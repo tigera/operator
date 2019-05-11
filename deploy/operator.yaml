@@ -12,11 +12,15 @@ spec:
       labels:
         name: operator
     spec:
+      tolerations:
+        - effect: NoSchedule
+          key: node.kubernetes.io/not-ready
       serviceAccountName: operator
+      hostNetwork: true
       containers:
         - name: operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: caseydavenport/operator
           command:
           - operator
           imagePullPolicy: Always

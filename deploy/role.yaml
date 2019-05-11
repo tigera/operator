@@ -1,6 +1,9 @@
-kind: ClusterRole
+# TODO: Lock down RBAC to only what the operator actually
+# needs in order to install Calico.
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
 metadata:
+  creationTimestamp: null
   name: operator
 rules:
 - apiGroups:
@@ -9,33 +12,44 @@ rules:
   - pods
   - services
   - endpoints
-  - persistentvolumeclaims
   - events
   - configmaps
   - secrets
+  - serviceaccounts
   verbs:
-  - "*"
+  - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - '*'
 - apiGroups:
   - apps
   resources:
   - deployments
   - daemonsets
-  - replicasets
-  - statefulsets
   verbs:
-  - "*"
+  - '*'
 - apiGroups:
   - monitoring.coreos.com
   resources:
   - servicemonitors
   verbs:
-  - "get"
-  - "create"
+  - get
+  - create
 - apiGroups:
   - apps
-  resources:
-  - deployments/finalizers
   resourceNames:
   - operator
+  resources:
+  - deployments/finalizers
   verbs:
-  - "update"
+  - update
+- apiGroups:
+  - operator.projectcalico.org
+  resources:
+  - '*'
+  verbs:
+  - '*'

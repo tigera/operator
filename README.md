@@ -11,8 +11,28 @@ For users who want to learn more about the project or get started with Calico, s
 
 ## Get Started Developing Calico
 
-### Making changes to Operator
+### Testing locally
 
-Contributions to this code are welcome!  The code in this repository can be built and tested using the Makefile.
+You can create a local docker-in-docker cluster with the Makefile:
 
-	make test
+	make cluster-create
+
+Set your shell to use the local cluster:
+
+	export KUBECONFIG="$(./k3d get-kubeconfig --name='operator-test-cluster')"
+
+Apply the necessary CRDs (if it fails, run this command twice):
+
+	kubectl apply -f deploy/crds
+
+Then, build the local code:
+
+	make build
+
+And then, run it against your local cluster:
+
+	WATCH_NAMESPACE="" ./build/_output/bin/operator
+
+Finally, tear down the cluster:
+
+	make cluster-destroy

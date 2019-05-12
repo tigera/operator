@@ -1,4 +1,8 @@
-vendor
+# Test tools
+k3d
+# Vendor
+vendor/
+# Temporary Build Files
 build/_output
 build/_test
 operator-sdk*

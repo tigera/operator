@@ -23,7 +23,9 @@ CONTAINERIZED=docker run --rm \
 ###############################################################################
 # Building the code
 ###############################################################################
+.PHONY: build
 build: vendor
+	mkdir -p build/_output/bin
 	$(CONTAINERIZED) go build -v -o build/_output/bin/operator ./cmd/manager/main.go
 
 image: vendor build
@@ -36,6 +38,9 @@ operator-sdk:
 	wget https://github.com/operator-framework/operator-sdk/releases/download/v0.7.0/operator-sdk-v0.7.0-x86_64-linux-gnu
 	mv operator-sdk-v0.7.0-x86_64-linux-gnu ./operator-sdk
 	chmod +x ./operator-sdk
+
+clean:
+	rm -rf build/_output
 
 ###############################################################################
 # Tests: TODO: Add tests.

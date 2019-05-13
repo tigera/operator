@@ -10,6 +10,17 @@ all: build
 ## Run the tests for the current platform/architecture
 test: build
 
+PACKAGE_NAME?=github.com/projectcalico/operator
+LOCAL_USER_ID?=$(shell id -u $$USER)
+GO_BUILD_VER?=v0.20
+CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
+CONTAINERIZED=docker run --rm \
+		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-w /go/src/$(PACKAGE_NAME) \
+		$(CALICO_BUILD)
+
+
 ###############################################################################
 # Building the code 
 ###############################################################################
@@ -24,7 +35,7 @@ operator-sdk:
 
 # Use this to populate the vendor directory after checking out the repository.
 vendor: 
-	dep ensure
+	$(CONTAINERIZED) dep ensure
 
 ###############################################################################
 # Tests: TODO: Add tests.

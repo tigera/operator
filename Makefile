@@ -14,9 +14,13 @@ test: build
 # Building the code 
 ###############################################################################
 build: image
-image: vendor
-	# TODO: Either install the SDK binary as a dep, or switch to using go build.
-	operator-sdk build calico/operator
+image: vendor operator-sdk
+	./operator-sdk build calico/operator
+
+operator-sdk:
+	wget https://github.com/operator-framework/operator-sdk/releases/download/v0.7.0/operator-sdk-v0.7.0-x86_64-linux-gnu
+	mv operator-sdk-v0.7.0-x86_64-linux-gnu ./operator-sdk
+	chmod +x ./operator-sdk
 
 # Use this to populate the vendor directory after checking out the repository.
 vendor: 

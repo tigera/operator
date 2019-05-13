@@ -20,7 +20,6 @@ CONTAINERIZED=docker run --rm \
 		-w /go/src/$(PACKAGE_NAME) \
 		$(CALICO_BUILD)
 
-
 ###############################################################################
 # Building the code 
 ###############################################################################
@@ -28,14 +27,13 @@ build: image
 image: vendor operator-sdk
 	./operator-sdk build calico/operator
 
+vendor:
+	$(CONTAINERIZED) dep ensure
+
 operator-sdk:
 	wget https://github.com/operator-framework/operator-sdk/releases/download/v0.7.0/operator-sdk-v0.7.0-x86_64-linux-gnu
 	mv operator-sdk-v0.7.0-x86_64-linux-gnu ./operator-sdk
 	chmod +x ./operator-sdk
-
-# Use this to populate the vendor directory after checking out the repository.
-vendor: 
-	$(CONTAINERIZED) dep ensure
 
 ###############################################################################
 # Tests: TODO: Add tests.

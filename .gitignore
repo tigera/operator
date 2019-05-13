@@ -1,6 +1,4 @@
-# Vendor
-vendor/
-# Temporary Build Files
+vendor
 build/_output
 build/_test
 operator-sdk*

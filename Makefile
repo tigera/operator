@@ -8,7 +8,7 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: build
+test: image
 
 PACKAGE_NAME?=github.com/projectcalico/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
@@ -21,11 +21,13 @@ CONTAINERIZED=docker run --rm \
 		$(CALICO_BUILD)
 
 ###############################################################################
-# Building the code 
+# Building the code
 ###############################################################################
-build: image
-image: vendor operator-sdk
-	./operator-sdk build calico/operator
+build: vendor
+	$(CONTAINERIZED) go build -v -o build/_output/bin/operator ./cmd/manager/main.go
+
+image: vendor build
+	docker build -f build/Dockerfile -t calico/operator .
 
 vendor:
 	$(CONTAINERIZED) dep ensure

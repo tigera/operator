@@ -8,19 +8,39 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: build
+test: image
+
+PACKAGE_NAME?=github.com/projectcalico/operator
+LOCAL_USER_ID?=$(shell id -u $$USER)
+GO_BUILD_VER?=v0.20
+CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
+CONTAINERIZED=docker run --rm \
+		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-w /go/src/$(PACKAGE_NAME) \
+		$(CALICO_BUILD)
 
 ###############################################################################
-# Building the code 
+# Building the code
 ###############################################################################
-build: image
-image: vendor
-	# TODO: Either install the SDK binary as a dep, or switch to using go build.
-	operator-sdk build calico/operator
+.PHONY: build
+build: vendor
+	mkdir -p build/_output/bin
+	$(CONTAINERIZED) go build -v -o build/_output/bin/operator ./cmd/manager/main.go
 
-# Use this to populate the vendor directory after checking out the repository.
-vendor: 
-	dep ensure
+image: vendor build
+	docker build -f build/Dockerfile -t calico/operator .
+
+vendor:
+	$(CONTAINERIZED) dep ensure
+
+operator-sdk:
+	wget https://github.com/operator-framework/operator-sdk/releases/download/v0.7.0/operator-sdk-v0.7.0-x86_64-linux-gnu
+	mv operator-sdk-v0.7.0-x86_64-linux-gnu ./operator-sdk
+	chmod +x ./operator-sdk
+
+clean:
+	rm -rf build/_output
 
 ###############################################################################
 # Tests: TODO: Add tests.

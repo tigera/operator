@@ -1,8 +1,7 @@
-# Vendor
-vendor/
-# Temporary Build Files
+vendor
 build/_output
 build/_test
+operator-sdk*
 # Created by https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 ### Emacs ###
 # -*- mode: gitignore; -*-

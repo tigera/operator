@@ -2,3 +2,6 @@ apiVersion: operator.projectcalico.org/v1alpha1
 kind: Core
 metadata:
   name: default
+spec:
+  cniBinDir: ""
+  cniNetDir: ""

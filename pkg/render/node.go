@@ -160,6 +160,16 @@ func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 }
 
 func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
+	// Determine the CNI directories to use.
+	cniNetDir := "/etc/cni/net.d"
+	if len(cr.Spec.CNINetDir) != 0 {
+		cniNetDir = cr.Spec.CNINetDir
+	}
+	cniBinDir := "/opt/cni/bin"
+	if len(cr.Spec.CNIBinDir) != 0 {
+		cniBinDir = cr.Spec.CNIBinDir
+	}
+
 	var terminationGracePeriod int64 = 0
 	var trueBool bool = true
 	var fileOrCreate v1.HostPathType = v1.HostPathFileOrCreate
@@ -198,14 +208,13 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 								{Name: "CNI_MTU", Value: "1440"},
 								{Name: "SLEEP", Value: "false"},
 								{Name: "CNI_NETWORK_CONFIG", Value: "TODO"},
+								{Name: "CNI_NET_DIR", Value: cniNetDir},
 								{
 									Name: "KUBERNETES_NODE_NAME",
 									ValueFrom: &v1.EnvVarSource{
 										FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 									},
 								},
-								// TODO: Change this for Openshift.
-								{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
 							},
 							VolumeMounts: []v1.VolumeMount{
 								{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
@@ -252,8 +261,8 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 						{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 						{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 						// TODO: Change these for OpenShift.
-						{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/kubernetes/cni/bin"}}},
-						{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/kubernetes/cni/net.d"}}},
+						{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}},
+						{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}},
 					},
 				},
 			},

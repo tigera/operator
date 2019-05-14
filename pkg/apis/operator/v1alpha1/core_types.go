@@ -4,15 +4,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NOTE: After modifying this file, run `make gen-files` to regenerate code.
 
 // CoreSpec defines the desired state of Core
 // +k8s:openapi-gen=true
 type CoreSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	CNINetDir string `json:"cniNetDir,omitempty"`
+	CNIBinDir string `json:"cniBinDir,omitempty"`
 }
 
 // CoreStatus defines the observed state of Core

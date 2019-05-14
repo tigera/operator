@@ -1,5 +1,10 @@
+# This Makefile requires the following dependencies on the host system:
+# - dep
+# - go
+#
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
+
 
 # Shortcut targets
 default: build
@@ -34,17 +39,25 @@ image: vendor build
 vendor:
 	$(CONTAINERIZED) dep ensure
 
-operator-sdk:
-	wget https://github.com/operator-framework/operator-sdk/releases/download/v0.7.0/operator-sdk-v0.7.0-x86_64-linux-gnu
-	mv operator-sdk-v0.7.0-x86_64-linux-gnu ./operator-sdk
-	chmod +x ./operator-sdk
-
 clean:
 	rm -rf build/_output
 
 ###############################################################################
-# Tests: TODO: Add tests.
+# Tests
 ###############################################################################
+st: cluster-create
+	@echo "TODO: Write some STs"
+
+cluster-create: k3d
+	./k3d create --workers 2 --name "operator-test-cluster"
+
+cluster-destroy: k3d
+	./k3d delete --name "operator-test-cluster"
+
+k3d:
+	# TODO: Use a real release of k3d. For now, just use this build which turns off flannel.
+	wget https://github.com/caseydavenport/k3d/releases/download/no-flannel/k3d
+	chmod +x ./k3d
 
 ###############################################################################
 # Static checks
@@ -76,7 +89,7 @@ foss-checks: vendor
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: static-checks test
+ci: test #static-checks
 
 ## Deploys images to registry
 cd:
@@ -92,7 +105,6 @@ endif
 ###############################################################################
 # Release: TODO
 ###############################################################################
-
 
 ###############################################################################
 # Utilities

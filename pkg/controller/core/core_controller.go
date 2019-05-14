@@ -8,6 +8,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -103,7 +104,26 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// Create the objects.
 	for _, obj := range objs {
-		// TODO: Check if object exists, reconcile if needed, skip if no change.
+		var old runtime.Object = obj.DeepCopyObject()
+		var key client.ObjectKey
+		key, err = client.ObjectKeyFromObject(obj)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		err = r.client.Get(context.TODO(), key, old)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				// Anything other than "Not found" we should retry.
+				return reconcile.Result{}, err
+			}
+			// Otherwise, if it was not found, we should create it.
+		} else {
+			// Resource exists, skip it.
+			// TODO: Reconcile any changes if the object doesn't match.
+			reqLogger.Info("Resource exists")
+			return reconcile.Result{}, nil
+		}
+
 		reqLogger.Info("Creating new object")
 		err = r.client.Create(context.TODO(), obj)
 		if err != nil {

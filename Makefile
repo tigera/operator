@@ -41,6 +41,7 @@ vendor:
 
 clean:
 	rm -rf build/_output
+	rm -rf vendor/
 
 ###############################################################################
 # Tests
@@ -49,7 +50,11 @@ st: cluster-create
 	@echo "TODO: Write some STs"
 
 cluster-create: k3d
-	./k3d create --workers 2 --name "operator-test-cluster"
+	./k3d create \
+		--workers 2 \
+		--worker-arg="--no-flannel" \
+		--server-arg="--no-flannel" \
+		--name "operator-test-cluster"
 
 cluster-destroy: k3d
 	./k3d delete --name "operator-test-cluster"

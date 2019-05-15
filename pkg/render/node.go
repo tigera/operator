@@ -15,6 +15,7 @@ func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 		nodeServiceAccount(cr),
 		nodeRole(cr),
 		nodeRoleBinding(cr),
+		nodeCNIConfigMap(cr),
 		nodeDaemonset(cr),
 	}
 }
@@ -159,6 +160,46 @@ func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 	}
 }
 
+// nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
+func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
+	var config string = `{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.0",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": "1440",
+      "ipam": {
+          "type": "calico-ipam"
+      },
+      "policy": {
+          "type": "k8s"
+      },
+      "kubernetes": {
+          "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "portmap",
+      "snat": true,
+      "capabilities": {"portMappings": true}
+    }
+  ]
+}`
+	return &v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cni-config",
+			Namespace: "kube-system",
+			Labels:    map[string]string{},
+		},
+		Data: map[string]string{
+			"config": config,
+		},
+	}
+}
+
 func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	// Determine the CNI directories to use.
 	cniNetDir := "/etc/cni/net.d"
@@ -205,14 +246,17 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							Command: []string{"/install-cni.sh"},
 							Env: []v1.EnvVar{
 								{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-								{Name: "CNI_MTU", Value: "1440"},
 								{Name: "SLEEP", Value: "false"},
-								{Name: "CNI_NETWORK_CONFIG", Value: "TODO"},
 								{Name: "CNI_NET_DIR", Value: cniNetDir},
 								{
-									Name: "KUBERNETES_NODE_NAME",
+									Name: "CNI_NETWORK_CONFIG",
 									ValueFrom: &v1.EnvVarSource{
-										FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+										ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+											Key: "config",
+											LocalObjectReference: v1.LocalObjectReference{
+												Name: "cni-config",
+											},
+										},
 									},
 								},
 							},
@@ -241,7 +285,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 								{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 								{Name: "FELIX_HEALTHENABLED", Value: "true"},
 								{
-									Name: "NODOENAME",
+									Name: "NODENAME",
 									ValueFrom: &v1.EnvVarSource{
 										FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 									},
@@ -260,7 +304,6 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 						{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 						{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 						{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-						// TODO: Change these for OpenShift.
 						{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}},
 						{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}},
 					},

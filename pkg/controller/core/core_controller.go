@@ -124,7 +124,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			return reconcile.Result{}, nil
 		}
 
-		reqLogger.Info("Creating new object")
+		reqLogger.WithValues("Resource", obj.GetObjectKind()).Info("Creating new object")
 		err = r.client.Create(context.TODO(), obj)
 		if err != nil {
 			// Hit an error creating object - we need to requeue.

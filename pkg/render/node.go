@@ -169,7 +169,7 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": "1440",
+      "mtu": 1440,
       "ipam": {
           "type": "calico-ipam"
       },
@@ -209,6 +209,12 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	cniBinDir := "/opt/cni/bin"
 	if len(cr.Spec.CNIBinDir) != 0 {
 		cniBinDir = cr.Spec.CNIBinDir
+	}
+
+	// Determine default CIDR.
+	defaultCIDR := "192.168.0.0/16"
+	if len(cr.Spec.IPPools) != 0 {
+		defaultCIDR = cr.Spec.IPPools[0].CIDR
 	}
 
 	var terminationGracePeriod int64 = 0
@@ -266,6 +272,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							},
 						},
 					},
+					// TODO: Add readiness and liveness checks
 					Containers: []v1.Container{
 						{
 							Name:            "calico-node",
@@ -277,7 +284,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 								{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 								{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
 								{Name: "IP", Value: "autodetect"},
-								{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.0.0/16"},
+								{Name: "CALICO_IPV4POOL_CIDR", Value: defaultCIDR},
 								{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 								{Name: "FELIX_IPINIPMTU", Value: "1440"},

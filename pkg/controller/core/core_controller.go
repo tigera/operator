@@ -2,15 +2,19 @@ package core
 
 import (
 	"context"
+	"os"
 
 	operatorv1alpha1 "github.com/projectcalico/operator/pkg/apis/operator/v1alpha1"
 	"github.com/projectcalico/operator/pkg/render"
+
+	configv1 "github.com/openshift/api/config/v1"
 
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -22,6 +26,7 @@ import (
 )
 
 var log = logf.Log.WithName("controller_core")
+var openshiftEnv = "OPENSHIFT"
 
 // Add creates a new Core Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -46,6 +51,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1alpha1.Core{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
+	}
+
+	if os.Getenv(openshiftEnv) == "true" {
+		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
+		// merge this configuration with our own and the write back the status object.
+		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+		}
 	}
 
 	// TODO(user): Modify this to be the types you create that are owned by the primary resource
@@ -79,6 +95,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	reqLogger.Info("Reconciling Core")
 
 	// Fetch the Core instance
+	// TODO: Handle changes to things other than the CORE resource.
 	instance := &operatorv1alpha1.Core{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
@@ -92,7 +109,21 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Define a new Pod object
+	openshiftConfig := &configv1.Network{}
+	if os.Getenv(openshiftEnv) == "true" {
+		// If configured to run in openshift, then also fetch the openshift configuration API.
+		reqLogger.Info("Querying for openshift network config")
+		err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: "", Name: "cluster"}, openshiftConfig)
+		if err != nil {
+			// Error reading the object - requeue the request.
+			return reconcile.Result{}, err
+		}
+
+		// Use the openshift provided CIDRs. For now, we only support a single pool.
+		instance.Spec.IPPools = []operatorv1alpha1.IPPool{{CIDR: openshiftConfig.Spec.ClusterNetwork[0].CIDR}}
+	}
+
+	// Render the desired objects based on our configuration.
 	objs := renderObjects(instance)
 
 	// Set Core instance as the owner and controller
@@ -128,6 +159,18 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		err = r.client.Create(context.TODO(), obj)
 		if err != nil {
 			// Hit an error creating object - we need to requeue.
+			return reconcile.Result{}, err
+		}
+	}
+
+	if os.Getenv(openshiftEnv) == "true" {
+		// If configured to run in openshift, update the config status with the current state.
+		reqLogger.Info("Updating openshift cluster network status")
+		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
+		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
+		openshiftConfig.Status.ClusterNetworkMTU = 1440
+		openshiftConfig.Status.NetworkType = "Calico"
+		if err = r.client.Update(context.TODO(), openshiftConfig); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

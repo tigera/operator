@@ -10,8 +10,13 @@ import (
 // CoreSpec defines the desired state of Core
 // +k8s:openapi-gen=true
 type CoreSpec struct {
-	CNINetDir string `json:"cniNetDir,omitempty"`
-	CNIBinDir string `json:"cniBinDir,omitempty"`
+	IPPools   []IPPool `json:"ipPools,omitempty"`
+	CNINetDir string   `json:"cniNetDir,omitempty"`
+	CNIBinDir string   `json:"cniBinDir,omitempty"`
+}
+
+type IPPool struct {
+	CIDR string `json:"cidr"`
 }
 
 // CoreStatus defines the observed state of Core

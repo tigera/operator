@@ -1,3 +1,5 @@
+# Copyright (c) 2019 Tigera, Inc. All rights reserved.
+
 # This Makefile requires the following dependencies on the host system:
 # - dep
 # - go
@@ -70,11 +72,7 @@ k3d:
 .PHONY: static-checks
 ## Perform static checks on the code.
 static-checks: vendor
-	docker run --rm \
-		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-		-v $(CURDIR):/go/src/$(PACKAGE_NAME) \
-		-w /go/src/$(PACKAGE_NAME) \
-		$(CALICO_BUILD) gometalinter --deadline=300s --disable-all --enable=vet --enable=errcheck --enable=goimports --vendor pkg/...
+	$(CONTAINERIZED) gometalinter --deadline=300s --disable-all --enable=vet --enable=errcheck --enable=goimports --vendor pkg/...
 
 .PHONY: fix
 ## Fix static checks
@@ -83,11 +81,12 @@ fix:
 
 foss-checks: vendor
 	@echo Running $@...
-	@docker run --rm -v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
-	  -e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-	  -e FOSSA_API_KEY=$(FOSSA_API_KEY) \
-	  -w /go/src/$(PACKAGE_NAME) \
-	  $(CALICO_BUILD) /usr/local/bin/fossa
+	docker run --rm \
+		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-w /go/src/$(PACKAGE_NAME)
+		-e FOSSA_API_KEY=$(FOSSA_API_KEY) \
+		$(CALICO_BUILD) /usr/local/bin/fossa
 
 ###############################################################################
 # CI/CD

@@ -72,7 +72,7 @@ k3d:
 .PHONY: static-checks
 ## Perform static checks on the code.
 static-checks: vendor
-	$(CONTAINERIZED) $(CALICO_BUILD) gometalinter --deadline=300s --disable-all --enable=vet --enable=errcheck --enable=goimports --vendor pkg/...
+	$(CONTAINERIZED) gometalinter --deadline=300s --disable-all --enable=vet --enable=errcheck --enable=goimports --vendor pkg/...
 
 .PHONY: fix
 ## Fix static checks
@@ -81,9 +81,12 @@ fix:
 
 foss-checks: vendor
 	@echo Running $@...
-	$(CONTAINERIZED)
-	  -e FOSSA_API_KEY=$(FOSSA_API_KEY) \
-	  $(CALICO_BUILD) /usr/local/bin/fossa
+	docker run --rm \
+		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-w /go/src/$(PACKAGE_NAME)
+		-e FOSSA_API_KEY=$(FOSSA_API_KEY) \
+		$(CALICO_BUILD) /usr/local/bin/fossa
 
 ###############################################################################
 # CI/CD

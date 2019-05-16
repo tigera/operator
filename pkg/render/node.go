@@ -10,6 +10,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+var nodeProxyMeta = metav1.ObjectMeta{
+	Name:      "calico-node",
+	Namespace: "kube-system",
+	Labels:    map[string]string{},
+}
+
 func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 	return []runtime.Object{
 		nodeServiceAccount(cr),
@@ -22,23 +28,15 @@ func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 
 func nodeServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: nodeProxyMeta,
 	}
 }
 
 func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: nodeProxyMeta,
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
@@ -56,12 +54,8 @@ func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 
 func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: nodeProxyMeta,
 		// TODO: Comments explaining why each permission is needed.
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -188,12 +182,8 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
   ]
 }`
 	return &v1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cni-config",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: nodeProxyMeta,
 		Data: map[string]string{
 			"config": config,
 		},
@@ -215,12 +205,8 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	var trueBool bool = true
 	var fileOrCreate v1.HostPathType = v1.HostPathFileOrCreate
 	return &apps.DaemonSet{
-		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: nodeProxyMeta,
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
 			Template: v1.PodTemplateSpec{

@@ -138,5 +138,6 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {
 	objs := render.Node(cr)
+	objs = append(objs, render.KubeProxy(cr))
 	return objs
 }

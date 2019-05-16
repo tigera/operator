@@ -10,8 +10,9 @@ import (
 // CoreSpec defines the desired state of Core
 // +k8s:openapi-gen=true
 type CoreSpec struct {
-	CNINetDir string `json:"cniNetDir,omitempty"`
-	CNIBinDir string `json:"cniBinDir,omitempty"`
+	CNINetDir         string  `json:"cniNetDir,omitempty"`
+	CNIBinDir         string  `json:"cniBinDir,omitempty"`
+	KubeProxyRequired boolean `json: "kubeProxyRequired,omitempty"`
 }
 
 // CoreStatus defines the observed state of Core

@@ -35,9 +35,8 @@ func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
+			Name:   "calico-node",
+			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -58,9 +57,8 @@ func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
+			Name:   "calico-node",
+			Labels: map[string]string{},
 		},
 		// TODO: Comments explaining why each permission is needed.
 		Rules: []rbacv1.PolicyRule{

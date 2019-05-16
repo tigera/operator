@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 
+	"github.com/go-logr/logr"
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
 
 	apps "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +30,8 @@ import (
 
 var log = logf.Log.WithName("controller_core")
 var openshiftEnv = "OPENSHIFT"
+var defaultInstanceKey = client.ObjectKey{Name: "default"}
+var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Core Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -64,17 +69,29 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner Core
-	err = c.Watch(&source.Kind{Type: &apps.DaemonSet{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &operatorv1alpha1.Core{},
-	})
-	if err != nil {
-		return err
+	for _, t := range secondaryResources() {
+		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &operatorv1alpha1.Core{},
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// secondaryResources returns a list of the secondary resources that this controller
+// monitors for changes. Add resources here which correspond to the resources created by
+// this controller.
+func secondaryResources() []runtime.Object {
+	return []runtime.Object{
+		&apps.DaemonSet{},
+		&rbacv1.ClusterRole{},
+		&rbacv1.ClusterRoleBinding{},
+		&v1.ServiceAccount{},
+	}
 }
 
 var _ reconcile.Reconciler = &ReconcileCore{}
@@ -92,17 +109,17 @@ type ReconcileCore struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Core")
+	reqLogger.Info("Reconciling network installation")
 
-	// Fetch the Core instance
-	// TODO: Handle changes to things other than the CORE resource.
+	// Fetch the Core instance. We only support a single instance named "default".
 	instance := &operatorv1alpha1.Core{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.client.Get(context.TODO(), defaultInstanceKey, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			reqLogger.Info("Network installation config not found")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -113,14 +130,17 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	if os.Getenv(openshiftEnv) == "true" {
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.Info("Querying for openshift network config")
-		err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: "", Name: "cluster"}, openshiftConfig)
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
 			// Error reading the object - requeue the request.
 			return reconcile.Result{}, err
 		}
 
-		// Use the openshift provided CIDRs. For now, we only support a single pool.
-		instance.Spec.IPPools = []operatorv1alpha1.IPPool{{CIDR: openshiftConfig.Spec.ClusterNetwork[0].CIDR}}
+		// Use the openshift provided CIDRs.
+		instance.Spec.IPPools = []operatorv1alpha1.IPPool{}
+		for _, net := range openshiftConfig.Spec.ClusterNetwork {
+			instance.Spec.IPPools = append(instance.Spec.IPPools, operatorv1alpha1.IPPool{CIDR: net.CIDR})
+		}
 	}
 
 	// Render the desired objects based on our configuration.
@@ -135,6 +155,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// Create the objects.
 	for _, obj := range objs {
+		logCtx := contextLoggerForResource(obj)
 		var old runtime.Object = obj.DeepCopyObject()
 		var key client.ObjectKey
 		key, err = client.ObjectKeyFromObject(obj)
@@ -148,14 +169,15 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 				return reconcile.Result{}, err
 			}
 			// Otherwise, if it was not found, we should create it.
+			logCtx.Info("Object does not exist", "error", err)
 		} else {
 			// Resource exists, skip it.
 			// TODO: Reconcile any changes if the object doesn't match.
-			reqLogger.Info("Resource exists")
-			return reconcile.Result{}, nil
+			logCtx.Info("Resource exists")
+			continue
 		}
 
-		reqLogger.WithValues("Resource", obj.GetObjectKind()).Info("Creating new object")
+		logCtx.Info("Creating new object")
 		err = r.client.Create(context.TODO(), obj)
 		if err != nil {
 			// Hit an error creating object - we need to requeue.
@@ -176,7 +198,15 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// Created successfully - don't requeue
+	reqLogger.Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+func contextLoggerForResource(obj runtime.Object) logr.Logger {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
+	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
+	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
 }
 
 func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {

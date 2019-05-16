@@ -53,3 +53,19 @@ rules:
   - '*'
   verbs:
   - '*'
+# When running in openshift, we need to update networking config.
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - networks/status
+  verbs:
+  - 'update'
+  - '*'
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - networks
+  verbs:
+  - 'get'
+  - '*'
+

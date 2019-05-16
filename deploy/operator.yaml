@@ -14,7 +14,9 @@ spec:
     spec:
       tolerations:
         - effect: NoSchedule
-          key: node.kubernetes.io/not-ready
+          operator: Exists
+        - effect: NoSchedule
+          operator: Exists
       serviceAccountName: operator
       hostNetwork: true
       containers:

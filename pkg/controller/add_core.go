@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/projectcalico/operator/pkg/controller/core"
+	"github.com/tigera/operator/pkg/controller/core"
 )
 
 func init() {

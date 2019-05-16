@@ -109,7 +109,7 @@ type ReconcileCore struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling network installation")
+	reqLogger.V(1).Info("Reconciling network installation")
 
 	// Fetch the Core instance. We only support a single instance named "default".
 	instance := &operatorv1alpha1.Core{}
@@ -129,7 +129,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	openshiftConfig := &configv1.Network{}
 	if os.Getenv(openshiftEnv) == "true" {
 		// If configured to run in openshift, then also fetch the openshift configuration API.
-		reqLogger.Info("Querying for openshift network config")
+		reqLogger.V(1).Info("Querying for openshift network config")
 		err = r.client.Get(context.TODO(), types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
 			// Error reading the object - requeue the request.
@@ -169,11 +169,11 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 				return reconcile.Result{}, err
 			}
 			// Otherwise, if it was not found, we should create it.
-			logCtx.Info("Object does not exist", "error", err)
+			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
 			// Resource exists, skip it.
 			// TODO: Reconcile any changes if the object doesn't match.
-			logCtx.Info("Resource exists")
+			logCtx.V(1).Info("Resource exists")
 			continue
 		}
 
@@ -187,7 +187,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	if os.Getenv(openshiftEnv) == "true" {
 		// If configured to run in openshift, update the config status with the current state.
-		reqLogger.Info("Updating openshift cluster network status")
+		reqLogger.V(1).Info("Updating openshift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
 		openshiftConfig.Status.ClusterNetworkMTU = 1440
@@ -198,7 +198,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// Created successfully - don't requeue
-	reqLogger.Info("Finished reconciling network installation")
+	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
 }
 

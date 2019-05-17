@@ -10,6 +10,18 @@ import (
 // CoreSpec defines the desired state of Core
 // +k8s:openapi-gen=true
 type CoreSpec struct {
+	// Version of the product to install.
+	// Default: latest
+	Version string `json:"version,omitempty"`
+
+	// The product to install - one of Calico or TigeraSecureEnterprise
+	// Default: Calico
+	Variant ProductVariant `json:"variant,omitempty"`
+
+	// Registry to use for container images.
+	// Default: docker.io
+	Registry string `json:"registry,omitempty`
+
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
 	// a maximum of one IP pool is supported.
 	// Default: 192.168.0.0/16.
@@ -23,6 +35,13 @@ type CoreSpec struct {
 	// Default: /opt/cni/bin
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 }
+
+type ProductVariant string
+
+var (
+	Calico                 ProductVariant = "Calico"
+	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
+)
 
 type IPPool struct {
 	CIDR string `json:"cidr"`

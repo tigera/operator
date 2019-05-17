@@ -12,7 +12,7 @@ import (
 type CoreSpec struct {
 	CNINetDir    string `json:"cniNetDir,omitempty"`
 	CNIBinDir    string `json:"cniBinDir,omitempty"`
-	RunKubeProxy bool   `json:"kubeProxyRequired,omitempty"`
+	RunKubeProxy bool   `json:"runKubeProxy,omitempty"`
 }
 
 // CoreStatus defines the observed state of Core

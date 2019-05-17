@@ -140,10 +140,8 @@ func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {
 	var objs []runtime.Object
 	// Only install KubeProxy if required, and do so before installing Node.
 	if cr.Spec.RunKubeProxy {
-		objs := render.KubeProxy(cr)
-		objs = append(objs, render.Node(cr))
-	} else {
-		objs := render.Node(cr)
+		objs = render.KubeProxy(cr)
 	}
+	objs = append(objs, render.Node(cr)...)
 	return objs
 }

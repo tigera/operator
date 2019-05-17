@@ -1,7 +1,7 @@
 package render
 
 import (
-	operatorv1alpha1 "github.com/projectcalico/operator/pkg/apis/operator/v1alpha1"
+	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -52,7 +52,6 @@ func kubeProxyRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding 
 	}
 }
 
-// kubeProxyConfigMap returns a config map containing the CNI network config to be installed on each node.
 func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 	var config string = `{
     apiVersion: kubeproxy.config.k8s.io/v1alpha1

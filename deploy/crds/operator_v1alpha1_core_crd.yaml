@@ -1,9 +1,9 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: cores.operator.projectcalico.org
+  name: cores.operator.tigera.io
 spec:
-  group: operator.projectcalico.org
+  group: operator.tigera.io
   names:
     kind: Core
     listKind: CoreList

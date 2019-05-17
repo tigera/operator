@@ -17,7 +17,7 @@ all: build
 ## Run the tests for the current platform/architecture
 test: image
 
-PACKAGE_NAME?=github.com/projectcalico/operator
+PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.20
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)

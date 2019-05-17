@@ -10,9 +10,26 @@ import (
 // CoreSpec defines the desired state of Core
 // +k8s:openapi-gen=true
 type CoreSpec struct {
-	CNINetDir    string `json:"cniNetDir,omitempty"`
-	CNIBinDir    string `json:"cniBinDir,omitempty"`
-	RunKubeProxy bool   `json:"runKubeProxy,omitempty"`
+	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
+	// a maximum of one IP pool is supported.
+	// Default: 192.168.0.0/16.
+	IPPools []IPPool `json:"ipPools,omitempty"`
+
+	// CNINetDir configures the path on the host where CNI network configuration files will be installed.
+	// Default: /etc/cni/net.d
+	CNINetDir string `json:"cniNetDir,omitempty"`
+
+	// CNIBinDir configures the path on the host where CNI binaries will be installed.
+	// Default: /opt/cni/bin
+	CNIBinDir string `json:"cniBinDir,omitempty"`
+  
+  // RunKubeProxy specifies whether Kube-Proxy needs to be installed or if it's already provided.
+  // Default: false
+  RunKubeProxy bool   `json:"runKubeProxy,omitempty"`
+}
+
+type IPPool struct {
+	CIDR string `json:"cidr"`
 }
 
 // CoreStatus defines the observed state of Core

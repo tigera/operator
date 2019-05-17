@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
@@ -104,6 +106,27 @@ type ReconcileCore struct {
 	scheme *runtime.Scheme
 }
 
+func fillDefaults(instance *operatorv1alpha1.Core) {
+	if instance.Spec.Version == "" {
+		instance.Spec.Version = "latest"
+	}
+	if len(instance.Spec.Registry) == 0 {
+		instance.Spec.Registry = "docker.io/"
+	}
+	if !strings.HasSuffix(instance.Spec.Registry, "/") {
+		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
+	}
+	if len(instance.Spec.Variant) == 0 {
+		instance.Spec.Variant = operatorv1alpha1.Calico
+	}
+	if len(instance.Spec.CNINetDir) == 0 {
+		instance.Spec.CNINetDir = "/etc/cni/net.d"
+	}
+	if len(instance.Spec.CNIBinDir) == 0 {
+		instance.Spec.CNIBinDir = "/opt/cni/bin"
+	}
+}
+
 // Reconcile reads that state of the cluster for a Core object and makes changes based on the state read
 // and what is in the Core.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -125,6 +148,8 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+	fillDefaults(instance)
+	reqLogger.Info("Loaded config", "config", instance)
 
 	openshiftConfig := &configv1.Network{}
 	if os.Getenv(openshiftEnv) == "true" {

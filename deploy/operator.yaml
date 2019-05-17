@@ -22,7 +22,7 @@ spec:
       containers:
         - name: operator
           # Replace this with the built image name
-          image: caseydavenport/operator
+          image: tigera/operator
           command:
           - operator
           imagePullPolicy: Always

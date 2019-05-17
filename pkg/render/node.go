@@ -1,6 +1,8 @@
 package render
 
 import (
+	"fmt"
+
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 
 	apps "k8s.io/api/apps/v1"
@@ -199,21 +201,15 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 }
 
 func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
-	// Determine the CNI directories to use.
-	cniNetDir := "/etc/cni/net.d"
-	if len(cr.Spec.CNINetDir) != 0 {
-		cniNetDir = cr.Spec.CNINetDir
-	}
-	cniBinDir := "/opt/cni/bin"
-	if len(cr.Spec.CNIBinDir) != 0 {
-		cniBinDir = cr.Spec.CNIBinDir
-	}
-
 	// Determine default CIDR.
 	defaultCIDR := "192.168.0.0/16"
 	if len(cr.Spec.IPPools) != 0 {
 		defaultCIDR = cr.Spec.IPPools[0].CIDR
 	}
+
+	// Build image strings to use.
+	cniImage := fmt.Sprintf("%scalico/cni:%s", cr.Spec.Registry, cr.Spec.Version)
+	nodeImage := fmt.Sprintf("%scalico/node:%s", cr.Spec.Registry, cr.Spec.Version)
 
 	var terminationGracePeriod int64 = 0
 	var trueBool bool = true
@@ -246,12 +242,12 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 					InitContainers: []v1.Container{
 						{
 							Name:    "install-cni",
-							Image:   "calico/cni:v3.7.2",
+							Image:   cniImage,
 							Command: []string{"/install-cni.sh"},
 							Env: []v1.EnvVar{
 								{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 								{Name: "SLEEP", Value: "false"},
-								{Name: "CNI_NET_DIR", Value: cniNetDir},
+								{Name: "CNI_NET_DIR", Value: cr.Spec.CNINetDir},
 								{
 									Name: "CNI_NETWORK_CONFIG",
 									ValueFrom: &v1.EnvVarSource{
@@ -274,7 +270,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 					Containers: []v1.Container{
 						{
 							Name:            "calico-node",
-							Image:           "calico/node:v3.7.2",
+							Image:           nodeImage,
 							SecurityContext: &v1.SecurityContext{Privileged: &trueBool},
 							Env: []v1.EnvVar{
 								{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -309,8 +305,8 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 						{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 						{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 						{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-						{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}},
-						{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}},
+						{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
+						{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
 					},
 				},
 			},

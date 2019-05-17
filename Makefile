@@ -36,7 +36,7 @@ build: vendor
 	$(CONTAINERIZED) go build -v -o build/_output/bin/operator ./cmd/manager/main.go
 
 image: vendor build
-	docker build -f build/Dockerfile -t calico/operator .
+	docker build -f build/Dockerfile -t tigera/operator .
 
 vendor:
 	$(CONTAINERIZED) dep ensure

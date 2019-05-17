@@ -149,7 +149,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 	fillDefaults(instance)
-	reqLogger.Info("Loaded config", "config", instance)
+	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	openshiftConfig := &configv1.Network{}
 	if os.Getenv(openshiftEnv) == "true" {

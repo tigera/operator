@@ -8,7 +8,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 var kubeProxyMeta = metav1.ObjectMeta{
@@ -124,7 +123,6 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 30
 	var trueBool bool = true
 	var configMapDefaultMode int32 = 420
-	var defaultString v1.ProcMountType = "Default"
 	fileOrCreate := v1.HostPathFileOrCreate
 
 	return &apps.DaemonSet{
@@ -148,10 +146,8 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							Image:           "k8s.gcr.io/kube-proxy:v1.12.7",
 							ImagePullPolicy: v1.PullAlways,
 							Name:            "kube-proxy",
-							Resources:       v1.ResourceRequirements{},
 							SecurityContext: &v1.SecurityContext{
 								Privileged: &trueBool,
-								ProcMount:  &defaultString,
 							},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: v1.TerminationMessageReadFile,
@@ -162,12 +158,10 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							},
 						},
 					},
-					DNSPolicy:                     "ClusterFirst",
+					DNSPolicy:                     v1.DNSClusterFirst,
 					HostNetwork:                   true,
 					PriorityClassName:             "system-node-critical",
 					RestartPolicy:                 v1.RestartPolicyAlways,
-					SchedulerName:                 "default-scheduler",
-					SecurityContext:               &v1.PodSecurityContext{},
 					ServiceAccountName:            "kube-proxy",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					Tolerations: []v1.Toleration{
@@ -208,10 +202,7 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 				},
 			},
 			UpdateStrategy: apps.DaemonSetUpdateStrategy{
-				RollingUpdate: &apps.RollingUpdateDaemonSet{
-					MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: int32(1)},
-				},
-				Type: "DaemonSetUpdateStrategyType",
+				Type: apps.RollingUpdateDaemonSetStrategyType,
 			},
 		},
 	}

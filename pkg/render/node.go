@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-var nodeProxyMeta = metav1.ObjectMeta{
+var nodeMeta = metav1.ObjectMeta{
 	Name:      "calico-node",
 	Namespace: "kube-system",
 	Labels:    map[string]string{},
@@ -29,14 +29,14 @@ func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 func nodeServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: nodeProxyMeta,
+		ObjectMeta: nodeMeta,
 	}
 }
 
 func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: nodeProxyMeta,
+		ObjectMeta: nodeMeta,
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
@@ -55,7 +55,7 @@ func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: nodeProxyMeta,
+		ObjectMeta: nodeMeta,
 		// TODO: Comments explaining why each permission is needed.
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -216,7 +216,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	var fileOrCreate v1.HostPathType = v1.HostPathFileOrCreate
 	return &apps.DaemonSet{
 		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-		ObjectMeta: nodeProxyMeta,
+		ObjectMeta: nodeMeta,
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
 			Template: v1.PodTemplateSpec{

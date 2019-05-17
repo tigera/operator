@@ -1,8 +1,6 @@
 package render
 
 import (
-	"time"
-
 	operatorv1alpha1 "github.com/projectcalico/operator/pkg/apis/operator/v1alpha1"
 
 	apps "k8s.io/api/apps/v1"
@@ -10,6 +8,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 var kubeProxyMeta = metav1.ObjectMeta{
@@ -22,8 +21,8 @@ func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
 	return []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),
-		nodeCNIConfigMap(cr),
-		nodeDaemonset(cr),
+		kubeProxyConfigMap(cr),
+		kubeProxyDaemonset(cr),
 	}
 }
 
@@ -53,8 +52,8 @@ func kubeProxyRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding 
 	}
 }
 
-// nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
-func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
+// kubeProxyConfigMap returns a config map containing the CNI network config to be installed on each node.
+func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 	var config string = `{
     apiVersion: kubeproxy.config.k8s.io/v1alpha1
     bindAddress: 0.0.0.0
@@ -126,6 +125,8 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 30
 	var trueBool bool = true
 	var configMapDefaultMode int32 = 420
+	var defaultString v1.ProcMountType = "Default"
+	fileOrCreate := v1.HostPathFileOrCreate
 
 	return &apps.DaemonSet{
 		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -136,7 +137,6 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 					Annotations: map[string]string{
 						"scheduler.alpha.kubernetes.io/critical-pod": "",
 					},
-					CreationTimestamp: time.Now(),
 					Labels: map[string]string{
 						"k8s-app": "kube-proxy",
 					},
@@ -147,15 +147,15 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							Command:         []string{"/usr/local/bin/kube-proxy"},
 							Args:            []string{"--config=/var/lib/kube-proxy/config.conf"},
 							Image:           "k8s.gcr.io/kube-proxy:v1.12.7",
-							ImagePullPolicy: PullAlways,
+							ImagePullPolicy: v1.PullAlways,
 							Name:            "kube-proxy",
-							Resources:       nil,
+							Resources:       v1.ResourceRequirements{},
 							SecurityContext: &v1.SecurityContext{
 								Privileged: &trueBool,
-								ProcMount:  "Default",
+								ProcMount:  &defaultString,
 							},
 							TerminationMessagePath:   "/dev/termination-log",
-							TerminationMessagePolicy: TerminationMessageReadFile,
+							TerminationMessagePolicy: v1.TerminationMessageReadFile,
 							VolumeMounts: []v1.VolumeMount{
 								{MountPath: "/var/lib/kube-proxy", Name: "kube-proxy"},
 								{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
@@ -166,11 +166,10 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 					DNSPolicy:                     "ClusterFirst",
 					HostNetwork:                   true,
 					PriorityClassName:             "system-node-critical",
-					RestartPolicy:                 RestartPolicyAlways,
+					RestartPolicy:                 v1.RestartPolicyAlways,
 					SchedulerName:                 "default-scheduler",
-					SecurityContext:               &v1.SecurityContext{},
-					ServiceAccount:                "calico-node",
-					ServiceAccountName:            "calico-node",
+					SecurityContext:               &v1.PodSecurityContext{},
+					ServiceAccountName:            "kube-proxy",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					Tolerations: []v1.Toleration{
 						{Operator: "Exists", Effect: "NoSchedule"},
@@ -183,7 +182,9 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							VolumeSource: v1.VolumeSource{
 								ConfigMap: &v1.ConfigMapVolumeSource{
 									DefaultMode: &configMapDefaultMode,
-									// TODO: name field ?
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "kube-proxy",
+									},
 								},
 							},
 						},
@@ -207,13 +208,12 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 					},
 				},
 			},
-		},
-		TemplateGeneration: 1,
-		UpdateStrategy: apps.DaemonSetUpdateStrategy{
-			RollingUpdate: apps.RollingUpdateDaemonSet{
-				MaxUnavailable: 1,
+			UpdateStrategy: apps.DaemonSetUpdateStrategy{
+				RollingUpdate: &apps.RollingUpdateDaemonSet{
+					MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: int32(1)},
+				},
+				Type: "DaemonSetUpdateStrategyType",
 			},
-			Type: "DaemonSetUpdateStrategyType",
 		},
 	}
 }

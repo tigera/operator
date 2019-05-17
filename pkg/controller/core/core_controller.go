@@ -235,6 +235,9 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 }
 
 func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {
-	objs := render.Node(cr)
+	var objs []runtime.Object
+
+	objs = append(objs, render.Node(cr)...)
+	objs = append(objs, render.Controllers(cr)...)
 	return objs
 }

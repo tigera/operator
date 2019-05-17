@@ -9,7 +9,7 @@ spec:
     listKind: CoreList
     plural: cores
     singular: core
-  scope: Namespaced
+  scope: Cluster
   subresources:
     status: {}
   validation:

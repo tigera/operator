@@ -3,5 +3,7 @@ kind: Core
 metadata:
   name: default
 spec:
-  cniBinDir: ""
-  cniNetDir: ""
+  version: v3.7.2
+  registry: docker.io
+  cniBinDir: /opt/cni/bin
+  cniNetDir: /etc/cni/net.d

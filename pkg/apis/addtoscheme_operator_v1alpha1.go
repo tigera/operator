@@ -2,7 +2,7 @@ package apis
 
 import (
 	configv1 "github.com/openshift/api/config/v1"
-	"github.com/projectcalico/operator/pkg/apis/operator/v1alpha1"
+	"github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 )
 
 func init() {

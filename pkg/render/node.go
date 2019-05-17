@@ -1,7 +1,7 @@
 package render
 
 import (
-	operatorv1alpha1 "github.com/projectcalico/operator/pkg/apis/operator/v1alpha1"
+	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"

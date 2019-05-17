@@ -13,9 +13,9 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.Core":       schema_pkg_apis_operator_v1alpha1_Core(ref),
-		"github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.CoreSpec":   schema_pkg_apis_operator_v1alpha1_CoreSpec(ref),
-		"github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.CoreStatus": schema_pkg_apis_operator_v1alpha1_CoreStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1alpha1.Core":       schema_pkg_apis_operator_v1alpha1_Core(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1alpha1.CoreSpec":   schema_pkg_apis_operator_v1alpha1_CoreSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1alpha1.CoreStatus": schema_pkg_apis_operator_v1alpha1_CoreStatus(ref),
 	}
 }
 
@@ -46,19 +46,19 @@ func schema_pkg_apis_operator_v1alpha1_Core(ref common.ReferenceCallback) common
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.CoreSpec"),
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1alpha1.CoreSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.CoreStatus"),
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1alpha1.CoreStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.CoreSpec", "github.com/projectcalico/operator/pkg/apis/operator/v1alpha1.CoreStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/tigera/operator/pkg/apis/operator/v1alpha1.CoreSpec", "github.com/tigera/operator/pkg/apis/operator/v1alpha1.CoreStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 

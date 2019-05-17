@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	operatorv1alpha1 "github.com/projectcalico/operator/pkg/apis/operator/v1alpha1"
-	"github.com/projectcalico/operator/pkg/render"
+	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
 

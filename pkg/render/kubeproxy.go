@@ -1,6 +1,8 @@
 package render
 
 import (
+	"strings"
+
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 
 	apps "k8s.io/api/apps/v1"
@@ -17,6 +19,10 @@ var kubeProxyMeta = metav1.ObjectMeta{
 }
 
 func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
+	if len(cr.Spec.APIServer) == 0 {
+		return nil
+	}
+
 	return []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),
@@ -61,7 +67,7 @@ func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
       contentType: application/vnd.kubernetes.protobuf
       kubeconfig: /var/lib/kube-proxy/kubeconfig.conf
       qps: 5
-    clusterCIDR: 192.168.0.0/16
+    clusterCIDR: defaultCIDR
     configSyncPeriod: 15m0s
     conntrack:
       max: null
@@ -96,7 +102,7 @@ func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
     clusters:
     - cluster:
         certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        server: https://api.casey-ocp.openshift.crc.aws.eng.tigera.net:6443
+        server: APIServer
       name: default
     contexts:
     - context:
@@ -110,6 +116,17 @@ func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
       user:
         tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
 }`
+	if len(cr.Spec.APIServer) == 0 {
+		return nil
+	}
+	config = strings.Replace(config, "APIServer", cr.Spec.APIServer, 1)
+
+	defaultCIDR := "192.168.0.0/16"
+	if len(cr.Spec.IPPools) != 0 {
+		defaultCIDR = cr.Spec.IPPools[0].CIDR
+	}
+	config = strings.Replace(config, "defaultCIDR", defaultCIDR, 1)
+
 	return &v1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: kubeProxyMeta,

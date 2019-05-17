@@ -38,6 +38,8 @@ type CoreSpec struct {
 	// RunKubeProxy specifies whether Kube-Proxy needs to be installed or if it's already provided.
 	// Default: false
 	RunKubeProxy bool `json:"runKubeProxy,omitempty"`
+
+	APIServer string `json:"apiServer,omitempty"`
 }
 
 type ProductVariant string

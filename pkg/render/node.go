@@ -162,7 +162,7 @@ func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
-	var config string = `{
+	var config = `{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.0",
   "plugins": [

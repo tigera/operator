@@ -15,7 +15,6 @@ import (
 var nodeMeta = metav1.ObjectMeta{
 	Name:      "calico-node",
 	Namespace: "kube-system",
-	Labels:    map[string]string{},
 }
 
 func Node(cr *operatorv1alpha1.Core) []runtime.Object {

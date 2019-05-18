@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 	"k8s.io/api/extensions/v1beta1"
 
@@ -77,9 +78,8 @@ func controllersRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBindin
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-kube-controllers",
-			Namespace: "kube-system",
-			Labels:    map[string]string{},
+			Name:   "calico-kube-controllers",
+			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",

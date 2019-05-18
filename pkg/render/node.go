@@ -203,12 +203,6 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 }
 
 func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
-	// Determine default CIDR.
-	defaultCIDR := "192.168.0.0/16"
-	if len(cr.Spec.IPPools) != 0 {
-		defaultCIDR = cr.Spec.IPPools[0].CIDR
-	}
-
 	// Build image strings to use.
 	cniImage := fmt.Sprintf("%scalico/cni:%s", cr.Spec.Registry, cr.Spec.Version)
 	nodeImage := fmt.Sprintf("%scalico/node:%s", cr.Spec.Registry, cr.Spec.Version)
@@ -276,7 +270,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 								{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 								{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
 								{Name: "IP", Value: "autodetect"},
-								{Name: "CALICO_IPV4POOL_CIDR", Value: defaultCIDR},
+								{Name: "CALICO_IPV4POOL_CIDR", Value: cr.Spec.IPPools[0].CIDR},
 								{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 								{Name: "FELIX_IPINIPMTU", Value: "1440"},

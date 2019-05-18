@@ -19,10 +19,6 @@ var kubeProxyMeta = metav1.ObjectMeta{
 }
 
 func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
-	if len(cr.Spec.APIServer) == 0 {
-		return nil
-	}
-
 	return []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),
@@ -116,16 +112,10 @@ func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
       user:
         tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
 }`
-	if len(cr.Spec.APIServer) == 0 {
-		return nil
-	}
-	config = strings.Replace(config, "APIServer", cr.Spec.APIServer, 1)
 
-	defaultCIDR := "192.168.0.0/16"
-	if len(cr.Spec.IPPools) != 0 {
-		defaultCIDR = cr.Spec.IPPools[0].CIDR
-	}
-	config = strings.Replace(config, "defaultCIDR", defaultCIDR, 1)
+	// Populate the config map with values from the custom resource.
+	config = strings.Replace(config, "APIServer", cr.Spec.APIServer, 1)
+	config = strings.Replace(config, "defaultCIDR", cr.Spec.IPPools[0].CIDR, 1)
 
 	return &v1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},

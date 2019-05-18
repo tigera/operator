@@ -236,7 +236,14 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 
 func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {
 	var objs []runtime.Object
-
+	// Only install KubeProxy if required, and do so before installing Node.
+	if cr.Spec.RunKubeProxy {
+		if len(cr.Spec.APIServer) == 0 {
+			log.Info("APIServer parameter is required for a KubeProxy installation")
+		} else {
+			objs = render.KubeProxy(cr)
+		}
+	}
 	objs = append(objs, render.Node(cr)...)
 	objs = append(objs, render.Controllers(cr)...)
 	return objs

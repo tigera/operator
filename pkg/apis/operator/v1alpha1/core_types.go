@@ -34,6 +34,12 @@ type CoreSpec struct {
 	// CNIBinDir configures the path on the host where CNI binaries will be installed.
 	// Default: /opt/cni/bin
 	CNIBinDir string `json:"cniBinDir,omitempty"`
+
+	// RunKubeProxy specifies whether Kube-Proxy needs to be installed or if it's already provided.
+	// Default: false
+	RunKubeProxy bool `json:"runKubeProxy,omitempty"`
+
+	APIServer string `json:"apiServer,omitempty"`
 }
 
 type ProductVariant string

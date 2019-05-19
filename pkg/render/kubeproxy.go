@@ -15,14 +15,9 @@ import (
 var kubeProxyMeta = metav1.ObjectMeta{
 	Name:      "kube-proxy",
 	Namespace: "kube-system",
-	Labels:    map[string]string{},
 }
 
 func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
-	if len(cr.Spec.APIServer) == 0 {
-		return nil
-	}
-
 	return []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),
@@ -41,7 +36,7 @@ func kubeProxyServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 func kubeProxyRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: kubeProxyMeta,
+		ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy"},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
@@ -58,80 +53,75 @@ func kubeProxyRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding 
 }
 
 func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
-	var config string = `{
-    apiVersion: kubeproxy.config.k8s.io/v1alpha1
-    bindAddress: 0.0.0.0
-    clientConnection:
-      acceptContentTypes: ""
-      burst: 10
-      contentType: application/vnd.kubernetes.protobuf
-      kubeconfig: /var/lib/kube-proxy/kubeconfig.conf
-      qps: 5
-    clusterCIDR: defaultCIDR
-    configSyncPeriod: 15m0s
-    conntrack:
-      max: null
-      maxPerCore: 32768
-      min: 131072
-      tcpCloseWaitTimeout: 1h0m0s
-      tcpEstablishedTimeout: 24h0m0s
-    enableProfiling: false
-    healthzBindAddress: 0.0.0.0:10256
-    hostnameOverride: ""
-    iptables:
-      masqueradeAll: false
-      masqueradeBit: 14
-      minSyncPeriod: 0s
-      syncPeriod: 30s
-    ipvs:
-      excludeCIDRs: null
-      minSyncPeriod: 0s
-      scheduler: ""
-      syncPeriod: 30s
-    kind: KubeProxyConfiguration
-    metricsBindAddress: 127.0.0.1:10249
-    mode: iptables
-    nodePortAddresses: null
-    oomScoreAdj: -999
-    portRange: ""
-    resourceContainer: /kube-proxy
-    udpIdleTimeout: 250ms
-  kubeconfig.conf: |-
-    apiVersion: v1
-    kind: Config
-    clusters:
-    - cluster:
-        certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        server: APIServer
-      name: default
-    contexts:
-    - context:
-        cluster: default
-        namespace: default
-        user: default
-      name: default
-    current-context: default
-    users:
-    - name: default
-      user:
-        tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-}`
-	if len(cr.Spec.APIServer) == 0 {
-		return nil
-	}
-	config = strings.Replace(config, "APIServer", cr.Spec.APIServer, 1)
+	var config = `apiVersion: kubeproxy.config.k8s.io/v1alpha1
+bindAddress: 0.0.0.0
+clientConnection:
+  acceptContentTypes: ""
+  burst: 10
+  contentType: application/vnd.kubernetes.protobuf
+  kubeconfig: /var/lib/kube-proxy/kubeconfig.conf
+  qps: 5
+clusterCIDR: defaultCIDR
+configSyncPeriod: 15m0s
+conntrack:
+  max: null
+  maxPerCore: 32768
+  min: 131072
+  tcpCloseWaitTimeout: 1h0m0s
+  tcpEstablishedTimeout: 24h0m0s
+enableProfiling: false
+healthzBindAddress: 0.0.0.0:10256
+hostnameOverride: ""
+iptables:
+  masqueradeAll: false
+  masqueradeBit: 14
+  minSyncPeriod: 0s
+  syncPeriod: 30s
+ipvs:
+  excludeCIDRs: null
+  minSyncPeriod: 0s
+  scheduler: ""
+  syncPeriod: 30s
+kind: KubeProxyConfiguration
+metricsBindAddress: 127.0.0.1:10249
+mode: iptables
+nodePortAddresses: null
+oomScoreAdj: -999
+portRange: ""
+resourceContainer: /kube-proxy
+udpIdleTimeout: 250ms
+`
 
-	defaultCIDR := "192.168.0.0/16"
-	if len(cr.Spec.IPPools) != 0 {
-		defaultCIDR = cr.Spec.IPPools[0].CIDR
-	}
-	config = strings.Replace(config, "defaultCIDR", defaultCIDR, 1)
+	var kubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    server: APIServer
+  name: default
+contexts:
+- context:
+    cluster: default
+    namespace: default
+    user: default
+  name: default
+current-context: default
+users:
+- name: default
+  user:
+    tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+`
+
+	// Populate the config map with values from the custom resource.
+	kubeconfig = strings.Replace(kubeconfig, "APIServer", cr.Spec.APIServer, 1)
+	config = strings.Replace(config, "defaultCIDR", cr.Spec.IPPools[0].CIDR, 1)
 
 	return &v1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: kubeProxyMeta,
 		Data: map[string]string{
-			"config.conf": config,
+			"config.conf":     config,
+			"kubeconfig.conf": kubeconfig,
 		},
 	}
 }
@@ -146,6 +136,7 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: kubeProxyMeta,
 		Spec: apps.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "kube-proxy"}},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{

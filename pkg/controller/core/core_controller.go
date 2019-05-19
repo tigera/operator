@@ -125,6 +125,11 @@ func fillDefaults(instance *operatorv1alpha1.Core) {
 	if len(instance.Spec.CNIBinDir) == 0 {
 		instance.Spec.CNIBinDir = "/opt/cni/bin"
 	}
+	if len(instance.Spec.IPPools) == 0 {
+		instance.Spec.IPPools = []operatorv1alpha1.IPPool{
+			{CIDR: "192.168.0.0/16"},
+		}
+	}
 }
 
 // Reconcile reads that state of the cluster for a Core object and makes changes based on the state read
@@ -166,6 +171,11 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		for _, net := range openshiftConfig.Spec.ClusterNetwork {
 			instance.Spec.IPPools = append(instance.Spec.IPPools, operatorv1alpha1.IPPool{CIDR: net.CIDR})
 		}
+	}
+
+	// Validate the configuration.
+	if err = validateCustomResource(instance); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// Render the desired objects based on our configuration.
@@ -236,13 +246,9 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 
 func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {
 	var objs []runtime.Object
-	// Only install KubeProxy if required, and do so before installing Node.
 	if cr.Spec.RunKubeProxy {
-		if len(cr.Spec.APIServer) == 0 {
-			log.Info("APIServer parameter is required for a KubeProxy installation")
-		} else {
-			objs = render.KubeProxy(cr)
-		}
+		// Only install KubeProxy if required, and do so before installing Node.
+		objs = render.KubeProxy(cr)
 	}
 	objs = append(objs, render.Node(cr)...)
 	objs = append(objs, render.Controllers(cr)...)

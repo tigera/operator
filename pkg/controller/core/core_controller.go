@@ -1,10 +1,22 @@
+// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package core
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/go-logr/logr"
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
@@ -106,35 +118,6 @@ type ReconcileCore struct {
 	scheme *runtime.Scheme
 }
 
-func fillDefaults(instance *operatorv1alpha1.Core) {
-	if instance.Spec.Version == "" {
-		instance.Spec.Version = "latest"
-	}
-	if len(instance.Spec.Registry) == 0 {
-		instance.Spec.Registry = "docker.io/"
-	}
-	if !strings.HasSuffix(instance.Spec.Registry, "/") {
-		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
-	}
-	if len(instance.Spec.Variant) == 0 {
-		instance.Spec.Variant = operatorv1alpha1.Calico
-	}
-	if len(instance.Spec.CNINetDir) == 0 {
-		instance.Spec.CNINetDir = "/etc/cni/net.d"
-	}
-	if len(instance.Spec.CNIBinDir) == 0 {
-		instance.Spec.CNIBinDir = "/opt/cni/bin"
-	}
-	if len(instance.Spec.IPPools) == 0 {
-		instance.Spec.IPPools = []operatorv1alpha1.IPPool{
-			{CIDR: "192.168.0.0/16"},
-		}
-	}
-	if len(instance.Spec.KubeProxyImage) == 0 {
-		instance.Spec.KubeProxyImage = "k8s.gcr.io/kube-proxy:v1.12.7"
-	}
-}
-
 // Reconcile reads that state of the cluster for a Core object and makes changes based on the state read
 // and what is in the Core.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -182,7 +165,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// Render the desired objects based on our configuration.
-	objs := renderObjects(instance)
+	objs := render.Render(instance)
 
 	// Set Core instance as the owner and controller
 	for _, obj := range objs {
@@ -245,15 +228,4 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
 	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
-}
-
-func renderObjects(cr *operatorv1alpha1.Core) []runtime.Object {
-	var objs []runtime.Object
-	if cr.Spec.RunKubeProxy {
-		// Only install KubeProxy if required, and do so before installing Node.
-		objs = render.KubeProxy(cr)
-	}
-	objs = append(objs, render.Node(cr)...)
-	objs = append(objs, render.Controllers(cr)...)
-	return objs
 }

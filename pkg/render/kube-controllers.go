@@ -130,6 +130,11 @@ func controllersDeployment(cr *operatorv1alpha1.Core) *apps.Deployment {
 			Strategy: apps.DeploymentStrategy{
 				Type: apps.RecreateDeploymentStrategyType,
 			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": "calico-kube-controllers",
+				},
+			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "calico-kube-controllers",

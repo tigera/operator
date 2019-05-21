@@ -15,7 +15,7 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: image
+test: image ut st
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
@@ -23,7 +23,9 @@ GO_BUILD_VER?=v0.20
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 CONTAINERIZED=docker run --rm \
 		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
+		-v $(PWD)/.go-pkg-cache:/go-cache/:rw \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-e GOCACHE=/go-cache \
 		-w /go/src/$(PACKAGE_NAME) \
 		$(CALICO_BUILD)
 
@@ -48,9 +50,20 @@ clean:
 ###############################################################################
 # Tests
 ###############################################################################
-st: cluster-create
+WHAT?=.
+GINKGO_ARGS?=
+GINKGO_FOCUS?=.*
+
+## Run tests against a local Kubernetes cluster.
+st: 
 	@echo "TODO: Write some STs"
 
+## Run per-package unit tests
+ut:
+	-mkdir -p .go-pkg-cache report
+	$(CONTAINERIZED) ginkgo -r --skipPackage vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)
+
+## Create a local docker-in-docker cluster.
 cluster-create: k3d
 	./k3d create \
 		--workers 2 \
@@ -58,6 +71,7 @@ cluster-create: k3d
 		--server-arg="--no-flannel" \
 		--name "operator-test-cluster"
 
+## Destroy local docker-in-docker cluster
 cluster-destroy: k3d
 	./k3d delete --name "operator-test-cluster"
 

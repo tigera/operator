@@ -52,6 +52,14 @@ required = [
   version = "=v0.29.0"
 
 [[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "gopkg.in/fsnotify/fsnotify.v1"
+
+[[override]]
+  branch = "master"
+  name = "github.com/hpcloud/tail"
+
+[[override]]
   name = "sigs.k8s.io/controller-runtime"
   version = "=v0.1.10"
 
@@ -72,3 +80,7 @@ required = [
   [[prune.project]]
     name = "k8s.io/gengo"
     non-go = false
+
+[[constraint]]
+  name = "github.com/onsi/ginkgo"
+  version = "1.8.0"

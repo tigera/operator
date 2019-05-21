@@ -28,7 +28,7 @@ import (
 
 var replicas int32 = 1
 
-func Controllers(cr *operatorv1alpha1.Core) []runtime.Object {
+func KubeControllers(cr *operatorv1alpha1.Core) []runtime.Object {
 	return []runtime.Object{
 		controllersServiceAccount(cr),
 		controllersRole(cr),

@@ -34,11 +34,12 @@ var _ = Describe("kube-proxy rendering tests", func() {
 				IPPools: []operatorv1alpha1.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Version:   "test",
-				Registry:  "test-reg/",
-				CNINetDir: "/test/cni/net/dir",
-				CNIBinDir: "/test/cni/bin/dir",
-				APIServer: "https://apiserver:443",
+				Version:        "test",
+				Registry:       "test-reg/",
+				CNINetDir:      "/test/cni/net/dir",
+				CNIBinDir:      "/test/cni/bin/dir",
+				APIServer:      "https://apiserver:443",
+				KubeProxyImage: "k8s.gcr.io/kube-proxy:v1.12.7",
 			},
 		}
 

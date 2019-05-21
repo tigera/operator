@@ -39,7 +39,12 @@ type CoreSpec struct {
 	// Default: false
 	RunKubeProxy bool `json:"runKubeProxy,omitempty"`
 
+	// APIServer is a mandatory string containing a server:port URL.
 	APIServer string `json:"apiServer,omitempty"`
+
+	// Optional value for a custom kube-proxy image.
+	// Default: "k8s.gcr.io/kube-proxy:v1.12.7"
+	KubeProxyImage string `json:"kubeProxyImage,omitempty"`
 }
 
 type ProductVariant string

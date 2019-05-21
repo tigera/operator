@@ -130,6 +130,9 @@ func fillDefaults(instance *operatorv1alpha1.Core) {
 			{CIDR: "192.168.0.0/16"},
 		}
 	}
+	if len(instance.Spec.KubeProxyImage) == 0 {
+		instance.Spec.KubeProxyImage = "k8s.gcr.io/kube-proxy:v1.12.7"
+	}
 }
 
 // Reconcile reads that state of the cluster for a Core object and makes changes based on the state read

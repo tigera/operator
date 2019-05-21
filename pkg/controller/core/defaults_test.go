@@ -30,22 +30,25 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Registry).To(Equal("docker.io/"))
 		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
-		Expect(instance.Spec.RunKubeProxy).To(BeFalse())
-		Expect(instance.Spec.APIServer).To(Equal(""))
+		Expect(instance.Spec.KubeProxy.Required).To(BeFalse())
+		Expect(instance.Spec.KubeProxy.APIServer).To(Equal(""))
 	})
 
 	It("should not override custom configuration", func() {
 		instance := &operatorv1alpha1.Core{
 			Spec: operatorv1alpha1.CoreSpec{
-				Version:      "test",
-				Variant:      operatorv1alpha1.TigeraSecureEnterprise,
-				Registry:     "test-reg/",
-				CNIBinDir:    "/test/bin",
-				CNINetDir:    "/test/net",
-				RunKubeProxy: true,
-				APIServer:    "http://server",
+				Version:   "test",
+				Variant:   operatorv1alpha1.TigeraSecureEnterprise,
+				Registry:  "test-reg/",
+				CNIBinDir: "/test/bin",
+				CNINetDir: "/test/net",
 				IPPools: []operatorv1alpha1.IPPool{
 					{CIDR: "1.2.3.0/24"},
+				},
+				KubeProxy: operatorv1alpha1.KubeProxySpec{
+					Required:  true,
+					APIServer: "http://server",
+					Image:     "test-image",
 				},
 			},
 		}

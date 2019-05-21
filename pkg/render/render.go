@@ -21,7 +21,7 @@ import (
 
 func Render(cr *operatorv1alpha1.Core) []runtime.Object {
 	var objs []runtime.Object
-	if cr.Spec.RunKubeProxy {
+	if cr.Spec.KubeProxy.Required {
 		// Only install KubeProxy if required, and do so before installing Node.
 		objs = KubeProxy(cr)
 	}

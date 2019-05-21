@@ -20,10 +20,9 @@ import (
 
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 	"github.com/tigera/operator/pkg/render"
-	apps "k8s.io/api/apps/v1"
 )
 
-var _ = Describe("kube-controllers rendering tests", func() {
+var _ = Describe("Rendering tests", func() {
 	var instance *operatorv1alpha1.Core
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -43,19 +42,24 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		resources := render.KubeControllers(instance)
-		Expect(len(resources)).To(Equal(4))
+		// For this scenario, we expect the basic resources
+		// created by the controller without any optional ones. These include:
+		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
+		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
+		resources := render.Render(instance)
+		Expect(len(resources)).To(Equal(9))
+	})
 
-		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-kube-controllers", "kube-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "calico-kube-controllers", "kube-system", "apps", "v1", "Deployment")
-
-		// The Deployment should have the correct configuration.
-		ds := resources[3].(*apps.Deployment)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/calico/kube-controllers:test"))
-		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "DATASTORE_TYPE", "kubernetes")
-		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "ENABLED_CONTROLLERS", "node")
+	It("should render all resources when kube-proxy is enabled", func() {
+		// In this scenario, we expect the basic resources from the default
+		// configuration plus resources for the kube-proxy, which includes
+		// an additional 4 resources:
+		// - kube-proxy ServiceAccount
+		// - kube-proxy ClusterRoleBinding
+		// - kube-proxy ConfigMap
+		// - kube-proxy DaemonSet
+		instance.Spec.RunKubeProxy = true
+		resources := render.Render(instance)
+		Expect(len(resources)).To(Equal(13))
 	})
 })

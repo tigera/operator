@@ -15,7 +15,7 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: image ut st
+test: ut image
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)

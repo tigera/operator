@@ -15,7 +15,7 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: image ut st
+test: ut image
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
@@ -26,7 +26,9 @@ CONTAINERIZED=docker run --rm \
 		-v $(PWD)/.go-pkg-cache:/go-cache/:rw \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 		-e GOCACHE=/go-cache \
+		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-w /go/src/$(PACKAGE_NAME) \
+		--net=host \
 		$(CALICO_BUILD)
 
 ###############################################################################
@@ -54,12 +56,9 @@ WHAT?=.
 GINKGO_ARGS?=
 GINKGO_FOCUS?=.*
 
-## Run tests against a local Kubernetes cluster.
-st: 
-	@echo "TODO: Write some STs"
-
-## Run per-package unit tests
-ut:
+## Run the full set of tests
+ut: cluster-create run-uts cluster-destroy
+run-uts: vendor
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) ginkgo -r --skipPackage vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)
 
@@ -70,15 +69,29 @@ cluster-create: k3d
 		--worker-arg="--no-flannel" \
 		--server-arg="--no-flannel" \
 		--name "operator-test-cluster"
+	timeout 10 sh -c "while ! ./k3d get-kubeconfig --name='operator-test-cluster'; do echo 'Waiting for cluster'; sleep 1; done"
+	cp ~/.config/k3d/operator-test-cluster/kubeconfig.yaml .
+	$(MAKE) deploy-crds
+
+deploy-crds: kubectl
+	@export KUBECONFIG=./kubeconfig.yaml && \
+		./kubectl apply -f deploy/crds/operator_v1alpha1_core_crd.yaml && \
+		./kubectl apply -f deploy/crds/calico-resources/
 
 ## Destroy local docker-in-docker cluster
 cluster-destroy: k3d
 	./k3d delete --name "operator-test-cluster"
+	rm -f ./kubeconfig.yaml
 
 k3d:
 	# TODO: Use a real release of k3d. For now, just use this build which turns off flannel.
 	wget https://github.com/caseydavenport/k3d/releases/download/no-flannel/k3d
 	chmod +x ./k3d
+
+kubectl:
+	curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+	chmod +x ./kubectl
+
 
 ###############################################################################
 # Static checks

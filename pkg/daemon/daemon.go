@@ -85,5 +85,4 @@ func Main() {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}
-
 }

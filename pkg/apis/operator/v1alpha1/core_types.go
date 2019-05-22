@@ -12,7 +12,7 @@ import (
 type KubeProxySpec struct {
 	// Required specifies whether Kube-Proxy needs to be installed or if it's already provided.
 	// Default: false
-	Required bool `json:"installed,omitempty"`
+	Required bool `json:"required,omitempty"`
 
 	// APIServer is a mandatory string containing a server:port URL.
 	// Default: ""
@@ -51,7 +51,7 @@ type CoreSpec struct {
 	// Default: /opt/cni/bin
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 
-	KubeProxy KubeProxySpec
+	KubeProxy KubeProxySpec `json: "kubeProxy,omitempty"`
 }
 
 type ProductVariant string

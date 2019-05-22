@@ -38,7 +38,11 @@ var _ = Describe("kube-proxy rendering tests", func() {
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				APIServer: "https://apiserver:443",
+				KubeProxy: operatorv1alpha1.KubeProxySpec{
+					Required:  true,
+					APIServer: "https://apiserver:443",
+					Image:     "k8s.gcr.io/kube-proxy:v1.13.6",
+				},
 			},
 		}
 
@@ -56,7 +60,7 @@ var _ = Describe("kube-proxy rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[3].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("k8s.gcr.io/kube-proxy:v1.12.7"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("k8s.gcr.io/kube-proxy:v1.13.6"))
 
 		// The ConfigMap should have the right info.
 		cm := resources[2].(*v1.ConfigMap)

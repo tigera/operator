@@ -46,4 +46,11 @@ func fillDefaults(instance *operatorv1alpha1.Core) {
 			{CIDR: "192.168.0.0/16"},
 		}
 	}
+	if instance.Spec.KubeProxy.Required {
+		if len(instance.Spec.KubeProxy.Image) == 0 {
+			// Openshift's latest release uses Kubernetes 1.13. This is the latest stable kube-proxy version under that
+			// release as of 5.21.19.
+			instance.Spec.KubeProxy.Image = "k8s.gcr.io/kube-proxy:v1.13.6"
+		}
+	}
 }

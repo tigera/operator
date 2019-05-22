@@ -7,6 +7,22 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 // NOTE: After modifying this file, run `make gen-files` to regenerate code.
 
+// KubeProxySpec defines the state of a kube-proxy installation.
+// +k8s:openapi-gen=true
+type KubeProxySpec struct {
+	// Required specifies whether Kube-Proxy needs to be installed or if it's already provided.
+	// Default: false
+	Required bool `json:"required,omitempty"`
+
+	// APIServer is a mandatory string containing a server:port URL.
+	// Default: ""
+	APIServer string `json:"apiServer,omitempty"`
+
+	// Optional value for a custom kube-proxy image.
+	// Default: "k8s.gcr.io/kube-proxy:v1.14.2"
+	Image string `json:"image,omitempty"`
+}
+
 // CoreSpec defines the desired state of Core
 // +k8s:openapi-gen=true
 type CoreSpec struct {
@@ -35,11 +51,7 @@ type CoreSpec struct {
 	// Default: /opt/cni/bin
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 
-	// RunKubeProxy specifies whether Kube-Proxy needs to be installed or if it's already provided.
-	// Default: false
-	RunKubeProxy bool `json:"runKubeProxy,omitempty"`
-
-	APIServer string `json:"apiServer,omitempty"`
+	KubeProxy KubeProxySpec `json: "kubeProxy,omitempty"`
 }
 
 type ProductVariant string

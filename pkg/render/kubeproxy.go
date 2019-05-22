@@ -75,7 +75,7 @@ clientConnection:
   contentType: application/vnd.kubernetes.protobuf
   kubeconfig: /var/lib/kube-proxy/kubeconfig.conf
   qps: 5
-clusterCIDR: defaultCIDR
+clusterCIDR: <defaultCIDR>
 configSyncPeriod: 15m0s
 conntrack:
   max: null
@@ -111,7 +111,7 @@ kind: Config
 clusters:
 - cluster:
     certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-    server: APIServer
+    server: <APIServer>
   name: default
 contexts:
 - context:
@@ -127,8 +127,8 @@ users:
 `
 
 	// Populate the config map with values from the custom resource.
-	kubeconfig = strings.Replace(kubeconfig, "APIServer", cr.Spec.APIServer, 1)
-	config = strings.Replace(config, "defaultCIDR", cr.Spec.IPPools[0].CIDR, 1)
+	kubeconfig = strings.Replace(kubeconfig, "<APIServer>", cr.Spec.KubeProxy.APIServer, 1)
+	config = strings.Replace(config, "<defaultCIDR>", cr.Spec.IPPools[0].CIDR, 1)
 
 	return &v1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -165,7 +165,7 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 						{
 							Command:         []string{"/usr/local/bin/kube-proxy"},
 							Args:            []string{"--config=/var/lib/kube-proxy/config.conf"},
-							Image:           "k8s.gcr.io/kube-proxy:v1.12.7",
+							Image:           cr.Spec.KubeProxy.Image,
 							ImagePullPolicy: v1.PullAlways,
 							Name:            "kube-proxy",
 							SecurityContext: &v1.SecurityContext{

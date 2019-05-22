@@ -58,7 +58,7 @@ var _ = Describe("Rendering tests", func() {
 		// - kube-proxy ClusterRoleBinding
 		// - kube-proxy ConfigMap
 		// - kube-proxy DaemonSet
-		instance.Spec.RunKubeProxy = true
+		instance.Spec.KubeProxy.Required = true
 		resources := render.Render(instance)
 		Expect(len(resources)).To(Equal(13))
 	})

@@ -18,6 +18,8 @@ import (
 	"context"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -38,9 +40,15 @@ func ExpectResourceCreated(c client.Client, obj runtime.Object) {
 
 // ExpectResourceDestroyed asserts that the given object no longer exists.
 func ExpectResourceDestroyed(c client.Client, obj runtime.Object) {
+	var err error
 	Eventually(func() error {
-		return GetResource(c, obj)
+		err = GetResource(c, obj)
+		return err
 	}, 10*time.Second).ShouldNot(BeNil())
+
+	serr, ok := err.(*errors.StatusError)
+	Expect(ok).To(BeTrue())
+	Expect(serr.ErrStatus.Code).To(Equal(int32(404)))
 }
 
 // GetResource gets the requested object, populating obj with its contents.

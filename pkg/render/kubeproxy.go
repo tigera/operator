@@ -127,7 +127,7 @@ users:
 `
 
 	// Populate the config map with values from the custom resource.
-	kubeconfig = strings.Replace(kubeconfig, "<APIServer>", cr.Spec.KubeProxy.APIServer, 1)
+	kubeconfig = strings.Replace(kubeconfig, "<APIServer>", cr.Spec.Components.KubeProxy.APIServer, 1)
 	config = strings.Replace(config, "<defaultCIDR>", cr.Spec.IPPools[0].CIDR, 1)
 
 	return &v1.ConfigMap{
@@ -165,7 +165,7 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 						{
 							Command:         []string{"/usr/local/bin/kube-proxy"},
 							Args:            []string{"--config=/var/lib/kube-proxy/config.conf"},
-							Image:           cr.Spec.KubeProxy.Image,
+							Image:           cr.Spec.Components.KubeProxy.Image,
 							ImagePullPolicy: v1.PullAlways,
 							Name:            "kube-proxy",
 							SecurityContext: &v1.SecurityContext{

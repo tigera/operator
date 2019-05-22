@@ -164,10 +164,17 @@ sub-tag-images-%:
 # Building the code
 ###############################################################################
 .PHONY: build
+
+# Get version from git.
+GIT_VERSION:=$(shell git describe --tags --dirty --always)
+ifeq ($(LOCAL_BUILD),true)
+	GIT_VERSION = $(shell git describe --tags --dirty --always)-dev-build
+endif
+
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): vendor $(GO_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) ./cmd/manager/main.go
+	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
 
 image: vendor build
 	docker build -f build/Dockerfile.amd64 -t $(BUILD_IMAGE) .

@@ -24,7 +24,7 @@ Set your shell to use the local cluster:
 Apply the necessary CRDs (if it fails, run this command twice):
 
 	kubectl apply -f deploy/crds
-	kubectl apply -f deploy/crds/calico-resources
+	kubectl apply -f deploy/crds/calico/
 
 Then, build the local code:
 

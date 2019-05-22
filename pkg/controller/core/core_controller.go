@@ -140,6 +140,13 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+
+	err = checkOperatorVersion(instance.Spec.MinimumOperatorVersion)
+	if err != nil {
+		reqLogger.Info("Invalid version", "err", err.Error(), "version", instance.Spec.Version, "opVersion", instance.Spec.MinimumOperatorVersion)
+		return reconcile.Result{}, err
+	}
+
 	fillDefaults(instance)
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
@@ -211,7 +218,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
-	if !instance.Spec.KubeProxy.Required {
+	if !instance.Spec.Components.KubeProxy.Required {
 		// Render the objects that we _might_ want to delete.
 		objs := render.KubeProxy(instance)
 

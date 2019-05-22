@@ -111,7 +111,38 @@ func controllersRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBindin
 }
 
 func controllersDeployment(cr *operatorv1alpha1.Core) *apps.Deployment {
-	controllersImage := fmt.Sprintf("%scalico/kube-controllers:%s", cr.Spec.Registry, cr.Spec.Version)
+	imageName := "calico/kube-controllers"
+	controllersImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
+	if len(cr.Spec.Components.KubeControllers.ImageOverride) > 0 {
+		controllersImage = cr.Spec.Components.KubeControllers.ImageOverride
+	}
+
+	tolerations := []v1.Toleration{
+		{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
+		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
+	}
+	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.KubeControllers.Tolerations)
+
+	volumeMounts := []v1.VolumeMount{}
+	volumeMounts = setCustomVolumeMounts(volumeMounts, cr.Spec.Components.KubeControllers.ExtraVolumeMounts)
+
+	volumes := []v1.Volume{}
+	volumes = setCustomVolumes(volumes, cr.Spec.Components.KubeControllers.ExtraVolumes)
+
+	env := []v1.EnvVar{
+		{Name: "ENABLED_CONTROLLERS", Value: "node"},
+		{Name: "DATASTORE_TYPE", Value: string(cr.Spec.Datastore.Type)},
+	}
+	env = setCustomEnv(env, cr.Spec.Components.KubeControllers.ExtraEnv)
+
+	resources := v1.ResourceRequirements{
+		Requests: v1.ResourceList{},
+		Limits:   v1.ResourceList{},
+	}
+	if len(cr.Spec.Components.KubeControllers.Resources.Limits) > 0 || len(cr.Spec.Components.KubeControllers.Resources.Requests) > 0 {
+		resources.Requests = cr.Spec.Components.KubeControllers.Resources.Requests
+		resources.Limits = cr.Spec.Components.KubeControllers.Resources.Limits
+	}
 
 	return &apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -147,19 +178,15 @@ func controllersDeployment(cr *operatorv1alpha1.Core) *apps.Deployment {
 					NodeSelector: map[string]string{
 						"beta.kubernetes.io/os": "linux",
 					},
-					Tolerations: []v1.Toleration{
-						{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
-						{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
-					},
+					Tolerations:        tolerations,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
-							Name:  "calico-kube-controllers",
-							Image: controllersImage,
-							Env: []v1.EnvVar{
-								{Name: "ENABLED_CONTROLLERS", Value: "node"},
-								{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-							},
+							Name:         "calico-kube-controllers",
+							Image:        controllersImage,
+							Resources:    resources,
+							Env:          env,
+							VolumeMounts: volumeMounts,
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{
 									Exec: &v1.ExecAction{
@@ -172,6 +199,7 @@ func controllersDeployment(cr *operatorv1alpha1.Core) *apps.Deployment {
 							},
 						},
 					},
+					Volumes: volumes,
 				},
 			},
 		},

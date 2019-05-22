@@ -7,6 +7,9 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/tigera/operator/pkg/daemon"
+	"github.com/tigera/operator/version"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/clientcmd"
@@ -14,7 +17,6 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
-	"github.com/tigera/operator/pkg/daemon"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -31,6 +33,7 @@ func init() {
 }
 
 func printVersion() {
+	log.Info(fmt.Sprintf("Version: %v", version.VERSION))
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))

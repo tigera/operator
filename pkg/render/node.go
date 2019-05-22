@@ -216,13 +216,101 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 }
 
 func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
+	nodeImageName := "calico/node"
+	cniImageName := "calico/cni"
+
 	// Build image strings to use.
-	cniImage := fmt.Sprintf("%scalico/cni:%s", cr.Spec.Registry, cr.Spec.Version)
-	nodeImage := fmt.Sprintf("%scalico/node:%s", cr.Spec.Registry, cr.Spec.Version)
+	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, nodeImageName, cr.Spec.Version)
+	if len(cr.Spec.Components.Node.ImageOverride) > 0 {
+		nodeImage = cr.Spec.Components.Node.ImageOverride
+	}
+	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, cniImageName, cr.Spec.Version)
+	if len(cr.Spec.Components.CNI.ImageOverride) > 0 {
+		cniImage = cr.Spec.Components.CNI.ImageOverride
+	}
+
+	tolerations := []v1.Toleration{
+		{Operator: "Exists", Effect: "NoSchedule"},
+		{Operator: "Exists", Effect: "NoExecute"},
+		// TODO: Not valid?? {Operator: "Exists", Effect: "CriticalAddonsOnly"},
+	}
+	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.Node.Tolerations)
+
+	nodeVolumeMounts := []v1.VolumeMount{
+		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
+		{MountPath: "/var/run/calico", Name: "var-run-calico"},
+		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+	}
+	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, cr.Spec.Components.Node.ExtraVolumeMounts)
+
+	cniVolumeMounts := []v1.VolumeMount{
+		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+	}
+	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, cr.Spec.Components.CNI.ExtraVolumeMounts)
+
+	var fileOrCreate = v1.HostPathFileOrCreate
+	allVolumes := []v1.Volume{
+		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
+		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
+		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
+	}
+	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.Node.ExtraVolumes)
+	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.CNI.ExtraVolumes)
+
+	nodeEnv := []v1.EnvVar{
+		{Name: "DATASTORE_TYPE", Value: string(cr.Spec.Datastore.Type)},
+		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+		{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+		{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+		{Name: "IP", Value: "autodetect"},
+		{Name: "CALICO_IPV4POOL_CIDR", Value: cr.Spec.IPPools[0].CIDR},
+		{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
+		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+		{Name: "FELIX_IPINIPMTU", Value: "1440"},
+		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+		{Name: "FELIX_HEALTHENABLED", Value: "true"},
+		{
+			Name: "NODENAME",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+	}
+	nodeEnv = setCustomEnv(nodeEnv, cr.Spec.Components.Node.ExtraEnv)
+
+	cniEnv := []v1.EnvVar{
+		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+		{Name: "SLEEP", Value: "false"},
+		{Name: "CNI_NET_DIR", Value: cr.Spec.CNINetDir},
+		{
+			Name: "CNI_NETWORK_CONFIG",
+			ValueFrom: &v1.EnvVarSource{
+				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+					Key: "config",
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: "cni-config",
+					},
+				},
+			},
+		},
+	}
+	cniEnv = setCustomEnv(cniEnv, cr.Spec.Components.CNI.ExtraEnv)
+
+	nodeResources := v1.ResourceRequirements{}
+	if len(cr.Spec.Components.Node.Resources.Limits) > 0 || len(cr.Spec.Components.Node.Resources.Requests) > 0 {
+		nodeResources.Requests = cr.Spec.Components.Node.Resources.Requests
+		nodeResources.Limits = cr.Spec.Components.Node.Resources.Limits
+	}
 
 	var terminationGracePeriod int64 = 0
-	var trueBool bool = true
-	var fileOrCreate v1.HostPathType = v1.HostPathFileOrCreate
+	trueBool := true
+
 	return &apps.DaemonSet{
 		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: nodeMeta,
@@ -235,40 +323,18 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 					},
 				},
 				Spec: v1.PodSpec{
-					NodeSelector: map[string]string{},
-					Tolerations: []v1.Toleration{
-						{Operator: "Exists", Effect: "NoSchedule"},
-						{Operator: "Exists", Effect: "NoExecute"},
-						// TODO: Not valid?? {Operator: "Exists", Effect: "CriticalAddonsOnly"},
-					},
+					NodeSelector:                  map[string]string{},
+					Tolerations:                   tolerations,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					InitContainers: []v1.Container{
 						{
-							Name:    "install-cni",
-							Image:   cniImage,
-							Command: []string{"/install-cni.sh"},
-							Env: []v1.EnvVar{
-								{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-								{Name: "SLEEP", Value: "false"},
-								{Name: "CNI_NET_DIR", Value: cr.Spec.CNINetDir},
-								{
-									Name: "CNI_NETWORK_CONFIG",
-									ValueFrom: &v1.EnvVarSource{
-										ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-											Key: "config",
-											LocalObjectReference: v1.LocalObjectReference{
-												Name: "cni-config",
-											},
-										},
-									},
-								},
-							},
-							VolumeMounts: []v1.VolumeMount{
-								{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-								{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-							},
+							Name:         "install-cni",
+							Image:        cniImage,
+							Command:      []string{"/install-cni.sh"},
+							Env:          cniEnv,
+							VolumeMounts: cniVolumeMounts,
 						},
 					},
 					// TODO: Add readiness and liveness checks
@@ -276,43 +342,18 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 						{
 							Name:            "calico-node",
 							Image:           nodeImage,
+							Resources:       nodeResources,
 							SecurityContext: &v1.SecurityContext{Privileged: &trueBool},
-							Env: []v1.EnvVar{
-								{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-								{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-								{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-								{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
-								{Name: "IP", Value: "autodetect"},
-								{Name: "CALICO_IPV4POOL_CIDR", Value: cr.Spec.IPPools[0].CIDR},
-								{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-								{Name: "FELIX_IPINIPMTU", Value: "1440"},
-								{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-								{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-								{Name: "FELIX_HEALTHENABLED", Value: "true"},
-								{
-									Name: "NODENAME",
-									ValueFrom: &v1.EnvVarSource{
-										FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-									},
-								},
-							},
-							VolumeMounts: []v1.VolumeMount{
-								{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
-								{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-								{MountPath: "/var/run/calico", Name: "var-run-calico"},
-								{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
-							},
+							Env:             nodeEnv,
+							VolumeMounts:    nodeVolumeMounts,
 						},
 					},
-					Volumes: []v1.Volume{
-						{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
-						{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
-						{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
-						{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-						{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
-						{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
-					},
+					Volumes: allVolumes,
+				},
+			},
+			UpdateStrategy: apps.DaemonSetUpdateStrategy{
+				RollingUpdate: &apps.RollingUpdateDaemonSet{
+					MaxUnavailable: cr.Spec.Components.Node.MaxUnavailable,
 				},
 			},
 		},

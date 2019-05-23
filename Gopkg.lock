@@ -269,7 +269,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:392fcfaf94a99f112381968b43995e2111ecab4f2e1fc5bf9d56f2b680db31ed"
+  digest = "1:0671046ab1b1fcad07accc3bb416b532b21d27983b9df55d3da86acf5d9a8c9d"
   name = "github.com/gophercloud/gophercloud"
   packages = [
     ".",
@@ -281,7 +281,7 @@
     "pagination",
   ]
   pruneopts = "NT"
-  revision = "e87e5f90e7e67a309e0fe96dac144b824447607f"
+  revision = "4885c347dcf48fc518798d37fb93ffa7bdaa43e9"
 
 [[projects]]
   branch = "master"
@@ -457,7 +457,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:27bf79fc4f7b3c30bcf55ec5946006104af49d65e81cb6ff68d99ba4b7915cb9"
+  digest = "1:20e547b83b26f6166698ca658de94ac5924169b6e514894917a831b7d42486fa"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sutil",
@@ -468,7 +468,7 @@
     "version",
   ]
   pruneopts = "NT"
-  revision = "a67086ad2c15e1370f9a898fc946216378d0889b"
+  revision = "d4d37b10fc4bd875f56d75d59c69b3e53674a304"
 
 [[projects]]
   digest = "1:93b1d84c5fa6d1ea52f4114c37714cddd84d5b78f151b62bb101128dd51399bf"
@@ -543,7 +543,7 @@
     "internal/fs",
   ]
   pruneopts = "NT"
-  revision = "bc1a522cf7b161885c0c3ae8080f59bf38a6e9e7"
+  revision = "a7aeb8df3389edaf53efcc319ad0063cb27c3960"
 
 [[projects]]
   digest = "1:16d98b6d7dc80a9e55f2db81218c18f59d988bd0b1770b436cd46a4af94023e2"
@@ -664,7 +664,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:bee6f82ade647972632ca1f5acb6aa011f3504dcf5d407d8e5708ab60a321f09"
+  digest = "1:7161c8a8c4b49f47ccfcd25749a444fa73acb3e0995d8b1663dd6e2282a0651a"
   name = "golang.org/x/oauth2"
   packages = [
     ".",
@@ -674,7 +674,7 @@
     "jwt",
   ]
   pruneopts = "NT"
-  revision = "950ef44c6e079baf075030377d90bf0c7e4b7b7a"
+  revision = "aaccbc9213b0974828f81aaac109d194880e3014"
 
 [[projects]]
   branch = "master"
@@ -686,14 +686,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:811b3f22d8b710e08793b5348a97d1c3db44f5beccad5463beaa17b7f16e5781"
+  digest = "1:ccd5a2df094d3b793c4ce51a07a3542d877d15247aff79ef7286bd6ffc6dec80"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "8097e1b27ff5e40620836729a9584e91b094b062"
+  revision = "0e01d883c5c5e3a1741118a9962f68d71b0a6ed4"
 
 [[projects]]
   digest = "1:9cba358f138b62040fb7b875085e53425dd4b20758d9170ff5b48e2a14eb558f"
@@ -743,7 +743,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f7e33fcd4b32b77fa626ecd6a230a055e3a15d8cce07a7b8e71e10a286a64787"
+  digest = "1:b9a3aad6337388b4c33387d1e878876972442bd50be0355d630f06063e98909c"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -760,7 +760,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "521d6ed310dd2348b2d3c64b91c55df233c52860"
+  revision = "38d8bcfa38af6494a92557425458dc19a8e204d4"
 
 [[projects]]
   digest = "1:02786f28c84c3bf98ef2e5f31eecfafe01c77a789d99e5c87d8f761254b33afb"

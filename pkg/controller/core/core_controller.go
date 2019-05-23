@@ -16,6 +16,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/go-logr/logr"
@@ -128,6 +129,10 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Fetch the Core instance. We only support a single instance named "default".
 	instance := &operatorv1alpha1.Core{}
 	err := r.client.Get(context.TODO(), defaultInstanceKey, instance)
+
+	fmt.Printf(" -1-----> %+v\n", instance)
+	fmt.Printf(" -2-----> required %v\n", instance.Spec.KubeProxy.Required)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

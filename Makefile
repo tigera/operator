@@ -55,7 +55,7 @@ GINKGO_ARGS?=
 GINKGO_FOCUS?=.*
 
 ## Run tests against a local Kubernetes cluster.
-st: 
+st:
 	@echo "TODO: Write some STs"
 
 ## Run per-package unit tests
@@ -129,7 +129,7 @@ endif
 ###############################################################################
 ## Generating code after API changes
 gen-files:
-	operator-sdk generate k8s --verbose
+	operator-sdk generate k8s
 
 .PHONY: help
 ## Display this help text

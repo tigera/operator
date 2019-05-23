@@ -7,3 +7,6 @@ spec:
   registry: docker.io
   cniBinDir: /opt/cni/bin
   cniNetDir: /etc/cni/net.d
+  kubeProxy:
+    required: true
+    serverAPI: http://foo.bar:1234

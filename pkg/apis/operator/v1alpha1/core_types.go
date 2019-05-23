@@ -51,6 +51,7 @@ type CoreSpec struct {
 	// Default: /opt/cni/bin
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 
+	// KubeProxy install config.
 	KubeProxy KubeProxySpec `json: "kubeProxy,omitempty"`
 }
 

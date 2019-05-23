@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: operator
+  name: tigera-operator
+  namespace: tigera-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: operator
+      name: tigera-operator
   template:
     metadata:
       labels:
-        name: operator
+        name: tigera-operator
     spec:
       tolerations:
         - effect: NoSchedule
           operator: Exists
         - effect: NoSchedule
           operator: Exists
-      serviceAccountName: operator
+      serviceAccountName: tigera-operator
       hostNetwork: true
       containers:
-        - name: operator
-          # Replace this with the built image name
-          image: tigera/operator
+        - name: tigera-operator
+          image: quay.io/tigera/operator
           command:
           - operator
           imagePullPolicy: Always
@@ -34,4 +34,4 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
-              value: "operator"
+              value: "tigera-operator"

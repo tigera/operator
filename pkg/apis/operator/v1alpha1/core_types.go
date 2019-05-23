@@ -52,7 +52,7 @@ type CoreSpec struct {
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 
 	// KubeProxy install config.
-	KubeProxy KubeProxySpec `json: "kubeProxy,omitempty"`
+	KubeProxy KubeProxySpec `json:"kubeProxy,omitempty"`
 }
 
 type ProductVariant string

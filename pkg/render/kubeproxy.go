@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-var kubeProxyMeta = metav1.ObjectMeta{
+var KubeProxyMeta = metav1.ObjectMeta{
 	Name:      "kube-proxy",
 	Namespace: "kube-system",
 }
@@ -43,7 +43,7 @@ func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
 func kubeProxyServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: kubeProxyMeta,
+		ObjectMeta: KubeProxyMeta,
 	}
 }
 
@@ -132,7 +132,7 @@ users:
 
 	return &v1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: kubeProxyMeta,
+		ObjectMeta: KubeProxyMeta,
 		Data: map[string]string{
 			"config.conf":     config,
 			"kubeconfig.conf": kubeconfig,
@@ -148,7 +148,7 @@ func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 
 	return &apps.DaemonSet{
 		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-		ObjectMeta: kubeProxyMeta,
+		ObjectMeta: KubeProxyMeta,
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "kube-proxy"}},
 			Template: v1.PodTemplateSpec{

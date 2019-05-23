@@ -129,10 +129,6 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Fetch the Core instance. We only support a single instance named "default".
 	instance := &operatorv1alpha1.Core{}
 	err := r.client.Get(context.TODO(), defaultInstanceKey, instance)
-
-	fmt.Printf(" -1-----> %+v\n", instance)
-	fmt.Printf(" -2-----> required %v\n", instance.Spec.KubeProxy.Required)
-
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -169,22 +165,22 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Render the desired objects based on our configuration.
-	objs := render.Render(instance)
+	// Render the desired state objects based on our configuration.
+	desiredStates := render.Render(instance)
 
-	// Set Core instance as the owner and controller
-	for _, obj := range objs {
-		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
+	// Set Core instance as the owner and controller.
+	for _, d := range desiredStates {
+		if err := controllerutil.SetControllerReference(instance, d.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Create the objects.
-	for _, obj := range objs {
-		logCtx := contextLoggerForResource(obj)
-		var old runtime.Object = obj.DeepCopyObject()
+	// Create the desiredState objects.
+	for _, d := range desiredStates {
+		logCtx := contextLoggerForResource(d)
+		var old runtime.Object = d.DeepCopyObject()
 		var key client.ObjectKey
-		key, err = client.ObjectKeyFromObject(obj)
+		key, err = client.ObjectKeyFromObject(d)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -197,17 +193,26 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			// Otherwise, if it was not found, we should create it.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
-			// Resource exists, skip it.
-			// TODO: Reconcile any changes if the object doesn't match.
 			logCtx.V(1).Info("Resource exists")
 			continue
 		}
 
-		logCtx.Info("Creating new object")
-		err = r.client.Create(context.TODO(), obj)
+		logCtx.Info("Creating new desiredStateect")
+		err = r.client.Create(context.TODO(), d)
 		if err != nil {
-			// Hit an error creating object - we need to requeue.
+			// Hit an error creating desiredStateect - we need to requeue.
 			return reconcile.Result{}, err
+		}
+	}
+
+	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
+	if !instance.Spec.KubeProxy.Required {
+		var kubeProxyObj runtime.Object
+		proxyKey := client.ObjectKey{Namespace: render.KubeProxyMeta.Namespace, Name: render.KubeProxyMeta.Name}
+		err := r.client.Get(context.TODO(), proxyKey, kubeProxyObj)
+		if err == nil {
+			r.client.Delete(context.TODO(), kubeProxyObj)
+			fmt.Printf("deleting %+v\n", kubeProxyObj)
 		}
 	}
 

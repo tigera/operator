@@ -22,7 +22,7 @@ spec:
       hostNetwork: true
       containers:
         - name: tigera-operator
-          image: quay.io/tigera/operator
+          image: quay.io/tigera/operator:master
           command:
           - operator
           imagePullPolicy: Always

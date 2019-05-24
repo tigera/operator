@@ -145,7 +145,7 @@ func controllersDeployment(cr *operatorv1alpha1.Core) *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
+						"beta.kubernetes.io/os": "linux",
 					},
 					Tolerations: []v1.Toleration{
 						{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},

@@ -1,5 +1,7 @@
 # Test tools
 k3d
+kubectl
+kubeconfig.yaml
 # Vendor
 vendor/
 # Temporary Build Files

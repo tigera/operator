@@ -32,7 +32,7 @@ Then, build the local code:
 
 And then, run it against your local cluster:
 
-	WATCH_NAMESPACE="" ./build/_output/bin/operator
+	WATCH_NAMESPACE="" ./build/_output/bin/operator-amd64
 
 Finally, tear down the cluster:
 

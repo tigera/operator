@@ -51,7 +51,7 @@ type CoreSpec struct {
 	// Default: /opt/cni/bin
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 
-	KubeProxy KubeProxySpec `json: "kubeProxy,omitempty"`
+	KubeProxy KubeProxySpec `json:"kubeProxy,omitempty"`
 }
 
 type ProductVariant string

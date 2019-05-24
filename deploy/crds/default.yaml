@@ -1,9 +1,0 @@
-apiVersion: operator.tigera.io/v1alpha1
-kind: Core
-metadata:
-  name: default
-spec:
-  version: v3.7.2
-  registry: docker.io
-  cniBinDir: /opt/cni/bin
-  cniNetDir: /etc/cni/net.d

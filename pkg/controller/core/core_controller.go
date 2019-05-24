@@ -164,7 +164,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Render the desired state objects based on our configuration.
+	// Render the desired objects based on our configuration. This represents the desired state of the cluster.
 	desiredStateObjs := render.Render(instance)
 
 	// Set Core instance as the owner and controller.
@@ -192,7 +192,11 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			// Otherwise, if it was not found, we should create it.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
-			logCtx.V(1).Info("Resource exists")
+			logCtx.V(1).Info("Resource exists, updating it.")
+			err = r.client.Update(context.TODO(), d)
+			if err != nil {
+				logCtx.V(1).Info("Failed to update object.")
+			}
 			continue
 		}
 

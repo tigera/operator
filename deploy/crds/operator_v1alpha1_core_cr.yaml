@@ -8,5 +8,5 @@ spec:
   cniBinDir: /opt/cni/bin
   cniNetDir: /etc/cni/net.d
   kubeProxy:
-    required: false
+    required: true
     apiServer: http://foo.bar:1234

@@ -168,18 +168,18 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	desiredStateObjs := render.Render(instance)
 
 	// Set Core instance as the owner and controller.
-	for _, d := range desiredStateObjs {
-		if err := controllerutil.SetControllerReference(instance, d.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
+	for _, obj := range desiredStateObjs {
+		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
 	// Create the desired state objects.
-	for _, d := range desiredStateObjs {
-		logCtx := contextLoggerForResource(d)
-		var old runtime.Object = d.DeepCopyObject()
+	for _, obj := range desiredStateObjs {
+		logCtx := contextLoggerForResource(obj)
+		var old runtime.Object = obj.DeepCopyObject()
 		var key client.ObjectKey
-		key, err = client.ObjectKeyFromObject(d)
+		key, err = client.ObjectKeyFromObject(obj)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -193,15 +193,15 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
 			logCtx.V(1).Info("Resource exists, updating it.")
-			err = r.client.Update(context.TODO(), d)
+			err = r.client.Update(context.TODO(), obj)
 			if err != nil {
 				logCtx.V(1).Info("Failed to update object.")
 			}
 			continue
 		}
 
-		logCtx.Info("Creating new desired state object.")
-		err = r.client.Create(context.TODO(), d)
+		logCtx.Info("Creating new object.")
+		err = r.client.Create(context.TODO(), obj)
 		if err != nil {
 			// Hit an error creating desired state object - we need to requeue.
 			return reconcile.Result{}, err

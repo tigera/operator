@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -195,7 +196,8 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			logCtx.V(1).Info("Resource exists, updating it.")
 			err = r.client.Update(context.TODO(), obj)
 			if err != nil {
-				logCtx.V(1).Info("Failed to update object.")
+				logCtx.V(2).Info("Failed to update object.", "core", key)
+				return reconcile.Result{}, err
 			}
 			continue
 		}
@@ -210,37 +212,26 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
 	if !instance.Spec.KubeProxy.Required {
-		kubeProxyKey := client.ObjectKey{Namespace: render.KubeProxyMeta.Namespace, Name: render.KubeProxyMeta.Name}
-		kubeProxyDS := &apps.DaemonSet{}
-		err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxyDS)
+		// Render the objects that we _might_ want to delete.
+		objs := render.KubeProxy(instance)
+		for _, o := range objs {
+			logCtx := contextLoggerForResource(o)
 
-		if err == nil && kubeProxyDS.Status.CurrentNumberScheduled > 0 {
-			logCtx := contextLoggerForResource(kubeProxyDS)
-			logCtx.Info("Removing kube-proxy instance.")
-			r.client.Delete(context.TODO(), kubeProxyDS)
+			// Check if the object exists.
+			var key client.ObjectKey
+			key, err = client.ObjectKeyFromObject(o)
 
-			kubeProxyCM := &v1.ConfigMap{}
-			if err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxyCM); err == nil {
-				r.client.Delete(context.TODO(), kubeProxyCM)
-			} else {
-				logCtx := contextLoggerForResource(kubeProxyCM)
-				logCtx.V(1).Info("Failed to get a config map for kube-proxy.")
+			if err = r.client.Get(context.TODO(), key, o); err != nil {
+				continue
 			}
 
-			kubeProxyRB := &rbacv1.RoleBinding{}
-			if err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxyRB); err == nil {
-				r.client.Delete(context.TODO(), kubeProxyRB)
-			} else {
-				logCtx := contextLoggerForResource(kubeProxyRB)
-				logCtx.V(1).Info("Failed to get a role binding for kube-proxy.")
-			}
-
-			kubeProxySA := &v1.ServiceAccount{}
-			if err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxySA); err == nil {
-				r.client.Delete(context.TODO(), kubeProxySA)
-			} else {
-				logCtx := contextLoggerForResource(kubeProxySA)
-				logCtx.V(1).Info("Failed to get a service account for kube-proxy.")
+			// Check if we created it.
+			if hasOwnerReference(o, instance, r.scheme) {
+				if err = r.client.Delete(context.TODO(), o); err != nil {
+					logCtx.V(2).Info("Error deleting instance.", ":", key)
+				} else {
+					logCtx.Info("Object deleted.", ":", key)
+				}
 			}
 		}
 	}
@@ -267,4 +258,22 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
 	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
+}
+
+// Check if the given object was created by us (as opposed to another controller).
+func hasOwnerReference(obj runtime.Object, instance metav1.Object, scheme *runtime.Scheme) bool {
+	ro := instance.(runtime.Object)
+	gvk, err := apiutil.GVKForObject(ro, scheme)
+	if err != nil {
+		return false
+	}
+
+	refs := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetOwnerReferences()
+	for _, r := range refs {
+		if r.Kind == gvk.Kind && r.Name == instance.GetName() {
+			return true
+		}
+	}
+
+	return false
 }

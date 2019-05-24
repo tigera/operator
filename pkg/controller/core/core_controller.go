@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/go-logr/logr"
@@ -207,12 +206,38 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
 	if !instance.Spec.KubeProxy.Required {
-		var kubeProxyObj runtime.Object
-		proxyKey := client.ObjectKey{Namespace: render.KubeProxyMeta.Namespace, Name: render.KubeProxyMeta.Name}
-		err := r.client.Get(context.TODO(), proxyKey, kubeProxyObj)
-		if err == nil {
-			r.client.Delete(context.TODO(), kubeProxyObj)
-			fmt.Printf("deleting %+v\n", kubeProxyObj)
+		kubeProxyKey := client.ObjectKey{Namespace: render.KubeProxyMeta.Namespace, Name: render.KubeProxyMeta.Name}
+		kubeProxyDS := &apps.DaemonSet{}
+		err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxyDS)
+
+		if err == nil && kubeProxyDS.Status.CurrentNumberScheduled > 0 {
+			logCtx := contextLoggerForResource(kubeProxyDS)
+			logCtx.Info("Removing kube-proxy instance.")
+			r.client.Delete(context.TODO(), kubeProxyDS)
+
+			kubeProxyCM := &v1.ConfigMap{}
+			if err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxyCM); err == nil {
+				r.client.Delete(context.TODO(), kubeProxyCM)
+			} else {
+				logCtx := contextLoggerForResource(kubeProxyCM)
+				logCtx.V(1).Info("Failed to get a config map for kube-proxy.")
+			}
+
+			kubeProxyRB := &rbacv1.RoleBinding{}
+			if err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxyRB); err == nil {
+				r.client.Delete(context.TODO(), kubeProxyRB)
+			} else {
+				logCtx := contextLoggerForResource(kubeProxyRB)
+				logCtx.V(1).Info("Failed to get a role binding for kube-proxy.")
+			}
+
+			kubeProxySA := &v1.ServiceAccount{}
+			if err := r.client.Get(context.TODO(), kubeProxyKey, kubeProxySA); err == nil {
+				r.client.Delete(context.TODO(), kubeProxySA)
+			} else {
+				logCtx := contextLoggerForResource(kubeProxySA)
+				logCtx.V(1).Info("Failed to get a service account for kube-proxy.")
+			}
 		}
 	}
 

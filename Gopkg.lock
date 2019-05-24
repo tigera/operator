@@ -449,15 +449,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:994aada7f56f25aa47c3c1c02d7132c7c59ba92a8d0c82194c647451978a25ff"
+  digest = "1:8254153880ff74b1d16d2bfdd7136fb86e71ad04b1c0c884d8b5b3b8fc7da60c"
   name = "github.com/openshift/api"
   packages = ["config/v1"]
   pruneopts = "NT"
-  revision = "924343028ee3dc875057861a5faa5b817ec87f5b"
+  revision = "ed2bab04cd2ed056363f8de98ad61fd0011a3bcf"
 
 [[projects]]
   branch = "master"
-  digest = "1:1d7e7e22084c6cf48c43b41fc496604cccb136702ce8a36fecc676e886efa4f7"
+  digest = "1:918e2f42d106ab5a3b07ec45e81c3cf8c78256f9d811040036d951c6a417bd6a"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sutil",
@@ -468,7 +468,7 @@
     "version",
   ]
   pruneopts = "NT"
-  revision = "d4d37b10fc4bd875f56d75d59c69b3e53674a304"
+  revision = "ba40ad85b2b87d6fe616d188661a0ebd93ccdcd2"
 
 [[projects]]
   digest = "1:93b1d84c5fa6d1ea52f4114c37714cddd84d5b78f151b62bb101128dd51399bf"
@@ -686,14 +686,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f9d41ae3f110de9d050b31c12927af22ecefa6d4bd6596ed707412c0b77d3b14"
+  digest = "1:fec769b7d4eabb8c0ba4c18f099e0785bb7d13176bdffe69c56cc1702e41468e"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "0e01d883c5c5e3a1741118a9962f68d71b0a6ed4"
+  revision = "dbbf3f1254d491605cf4a0034ce25d0dc71b0c58"
 
 [[projects]]
   digest = "1:348fa8283a7c60b5b71ce04d27b37f7c0fce552d4d0b463b5b3ebbd1840d3f1a"
@@ -743,7 +743,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6528b91d2979524fc31911971b10e1706a9b974fdf9d3c13c45a16ecf34c986b"
+  digest = "1:7b2628a39b4f231ccb70f0438054ad8d9c585de271292241af273f4f5d511a7a"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -760,7 +760,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "38d8bcfa38af6494a92557425458dc19a8e204d4"
+  revision = "3d17549cdc6bfc8f924b817a94ec54bec5596488"
 
 [[projects]]
   digest = "1:dcac8e614409010171dcb258c4d90d1ecc553d591fcc6dde328b6f7408bbd5bf"
@@ -1209,6 +1209,7 @@
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/client-go/plugin/pkg/client/auth",
+    "k8s.io/client-go/tools/clientcmd",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/conversion-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",

@@ -166,17 +166,17 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// Render the desired state objects based on our configuration.
-	desiredStates := render.Render(instance)
+	desiredStateObjs := render.Render(instance)
 
 	// Set Core instance as the owner and controller.
-	for _, d := range desiredStates {
+	for _, d := range desiredStateObjs {
 		if err := controllerutil.SetControllerReference(instance, d.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Create the desiredState objects.
-	for _, d := range desiredStates {
+	// Create the desired state objects.
+	for _, d := range desiredStateObjs {
 		logCtx := contextLoggerForResource(d)
 		var old runtime.Object = d.DeepCopyObject()
 		var key client.ObjectKey
@@ -197,10 +197,10 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			continue
 		}
 
-		logCtx.Info("Creating new desiredStateect")
+		logCtx.Info("Creating new desired state object.")
 		err = r.client.Create(context.TODO(), d)
 		if err != nil {
-			// Hit an error creating desiredStateect - we need to requeue.
+			// Hit an error creating desired state object - we need to requeue.
 			return reconcile.Result{}, err
 		}
 	}

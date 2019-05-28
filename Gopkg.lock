@@ -268,8 +268,7 @@
   version = "v0.2.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:5ce88b3648d5ca5cb857d0232c5927b509c8729a4aa1f0454d61917d04e823c0"
+  digest = "1:5ebb2f472384c520ba7fb52108bcc0cf29bae2c4de35b6953792f9b85a4b0ac4"
   name = "github.com/gophercloud/gophercloud"
   packages = [
     ".",
@@ -281,7 +280,8 @@
     "pagination",
   ]
   pruneopts = "NT"
-  revision = "4885c347dcf48fc518798d37fb93ffa7bdaa43e9"
+  revision = "c2d73b246b48e239d3f03c455905e06fe26e33c3"
+  version = "v0.1.0"
 
 [[projects]]
   branch = "master"
@@ -449,15 +449,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8254153880ff74b1d16d2bfdd7136fb86e71ad04b1c0c884d8b5b3b8fc7da60c"
+  digest = "1:53376e1534b5238370743e5353b4cb677c3630eba8618912e0a033051bcb10f7"
   name = "github.com/openshift/api"
   packages = ["config/v1"]
   pruneopts = "NT"
-  revision = "ed2bab04cd2ed056363f8de98ad61fd0011a3bcf"
+  revision = "2963b4d8c99701a12f3a18c2d53c28b40408d213"
 
 [[projects]]
   branch = "master"
-  digest = "1:918e2f42d106ab5a3b07ec45e81c3cf8c78256f9d811040036d951c6a417bd6a"
+  digest = "1:363a0ff71a1c3556795cc240a2e35b69fc817bc537b26047704ef620482a27c2"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sutil",
@@ -468,7 +468,7 @@
     "version",
   ]
   pruneopts = "NT"
-  revision = "ba40ad85b2b87d6fe616d188661a0ebd93ccdcd2"
+  revision = "a9ee17ecae3d1de4e1231ed46fb4d6bc69769054"
 
 [[projects]]
   digest = "1:93b1d84c5fa6d1ea52f4114c37714cddd84d5b78f151b62bb101128dd51399bf"
@@ -536,14 +536,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:81a4e665f43471355867db3ae395c3d366980c09196a3b4d31a06999cff149c5"
+  digest = "1:1e23f736019d98e1cf9d1bf47a70b64fa23b3a7318d3873d1ef5f873c0c8738e"
   name = "github.com/prometheus/procfs"
   packages = [
     ".",
     "internal/fs",
   ]
   pruneopts = "NT"
-  revision = "a7aeb8df3389edaf53efcc319ad0063cb27c3960"
+  revision = "3cb620ac02d09c0648c0ea033ea9706e5d11e416"
 
 [[projects]]
   digest = "1:a4644e85e1f29f9825a4e61dcdd8244fe7c4db02eead3f508d5a5bdf7924dbbd"
@@ -686,14 +686,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:fec769b7d4eabb8c0ba4c18f099e0785bb7d13176bdffe69c56cc1702e41468e"
+  digest = "1:51f37608dee5b02ab6dbeb6eb50161475d6e99844afee7353b385c6357765a9d"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "dbbf3f1254d491605cf4a0034ce25d0dc71b0c58"
+  revision = "3626398d77499f570be2e36a6ad4fc91963a02c5"
 
 [[projects]]
   digest = "1:348fa8283a7c60b5b71ce04d27b37f7c0fce552d4d0b463b5b3ebbd1840d3f1a"
@@ -743,7 +743,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7b2628a39b4f231ccb70f0438054ad8d9c585de271292241af273f4f5d511a7a"
+  digest = "1:8df6f7a161c35a3c316b60e03ada59a302ac80f6f043ffb076d843ca08c1903d"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -760,7 +760,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "3d17549cdc6bfc8f924b817a94ec54bec5596488"
+  revision = "08bd53a4b4c43fb1e199ef0baf706273b2e25fd0"
 
 [[projects]]
   digest = "1:dcac8e614409010171dcb258c4d90d1ecc553d591fcc6dde328b6f7408bbd5bf"

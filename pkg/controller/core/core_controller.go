@@ -196,7 +196,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			logCtx.V(1).Info("Resource exists, updating it.")
 			err = r.client.Update(context.TODO(), obj)
 			if err != nil {
-				logCtx.V(2).Info("Failed to update object.", "core", key)
+				logCtx.WithValues("key", key).Info("Failed to update object.")
 				return reconcile.Result{}, err
 			}
 			continue
@@ -220,7 +220,6 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			// Check if the object exists.
 			var key client.ObjectKey
 			key, err = client.ObjectKeyFromObject(o)
-
 			if err = r.client.Get(context.TODO(), key, o); err != nil {
 				continue
 			}
@@ -228,10 +227,10 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			// Check if we created it.
 			if hasOwnerReference(o, instance, r.scheme) {
 				if err = r.client.Delete(context.TODO(), o); err != nil {
-					logCtx.V(2).Info("Error deleting instance.", ":", key)
-				} else {
-					logCtx.Info("Object deleted.", ":", key)
+					logCtx.WithValues("key", key).Info("Error deleting instance.")
+					return reconcile.Result{}, err
 				}
+				logCtx.WithValues("key", key).Info("Object deleted.")
 			}
 		}
 	}
@@ -260,7 +259,7 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
 }
 
-// Check if the given object was created by us (as opposed to another controller).
+// hasOwnerReference checks if the given object was created by us (as opposed to another controller).
 func hasOwnerReference(obj runtime.Object, instance metav1.Object, scheme *runtime.Scheme) bool {
 	ro := instance.(runtime.Object)
 	gvk, err := apiutil.GVKForObject(ro, scheme)

@@ -149,5 +149,31 @@ var _ = Describe("Mainline component function tests", func() {
 		// remove kube-proxy, we can verify that our installation of the proxy is functioning properly. Until then,
 		// we can only verify that we successfully create the daemonset.
 
+		By("Checking that Spec.KubeProxy.Version is set to the default value.")
+		Expect(proxy.Spec.Template.Spec.Containers[0].Image).To(Equal("k8s.gcr.io/kube-proxy:v1.13.6"))
+
+		By("Setting Spec.KubeProxy.Version to a new value.")
+		instance.Spec.KubeProxy.Image = "k8s.gcr.io/foo-bar:v1.2.3"
+		Eventually(func() error {
+			err = GetResource(c, proxy)
+			if err != nil {
+				return err
+			}
+			if proxy.Spec.Template.Spec.Containers[0].Image != "k8s.gcr.io/foo-bar:v1.2.3" {
+				return nil
+			}
+			return fmt.Errorf("Failed to update kube-proxy's Image field.")
+		}, 10*time.Second).Should(BeNil())
+
+		By("Setting Spec.KubeProxy.Required to false.")
+		instance.Spec.KubeProxy.Required = false
+		Eventually(func() error {
+			return GetResource(c, proxy)
+		}, 10*time.Second).Should(BeNil())
+
+		By("Setting Spec.KubeProxy.Required back to true.")
+		instance.Spec.KubeProxy.Required = true
+		ExpectResourceCreated(c, proxy)
+
 	})
 })

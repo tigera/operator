@@ -259,7 +259,7 @@ foss-checks: vendor
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: image test
+ci: clean image test
 
 ## Deploys images to registry
 cd:

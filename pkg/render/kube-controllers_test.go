@@ -100,10 +100,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(resources)).To(Equal(4))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-kube-controllers", "kube-system", "", "v1", "ServiceAccount")
+		ExpectResource(resources[0], "calico-kube-controllers", "calico-system", "", "v1", "ServiceAccount")
 		ExpectResource(resources[1], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 		ExpectResource(resources[2], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "calico-kube-controllers", "kube-system", "apps", "v1", "Deployment")
+		ExpectResource(resources[3], "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)

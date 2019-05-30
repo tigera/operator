@@ -104,9 +104,9 @@ var _ = Describe("Mainline component function tests", func() {
 		defer close(stopChan)
 
 		By("Verifying the resources were created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "kube-system"}}
+		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
 		ExpectResourceCreated(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "kube-system"}}
+		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
 		ExpectResourceCreated(c, kc)
 
 		By("Verifying the resources are ready")
@@ -158,9 +158,9 @@ var _ = Describe("Mainline component function tests", func() {
 		defer close(stopChan)
 
 		By("Verifying the resources were created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "kube-system"}}
+		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
 		ExpectResourceCreated(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "kube-system"}}
+		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
 		ExpectResourceCreated(c, kc)
 
 		proxyMeta := metav1.ObjectMeta{Name: "kube-proxy", Namespace: "kube-system"}
@@ -260,9 +260,9 @@ var _ = Describe("Mainline component function tests", func() {
 		defer close(stopChan)
 
 		By("Verifying the resources were created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "kube-system"}}
+		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
 		ExpectResourceCreated(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "kube-system"}}
+		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
 		ExpectResourceCreated(c, kc)
 
 		By("Verifying the resources are Ready")
@@ -323,9 +323,9 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 		defer close(stopChan)
 
 		By("Verifying resources were not created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "kube-system"}}
+		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
 		ExpectResourceDestroyed(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "kube-system"}}
+		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
 		ExpectResourceDestroyed(c, kc)
 		proxy := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: "kube-system"}}
 		ExpectResourceDestroyed(c, proxy)

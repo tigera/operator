@@ -449,11 +449,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ee35ceea96ebfa7f73a0d58903022a7999b27578a29c395f07dff83b8f661101"
+  digest = "1:87ceb08d125d6faf028373749ea7a801053bda7751b3737a66fac7ec8b6b352c"
   name = "github.com/openshift/api"
   packages = ["config/v1"]
   pruneopts = "NT"
-  revision = "dafd2647cb03b7e8b3ccec0eba3f7af85df898d6"
+  revision = "9a61cdf9e959317454c42856632cbbe2bdba361a"
 
 [[projects]]
   branch = "master"
@@ -686,14 +686,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:51b6a7e4fa38d626e9efe922932109e0a8e4767558a93b911dcbec659a7cbd16"
+  digest = "1:0505996ef74654afb437f36c4832e365be8f34c584c45f63549eb489c2d7fe0e"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "ad28b68e88f12448a1685d038ffea87bbbb34148"
+  revision = "69e3a3a65b5bed52b8194d33c59d955757d87523"
 
 [[projects]]
   digest = "1:348fa8283a7c60b5b71ce04d27b37f7c0fce552d4d0b463b5b3ebbd1840d3f1a"
@@ -743,7 +743,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e24f2a16a5eb821cfdbddfe30d671a1c8e718eb3447bc0b356c2f09414122373"
+  digest = "1:7bf983aa8c5ffcafcb397d078bf4d606d70969c05668a1430d3da6c5ee2f6e24"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -760,7 +760,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "75312fb06703a759656ae75b3d1c24b4aae95dfe"
+  revision = "b3315ee88b7da2b23cc6c62484a006958910e841"
 
 [[projects]]
   digest = "1:dcac8e614409010171dcb258c4d90d1ecc553d591fcc6dde328b6f7408bbd5bf"

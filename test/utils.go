@@ -36,6 +36,13 @@ func ExpectResourceCreated(c client.Client, obj runtime.Object) {
 	}, 10*time.Second).Should(BeNil())
 }
 
+// ExpectResourceDestroyed asserts that the given object no longer exists.
+func ExpectResourceDestroyed(c client.Client, obj runtime.Object) {
+	Eventually(func() error {
+		return GetResource(c, obj)
+	}, 10*time.Second).ShouldNot(BeNil())
+}
+
 // GetResource gets the requested object, populating obj with its contents.
 func GetResource(c client.Client, obj runtime.Object) error {
 	k := client.ObjectKey{

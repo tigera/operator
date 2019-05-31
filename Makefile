@@ -192,7 +192,7 @@ clean:
 # Tests
 ###############################################################################
 WHAT?=.
-GINKGO_ARGS?=
+GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
 ## Run the full set of tests
@@ -281,7 +281,7 @@ endif
 ###############################################################################
 ## Generating code after API changes
 gen-files:
-	operator-sdk generate k8s --verbose
+	operator-sdk generate k8s
 
 .PHONY: help
 ## Display this help text

@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -164,18 +165,18 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Render the desired objects based on our configuration.
-	objs := render.Render(instance)
+	// Render the desired objects based on our configuration. This represents the desired state of the cluster.
+	desiredStateObjs := render.Render(instance)
 
-	// Set Core instance as the owner and controller
-	for _, obj := range objs {
+	// Set Core instance as the owner and controller.
+	for _, obj := range desiredStateObjs {
 		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Create the objects.
-	for _, obj := range objs {
+	// Create the desired state objects.
+	for _, obj := range desiredStateObjs {
 		logCtx := contextLoggerForResource(obj)
 		var old runtime.Object = obj.DeepCopyObject()
 		var key client.ObjectKey
@@ -192,17 +193,46 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 			// Otherwise, if it was not found, we should create it.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
-			// Resource exists, skip it.
-			// TODO: Reconcile any changes if the object doesn't match.
-			logCtx.V(1).Info("Resource exists")
+			logCtx.V(1).Info("Resource exists, updating it.")
+			err = r.client.Update(context.TODO(), obj)
+			if err != nil {
+				logCtx.WithValues("key", key).Info("Failed to update object.")
+				return reconcile.Result{}, err
+			}
 			continue
 		}
 
-		logCtx.Info("Creating new object")
+		logCtx.Info("Creating new object.")
 		err = r.client.Create(context.TODO(), obj)
 		if err != nil {
-			// Hit an error creating object - we need to requeue.
+			// Hit an error creating desired state object - we need to requeue.
 			return reconcile.Result{}, err
+		}
+	}
+
+	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
+	if !instance.Spec.KubeProxy.Required {
+		// Render the objects that we _might_ want to delete.
+		objs := render.KubeProxy(instance)
+
+		for _, o := range objs {
+			logCtx := contextLoggerForResource(o)
+
+			// Check if the object exists.
+			var key client.ObjectKey
+			key, err = client.ObjectKeyFromObject(o)
+			if err = r.client.Get(context.TODO(), key, o); err != nil {
+				continue
+			}
+
+			// Check if we created it.
+			if hasOwnerReference(o, instance, r.scheme) {
+				if err = r.client.Delete(context.TODO(), o); err != nil {
+					logCtx.WithValues("key", key).Info("Error deleting instance.")
+					return reconcile.Result{}, err
+				}
+				logCtx.WithValues("key", key).Info("Object deleted.")
+			}
 		}
 	}
 
@@ -228,4 +258,23 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
 	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
+}
+
+// hasOwnerReference checks if the given object was created by us (as opposed to another controller).
+func hasOwnerReference(obj runtime.Object, instance metav1.Object, scheme *runtime.Scheme) bool {
+	ro := instance.(runtime.Object)
+	gvk, err := apiutil.GVKForObject(ro, scheme)
+	if err != nil {
+		return false
+	}
+
+	// Compare each of the object's owner references against the object's kind and our instance's name.
+	refs := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetOwnerReferences()
+	for _, r := range refs {
+		if r.Kind == gvk.Kind && r.Name == instance.GetName() {
+			return true
+		}
+	}
+
+	return false
 }

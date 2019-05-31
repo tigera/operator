@@ -84,8 +84,8 @@ LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.20
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 CONTAINERIZED=docker run --rm \
-		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
-		-v $(PWD)/.go-pkg-cache:/go-cache/:rw \
+		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
+		-v $(CURDIR)/.go-pkg-cache:/go-cache/:rw \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 		-e GOCACHE=/go-cache \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
@@ -248,7 +248,7 @@ fix:
 foss-checks: vendor
 	@echo Running $@...
 	docker run --rm \
-		-v $(PWD):/go/src/$(PACKAGE_NAME):rw \
+		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 		-w /go/src/$(PACKAGE_NAME)
 		-e FOSSA_API_KEY=$(FOSSA_API_KEY) \
@@ -259,7 +259,7 @@ foss-checks: vendor
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: image test
+ci: clean image test
 
 ## Deploys images to registry
 cd:

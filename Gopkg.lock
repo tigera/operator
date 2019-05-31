@@ -449,15 +449,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:53376e1534b5238370743e5353b4cb677c3630eba8618912e0a033051bcb10f7"
+  digest = "1:ee35ceea96ebfa7f73a0d58903022a7999b27578a29c395f07dff83b8f661101"
   name = "github.com/openshift/api"
   packages = ["config/v1"]
   pruneopts = "NT"
-  revision = "2963b4d8c99701a12f3a18c2d53c28b40408d213"
+  revision = "dafd2647cb03b7e8b3ccec0eba3f7af85df898d6"
 
 [[projects]]
   branch = "master"
-  digest = "1:363a0ff71a1c3556795cc240a2e35b69fc817bc537b26047704ef620482a27c2"
+  digest = "1:66095c393bd50c748450fdbdd4d0e4f6697fd0f77e4942463a2dbaa9fa152bea"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sutil",
@@ -468,7 +468,7 @@
     "version",
   ]
   pruneopts = "NT"
-  revision = "a9ee17ecae3d1de4e1231ed46fb4d6bc69769054"
+  revision = "d6f9cdf2f52e818b53a5917ef77d8618c47e0e88"
 
 [[projects]]
   digest = "1:93b1d84c5fa6d1ea52f4114c37714cddd84d5b78f151b62bb101128dd51399bf"
@@ -535,15 +535,15 @@
   version = "v0.4.1"
 
 [[projects]]
-  branch = "master"
-  digest = "1:1e23f736019d98e1cf9d1bf47a70b64fa23b3a7318d3873d1ef5f873c0c8738e"
+  digest = "1:16a5ada24a8dbdd458baef55501fce9d6ca7de9d6562c820aa00849fa30d4c62"
   name = "github.com/prometheus/procfs"
   packages = [
     ".",
     "internal/fs",
   ]
   pruneopts = "NT"
-  revision = "3cb620ac02d09c0648c0ea033ea9706e5d11e416"
+  revision = "65bdadfa96aecebf4dcf888da995a29eab4fc964"
+  version = "v0.0.1"
 
 [[projects]]
   digest = "1:a4644e85e1f29f9825a4e61dcdd8244fe7c4db02eead3f508d5a5bdf7924dbbd"
@@ -636,11 +636,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:af1fe3e40e947f75bee6d1f3b3610fa859079ddc4706634d5360213d7e70b954"
+  digest = "1:c519d84f84199354518c9f2a2dc9bb2fa914e77d32d2ecdc3eb574236cb5effd"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
   pruneopts = "NT"
-  revision = "22d7a77e9e5f409e934ed268692e56707cd169e5"
+  revision = "20be4c3c3ed52bfccdb2d59a412ee1a936d175a7"
 
 [[projects]]
   branch = "master"
@@ -686,14 +686,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:51f37608dee5b02ab6dbeb6eb50161475d6e99844afee7353b385c6357765a9d"
+  digest = "1:51b6a7e4fa38d626e9efe922932109e0a8e4767558a93b911dcbec659a7cbd16"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "3626398d77499f570be2e36a6ad4fc91963a02c5"
+  revision = "ad28b68e88f12448a1685d038ffea87bbbb34148"
 
 [[projects]]
   digest = "1:348fa8283a7c60b5b71ce04d27b37f7c0fce552d4d0b463b5b3ebbd1840d3f1a"
@@ -743,7 +743,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8df6f7a161c35a3c316b60e03ada59a302ac80f6f043ffb076d843ca08c1903d"
+  digest = "1:e24f2a16a5eb821cfdbddfe30d671a1c8e718eb3447bc0b356c2f09414122373"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -760,7 +760,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "08bd53a4b4c43fb1e199ef0baf706273b2e25fd0"
+  revision = "75312fb06703a759656ae75b3d1c24b4aae95dfe"
 
 [[projects]]
   digest = "1:dcac8e614409010171dcb258c4d90d1ecc553d591fcc6dde328b6f7408bbd5bf"
@@ -791,7 +791,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d696400fb97825caf354c374df8c773912660be10260b5d2fd3ff9570622df1a"
+  digest = "1:5954b3c3c063135f28458d2e2dfa8faa3ab2754f9159dd7a5ae7abdab95fdeca"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/httpbody",
@@ -799,7 +799,7 @@
     "protobuf/field_mask",
   ]
   pruneopts = "NT"
-  revision = "c2c4e71fbf6989c3e46a18d65cb88c288f8a3a55"
+  revision = "fb225487d10142b5bcc35abfc6cb9a0609614976"
 
 [[projects]]
   digest = "1:f96fe2ef361530a59bb330f40cf34723e8b46e1dcded4f2f37e6d4d3efaebbd1"
@@ -1101,12 +1101,12 @@
   revision = "e17681d19d3ac4837a019ece36c2a0ec31ffe985"
 
 [[projects]]
-  digest = "1:5a5a14a4e74d8d662f394d877b26262d24304c039fab9b61c8041cf6a6b71e9a"
+  digest = "1:507ee72b30eee7ecb34253592d108a01e68bf67b9cab25e0dcec7e3ee77cf8c0"
   name = "k8s.io/klog"
   packages = ["."]
   pruneopts = "NT"
-  revision = "89e63fd5117f8c20208186ef85f096703a280c20"
-  version = "v0.3.1"
+  revision = "78315d914a8af2453db4864e69230b647b1ff711"
+  version = "v0.3.2"
 
 [[projects]]
   digest = "1:c48a795cd7048bb1888273bc604b6e69b22f9b8089c3df65f77cc527757b515c"

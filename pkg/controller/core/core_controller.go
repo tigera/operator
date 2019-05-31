@@ -214,6 +214,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	if !instance.Spec.KubeProxy.Required {
 		// Render the objects that we _might_ want to delete.
 		objs := render.KubeProxy(instance)
+
 		for _, o := range objs {
 			logCtx := contextLoggerForResource(o)
 
@@ -267,6 +268,7 @@ func hasOwnerReference(obj runtime.Object, instance metav1.Object, scheme *runti
 		return false
 	}
 
+	// Compare each of the object's owner references against the object's kind and our instance's name.
 	refs := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetOwnerReferences()
 	for _, r := range refs {
 		if r.Kind == gvk.Kind && r.Name == instance.GetName() {

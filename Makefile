@@ -192,7 +192,7 @@ clean:
 # Tests
 ###############################################################################
 WHAT?=.
-GINKGO_ARGS?=
+GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
 ## Run the full set of tests

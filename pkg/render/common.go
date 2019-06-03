@@ -1,6 +1,8 @@
 package render
 
-import v1 "k8s.io/api/core/v1"
+import (
+	v1 "k8s.io/api/core/v1"
+)
 
 // setCustomVolumeMounts merges a custom list of volume mounts into a default list. A custom volume mount
 // overrides a default volume mount if they have the same name.
@@ -62,7 +64,7 @@ func setCustomTolerations(defaults []v1.Toleration, custom []v1.Toleration) []v1
 }
 
 // setCustomEnv merges a custom list of envvars into a default list. A custom envvar overrides a default envvar if
-// they have the same name
+// they have the same name.
 func setCustomEnv(defaults []v1.EnvVar, custom []v1.EnvVar) []v1.EnvVar {
 	for _, c := range custom {
 		var found bool

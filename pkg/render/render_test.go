@@ -47,7 +47,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(9))
+		Expect(len(resources)).To(Equal(10))
 	})
 
 	It("should render all resources when kube-proxy is enabled", func() {
@@ -60,6 +60,6 @@ var _ = Describe("Rendering tests", func() {
 		// - kube-proxy DaemonSet
 		instance.Spec.Components.KubeProxy.Required = true
 		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(13))
+		Expect(len(resources)).To(Equal(14))
 	})
 })

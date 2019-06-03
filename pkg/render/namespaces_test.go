@@ -1,0 +1,42 @@
+package render_test
+
+import (
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	"github.com/tigera/operator/pkg/render"
+)
+
+var _ = Describe("Namespace rendering tests", func() {
+	var instance *operatorv1alpha1.Core
+	BeforeEach(func() {
+		// Initialize a default instance to use. Each test can override this to its
+		// desired configuration.
+		instance = &operatorv1alpha1.Core{
+			Spec: operatorv1alpha1.CoreSpec{
+				IPPools: []operatorv1alpha1.IPPool{
+					{CIDR: "192.168.1.0/16"},
+				},
+				Version:   "test",
+				Registry:  "test-reg/",
+				CNINetDir: "/test/cni/net/dir",
+				CNIBinDir: "/test/cni/bin/dir",
+				Components: operatorv1alpha1.ComponentsSpec{
+					KubeProxy: operatorv1alpha1.KubeProxySpec{
+						Required:  true,
+						APIServer: "https://apiserver:443",
+						Image:     "k8s.gcr.io/kube-proxy:v1.13.6",
+					},
+				},
+			},
+		}
+
+	})
+
+	It("should render a namespace", func() {
+		resources := render.Namespaces(instance)
+		Expect(len(resources)).To(Equal(1))
+		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+	})
+})

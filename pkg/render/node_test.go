@@ -131,18 +131,17 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "kube-system", "", "v1", "ServiceAccount")
+		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
 		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "kube-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "kube-system", "apps", "v1", "DaemonSet")
+		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
+		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/calico/node:test"))
 		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
-		//ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_BIN_DIR", "/opt/cni/bin")
 	})
 
 	It("should render all resources for a custom configuration", func() {
@@ -150,11 +149,11 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "kube-system", "", "v1", "ServiceAccount")
+		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
 		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "kube-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "kube-system", "apps", "v1", "DaemonSet")
+		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
+		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)

@@ -10,6 +10,7 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
   - pods
   - services
   - endpoints

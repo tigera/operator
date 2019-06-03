@@ -26,11 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-var nodeMeta = metav1.ObjectMeta{
-	Name:      "calico-node",
-	Namespace: "kube-system",
-}
-
 func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 	return []runtime.Object{
 		nodeServiceAccount(cr),
@@ -43,8 +38,11 @@ func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 
 func nodeServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
-		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: nodeMeta,
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-node",
+			Namespace: calicoNamespace,
+		},
 	}
 }
 
@@ -64,7 +62,7 @@ func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "calico-node",
-				Namespace: "kube-system",
+				Namespace: calicoNamespace,
 			},
 		},
 	}
@@ -206,7 +204,7 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cni-config",
-			Namespace: "kube-system",
+			Namespace: calicoNamespace,
 			Labels:    map[string]string{},
 		},
 		Data: map[string]string{
@@ -312,8 +310,11 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	trueBool := true
 
 	return &apps.DaemonSet{
-		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-		ObjectMeta: nodeMeta,
+		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-node",
+			Namespace: calicoNamespace,
+		},
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
 			Template: v1.PodTemplateSpec{

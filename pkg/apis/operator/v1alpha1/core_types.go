@@ -185,23 +185,10 @@ type CNISpec struct {
 // DatastoreConfig specifies the product's datastore configuration.
 // +k8s:openapi-gen=true
 type DatastoreConfig struct {
-	// Type is the type of datastore to be used.
+	// Type is the type of datastore to be used. Currently, only Kubernetes API datastore is supported.
 	// Default: kubernetes
 	// +optional
 	Type DatastoreType `json:"type,omitempty"`
-
-	// EtcdEndpoints is a list of etcd endpoints for product to connect to.
-	// Example: ["http://127.0.0.1:2379" ," http://127.0.0.2:2379"]. Required if datastore type is "etcdv3".
-	// +optional
-	EtcdEndpoints []string `json:"etcdEndpoints,omitempty"`
-
-	// EtcdSecretRef is a reference to a secret containing etcd TLS configuration. The secret should have the following
-	// three keys defined (from https://coreos.com/etcd/docs/latest/op-guide/security.html)
-	// - etcd.crt:  Certificate used for SSL/TLS connections to etcd.
-	// - etcd.key: Key for the certificate. Must be unencrypted.
-	// - ca.crt: Certificate authority (if using self-signed certs).
-	// +optional
-	EtcdSecretRef *v1.LocalObjectReference
 }
 
 // DatastoreType is a valid datastore type.
@@ -209,7 +196,6 @@ type DatastoreType string
 
 var (
 	Kubernetes DatastoreType = "kubernetes"
-	Etcdv3     DatastoreType = "etcdv3"
 )
 
 type ProductVariant string

@@ -38,10 +38,12 @@ var _ = Describe("kube-proxy rendering tests", func() {
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				KubeProxy: operatorv1alpha1.KubeProxySpec{
-					Required:  true,
-					APIServer: "https://apiserver:443",
-					Image:     "k8s.gcr.io/kube-proxy:v1.13.6",
+				Components: operatorv1alpha1.ComponentsSpec{
+					KubeProxy: operatorv1alpha1.KubeProxySpec{
+						Required:  true,
+						APIServer: "https://apiserver:443",
+						Image:     "k8s.gcr.io/kube-proxy:v1.13.6",
+					},
 				},
 			},
 		}

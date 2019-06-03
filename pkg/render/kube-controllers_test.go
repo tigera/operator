@@ -17,6 +17,8 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 	"github.com/tigera/operator/pkg/render"
@@ -25,6 +27,44 @@ import (
 
 var _ = Describe("kube-controllers rendering tests", func() {
 	var instance *operatorv1alpha1.Core
+
+	tolerations := []v1.Toleration{
+		// This overrides node-role.kubernetes.io/master with a different effect.
+		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectPreferNoSchedule},
+		// A custom toleration
+		{
+			Key:      "somekey",
+			Operator: v1.TolerationOpEqual,
+			Value:    "somevalue",
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+	volume := v1.Volume{
+		Name: "extravolKubeControllers",
+		VolumeSource: v1.VolumeSource{
+			EmptyDir: &v1.EmptyDirVolumeSource{},
+		},
+	}
+	volumeMount := v1.VolumeMount{
+		Name:      "extravolKubeControllers",
+		MountPath: "/test/calico/kubecontrollers",
+	}
+	// Override an existing env and add a new one.
+	envVars := []v1.EnvVar{
+		{Name: "ENABLED_CONTROLLERS", Value: "node,namespace"},
+		{Name: "kubecontrollers-env", Value: "kubecontrollers-value"},
+	}
+	res := v1.ResourceRequirements{
+		Requests: v1.ResourceList{
+			v1.ResourceCPU:    resource.MustParse("1000m"),
+			v1.ResourceMemory: resource.MustParse("250Mi"),
+		},
+		Limits: v1.ResourceList{
+			v1.ResourceCPU:    resource.MustParse("1500m"),
+			v1.ResourceMemory: resource.MustParse("500Mi"),
+		},
+	}
+
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -37,6 +77,19 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
+				Datastore: operatorv1alpha1.DatastoreConfig{
+					Type: "kubernetes",
+				},
+				Components: operatorv1alpha1.ComponentsSpec{
+					KubeControllers: operatorv1alpha1.KubeControllersSpec{
+						ImageOverride:     "customRegistry/customImage:customVersion",
+						ExtraEnv:          envVars,
+						ExtraVolumes:      []v1.Volume{volume},
+						ExtraVolumeMounts: []v1.VolumeMount{volumeMount},
+						Tolerations:       tolerations,
+						Resources:         res,
+					},
+				},
 			},
 		}
 
@@ -54,8 +107,28 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/calico/kube-controllers:test"))
-		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "DATASTORE_TYPE", "kubernetes")
-		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "ENABLED_CONTROLLERS", "node")
+
+		// Image override results in correct image.
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("customRegistry/customImage:customVersion"))
+
+		// Verify env
+		expectedEnv := []v1.EnvVar{{Name: "DATASTORE_TYPE", Value: "kubernetes"}}
+		expectedEnv = append(expectedEnv, envVars...)
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
+
+		// Verify volumes and volumeMounts.
+		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(volume))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(volumeMount))
+
+		// Verify resources.
+		Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(res))
+
+		// Verify tolerations.
+		expectedTolerations := []v1.Toleration{
+			{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
+			{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
+		}
+		expectedTolerations = append(expectedTolerations, tolerations...)
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 	})
 })

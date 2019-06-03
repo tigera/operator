@@ -17,11 +17,15 @@ package core
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
+	maxUnavailable := intstr.FromInt(2)
 	It("should properly fill defaults on an empty instance", func() {
 		instance := &operatorv1alpha1.Core{}
 		fillDefaults(instance)
@@ -30,31 +34,141 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Registry).To(Equal("docker.io/"))
 		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
-		Expect(instance.Spec.KubeProxy.Required).To(BeFalse())
-		Expect(instance.Spec.KubeProxy.APIServer).To(Equal(""))
+		Expect(instance.Spec.IPPools).To(HaveLen(1))
+		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		Expect(instance.Spec.Components.KubeProxy.Required).To(BeFalse())
+		Expect(instance.Spec.Components.KubeProxy.APIServer).To(Equal(""))
+
+		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
+		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
 
 	It("should not override custom configuration", func() {
 		instance := &operatorv1alpha1.Core{
 			Spec: operatorv1alpha1.CoreSpec{
-				Version:   "test",
-				Variant:   operatorv1alpha1.TigeraSecureEnterprise,
-				Registry:  "test-reg/",
+				Version:                "test",
+				MinimumOperatorVersion: "0.9.1",
+				Variant:                operatorv1alpha1.TigeraSecureEnterprise,
+				Registry:               "test-reg/",
+				ImagePullSecretsRef: []v1.LocalObjectReference{
+					{
+						Name: "pullSecret1",
+					},
+					{
+						Name: "pullSecret2",
+					},
+				},
 				CNIBinDir: "/test/bin",
 				CNINetDir: "/test/net",
 				IPPools: []operatorv1alpha1.IPPool{
 					{CIDR: "1.2.3.0/24"},
 				},
-				KubeProxy: operatorv1alpha1.KubeProxySpec{
-					Required:  true,
-					APIServer: "http://server",
-					Image:     "test-image",
+				Datastore: operatorv1alpha1.DatastoreConfig{
+					Type:          operatorv1alpha1.Etcdv3,
+					EtcdEndpoints: []string{"etcd-ep1"},
+					EtcdSecretRef: &v1.LocalObjectReference{
+						Name: "etcdSecrets",
+					},
+				},
+				Components: operatorv1alpha1.ComponentsSpec{
+					Node: operatorv1alpha1.NodeSpec{
+						ImageOverride:  "nodeRegistry/nodeImage:1.2.3",
+						MaxUnavailable: &maxUnavailable,
+						ExtraEnv: []v1.EnvVar{
+							{
+								Name:  "project",
+								Value: "calico",
+							},
+						},
+						ExtraVolumes: []v1.Volume{
+							{
+								Name: "volume1",
+								VolumeSource: v1.VolumeSource{
+									NFS: &v1.NFSVolumeSource{
+										Server: "localhost",
+										Path:   "/",
+									},
+								},
+							},
+						},
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("100m"),
+								v1.ResourceMemory: resource.MustParse("250Mi"),
+							},
+							Limits: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("100m"),
+								v1.ResourceMemory: resource.MustParse("250Mi"),
+							},
+						},
+						Tolerations: []v1.Toleration{
+							{Operator: v1.TolerationOpEqual, Value: "nodeValue", Effect: v1.TaintEffectNoSchedule, Key: "node"},
+						},
+					},
+					KubeControllers: operatorv1alpha1.KubeControllersSpec{
+						ImageOverride: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
+						ExtraEnv: []v1.EnvVar{
+							{
+								Name:  "project",
+								Value: "calico",
+							},
+						},
+						ExtraVolumes: []v1.Volume{
+							{
+								Name: "volume1",
+								VolumeSource: v1.VolumeSource{
+									NFS: &v1.NFSVolumeSource{
+										Server: "localhost",
+										Path:   "/",
+									},
+								},
+							},
+						},
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("150m"),
+								v1.ResourceMemory: resource.MustParse("350Mi"),
+							},
+							Limits: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("150m"),
+								v1.ResourceMemory: resource.MustParse("350Mi"),
+							},
+						},
+						Tolerations: []v1.Toleration{
+							{Operator: v1.TolerationOpEqual, Value: "kubecontrollersValue", Effect: v1.TaintEffectNoSchedule, Key: "kubecontrollers"},
+						},
+					},
+					CNI: operatorv1alpha1.CNISpec{
+						ImageOverride: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
+						ExtraEnv: []v1.EnvVar{
+							{
+								Name:  "project",
+								Value: "calico",
+							},
+						},
+						ExtraVolumes: []v1.Volume{
+							{
+								Name: "volume1",
+								VolumeSource: v1.VolumeSource{
+									NFS: &v1.NFSVolumeSource{
+										Server: "localhost",
+										Path:   "/",
+									},
+								},
+							},
+						},
+					},
+					KubeProxy: operatorv1alpha1.KubeProxySpec{
+						Required:  true,
+						APIServer: "http://server",
+						Image:     "test-image",
+					},
 				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operatorv1alpha1.Core)
 		fillDefaults(instanceCopy)
-		Expect(instanceCopy).To(Equal(instance))
+		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
 	})
 
 	It("should correct missing slashes on registry", func() {
@@ -66,5 +180,4 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
 	})
-
 })

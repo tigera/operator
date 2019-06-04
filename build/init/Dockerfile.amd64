@@ -1,0 +1,26 @@
+FROM debian:9.8-slim
+
+ENV USER_UID=1000 \
+    USERNAME=init
+
+RUN apt-get update && apt-get install -y \
+    jq \
+    curl \
+    python-pip
+
+RUN pip install awscli
+
+# Need gecos and disabled-password flags to ensure adduser does not
+# prompt for input.
+RUN adduser --uid $USER_UID -q $USERNAME --gecos "First Last,RoomNumber,WorkPhone,HomePhone" --disabled-password
+
+COPY build/init/bin/kubectl /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kubectl
+
+COPY build/init/*.sh /
+
+RUN chmod +x /*.sh
+
+ENTRYPOINT ["/init.sh"]
+
+USER ${USER_UID}

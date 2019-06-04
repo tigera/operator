@@ -94,20 +94,22 @@ CONTAINERIZED=docker run --rm \
 		$(CALICO_BUILD)
 
 BUILD_IMAGE?=tigera/operator
-PUSH_IMAGES?=quay.io/$(BUILD_IMAGE)
-RELEASE_IMAGES?=
-
-# remove from the list to push to manifest any registries that do not support multi-arch
-EXCLUDE_MANIFEST_REGISTRIES ?= quay.io/
-PUSH_MANIFEST_IMAGES=$(PUSH_IMAGES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
-PUSH_NONMANIFEST_IMAGES=$(filter-out $(PUSH_MANIFEST_IMAGES),$(PUSH_IMAGES))
+BUILD_INIT_IMAGE?=tigera/operator-init
 
 BINDIR?=build/_output/bin
 
+PUSH_IMAGE_PREFIXES?=quay.io/
+RELEASE_PREFIXES?=
 # If this is a release, also tag and push additional images.
 ifeq ($(RELEASE),true)
-PUSH_IMAGES+=$(RELEASE_IMAGES)
+PUSH_IMAGE_PREFIXES+=$(RELEASE_PREFIXES)
 endif
+
+# remove from the list to push to manifest any registries that do not support multi-arch
+EXCLUDE_MANIFEST_REGISTRIES?=quay.io/
+PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
+PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
+
 
 imagetag:
 ifndef IMAGETAG
@@ -115,42 +117,45 @@ ifndef IMAGETAG
 endif
 
 ## push one arch
-push: imagetag $(addprefix sub-single-push-,$(call escapefs,$(PUSH_IMAGES)))
+push: imagetag $(addprefix sub-single-push-,$(call escapefs,$(PUSH_IMAGE_PREFIXES)))
 
 sub-single-push-%:
-	docker push $(call unescapefs,$*:$(IMAGETAG)-$(ARCH))
+	docker push $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG)-$(ARCH))
+	docker push $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG)-$(ARCH))
 
 ## push all arches
 push-all: imagetag $(addprefix sub-push-,$(ARCHES))
 sub-push-%:
 	$(MAKE) push ARCH=$* IMAGETAG=$(IMAGETAG)
 
-## push multi-arch manifest where supported
-push-manifests: imagetag  $(addprefix sub-manifest-,$(call escapefs,$(PUSH_MANIFEST_IMAGES)))
+push-manifests: imagetag  $(addprefix sub-manifest-,$(call escapefs,$(PUSH_MANIFEST_IMAGE_PREFIXES)))
 sub-manifest-%:
 	# Docker login to hub.docker.com required before running this target as we are using $(DOCKER_CONFIG) holds the docker login credentials
 	# path to credentials based on manifest-tool's requirements here https://github.com/estesp/manifest-tool#sample-usage
-	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(ARCHES)) --template $(call unescapefs,$*:$(IMAGETAG))-ARCH --target $(call unescapefs,$*:$(IMAGETAG))"
+	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))"
+	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))"
 
 ## push default amd64 arch where multi-arch manifest is not supported
-push-non-manifests: imagetag $(addprefix sub-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGES)))
+push-non-manifests: imagetag $(addprefix sub-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))
 sub-non-manifest-%:
 ifeq ($(ARCH),amd64)
-	docker push $(call unescapefs,$*:$(IMAGETAG))
+	docker push $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
+	docker push $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))
 else
 	$(NOECHO) $(NOOP)
 endif
 
-## tag images of one arch for all supported registries
-tag-images: imagetag $(addprefix sub-single-tag-images-arch-,$(call escapefs,$(PUSH_IMAGES))) $(addprefix sub-single-tag-images-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGES)))
-
+## tag images of one arch
+tag-images: imagetag $(addprefix sub-single-tag-images-arch-,$(call escapefs,$(PUSH_IMAGE_PREFIXES))) $(addprefix sub-single-tag-images-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))
 sub-single-tag-images-arch-%:
-	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(call unescapefs,$*:$(IMAGETAG)-$(ARCH))
+	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG)-$(ARCH))
+	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG)-$(ARCH))
 
 # because some still do not support multi-arch manifest
 sub-single-tag-images-non-manifest-%:
 ifeq ($(ARCH),amd64)
-	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(call unescapefs,$*:$(IMAGETAG))
+	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
+	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))
 else
 	$(NOECHO) $(NOOP)
 endif
@@ -176,10 +181,8 @@ $(BINDIR)/operator-$(ARCH): vendor $(GO_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
 
-image: vendor build
-	docker build -f build/Dockerfile.amd64 -t $(BUILD_IMAGE) .
-
-image: $(BUILD_IMAGE)
+.PHONY: image
+image: vendor build $(BUILD_IMAGE)
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
 	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) -f ./build/Dockerfile.$(ARCH) .
@@ -187,12 +190,36 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
 
+
+build/init/bin/kubectl:
+	mkdir -p build/init/bin
+	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+
+.PHONY: image-init
+image-init: build/init/bin/kubectl $(BUILD_INIT_IMAGE)
+$(BUILD_INIT_IMAGE): $(BUILD_INIT_IMAGE)-$(ARCH)
+$(BUILD_INIT_IMAGE)-$(ARCH):
+	docker build --pull -t $(BUILD_INIT_IMAGE):latest-$(ARCH) -f ./build/init/Dockerfile.$(ARCH) .
+ifeq ($(ARCH),amd64)
+	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
+endif
+
+.PHONY: images
+images: image image-init
+
+# Build the images for the target architecture
+.PHONY: images-all
+images-all: $(addprefix sub-image-,$(VALIDARCHES))
+sub-image-%:
+	$(MAKE) images ARCH=$*
+
 vendor:
 	$(CONTAINERIZED) dep ensure
 
 clean:
 	rm -rf build/_output
 	rm -rf vendor/
+	rm -rf build/init/bin
 	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
 
 ###############################################################################

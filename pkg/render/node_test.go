@@ -250,6 +250,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedTolerations := []v1.Toleration{
 			{Operator: "Exists", Effect: "NoSchedule"},
 			{Operator: "Exists", Effect: "NoExecute"},
+			{Operator: "Exists", Key: "CriticalAddonsOnly"},
 		}
 		expectedTolerations = append(expectedTolerations, tolerations...)
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))

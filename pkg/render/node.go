@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"os"
 
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 
@@ -24,6 +25,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func Node(cr *operatorv1alpha1.Core) []runtime.Object {
@@ -228,9 +230,9 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	}
 
 	tolerations := []v1.Toleration{
-		{Operator: "Exists", Effect: "NoSchedule"},
-		{Operator: "Exists", Effect: "NoExecute"},
-		// TODO: Not valid?? {Operator: "Exists", Effect: "CriticalAddonsOnly"},
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
+		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 	}
 	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.Node.Tolerations)
 
@@ -260,6 +262,7 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.Node.ExtraVolumes)
 	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.CNI.ExtraVolumes)
 
+	// Determine environment to pass to the node container.
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: string(cr.Spec.Datastore.Type)},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -280,8 +283,23 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 			},
 		},
 	}
+
+	// Determine liveness and readiness configuration for node.
+	livenessPort := intstr.FromInt(9099)
+	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
+	if os.Getenv("OPENSHIFT") == "true" {
+		// TODO: For Openshift, we need special configuration since our default port is already in use.
+		// Additionally, since the node readiness probe doesn't yet support
+		// custom ports, we need to disable felix readiness for now.
+		livenessPort = intstr.FromInt(9199)
+		readinessCmd = []string{"/bin/calico-node", "-bird-ready"}
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
+	}
+
+	// Merge in any user-supplied extra environment variables into the node environment.
 	nodeEnv = setCustomEnv(nodeEnv, cr.Spec.Components.Node.ExtraEnv)
 
+	// Determine environment to pass to the CNI init container.
 	cniEnv := []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
@@ -338,7 +356,6 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							VolumeMounts: cniVolumeMounts,
 						},
 					},
-					// TODO: Add readiness and liveness checks
 					Containers: []v1.Container{
 						{
 							Name:            "calico-node",
@@ -347,6 +364,18 @@ func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
 							SecurityContext: &v1.SecurityContext{Privileged: &trueBool},
 							Env:             nodeEnv,
 							VolumeMounts:    nodeVolumeMounts,
+							LivenessProbe: &v1.Probe{
+								Handler: v1.Handler{
+									HTTPGet: &v1.HTTPGetAction{
+										Host: "localhost",
+										Path: "/liveness",
+										Port: livenessPort,
+									},
+								},
+							},
+							ReadinessProbe: &v1.Probe{
+								Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},
+							},
 						},
 					},
 					Volumes: allVolumes,

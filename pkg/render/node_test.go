@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"os"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -254,5 +256,47 @@ var _ = Describe("Node rendering tests", func() {
 		}
 		expectedTolerations = append(expectedTolerations, tolerations...)
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+
+		// Verify readiness and liveness probes.
+		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}}}
+		expectedLiveness := &v1.Probe{Handler: v1.Handler{
+			HTTPGet: &v1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/liveness",
+				Port: intstr.FromInt(9099),
+			}}}
+		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
+		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+	})
+
+	It("should render all resources when OPENSHIFT=true", func() {
+		os.Setenv("OPENSHIFT", "true")
+		defer os.Unsetenv("OPENSHIFT")
+		resources := render.Node(defaultInstance)
+		Expect(len(resources)).To(Equal(5))
+
+		// Should render the correct resources.
+		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
+		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
+		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
+		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
+		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+
+		// The DaemonSet should have the correct configuration.
+		ds := resources[4].(*apps.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/calico/node:test"))
+		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
+		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+
+		// Verify readiness and liveness probes.
+		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready"}}}}
+		expectedLiveness := &v1.Probe{Handler: v1.Handler{
+			HTTPGet: &v1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/liveness",
+				Port: intstr.FromInt(9199),
+			}}}
+		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
+		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
 	})
 })

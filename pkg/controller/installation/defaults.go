@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package core
+package installation
 
 import (
 	"fmt"
@@ -21,16 +21,16 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 // fillDefaults fills in the default values for an instance.
-func fillDefaults(instance *operatorv1alpha1.Core) {
+func fillDefaults(instance *operator.Installation) {
 	if len(instance.Spec.Version) == 0 {
 		instance.Spec.Version = "latest"
 	}
 	if len(instance.Spec.Datastore.Type) == 0 {
-		instance.Spec.Datastore.Type = operatorv1alpha1.Kubernetes
+		instance.Spec.Datastore.Type = operator.Kubernetes
 	}
 	if len(instance.Spec.Registry) == 0 {
 		instance.Spec.Registry = "docker.io/"
@@ -39,7 +39,7 @@ func fillDefaults(instance *operatorv1alpha1.Core) {
 		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
 	}
 	if len(instance.Spec.Variant) == 0 {
-		instance.Spec.Variant = operatorv1alpha1.Calico
+		instance.Spec.Variant = operator.Calico
 	}
 	if len(instance.Spec.CNINetDir) == 0 {
 		instance.Spec.CNINetDir = "/etc/cni/net.d"
@@ -48,7 +48,7 @@ func fillDefaults(instance *operatorv1alpha1.Core) {
 		instance.Spec.CNIBinDir = "/opt/cni/bin"
 	}
 	if len(instance.Spec.IPPools) == 0 {
-		instance.Spec.IPPools = []operatorv1alpha1.IPPool{
+		instance.Spec.IPPools = []operator.IPPool{
 			{CIDR: "192.168.0.0/16"},
 		}
 	}

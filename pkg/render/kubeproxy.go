@@ -17,7 +17,7 @@ package render
 import (
 	"strings"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -31,7 +31,7 @@ var KubeProxyMeta = metav1.ObjectMeta{
 	Namespace: "kube-system",
 }
 
-func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
+func KubeProxy(cr *operator.Installation) []runtime.Object {
 	return []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),
@@ -40,14 +40,14 @@ func KubeProxy(cr *operatorv1alpha1.Core) []runtime.Object {
 	}
 }
 
-func kubeProxyServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
+func kubeProxyServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: KubeProxyMeta,
 	}
 }
 
-func kubeProxyRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
+func kubeProxyRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy"},
@@ -66,7 +66,7 @@ func kubeProxyRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding 
 	}
 }
 
-func kubeProxyConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
+func kubeProxyConfigMap(cr *operator.Installation) *v1.ConfigMap {
 	var config = `apiVersion: kubeproxy.config.k8s.io/v1alpha1
 bindAddress: 0.0.0.0
 clientConnection:
@@ -140,7 +140,7 @@ users:
 	}
 }
 
-func kubeProxyDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
+func kubeProxyDaemonset(cr *operator.Installation) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 30
 	var trueBool bool = true
 	var configMapDefaultMode int32 = 420

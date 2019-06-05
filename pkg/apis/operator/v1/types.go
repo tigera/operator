@@ -1,4 +1,4 @@
-package v1alpha1
+package v1
 
 import (
 	v1 "k8s.io/api/core/v1"
@@ -28,9 +28,9 @@ type KubeProxySpec struct {
 	Image string `json:"image,omitempty"`
 }
 
-// CoreSpec defines the desired state of Core.
+// InstallationSpec defines the desired state of Installation.
 // +k8s:openapi-gen=true
-type CoreSpec struct {
+type InstallationSpec struct {
 	// Version of the product to install.
 	// Default: latest
 	// +optional
@@ -243,9 +243,9 @@ type IPPool struct {
 	CIDR string `json:"cidr"`
 }
 
-// CoreStatus defines the observed state of Core
+// InstallationStatus defines the observed state of Installation
 // +k8s:openapi-gen=true
-type CoreStatus struct {
+type InstallationStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
@@ -253,26 +253,26 @@ type CoreStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Core is the Schema for the cores API
+// Installation is the Schema for the cores API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-type Core struct {
+type Installation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CoreSpec   `json:"spec,omitempty"`
-	Status CoreStatus `json:"status,omitempty"`
+	Spec   InstallationSpec   `json:"spec,omitempty"`
+	Status InstallationStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CoreList contains a list of Core
-type CoreList struct {
+// InstallationList contains a list of Installation
+type InstallationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Core `json:"items"`
+	Items           []Installation `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Core{}, &CoreList{})
+	SchemeBuilder.Register(&Installation{}, &InstallationList{})
 }

@@ -25,6 +25,10 @@ func Render(cr *operatorv1alpha1.Core) []runtime.Object {
 		// Only install KubeProxy if required, and do so before installing Node.
 		objs = KubeProxy(cr)
 	}
+	if cr.Spec.Components.APIServer	!= nil {
+		objs = append(objs, APIServer(cr)...)
+	}
+
 	objs = append(objs, Namespaces(cr)...)
 	objs = append(objs, Node(cr)...)
 	objs = append(objs, KubeControllers(cr)...)

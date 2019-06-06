@@ -97,6 +97,10 @@ type ComponentsSpec struct {
 	// KubeProxy is optional configuration for kube-proxy.
 	// +optional
 	KubeProxy KubeProxySpec `json:"kubeProxy,omitempty"`
+
+	// APIServer is optional configuration for the API server component.
+	// +optional
+	APIServer *APIServerSpec `json:"apiServer,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
@@ -124,6 +128,62 @@ type KubeControllersSpec struct {
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 
 	// Resources configures custom resource requirements on the kube-controllers container.
+	// +optional
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// TLSConfig contains TLS configuration use for the API server.
+type TLSConfig struct {
+	// Certificate is a base64-encoded string of the certificate file contents.
+	// +optional
+	Certificate string `json:"certificate,omitempty"`
+
+	// Key is a base64-encoded string of the key file contents.
+	// +optional
+	Key string `json:"key,omitempty"`
+
+	// CABundle is a base64-encoded string of a CA bundle file contents.
+	// If provided, TLS verification is enabled when communicating with the API server.
+	// +optional
+	CABundle string
+}
+
+// APIServerSpec defines optional configuration for the API server component.
+// Valid only for the variant 'TigeraSecureEnterprise'.
+// +k8s:openapi-gen=true
+type APIServerSpec struct {
+	// TLS configures TLS on the API server.
+	// +optional
+	TLS TLSConfig `json:"tls,omitempty"`
+
+	// RunAsPrivileged enables privileged mode on the API server container.
+	// Note: Processes in privileged containers run equivalent to root on the host.
+	// Default: false
+	// +optional
+	RunAsPrivileged bool `json:"runAsPrivileged,omitempty"`
+
+	// ImageOverride configures a different Docker image for the API server.
+	// E.g "acme/calico-api-server".
+	// +optional
+	ImageOverride string `json:"imageOverride,omitempty"`
+
+	// ExtraEnv adds extra environment variables to the API server.
+	// +optional
+	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
+
+	// ExtraVolumes configures custom volumes to be used by the API server.
+	// +optional
+	ExtraVolumes []v1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts configures custom volume mounts to be used by the API server.
+	// +optional
+	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Tolerations configures custom tolerations on the API server deployment.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// Resources configures custom resource requirements on the API server container.
 	// +optional
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }

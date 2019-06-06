@@ -62,4 +62,16 @@ var _ = Describe("Rendering tests", func() {
 		resources := render.Render(instance)
 		Expect(len(resources)).To(Equal(14))
 	})
+
+	It("should render all resources when API server is enabled", func() {
+		instance.Spec.Components.APIServer = &operatorv1alpha1.APIServerSpec{
+			TLS: operatorv1alpha1.TLSConfig{
+				Certificate: "cert",
+				Key: "key",
+			},
+			RunAsPrivileged: true,
+		}
+		resources := render.Render(instance)
+		Expect(len(resources)).To(Equal(20))
+	})
 })

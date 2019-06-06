@@ -156,12 +156,6 @@ type APIServerSpec struct {
 	// +optional
 	TLS TLSConfig `json:"tls,omitempty"`
 
-	// RunAsPrivileged enables privileged mode on the API server container.
-	// Note: Processes in privileged containers run equivalent to root on the host.
-	// Default: false
-	// +optional
-	RunAsPrivileged bool `json:"runAsPrivileged,omitempty"`
-
 	// ImageOverride configures a different Docker image for the API server.
 	// E.g "acme/calico-api-server".
 	// +optional

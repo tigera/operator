@@ -336,13 +336,6 @@ func apiServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 		},
 	}
 
-	if cr.Spec.Components.APIServer.RunAsPrivileged {
-		privileged := true
-		apiServer.SecurityContext = &corev1.SecurityContext{
-			Privileged:	&privileged,
-		}
-	}
-
 	return apiServer
 }
 

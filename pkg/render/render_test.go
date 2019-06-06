@@ -69,7 +69,6 @@ var _ = Describe("Rendering tests", func() {
 				Certificate: "cert",
 				Key: "key",
 			},
-			RunAsPrivileged: true,
 		}
 		resources := render.Render(instance)
 		Expect(len(resources)).To(Equal(20))

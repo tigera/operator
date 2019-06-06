@@ -132,7 +132,6 @@ var _ = Describe("API server rendering tests", func() {
 				Certificate: "crt",
 				Key:         "key",
 			},
-			RunAsPrivileged: true,
 		}
 
 		resources := render.APIServer(instance)
@@ -142,9 +141,6 @@ var _ = Describe("API server rendering tests", func() {
 		ExpectResource(resources[0], "cnx-apiserver", "kube-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
-
-		// The API server is now privileged.
-		Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())
 
 		// One more volume created now for the TLS secret.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))

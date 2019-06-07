@@ -18,13 +18,5 @@ func validateCustomResource(instance *operatorv1alpha1.Core) error {
 		}
 	}
 
-	if instance.Spec.Components.APIServer != nil {
-		// Both the key and the certificate either be specified or not at all.
-		certEmpty := len(instance.Spec.Components.APIServer.TLS.Certificate) == 0
-		keyEmpty := len(instance.Spec.Components.APIServer.TLS.Key) == 0
-		if (certEmpty && !keyEmpty) || (!certEmpty && keyEmpty) {
-			return fmt.Errorf("spec.components.apiServer.tls.certificate or key is missing")
-		}
-	}
 	return nil
 }

@@ -23,14 +23,22 @@ func Render(cr *operatorv1alpha1.Core) []runtime.Object {
 	var objs []runtime.Object
 	if cr.Spec.Components.KubeProxy.Required {
 		// Only install KubeProxy if required, and do so before installing Node.
-		objs = KubeProxy(cr)
-	}
-	if cr.Spec.Components.APIServer	!= nil {
-		objs = append(objs, APIServer(cr)...)
+		objs = appendNotNil(objs, KubeProxy(cr))
 	}
 
-	objs = append(objs, Namespaces(cr)...)
-	objs = append(objs, Node(cr)...)
-	objs = append(objs, KubeControllers(cr)...)
+	objs = appendNotNil(objs, Namespaces(cr))
+    objs = appendNotNil(objs, Node(cr))
+	objs = appendNotNil(objs, KubeControllers(cr))
+	objs = appendNotNil(objs, APIServer(cr))
 	return objs
 }
+
+func appendNotNil(objs []runtime.Object, newObjs []runtime.Object) []runtime.Object {
+	for _, x := range newObjs {
+		if x != nil {
+			objs = append(objs, x)
+		}
+	}
+	return objs
+}
+

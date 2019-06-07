@@ -15,17 +15,22 @@ const (
 )
 
 func Namespaces(cr *operatorv1alpha1.Core) []runtime.Object {
-	return []runtime.Object{
-		calicoComponentsNamespace(cr),
+	ns := []runtime.Object{
+		createNamespace(calicoNamespace),
 	}
+
+	if cr.Spec.Variant == operatorv1alpha1.TigeraSecureEnterprise {
+		ns = append(ns, createNamespace(tigeraSecureNamespace))
+	}
+	return ns
 }
 
-func calicoComponentsNamespace(cr *operatorv1alpha1.Core) *v1.Namespace {
+func createNamespace(name string) *v1.Namespace {
 	ns := &v1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        calicoNamespace,
-			Labels:      map[string]string{"name": calicoNamespace},
+			Name:        name,
+			Labels:      map[string]string{"name": name},
 			Annotations: map[string]string{},
 		},
 	}

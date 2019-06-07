@@ -17,6 +17,7 @@ var _ = Describe("API server rendering tests", func() {
 		// desired configuration.
 		instance = &operatorv1alpha1.Core{
 			Spec: operatorv1alpha1.CoreSpec{
+				Variant: operatorv1alpha1.TigeraSecureEnterprise,
 				IPPools: []operatorv1alpha1.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
@@ -25,7 +26,7 @@ var _ = Describe("API server rendering tests", func() {
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
 				Components: operatorv1alpha1.ComponentsSpec{
-					APIServer: &operatorv1alpha1.APIServerSpec{},
+					APIServer: operatorv1alpha1.APIServerSpec{},
 				},
 			},
 		}
@@ -127,44 +128,18 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		instance.Spec.Components.APIServer = &operatorv1alpha1.APIServerSpec{
-			TLS: operatorv1alpha1.TLSConfig{
-				Certificate: "crt",
-				Key:         "key",
-			},
+		instance.Spec.Components.APIServer = operatorv1alpha1.APIServerSpec{
+			ImageOverride: "test/apiserver",
 		}
 
 		resources := render.APIServer(instance)
 
-		// Should render the correct resources. One more resource for the secret holding TLS config.
-		Expect(len(resources)).To(Equal(10))
+		// Should render the correct resources.
+		Expect(len(resources)).To(Equal(9))
 		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
 
-		// One more volume created now for the TLS secret.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal("apiserver-certs"))
-		Expect(d.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal("tigera-apiserver-certs"))
-
-		// And another volume mount for the TLS secret on the API server container.
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("apiserver-certs"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
-
-		// Verify the secret
-		var secret *corev1.Secret
-		for _, v := range resources {
-			if s, found := v.(*corev1.Secret); found {
-				secret = s
-				break
-			}
-		}
-
-		Expect(secret).To(Not(BeNil()))
-		Expect(secret.Name).To(Equal("tigera-apiserver-certs"))
-		Expect(secret.Namespace).To(Equal("tigera-system"))
-		Expect(secret.Data).To(HaveKeyWithValue("apiserver.key", []byte("key")))
-		Expect(secret.Data).To(HaveKeyWithValue("apiserver.crt", []byte("crt")))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
 	})
 })

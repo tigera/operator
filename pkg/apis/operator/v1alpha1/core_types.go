@@ -56,7 +56,7 @@ type CoreSpec struct {
 
 	// ImagePullSecretsRef is an array of references to registry pull secrets.
 	// +optional
-	ImagePullSecretsRef []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ImagePullSecretsRef []v1.LocalObjectReference `json:"imagePullSecretsRef,omitempty"`
 
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
 	// a maximum of one IP pool is supported.
@@ -100,7 +100,7 @@ type ComponentsSpec struct {
 
 	// APIServer is optional configuration for the API server component.
 	// +optional
-	APIServer *APIServerSpec `json:"apiServer,omitempty"`
+	APIServer APIServerSpec `json:"apiServer,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
@@ -132,30 +132,10 @@ type KubeControllersSpec struct {
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// TLSConfig contains TLS configuration use for the API server.
-type TLSConfig struct {
-	// Certificate is a base64-encoded string of the certificate file contents.
-	// +optional
-	Certificate string `json:"certificate,omitempty"`
-
-	// Key is a base64-encoded string of the key file contents.
-	// +optional
-	Key string `json:"key,omitempty"`
-
-	// CABundle is a base64-encoded string of a CA bundle file contents.
-	// If provided, TLS verification is enabled when communicating with the API server.
-	// +optional
-	CABundle string
-}
-
 // APIServerSpec defines optional configuration for the API server component.
 // Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
 type APIServerSpec struct {
-	// TLS configures TLS on the API server.
-	// +optional
-	TLS TLSConfig `json:"tls,omitempty"`
-
 	// ImageOverride configures a different Docker image for the API server.
 	// E.g "acme/calico-api-server".
 	// +optional

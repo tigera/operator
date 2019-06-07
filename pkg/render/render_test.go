@@ -46,6 +46,7 @@ var _ = Describe("Rendering tests", func() {
 		// created by the controller without any optional ones. These include:
 		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
+		// - 1 namespace
 		resources := render.Render(instance)
 		Expect(len(resources)).To(Equal(10))
 	})
@@ -63,13 +64,18 @@ var _ = Describe("Rendering tests", func() {
 		Expect(len(resources)).To(Equal(14))
 	})
 
-	It("should render all resources when API server is enabled", func() {
-		instance.Spec.Components.APIServer = &operatorv1alpha1.APIServerSpec{
-			TLS: operatorv1alpha1.TLSConfig{
-				Certificate: "cert",
-				Key: "key",
-			},
-		}
+	It("should render all resources when variant is Tigera Secure", func() {
+		// For this scenario, we expect the basic resources plus the following 10 resources for Tigera Secure:
+		// - 1 additional namespace
+		// - 1 APIService
+		// - 1 ClusterRole
+		// - 2 ClusterRoleBindings
+		// - 1 RoleBinding
+		// - 1 ConfigMap
+		// - 1 Deployment
+		// - 1 Service
+		// - 1 ServiceAccount
+		instance.Spec.Variant = operatorv1alpha1.TigeraSecureEnterprise
 		resources := render.Render(instance)
 		Expect(len(resources)).To(Equal(20))
 	})

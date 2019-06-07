@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -13,13 +14,16 @@ import (
 )
 
 const (
-	defaultAPIServerImageName = "tigera/apiserver"
+	defaultAPIServerImageName   = "tigera/apiserver"
 	defaultQueryServerImageName = "tigera/queryserver"
-	apiServerPort = 5443
-	queryServerPort = 8080
+	apiServerPort               = 5443
+	queryServerPort             = 8080
 )
 
 func APIServer(cr *operatorv1alpha1.Core) []runtime.Object {
+	if cr.Spec.Variant != operatorv1alpha1.TigeraSecureEnterprise {
+		return nil
+	}
 	objs := []runtime.Object{
 		apiServer(cr),
 		auditPolicyConfigMap(cr),
@@ -30,9 +34,6 @@ func APIServer(cr *operatorv1alpha1.Core) []runtime.Object {
 		tieredPolicyPassthruClusterRolebinding(cr),
 		delegateAuthClusterRoleBinding(cr),
 		authReaderRoleBinding(cr),
-	}
-	if len(cr.Spec.Components.APIServer.TLS.Certificate) > 0 && len(cr.Spec.Components.APIServer.TLS.Key) > 0 {
-		objs = append(objs, tlsSecret(cr))
 	}
 	return objs
 }
@@ -45,21 +46,16 @@ func apiService(cr *operatorv1alpha1.Core) *v1beta1.APIService {
 			Name: "v3.projectcalico.org",
 		},
 		Spec: v1beta1.APIServiceSpec{
-			Group: "projectcalico.org",
-			VersionPriority: 200,
+			Group:                "projectcalico.org",
+			VersionPriority:      200,
 			GroupPriorityMinimum: 200,
 			Service: &v1beta1.ServiceReference{
-				Name: "tigera-api",
+				Name:      "tigera-api",
 				Namespace: "tigera-system",
 			},
-			Version: "v3",
+			Version:               "v3",
 			InsecureSkipTLSVerify: true,
 		},
-	}
-	// If a CA bundle is provided, enable TLS verification and add the bundle to the API service.
-	if len(cr.Spec.Components.APIServer.TLS.CABundle) > 0 {
-		s.Spec.InsecureSkipTLSVerify = false
-		s.Spec.CABundle = []byte(cr.Spec.Components.APIServer.TLS.CABundle)
 	}
 	return s
 }
@@ -75,8 +71,8 @@ func tieredPolicyPassthruClusterRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterR
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"networkpolicies","globalnetworkpolicies"},
-				Verbs:  []string{"*"},
+				Resources: []string{"networkpolicies", "globalnetworkpolicies"},
+				Verbs:     []string{"*"},
 			},
 		},
 	}
@@ -91,19 +87,19 @@ func tieredPolicyPassthruClusterRolebinding(cr *operatorv1alpha1.Core) *rbacv1.C
 		},
 		Subjects: []rbacv1.Subject{
 			{
-				Kind: "Group",
-				Name: "system:authenticated",
+				Kind:     "Group",
+				Name:     "system:authenticated",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 			{
-				Kind: "Group",
-				Name: "system:unauthenticated",
+				Kind:     "Group",
+				Name:     "system:unauthenticated",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
-			Kind: "ClusterRole",
-			Name: "tigera-tiered-policy-passthrough",
+			Kind:     "ClusterRole",
+			Name:     "tigera-tiered-policy-passthrough",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -119,14 +115,14 @@ func delegateAuthClusterRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRo
 		},
 		Subjects: []rbacv1.Subject{
 			{
-				Kind: "ServiceAccount",
-				Name: "tigera-apiserver",
+				Kind:      "ServiceAccount",
+				Name:      "tigera-apiserver",
 				Namespace: "tigera-system",
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
-			Kind: "ClusterRole",
-			Name: "system:auth-delegator",
+			Kind:     "ClusterRole",
+			Name:     "system:auth-delegator",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -135,22 +131,22 @@ func delegateAuthClusterRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRo
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
 // extension-apiserver-authentication configmap. That configmap contains the client CA file that
 // the main API server was configured with.
-func authReaderRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.RoleBinding{
+func authReaderRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-auth-reader",
+			Name:      "tigera-auth-reader",
 			Namespace: "tigera-system",
 		},
 		RoleRef: rbacv1.RoleRef{
-			Kind: "Role",
-			Name: "extension-apiserver-authentication-reader",
+			Kind:     "Role",
+			Name:     "extension-apiserver-authentication-reader",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 		Subjects: []rbacv1.Subject{
 			{
-				Kind: "ServiceAccount",
-				Name: "tigera-apiserver",
+				Kind:      "ServiceAccount",
+				Name:      "tigera-apiserver",
 				Namespace: "tigera-system",
 			},
 		},
@@ -162,7 +158,7 @@ func apiServerServiceAccount(cr *operatorv1alpha1.Core) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver",
+			Name:      "tigera-apiserver",
 			Namespace: "tigera-system",
 		},
 	}
@@ -173,42 +169,27 @@ func apiServerService(cr *operatorv1alpha1.Core) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-api",
+			Name:      "tigera-api",
 			Namespace: "tigera-system",
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name: "apiserver",
-					Port: 443,
-					Protocol: corev1.ProtocolTCP,
+					Name:       "apiserver",
+					Port:       443,
+					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(apiServerPort),
 				},
 				{
-					Name: "queryserver",
-					Port: queryServerPort,
-					Protocol: corev1.ProtocolTCP,
+					Name:       "queryserver",
+					Port:       queryServerPort,
+					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(queryServerPort),
 				},
 			},
 			Selector: map[string]string{
 				"apiserver": "true",
 			},
-		},
-	}
-}
-
-func tlsSecret(cr *operatorv1alpha1.Core) *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		Type: corev1.SecretTypeOpaque,
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver-certs",
-			Namespace: "tigera-system",
-		},
-		Data: map[string][]byte{
-			"apiserver.key": []byte(cr.Spec.Components.APIServer.TLS.Key),
-			"apiserver.crt": []byte(cr.Spec.Components.APIServer.TLS.Certificate),
 		},
 	}
 }
@@ -280,8 +261,8 @@ func apiServer(cr *operatorv1alpha1.Core) *appsv1.Deployment {
 						"beta.kubernetes.io/os": "linux",
 					},
 					ServiceAccountName: "tigera-apiserver",
-					Tolerations: tolerations(cr),
-					ImagePullSecrets: cr.Spec.ImagePullSecretsRef,
+					Tolerations:        tolerations(cr),
+					ImagePullSecrets:   cr.Spec.ImagePullSecretsRef,
 					Containers: []corev1.Container{
 						apiServerContainer(cr),
 						queryServerContainer(cr),
@@ -306,13 +287,6 @@ func apiServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 		{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
 	}
 
-	if len(cr.Spec.Components.APIServer.TLS.Certificate) > 0 && len(cr.Spec.Components.APIServer.TLS.Key) > 0 {
-		apiCertVolume := corev1.VolumeMount{
-			Name: "apiserver-certs",
-			MountPath: "/code/apiserver.local.config/certificates",
-		}
-		volumeMounts = append(volumeMounts, apiCertVolume)
-	}
 	volumeMounts = setCustomVolumeMounts(volumeMounts, cr.Spec.Components.APIServer.ExtraVolumeMounts)
 
 	apiServer := corev1.Container{
@@ -400,24 +374,12 @@ func apiServerVolumes(cr *operatorv1alpha1.Core) []corev1.Volume {
 			},
 		},
 	}
-	// If we have TLS config specified add the TLS volume using the secret.
-	if len(cr.Spec.Components.APIServer.TLS.Certificate) > 0 && len(cr.Spec.Components.APIServer.TLS.Key) > 0 {
-		certVolume := corev1.Volume{
-			Name: "apiserver-certs",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "tigera-apiserver-certs",
-				},
-			},
-		}
-		volumes = append(volumes, certVolume)
-	}
 	volumes = setCustomVolumes(volumes, cr.Spec.Components.APIServer.ExtraVolumes)
 	return volumes
 }
 
 // tolerations creates the tolerations used by the API server deployment.
-func tolerations(cr *operatorv1alpha1.Core) []corev1.Toleration{
+func tolerations(cr *operatorv1alpha1.Core) []corev1.Toleration {
 	tolerations := []corev1.Toleration{
 		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
 	}

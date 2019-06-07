@@ -15,6 +15,8 @@ import (
 const (
 	defaultAPIServerImageName = "tigera/apiserver"
 	defaultQueryServerImageName = "tigera/queryserver"
+	apiServerPort = 5443
+	queryServerPort = 8080
 )
 
 func APIServer(cr *operatorv1alpha1.Core) []runtime.Object {
@@ -180,13 +182,13 @@ func apiServerService(cr *operatorv1alpha1.Core) *corev1.Service {
 					Name: "apiserver",
 					Port: 443,
 					Protocol: corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(5443),
+					TargetPort: intstr.FromInt(apiServerPort),
 				},
 				{
 					Name: "queryserver",
-					Port: 8080,
+					Port: queryServerPort,
 					Protocol: corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(8080),
+					TargetPort: intstr.FromInt(queryServerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -317,7 +319,7 @@ func apiServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 		Name:  "tigera-apiserver",
 		Image: apiServerImage,
 		Args: []string{
-			"--secure-port=5443",
+			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 		},
@@ -329,7 +331,7 @@ func apiServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(5443),
+					Port:   intstr.FromInt(apiServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -359,7 +361,7 @@ func queryServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(8080),
+					Port:   intstr.FromInt(queryServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},

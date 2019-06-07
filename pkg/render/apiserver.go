@@ -48,7 +48,7 @@ func apiService(cr *operatorv1alpha1.Core) *v1beta1.APIService {
 			GroupPriorityMinimum: 200,
 			Service: &v1beta1.ServiceReference{
 				Name: "tigera-api",
-				Namespace: "kube-system",
+				Namespace: "tigera-system",
 			},
 			Version: "v3",
 			InsecureSkipTLSVerify: true,
@@ -119,7 +119,7 @@ func delegateAuthClusterRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRo
 			{
 				Kind: "ServiceAccount",
 				Name: "tigera-apiserver",
-				Namespace: "kube-system",
+				Namespace: "tigera-system",
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -138,7 +138,7 @@ func authReaderRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-auth-reader",
-			Namespace: "kube-system",
+			Namespace: "tigera-system",
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind: "Role",
@@ -149,7 +149,7 @@ func authReaderRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.RoleBinding{
 			{
 				Kind: "ServiceAccount",
 				Name: "tigera-apiserver",
-				Namespace: "kube-system",
+				Namespace: "tigera-system",
 			},
 		},
 	}
@@ -161,7 +161,7 @@ func apiServerServiceAccount(cr *operatorv1alpha1.Core) *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-apiserver",
-			Namespace: "kube-system",
+			Namespace: "tigera-system",
 		},
 	}
 }
@@ -172,7 +172,7 @@ func apiServerService(cr *operatorv1alpha1.Core) *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-api",
-			Namespace: "kube-system",
+			Namespace: "tigera-system",
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -202,7 +202,7 @@ func tlsSecret(cr *operatorv1alpha1.Core) *corev1.Secret {
 		Type: corev1.SecretTypeOpaque,
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-apiserver-certs",
-			Namespace: "kube-system",
+			Namespace: "tigera-system",
 		},
 		Data: map[string][]byte{
 			"apiserver.key": []byte(cr.Spec.Components.APIServer.TLS.Key),
@@ -236,7 +236,7 @@ rules:
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-audit-policy",
-			Namespace: "kube-system",
+			Namespace: "tigera-system",
 		},
 		Data: map[string]string{
 			"config": defaultAuditPolicy,
@@ -252,7 +252,7 @@ func apiServer(cr *operatorv1alpha1.Core) *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-apiserver",
-			Namespace: "kube-system",
+			Namespace: "tigera-system",
 			Labels: map[string]string{
 				"apiserver": "true",
 				"k8s-app":   "tigera-apiserver",
@@ -267,7 +267,7 @@ func apiServer(cr *operatorv1alpha1.Core) *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tigera-apiserver",
-					Namespace: "kube-system",
+					Namespace: "tigera-system",
 					Labels: map[string]string{
 						"apiserver": "true",
 						"k8s-app":   "tigera-apiserver",

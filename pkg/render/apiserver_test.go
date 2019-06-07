@@ -37,7 +37,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		Expect(len(resources)).To(Equal(9))
-		ExpectResource(resources[0], "tigera-apiserver", "kube-system", "", "v1", "Deployment")
+		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
 
@@ -52,7 +52,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
 
 		Expect(d.Spec.Template.Name).To(Equal("tigera-apiserver"))
-		Expect(d.Spec.Template.Namespace).To(Equal("kube-system"))
+		Expect(d.Spec.Template.Namespace).To(Equal("tigera-system"))
 		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
@@ -138,7 +138,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources. One more resource for the secret holding TLS config.
 		Expect(len(resources)).To(Equal(10))
-		ExpectResource(resources[0], "tigera-apiserver", "kube-system", "", "v1", "Deployment")
+		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
 
@@ -163,7 +163,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(secret).To(Not(BeNil()))
 		Expect(secret.Name).To(Equal("tigera-apiserver-certs"))
-		Expect(secret.Namespace).To(Equal("kube-system"))
+		Expect(secret.Namespace).To(Equal("tigera-system"))
 		Expect(secret.Data).To(HaveKeyWithValue("apiserver.key", []byte("key")))
 		Expect(secret.Data).To(HaveKeyWithValue("apiserver.crt", []byte("crt")))
 	})

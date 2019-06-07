@@ -37,29 +37,29 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		Expect(len(resources)).To(Equal(9))
-		ExpectResource(resources[0], "cnx-apiserver", "kube-system", "", "v1", "Deployment")
+		ExpectResource(resources[0], "tigera-apiserver", "kube-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
 
-		Expect(d.Name).To(Equal("cnx-apiserver"))
+		Expect(d.Name).To(Equal("tigera-apiserver"))
 		Expect(len(d.Labels)).To(Equal(2))
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "cnx-apiserver"))
+		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
 		Expect(d.Spec.Strategy.Type).To(Equal(v1.RecreateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
 
-		Expect(d.Spec.Template.Name).To(Equal("cnx-apiserver"))
+		Expect(d.Spec.Template.Name).To(Equal("tigera-apiserver"))
 		Expect(d.Spec.Template.Namespace).To(Equal("kube-system"))
 		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "cnx-apiserver"))
+		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
 		Expect(len(d.Spec.Template.Spec.NodeSelector)).To(Equal(1))
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("beta.kubernetes.io/os", "linux"))
-		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("cnx-apiserver"))
+		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
 		expectedTolerations := []corev1.Toleration{
 			{Key: "node-role.kubernetes.io/master", Effect: "NoSchedule"},
@@ -68,8 +68,8 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
-		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("cnx-apiserver"))
-		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal("testregistry.com/tigera/cnx-apiserver:test"))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal("testregistry.com/tigera/apiserver:test"))
 
 		expectedArgs := []string{
 			"--secure-port=5443",
@@ -84,9 +84,9 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/var/log/calico/audit"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("var-log-calico-audit"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-audit-logs"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/tigera/audit"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("audit-policy-ee"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-policy"))
 
 		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
@@ -96,8 +96,8 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.Containers[0].SecurityContext).To(BeNil())
 
-		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("cnx-queryserver"))
-		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal("testregistry.com/tigera/cnx-queryserver:test"))
+		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal("testregistry.com/tigera/queryserver:test"))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
 
@@ -116,11 +116,11 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
-		Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("var-log-calico-audit"))
+		Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-audit-logs"))
 		Expect(d.Spec.Template.Spec.Volumes[0].HostPath.Path).To(Equal("/var/log/calico/audit"))
 		Expect(*d.Spec.Template.Spec.Volumes[0].HostPath.Type).To(BeEquivalentTo("DirectoryOrCreate"))
-		Expect(d.Spec.Template.Spec.Volumes[1].Name).To(Equal("audit-policy-ee"))
-		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal("audit-policy-ee"))
+		Expect(d.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal("tigera-audit-policy"))
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Key).To(Equal("config"))
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
 		Expect(len(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items)).To(Equal(1))
@@ -138,14 +138,14 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources. One more resource for the secret holding TLS config.
 		Expect(len(resources)).To(Equal(10))
-		ExpectResource(resources[0], "cnx-apiserver", "kube-system", "", "v1", "Deployment")
+		ExpectResource(resources[0], "tigera-apiserver", "kube-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
 
 		// One more volume created now for the TLS secret.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal("apiserver-certs"))
-		Expect(d.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal("cnx-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal("tigera-apiserver-certs"))
 
 		// And another volume mount for the TLS secret on the API server container.
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
@@ -162,7 +162,7 @@ var _ = Describe("API server rendering tests", func() {
 		}
 
 		Expect(secret).To(Not(BeNil()))
-		Expect(secret.Name).To(Equal("cnx-apiserver-certs"))
+		Expect(secret.Name).To(Equal("tigera-apiserver-certs"))
 		Expect(secret.Namespace).To(Equal("kube-system"))
 		Expect(secret.Data).To(HaveKeyWithValue("apiserver.key", []byte("key")))
 		Expect(secret.Data).To(HaveKeyWithValue("apiserver.crt", []byte("crt")))

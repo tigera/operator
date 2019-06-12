@@ -83,6 +83,8 @@ PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.20
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
+SRC_FILES=$(shell find ./pkg -name '*.go')
+SRC_FILES+=$(shell find ./cmd -name '*.go)
 CONTAINERIZED=docker run --rm \
 		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
 		-v $(CURDIR)/.go-pkg-cache:/go-cache/:rw \
@@ -177,7 +179,7 @@ ifeq ($(LOCAL_BUILD),true)
 endif
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): vendor $(GO_FILES)
+$(BINDIR)/operator-$(ARCH): vendor $(SRC_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
 

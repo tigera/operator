@@ -50,7 +50,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				MinimumOperatorVersion: "0.9.1",
 				Variant:                operator.TigeraSecureEnterprise,
 				Registry:               "test-reg/",
-				ImagePullSecretsRef: []v1.LocalObjectReference{
+				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",
 					},

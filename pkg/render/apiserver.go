@@ -262,7 +262,7 @@ func apiServer(cr *operator.Installation) *appsv1.Deployment {
 					},
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        tolerations(cr),
-					ImagePullSecrets:   cr.Spec.ImagePullSecretsRef,
+					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						apiServerContainer(cr),
 						queryServerContainer(cr),

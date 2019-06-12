@@ -77,7 +77,7 @@ func nodeRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 }
 
 func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "calico-node",
@@ -122,6 +122,7 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Resources: []string{
 					"bgpconfigurations",
 					"bgppeers",
+					"blockaffinities",
 					"clusterinformations",
 					"felixconfigurations",
 					"globalnetworkpolicies",
@@ -179,6 +180,21 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 			},
 		},
 	}
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraRules := []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"licensekeys",
+					"remoteclusterconfigurations",
+					"tiers",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+		}
+		role.Rules = append(role.Rules, extraRules...)
+	}
+	return role
 }
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.

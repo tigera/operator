@@ -68,8 +68,8 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources plus the following 10 resources for Tigera Secure:
 		// - 1 additional namespace
 		// - 1 APIService
-		// - 1 ClusterRole
-		// - 2 ClusterRoleBindings
+		// - 2 ClusterRole
+		// - 3 ClusterRoleBindings
 		// - 1 RoleBinding
 		// - 1 ConfigMap
 		// - 1 Deployment
@@ -77,6 +77,6 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 ServiceAccount
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 	})
 })

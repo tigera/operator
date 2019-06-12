@@ -44,6 +44,8 @@ func APIServer(cr *operator.Installation) []runtime.Object {
 		apiServerServiceAccount(cr),
 		apiService(cr),
 		apiServerService(cr),
+		apiServiceAccountClusterRole(cr),
+		apiServiceAccountClusterRoleBinding(cr),
 		tieredPolicyPassthruClusterRole(cr),
 		tieredPolicyPassthruClusterRolebinding(cr),
 		delegateAuthClusterRoleBinding(cr),
@@ -174,6 +176,74 @@ func apiServerServiceAccount(cr *operator.Installation) *corev1.ServiceAccount {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-apiserver",
 			Namespace: "tigera-system",
+		},
+	}
+}
+
+// apiServiceAccountClusterRole creates a clusterrole that gives permissions to access backing CRDs and
+// k8s networkpolicies.
+func apiServiceAccountClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-crds",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{
+					"extensions",
+					"networking.k8s.io",
+					"",
+				},
+				Resources: []string{
+					"networkpolicies",
+					"nodes",
+					"namespaces",
+					"pods",
+					"serviceaccounts",
+				},
+				Verbs: []string{
+					"get",
+					"list",
+					"watch",
+				},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"globalnetworkpolicies",
+					"networkpolicies",
+					"tiers",
+					"clusterinformations",
+					"hostendpoints",
+					"licensekeys",
+					"globalnetworksets",
+				},
+				Verbs: []string{"*"},
+			},
+		},
+	}
+}
+
+// apiServiceAccountClusterRoleBinding creates a clusterrolebinding that applies apiServiceAccountClusterRole to
+// the tigera-apiserver service account.
+func apiServiceAccountClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-apiserver-access-crds",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-apiserver",
+				Namespace: "tigera-system",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "tigera-crds",
+			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
 }

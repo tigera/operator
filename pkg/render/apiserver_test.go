@@ -51,7 +51,7 @@ var _ = Describe("API server rendering tests", func() {
 		resources := render.APIServer(instance)
 
 		// Should render the correct resources.
-		Expect(len(resources)).To(Equal(9))
+		Expect(len(resources)).To(Equal(11))
 		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
@@ -149,7 +149,7 @@ var _ = Describe("API server rendering tests", func() {
 		resources := render.APIServer(instance)
 
 		// Should render the correct resources.
-		Expect(len(resources)).To(Equal(9))
+		Expect(len(resources)).To(Equal(11))
 		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)

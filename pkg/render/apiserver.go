@@ -150,7 +150,7 @@ func authReaderRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-auth-reader",
-			Namespace: "tigera-system",
+			Namespace: "kube-system",
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "Role",

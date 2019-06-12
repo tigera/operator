@@ -68,9 +68,9 @@ type InstallationSpec struct {
 	// +optional
 	Registry string `json:"registry,omitempty"`
 
-	// ImagePullSecretsRef is an array of references to registry pull secrets.
+	// ImagePullSecrets is an array of references to registry pull secrets.
 	// +optional
-	ImagePullSecretsRef []v1.LocalObjectReference `json:"imagePullSecretsRef,omitempty"`
+	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
 	// a maximum of one IP pool is supported.

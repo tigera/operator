@@ -210,8 +210,8 @@ func (in *InstallationList) DeepCopyObject() runtime.Object {
 func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 	*out = *in
 	out.Datastore = in.Datastore
-	if in.ImagePullSecretsRef != nil {
-		in, out := &in.ImagePullSecretsRef, &out.ImagePullSecretsRef
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
 		*out = make([]corev1.LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}

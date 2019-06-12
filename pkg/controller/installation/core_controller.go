@@ -38,8 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -58,7 +60,10 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileInstallation{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileInstallation{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -87,10 +92,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	for _, t := range secondaryResources() {
+		pred := predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				// Ignore updates to objects when metadata.Generation does not change.
+				return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
+			},
+		}
 		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &operator.Installation{},
-		})
+		}, pred)
 		if err != nil {
 			return err
 		}
@@ -204,7 +215,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Otherwise, if it was not found, we should create it.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
-			logCtx.V(1).Info("Resource exists, updating it.")
+			logCtx.V(1).Info("Resource already exists, update it")
+			oldRV := old.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+			obj.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
 			err = r.client.Update(context.TODO(), obj)
 			if err != nil {
 				logCtx.WithValues("key", key).Info("Failed to update object.")

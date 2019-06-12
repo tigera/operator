@@ -54,7 +54,7 @@ func controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 }
 
 func controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "calico-kube-controllers",
@@ -91,6 +91,32 @@ func controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
 			},
 		},
 	}
+
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraRules := []rbacv1.PolicyRule{
+			{
+				// Needs access to update clusterinformations.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "create", "update"},
+			},
+			{
+				// calico-kube-controllers requires tiers create
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"tiers"},
+				Verbs:     []string{"create"},
+			},
+			{
+				// Needed to validate the license
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get"},
+			},
+		}
+
+		role.Rules = append(role.Rules, extraRules...)
+	}
+	return role
 }
 
 func controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {

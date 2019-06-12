@@ -187,7 +187,7 @@ func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 						"beta.kubernetes.io/os": "linux",
 					},
 					Tolerations:        tolerations,
-					ImagePullSecrets:   cr.Spec.ImagePullSecretsRef,
+					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{

@@ -18,6 +18,8 @@ import (
 	"context"
 	"os"
 
+	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+
 	"github.com/go-logr/logr"
 	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
 	"github.com/tigera/operator/pkg/render"
@@ -106,6 +108,8 @@ func secondaryResources() []runtime.Object {
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
 		&v1.ServiceAccount{},
+		&v1beta1.APIService{},
+		&v1.Service{},
 	}
 }
 

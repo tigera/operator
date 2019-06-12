@@ -55,6 +55,13 @@ rules:
   - '*'
   verbs:
   - '*'
+# When running TigeraSecureEnterprise, we need to manage APIServices.
+- apiGroups:
+  - apiregistration.k8s.io
+  resources:
+  - apiservices
+  verbs:
+  - '*'
 # When running in openshift, we need to update networking config.
 - apiGroups:
   - config.openshift.io

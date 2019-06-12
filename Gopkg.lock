@@ -1123,7 +1123,9 @@
   name = "k8s.io/kube-aggregator"
   packages = [
     "pkg/apis/apiregistration",
+    "pkg/apis/apiregistration/v1",
     "pkg/apis/apiregistration/v1beta1",
+    "pkg/client/clientset_generated/clientset/scheme",
   ]
   pruneopts = "NT"
   revision = "b998c87818f673b58e26800667dadc3d2e2f49c7"
@@ -1249,6 +1251,7 @@
     "k8s.io/code-generator/cmd/lister-gen",
     "k8s.io/gengo/args",
     "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1",
+    "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme",
     "k8s.io/kube-openapi/cmd/openapi-gen",
     "k8s.io/kube-openapi/pkg/common",
     "sigs.k8s.io/controller-runtime/pkg/client",

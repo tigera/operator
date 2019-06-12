@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
@@ -58,7 +59,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileInstallation{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileInstallation{
+		client:           mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		resourceVersions: map[string]string{},
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -121,6 +126,10 @@ type ReconcileInstallation struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+
+	// Keep track of known resource versions for each object so we can tell
+	// when we need to update an object.
+	resourceVersions map[string]string
 }
 
 // Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
@@ -204,12 +213,27 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Otherwise, if it was not found, we should create it.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
-			logCtx.V(1).Info("Resource exists, updating it.")
-			err = r.client.Update(context.TODO(), obj)
+			logCtx.V(1).Info("Resource already exists, check if it needs to be updated")
+
+			// Check if we need to update the resource by compare resource versions.
+			// This de-duplicates updates that we ourselves generated.
+			newRV := old.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+			if rv, ok := r.resourceVersions[keyForResrouce(obj)]; ok && newRV == rv {
+				logCtx.V(2).Info("Resource already up to date, skipping")
+				continue
+			}
+			logCtx.V(1).Info("Resource needs update")
+
+			// Update the object.
+			err = r.client.Update(context.TODO(), old)
 			if err != nil {
 				logCtx.WithValues("key", key).Info("Failed to update object.")
 				return reconcile.Result{}, err
 			}
+
+			// We succeeded - store off the updated objects resource version so we can compare if
+			// we need to update on future events.
+			r.resourceVersions[keyForResrouce(old)] = old.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
 			continue
 		}
 
@@ -269,6 +293,13 @@ func contextLoggerForResource(obj runtime.Object) logr.Logger {
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
 	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
+}
+
+func keyForResrouce(obj runtime.Object) string {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
+	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
+	return fmt.Sprintf("%s/%s/%s", gvk, name, namespace)
 }
 
 // hasOwnerReference checks if the given object was created by us (as opposed to another controller).

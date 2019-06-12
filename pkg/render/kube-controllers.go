@@ -26,6 +26,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	defaultCalicoKubeControllersImageName = "calico/kube-controllers"
+	defaultTigeraKubeControllersImageName = "tigera/kube-controllers"
+)
+
 var replicas int32 = 1
 
 func KubeControllers(cr *operator.Installation) []runtime.Object {
@@ -111,7 +116,10 @@ func controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBindin
 }
 
 func controllersDeployment(cr *operator.Installation) *apps.Deployment {
-	imageName := "calico/kube-controllers"
+	imageName := defaultCalicoKubeControllersImageName
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		imageName = defaultTigeraKubeControllersImageName
+	}
 	controllersImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
 	if len(cr.Spec.Components.KubeControllers.ImageOverride) > 0 {
 		controllersImage = cr.Spec.Components.KubeControllers.ImageOverride
@@ -179,6 +187,7 @@ func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 						"beta.kubernetes.io/os": "linux",
 					},
 					Tolerations:        tolerations,
+					ImagePullSecrets:   cr.Spec.ImagePullSecretsRef,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{

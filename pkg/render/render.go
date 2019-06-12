@@ -27,7 +27,7 @@ func Render(cr *operatorv1alpha1.Core) []runtime.Object {
 	}
 
 	objs = appendNotNil(objs, Namespaces(cr))
-    objs = appendNotNil(objs, Node(cr))
+	objs = appendNotNil(objs, Node(cr))
 	objs = appendNotNil(objs, KubeControllers(cr))
 	objs = appendNotNil(objs, APIServer(cr))
 	return objs
@@ -41,4 +41,3 @@ func appendNotNil(objs []runtime.Object, newObjs []runtime.Object) []runtime.Obj
 	}
 	return objs
 }
-

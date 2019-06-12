@@ -351,7 +351,7 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 				Spec: v1.PodSpec{
 					NodeSelector:                  map[string]string{},
 					Tolerations:                   tolerations,
-					ImagePullSecrets:              cr.Spec.ImagePullSecretsRef,
+					ImagePullSecrets:              cr.Spec.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,

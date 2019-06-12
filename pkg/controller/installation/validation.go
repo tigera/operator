@@ -12,33 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package installation
 
 import (
+	"fmt"
+	"net/url"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func Render(cr *operator.Installation) []runtime.Object {
-	var objs []runtime.Object
-	if cr.Spec.Components.KubeProxy.Required {
-		// Only install KubeProxy if required, and do so before installing Node.
-		objs = appendNotNil(objs, KubeProxy(cr))
-	}
-
-	objs = appendNotNil(objs, Namespaces(cr))
-    objs = appendNotNil(objs, Node(cr))
-	objs = appendNotNil(objs, KubeControllers(cr))
-	objs = appendNotNil(objs, APIServer(cr))
-	return objs
-}
-
-func appendNotNil(objs []runtime.Object, newObjs []runtime.Object) []runtime.Object {
-	for _, x := range newObjs {
-		if x != nil {
-			objs = append(objs, x)
+// validateCustomResource validates that the given custom resource is correct. This
+// should be called after populating defaults and before rendering objects.
+func validateCustomResource(instance *operator.Installation) error {
+	if instance.Spec.Components.KubeProxy.Required {
+		if len(instance.Spec.Components.KubeProxy.APIServer) == 0 {
+			return fmt.Errorf("spec.apiServer required for kubeProxy installation")
+		} else if _, err := url.ParseRequestURI(instance.Spec.Components.KubeProxy.APIServer); err != nil {
+			return fmt.Errorf("spec.apiServer contains invalid domain string")
 		}
 	}
-	return objs
+	return nil
 }
-

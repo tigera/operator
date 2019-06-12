@@ -3,7 +3,7 @@ package render
 import (
 	"os"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,12 +14,12 @@ const (
 	tigeraSecureNamespace = "tigera-system"
 )
 
-func Namespaces(cr *operatorv1alpha1.Core) []runtime.Object {
+func Namespaces(cr *operator.Installation) []runtime.Object {
 	ns := []runtime.Object{
 		createNamespace(calicoNamespace),
 	}
 
-	if cr.Spec.Variant == operatorv1alpha1.TigeraSecureEnterprise {
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		ns = append(ns, createNamespace(tigeraSecureNamespace))
 	}
 	return ns

@@ -1,5 +1,5 @@
-apiVersion: operator.tigera.io/v1alpha1
-kind: Core
+apiVersion: operator.tigera.io/v1
+kind: Installation
 metadata:
   name: default
 spec:

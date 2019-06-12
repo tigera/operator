@@ -17,7 +17,7 @@ package render
 import (
 	"fmt"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apps "k8s.io/api/apps/v1"
 
 	v1 "k8s.io/api/core/v1"
@@ -28,7 +28,7 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operatorv1alpha1.Core) []runtime.Object {
+func KubeControllers(cr *operator.Installation) []runtime.Object {
 	return []runtime.Object{
 		controllersServiceAccount(cr),
 		controllersRole(cr),
@@ -37,7 +37,7 @@ func KubeControllers(cr *operatorv1alpha1.Core) []runtime.Object {
 	}
 }
 
-func controllersServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
+func controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,7 +48,7 @@ func controllersServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 	}
 }
 
-func controllersRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
+func controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -88,7 +88,7 @@ func controllersRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 	}
 }
 
-func controllersRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
+func controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -110,7 +110,7 @@ func controllersRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBindin
 	}
 }
 
-func controllersDeployment(cr *operatorv1alpha1.Core) *apps.Deployment {
+func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 	imageName := "calico/kube-controllers"
 	controllersImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
 	if len(cr.Spec.Components.KubeControllers.ImageOverride) > 0 {

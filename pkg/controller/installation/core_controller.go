@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package core
+package installation
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	"github.com/go-logr/logr"
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -45,12 +45,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_core")
+var log = logf.Log.WithName("installation_controller")
 var openshiftEnv = "OPENSHIFT"
 var defaultInstanceKey = client.ObjectKey{Name: "default"}
 var openshiftNetworkConfig = "cluster"
 
-// Add creates a new Core Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -58,19 +58,19 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileCore{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileInstallation{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("core-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to primary resource Core
-	err = c.Watch(&source.Kind{Type: &operatorv1alpha1.Core{}}, &handler.EnqueueRequestForObject{})
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, t := range secondaryResources() {
 		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &operatorv1alpha1.Core{},
+			OwnerType:    &operator.Installation{},
 		})
 		if err != nil {
 			return err
@@ -113,25 +113,25 @@ func secondaryResources() []runtime.Object {
 	}
 }
 
-var _ reconcile.Reconciler = &ReconcileCore{}
+var _ reconcile.Reconciler = &ReconcileInstallation{}
 
-// ReconcileCore reconciles a Core object
-type ReconcileCore struct {
+// ReconcileInstallation reconciles a Installation object
+type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
 }
 
-// Reconcile reads that state of the cluster for a Core object and makes changes based on the state read
-// and what is in the Core.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
+// Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
+// and what is in the Installation.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling network installation")
 
-	// Fetch the Core instance. We only support a single instance named "default".
-	instance := &operatorv1alpha1.Core{}
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operator.Installation{}
 	err := r.client.Get(context.TODO(), defaultInstanceKey, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -165,9 +165,9 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 
 		// Use the openshift provided CIDRs.
-		instance.Spec.IPPools = []operatorv1alpha1.IPPool{}
+		instance.Spec.IPPools = []operator.IPPool{}
 		for _, net := range openshiftConfig.Spec.ClusterNetwork {
-			instance.Spec.IPPools = append(instance.Spec.IPPools, operatorv1alpha1.IPPool{CIDR: net.CIDR})
+			instance.Spec.IPPools = append(instance.Spec.IPPools, operator.IPPool{CIDR: net.CIDR})
 		}
 	}
 
@@ -179,7 +179,7 @@ func (r *ReconcileCore) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Render the desired objects based on our configuration. This represents the desired state of the cluster.
 	desiredStateObjs := render.Render(instance)
 
-	// Set Core instance as the owner and controller.
+	// Set Installation instance as the owner and controller.
 	for _, obj := range desiredStateObjs {
 		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
 			return reconcile.Result{}, err

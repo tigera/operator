@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package core
+package installation
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -21,16 +21,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
 	maxUnavailable := intstr.FromInt(2)
 	It("should properly fill defaults on an empty instance", func() {
-		instance := &operatorv1alpha1.Core{}
+		instance := &operator.Installation{}
 		fillDefaults(instance)
 		Expect(instance.Spec.Version).To(Equal("latest"))
-		Expect(instance.Spec.Variant).To(Equal(operatorv1alpha1.Calico))
+		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(Equal("docker.io/"))
 		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
@@ -44,11 +44,11 @@ var _ = Describe("Defaulting logic tests", func() {
 	})
 
 	It("should not override custom configuration", func() {
-		instance := &operatorv1alpha1.Core{
-			Spec: operatorv1alpha1.CoreSpec{
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
 				Version:                "test",
 				MinimumOperatorVersion: "0.9.1",
-				Variant:                operatorv1alpha1.TigeraSecureEnterprise,
+				Variant:                operator.TigeraSecureEnterprise,
 				Registry:               "test-reg/",
 				ImagePullSecretsRef: []v1.LocalObjectReference{
 					{
@@ -60,14 +60,14 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				CNIBinDir: "/test/bin",
 				CNINetDir: "/test/net",
-				IPPools: []operatorv1alpha1.IPPool{
+				IPPools: []operator.IPPool{
 					{CIDR: "1.2.3.0/24"},
 				},
-				Datastore: operatorv1alpha1.DatastoreConfig{
-					Type: operatorv1alpha1.Kubernetes,
+				Datastore: operator.DatastoreConfig{
+					Type: operator.Kubernetes,
 				},
-				Components: operatorv1alpha1.ComponentsSpec{
-					Node: operatorv1alpha1.NodeSpec{
+				Components: operator.ComponentsSpec{
+					Node: operator.NodeSpec{
 						ImageOverride:  "nodeRegistry/nodeImage:1.2.3",
 						MaxUnavailable: &maxUnavailable,
 						ExtraEnv: []v1.EnvVar{
@@ -101,7 +101,7 @@ var _ = Describe("Defaulting logic tests", func() {
 							{Operator: v1.TolerationOpEqual, Value: "nodeValue", Effect: v1.TaintEffectNoSchedule, Key: "node"},
 						},
 					},
-					KubeControllers: operatorv1alpha1.KubeControllersSpec{
+					KubeControllers: operator.KubeControllersSpec{
 						ImageOverride: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
@@ -134,7 +134,7 @@ var _ = Describe("Defaulting logic tests", func() {
 							{Operator: v1.TolerationOpEqual, Value: "kubecontrollersValue", Effect: v1.TaintEffectNoSchedule, Key: "kubecontrollers"},
 						},
 					},
-					CNI: operatorv1alpha1.CNISpec{
+					CNI: operator.CNISpec{
 						ImageOverride: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
@@ -154,7 +154,7 @@ var _ = Describe("Defaulting logic tests", func() {
 							},
 						},
 					},
-					KubeProxy: operatorv1alpha1.KubeProxySpec{
+					KubeProxy: operator.KubeProxySpec{
 						Required:  true,
 						APIServer: "http://server",
 						Image:     "test-image",
@@ -162,14 +162,14 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 			},
 		}
-		instanceCopy := instance.DeepCopyObject().(*operatorv1alpha1.Core)
+		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
 		fillDefaults(instanceCopy)
 		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
 	})
 
 	It("should correct missing slashes on registry", func() {
-		instance := &operatorv1alpha1.Core{
-			Spec: operatorv1alpha1.CoreSpec{
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
 				Registry: "test-reg",
 			},
 		}

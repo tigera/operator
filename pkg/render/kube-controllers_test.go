@@ -20,13 +20,13 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 )
 
 var _ = Describe("kube-controllers rendering tests", func() {
-	var instance *operatorv1alpha1.Core
+	var instance *operator.Installation
 
 	tolerations := []v1.Toleration{
 		// This overrides node-role.kubernetes.io/master with a different effect.
@@ -68,20 +68,20 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operatorv1alpha1.Core{
-			Spec: operatorv1alpha1.CoreSpec{
-				IPPools: []operatorv1alpha1.IPPool{
+		instance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
 				Version:   "test",
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				Datastore: operatorv1alpha1.DatastoreConfig{
+				Datastore: operator.DatastoreConfig{
 					Type: "kubernetes",
 				},
-				Components: operatorv1alpha1.ComponentsSpec{
-					KubeControllers: operatorv1alpha1.KubeControllersSpec{
+				Components: operator.ComponentsSpec{
+					KubeControllers: operator.KubeControllersSpec{
 						ImageOverride:     "customRegistry/customImage:customVersion",
 						ExtraEnv:          envVars,
 						ExtraVolumes:      []v1.Volume{volume},

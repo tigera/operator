@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func Node(cr *operatorv1alpha1.Core) []runtime.Object {
+func Node(cr *operator.Installation) []runtime.Object {
 	return []runtime.Object{
 		nodeServiceAccount(cr),
 		nodeRole(cr),
@@ -38,7 +38,7 @@ func Node(cr *operatorv1alpha1.Core) []runtime.Object {
 	}
 }
 
-func nodeServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
+func nodeServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,7 +48,7 @@ func nodeServiceAccount(cr *operatorv1alpha1.Core) *v1.ServiceAccount {
 	}
 }
 
-func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
+func nodeRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,7 +70,7 @@ func nodeRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
 	}
 }
 
-func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
+func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -176,7 +176,7 @@ func nodeRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
 }
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
-func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
+func nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMap {
 	var config = `{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.0",
@@ -215,7 +215,7 @@ func nodeCNIConfigMap(cr *operatorv1alpha1.Core) *v1.ConfigMap {
 	}
 }
 
-func nodeDaemonset(cr *operatorv1alpha1.Core) *apps.DaemonSet {
+func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 	nodeImageName := "calico/node"
 	cniImageName := "calico/cni"
 

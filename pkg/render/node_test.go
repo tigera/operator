@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -29,8 +29,8 @@ import (
 )
 
 var _ = Describe("Node rendering tests", func() {
-	var instance *operatorv1alpha1.Core
-	var defaultInstance *operatorv1alpha1.Core
+	var instance *operator.Installation
+	var defaultInstance *operator.Installation
 
 	tolerations := []v1.Toleration{
 		{Operator: "Exists", Effect: "PreferNoSchedule"},
@@ -83,20 +83,20 @@ var _ = Describe("Node rendering tests", func() {
 
 	BeforeEach(func() {
 		maxUnavailable := intstr.FromInt(2)
-		instance = &operatorv1alpha1.Core{
-			Spec: operatorv1alpha1.CoreSpec{
-				IPPools: []operatorv1alpha1.IPPool{
+		instance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
 				Version:   "test",
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				Datastore: operatorv1alpha1.DatastoreConfig{
-					Type: operatorv1alpha1.Kubernetes,
+				Datastore: operator.DatastoreConfig{
+					Type: operator.Kubernetes,
 				},
-				Components: operatorv1alpha1.ComponentsSpec{
-					Node: operatorv1alpha1.NodeSpec{
+				Components: operator.ComponentsSpec{
+					Node: operator.NodeSpec{
 						ImageOverride:     "customNodeRegistry/customNodeImage:customNodeVersion",
 						MaxUnavailable:    &maxUnavailable,
 						ExtraEnv:          nodeEnv,
@@ -105,7 +105,7 @@ var _ = Describe("Node rendering tests", func() {
 						Tolerations:       tolerations,
 						Resources:         nodeResources,
 					},
-					CNI: operatorv1alpha1.CNISpec{
+					CNI: operator.CNISpec{
 						ImageOverride:     "customCNIRegistry/customCNIImage:customCNIVersion",
 						ExtraEnv:          cniEnv,
 						ExtraVolumes:      []v1.Volume{cniVolume},
@@ -115,9 +115,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 		}
 
-		defaultInstance = &operatorv1alpha1.Core{
-			Spec: operatorv1alpha1.CoreSpec{
-				IPPools: []operatorv1alpha1.IPPool{
+		defaultInstance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
 				Version:   "test",

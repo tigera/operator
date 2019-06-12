@@ -27,7 +27,7 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -77,8 +77,8 @@ var _ = Describe("Mainline component function tests", func() {
 
 	AfterEach(func() {
 		// Delete any CRD that might have been created by the test.
-		instance := &operatorv1alpha1.Core{
-			TypeMeta:   metav1.TypeMeta{Kind: "Core", APIVersion: "operator.tigera.io/v1alpha1"},
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 		err := c.Get(context.Background(), client.ObjectKey{Name: "default"}, instance)
@@ -92,8 +92,8 @@ var _ = Describe("Mainline component function tests", func() {
 
 	It("Should install resources for a CRD with kube-proxy disabled", func() {
 		By("Creating a CRD with Spec.KubeProxy.Required=false")
-		instance := &operatorv1alpha1.Core{
-			TypeMeta:   metav1.TypeMeta{Kind: "Core", APIVersion: "operator.tigera.io/v1alpha1"},
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 		err := c.Create(context.Background(), instance)
@@ -138,12 +138,12 @@ var _ = Describe("Mainline component function tests", func() {
 
 	It("Should install resources for a CRD with kube-proxy enabled", func() {
 		By("Creating a CRD with Spec.KubeProxy.Required=true")
-		instance := &operatorv1alpha1.Core{
-			TypeMeta:   metav1.TypeMeta{Kind: "Core", APIVersion: "operator.tigera.io/v1alpha1"},
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Spec: operatorv1alpha1.CoreSpec{
-				Components: operatorv1alpha1.ComponentsSpec{
-					KubeProxy: operatorv1alpha1.KubeProxySpec{
+			Spec: operator.InstallationSpec{
+				Components: operator.ComponentsSpec{
+					KubeProxy: operator.KubeProxySpec{
 						Required:  true,
 						APIServer: "https://localhost:6443",
 					},
@@ -236,12 +236,12 @@ var _ = Describe("Mainline component function tests", func() {
 		}
 
 		maxUnavailable := intstr.FromInt(2)
-		instance := &operatorv1alpha1.Core{
-			TypeMeta:   metav1.TypeMeta{Kind: "Core", APIVersion: "operator.tigera.io/v1alpha1"},
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Spec: operatorv1alpha1.CoreSpec{
-				Components: operatorv1alpha1.ComponentsSpec{
-					Node: operatorv1alpha1.NodeSpec{
+			Spec: operator.InstallationSpec{
+				Components: operator.ComponentsSpec{
+					Node: operator.NodeSpec{
 						MaxUnavailable:    &maxUnavailable,
 						ExtraEnv:          []v1.EnvVar{envVar},
 						ExtraVolumes:      []v1.Volume{volume},
@@ -310,10 +310,10 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 
 	It("Should ignore a CRD resource not named 'default'", func() {
 		By("Creating a CRD resource not named default")
-		instance := &operatorv1alpha1.Core{
-			TypeMeta:   metav1.TypeMeta{Kind: "Core", APIVersion: "operator.tigera.io/v1alpha1"},
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
-			Spec:       operatorv1alpha1.CoreSpec{},
+			Spec:       operator.InstallationSpec{},
 		}
 		err := c.Create(context.Background(), instance)
 		Expect(err).NotTo(HaveOccurred())

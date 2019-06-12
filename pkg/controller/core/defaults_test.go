@@ -64,7 +64,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					{CIDR: "1.2.3.0/24"},
 				},
 				Datastore: operatorv1alpha1.DatastoreConfig{
-					Type:          operatorv1alpha1.Kubernetes,
+					Type: operatorv1alpha1.Kubernetes,
 				},
 				Components: operatorv1alpha1.ComponentsSpec{
 					Node: operatorv1alpha1.NodeSpec{

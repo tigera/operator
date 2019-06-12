@@ -12,10 +12,11 @@ import (
 func validateCustomResource(instance *operatorv1alpha1.Core) error {
 	if instance.Spec.Components.KubeProxy.Required {
 		if len(instance.Spec.Components.KubeProxy.APIServer) == 0 {
-			return fmt.Errorf("spec.apiServer required for kubeProxy installation")
+			return fmt.Errorf("spec.components.kubeProxy.apiServer required for kubeProxy installation")
 		} else if _, err := url.ParseRequestURI(instance.Spec.Components.KubeProxy.APIServer); err != nil {
-			return fmt.Errorf("spec.apiServer contains invalid domain string")
+			return fmt.Errorf("spec.components.kubeProxy.apiServer contains invalid domain string")
 		}
 	}
+
 	return nil
 }

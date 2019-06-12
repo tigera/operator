@@ -28,6 +28,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const (
+	defaultCNIImageName        = "calico/cni"
+	defaultCalicoNodeImageName = "calico/node"
+	defaultTigeraNodeImageName = "tigera/cnx-node"
+)
+
 func Node(cr *operator.Installation) []runtime.Object {
 	return []runtime.Object{
 		nodeServiceAccount(cr),
@@ -216,15 +222,16 @@ func nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMap {
 }
 
 func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
-	nodeImageName := "calico/node"
-	cniImageName := "calico/cni"
-
 	// Build image strings to use.
-	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, nodeImageName, cr.Spec.Version)
+	imageName := defaultCalicoNodeImageName
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		imageName = defaultTigeraNodeImageName
+	}
+	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
 	if len(cr.Spec.Components.Node.ImageOverride) > 0 {
 		nodeImage = cr.Spec.Components.Node.ImageOverride
 	}
-	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, cniImageName, cr.Spec.Version)
+	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultCNIImageName, cr.Spec.Version)
 	if len(cr.Spec.Components.CNI.ImageOverride) > 0 {
 		cniImage = cr.Spec.Components.CNI.ImageOverride
 	}

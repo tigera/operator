@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	defaultAPIServerImageName   = "tigera/apiserver"
-	defaultQueryServerImageName = "tigera/queryserver"
+	defaultAPIServerImageName   = "tigera/cnx-apiserver"
+	defaultQueryServerImageName = "tigera/cnx-queryserver"
 	apiServerPort               = 5443
 	queryServerPort             = 8080
 )

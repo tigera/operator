@@ -1,11 +1,7 @@
-# TODO: Lock down RBAC to only what the operator actually
-# needs in order to install Calico.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: tigera-operator
-  namespace: tigera-operator
 rules:
 - apiGroups:
   - ""

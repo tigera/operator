@@ -38,8 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -58,7 +60,10 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileInstallation{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileInstallation{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -87,10 +92,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	for _, t := range secondaryResources() {
+		pred := predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				// Ignore updates to objects when metadata.Generation does not change.
+				return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
+			},
+		}
 		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &operator.Installation{},
-		})
+		}, pred)
 		if err != nil {
 			return err
 		}
@@ -204,8 +215,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Otherwise, if it was not found, we should create it.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
-			logCtx.V(1).Info("Resource exists, updating it.")
-			err = r.client.Update(context.TODO(), obj)
+			logCtx.V(1).Info("Resource already exists, update it")
+			err = r.client.Update(context.TODO(), mergeState(obj, old))
 			if err != nil {
 				logCtx.WithValues("key", key).Info("Failed to update object.")
 				return reconcile.Result{}, err
@@ -262,6 +273,26 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+// mergeState returns the object to pass to Update given the current and desired object states.
+func mergeState(desired, current runtime.Object) runtime.Object {
+	switch desired.(type) {
+	case *v1.Service:
+		// Services are a special case since some fields (namely ClusterIP) are defaulted
+		// and we need to maintain them on updates.
+		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
+		cs := current.(*v1.Service)
+		ds := desired.(*v1.Service)
+		ds.Spec.ClusterIP = cs.Spec.ClusterIP
+		return ds
+	default:
+		// Default to just using the desired state, with an updated RV.
+		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
+		return desired
+	}
 }
 
 func contextLoggerForResource(obj runtime.Object) logr.Logger {

@@ -216,9 +216,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
 			logCtx.V(1).Info("Resource already exists, update it")
-			oldRV := old.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-			obj.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
-			err = r.client.Update(context.TODO(), obj)
+			err = r.client.Update(context.TODO(), mergeState(obj, old))
 			if err != nil {
 				logCtx.WithValues("key", key).Info("Failed to update object.")
 				return reconcile.Result{}, err
@@ -275,6 +273,26 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+// mergeState returns the object to pass to Update given the current and desired object states.
+func mergeState(desired, current runtime.Object) runtime.Object {
+	switch desired.(type) {
+	case *v1.Service:
+		// Services are a special case since some fields (namely ClusterIP) are defaulted
+		// and we need to maintain them on updates.
+		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
+		cs := current.(*v1.Service)
+		ds := desired.(*v1.Service)
+		ds.Spec.ClusterIP = cs.Spec.ClusterIP
+		return ds
+	default:
+		// Default to just using the desired state, with an updated RV.
+		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
+		return desired
+	}
 }
 
 func contextLoggerForResource(obj runtime.Object) logr.Logger {

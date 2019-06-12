@@ -6,27 +6,27 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("API server rendering tests", func() {
-	var instance *operatorv1alpha1.Core
+	var instance *operator.Installation
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operatorv1alpha1.Core{
-			Spec: operatorv1alpha1.CoreSpec{
-				Variant: operatorv1alpha1.TigeraSecureEnterprise,
-				IPPools: []operatorv1alpha1.IPPool{
+		instance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				Variant: operator.TigeraSecureEnterprise,
+				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
 				Version:   "test",
 				Registry:  "testregistry.com/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				Components: operatorv1alpha1.ComponentsSpec{
-					APIServer: operatorv1alpha1.APIServerSpec{},
+				Components: operator.ComponentsSpec{
+					APIServer: operator.APIServerSpec{},
 				},
 			},
 		}
@@ -128,7 +128,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		instance.Spec.Components.APIServer = operatorv1alpha1.APIServerSpec{
+		instance.Spec.Components.APIServer = operator.APIServerSpec{
 			ImageOverride: "test/apiserver",
 		}
 

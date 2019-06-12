@@ -3,7 +3,7 @@ package render
 import (
 	"fmt"
 
-	operatorv1alpha1 "github.com/tigera/operator/pkg/apis/operator/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -20,8 +20,8 @@ const (
 	queryServerPort             = 8080
 )
 
-func APIServer(cr *operatorv1alpha1.Core) []runtime.Object {
-	if cr.Spec.Variant != operatorv1alpha1.TigeraSecureEnterprise {
+func APIServer(cr *operator.Installation) []runtime.Object {
+	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
 	objs := []runtime.Object{
@@ -39,7 +39,7 @@ func APIServer(cr *operatorv1alpha1.Core) []runtime.Object {
 }
 
 // apiService creates an API service that registers Tigera Secure APIs (and API server).
-func apiService(cr *operatorv1alpha1.Core) *v1beta1.APIService {
+func apiService(cr *operator.Installation) *v1beta1.APIService {
 	s := &v1beta1.APIService{
 		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -62,7 +62,7 @@ func apiService(cr *operatorv1alpha1.Core) *v1beta1.APIService {
 
 // tieredPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
 // mechanism for Tigera Secure tiered policy.
-func tieredPolicyPassthruClusterRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterRole {
+func tieredPolicyPassthruClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -79,7 +79,7 @@ func tieredPolicyPassthruClusterRole(cr *operatorv1alpha1.Core) *rbacv1.ClusterR
 }
 
 // tieredPolicyPassthruClusterRolebinding creates a clusterrolebinding that applies tieredPolicyPassthruClusterRole to all users.
-func tieredPolicyPassthruClusterRolebinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
+func tieredPolicyPassthruClusterRolebinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -107,7 +107,7 @@ func tieredPolicyPassthruClusterRolebinding(cr *operatorv1alpha1.Core) *rbacv1.C
 
 // delegateAuthClusterRoleBinding creates a clusterrolebinding that allows the API server to delegate
 // authn/authz requests to main API server.
-func delegateAuthClusterRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRoleBinding {
+func delegateAuthClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -131,7 +131,7 @@ func delegateAuthClusterRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.ClusterRo
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
 // extension-apiserver-authentication configmap. That configmap contains the client CA file that
 // the main API server was configured with.
-func authReaderRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.RoleBinding {
+func authReaderRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -154,7 +154,7 @@ func authReaderRoleBinding(cr *operatorv1alpha1.Core) *rbacv1.RoleBinding {
 }
 
 // apiServerServiceAccount creates the service account used by the API server.
-func apiServerServiceAccount(cr *operatorv1alpha1.Core) *corev1.ServiceAccount {
+func apiServerServiceAccount(cr *operator.Installation) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -165,7 +165,7 @@ func apiServerServiceAccount(cr *operatorv1alpha1.Core) *corev1.ServiceAccount {
 }
 
 // apiServerService creates a service backed by the API server and query server.
-func apiServerService(cr *operatorv1alpha1.Core) *corev1.Service {
+func apiServerService(cr *operator.Installation) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -194,7 +194,7 @@ func apiServerService(cr *operatorv1alpha1.Core) *corev1.Service {
 	}
 }
 
-func auditPolicyConfigMap(cr *operatorv1alpha1.Core) *corev1.ConfigMap {
+func auditPolicyConfigMap(cr *operator.Installation) *corev1.ConfigMap {
 	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
 kind: Policy
 rules:
@@ -228,7 +228,7 @@ rules:
 }
 
 // apiServer creates a deployment containing the API and query servers.
-func apiServer(cr *operatorv1alpha1.Core) *appsv1.Deployment {
+func apiServer(cr *operator.Installation) *appsv1.Deployment {
 	var replicas int32 = 1
 
 	d := &appsv1.Deployment{
@@ -276,7 +276,7 @@ func apiServer(cr *operatorv1alpha1.Core) *appsv1.Deployment {
 }
 
 // apiServerContainer creates the API server container.
-func apiServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
+func apiServerContainer(cr *operator.Installation) corev1.Container {
 	apiServerImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultAPIServerImageName, cr.Spec.Version)
 	if len(cr.Spec.Components.APIServer.ImageOverride) > 0 {
 		apiServerImage = cr.Spec.Components.APIServer.ImageOverride
@@ -318,7 +318,7 @@ func apiServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 }
 
 // queryServerContainer creates the query server container.
-func queryServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
+func queryServerContainer(cr *operator.Installation) corev1.Container {
 	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultQueryServerImageName, cr.Spec.Version)
 	if len(cr.Spec.Components.APIServer.ImageOverride) > 0 {
 		image = cr.Spec.Components.APIServer.ImageOverride
@@ -347,7 +347,7 @@ func queryServerContainer(cr *operatorv1alpha1.Core) corev1.Container {
 }
 
 // apiServerVolumes creates the volumes used by the API server deployment.
-func apiServerVolumes(cr *operatorv1alpha1.Core) []corev1.Volume {
+func apiServerVolumes(cr *operator.Installation) []corev1.Volume {
 	hostPathType := corev1.HostPathDirectoryOrCreate
 	volumes := []corev1.Volume{
 		{
@@ -379,7 +379,7 @@ func apiServerVolumes(cr *operatorv1alpha1.Core) []corev1.Volume {
 }
 
 // tolerations creates the tolerations used by the API server deployment.
-func tolerations(cr *operatorv1alpha1.Core) []corev1.Toleration {
+func tolerations(cr *operator.Installation) []corev1.Toleration {
 	tolerations := []corev1.Toleration{
 		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
 	}

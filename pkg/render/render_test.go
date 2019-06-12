@@ -75,7 +75,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 Deployment
 		// - 1 Service
 		// - 1 ServiceAccount
-		instance.Spec.Variant = operatorv1alpha1.TigeraSecureEnterprise
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		resources := render.Render(instance)
 		Expect(len(resources)).To(Equal(20))
 	})

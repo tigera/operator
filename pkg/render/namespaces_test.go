@@ -48,7 +48,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render an additional namespace if this is Tigera Secure", func() {
-		instance.Spec.Variant = operatorv1alpha1.TigeraSecureEnterprise
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		resources := render.Namespaces(instance)
 		Expect(len(resources)).To(Equal(2))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")

@@ -234,16 +234,19 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
 	if !instance.Spec.Components.KubeProxy.Required {
-		// Render the objects that we _might_ want to delete.
-		objs := render.KubeProxy(instance)
-
+		// Render the objects that we might want to delete.
+		cp := instance.DeepCopyObject().(*operator.Installation)
+		cp.Spec.Components.KubeProxy.Required = true
+		objs := render.KubeProxy(cp)
 		for _, o := range objs {
 			logCtx := contextLoggerForResource(o)
 
 			// Check if the object exists.
 			var key client.ObjectKey
 			key, err = client.ObjectKeyFromObject(o)
+			logCtx.WithValues("key", key).V(1).Info("Checking if we need to delete object")
 			if err = r.client.Get(context.TODO(), key, o); err != nil {
+				logCtx.WithValues("key", key, "error", err).Info("Error querying object")
 				continue
 			}
 

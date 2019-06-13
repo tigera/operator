@@ -295,7 +295,7 @@
   revision = "901d90724c7919163f472a9812253fb26761123d"
 
 [[projects]]
-  digest = "1:40e984b54d9df5188c8776175a277668cb5732f0c792e94d66805c36eae9280b"
+  digest = "1:0a58bbae2ca15821c827ae0b2bd013009a9aaa3e9f731ff1d13eb51db62e3cbf"
   name = "github.com/grpc-ecosystem/grpc-gateway"
   packages = [
     "internal",
@@ -303,8 +303,8 @@
     "utilities",
   ]
   pruneopts = "NT"
-  revision = "8fd5fd9d19ce68183a6b0934519dfe7fe6269612"
-  version = "v1.9.0"
+  revision = "cddead4ec1d10cc62f08e1fd6f8591fbe71cfff9"
+  version = "v1.9.1"
 
 [[projects]]
   digest = "1:53a4ebb0e1eb24a4644a3eec9457ba6ead5476a9ea5af43bf2c8b8b1a8ce47f2"
@@ -458,15 +458,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:66b87f4d32bd5b309f3589fa33341212cd67c4aa6afd42ba1e1c1f466b70ff69"
+  digest = "1:81469458af22cb9f556c7bab0ac8afc5a9df50866852687368501fe7f744a88d"
   name = "github.com/openshift/api"
   packages = ["config/v1"]
   pruneopts = "NT"
-  revision = "9c4ae3cf618d8a1ac03824fa58ff9ec27c4ac662"
+  revision = "5114e14c97ff18657b68d15224a520a278861e8a"
 
 [[projects]]
   branch = "master"
-  digest = "1:ca5393e54092116ee070581def17316d45d7ec546369a13850e41b1c08fbf423"
+  digest = "1:542d3e014f017d7cd263ee78275456437a356336a1b2b18114d4eafa0ee21578"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sutil",
@@ -477,7 +477,7 @@
     "version",
   ]
   pruneopts = "NT"
-  revision = "9cf300dd1a08341f89ce3b2ee995084b314c5bdf"
+  revision = "fd13b3901fea6862900e80b3698d58253c5622d5"
 
 [[projects]]
   digest = "1:93b1d84c5fa6d1ea52f4114c37714cddd84d5b78f151b62bb101128dd51399bf"
@@ -653,7 +653,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7f3c454b6342e040c91ce2a2ca1b8d41087755b0b4e4794dd6369b7f551557c8"
+  digest = "1:b81fcef37b579cf498b0ebb373e90f32adb88435caca887977cf60588617dced"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -669,7 +669,7 @@
     "trace",
   ]
   pruneopts = "NT"
-  revision = "3f473d35a33aa6fdd203e306dc439b797820e3f1"
+  revision = "d28f0bde5980168871434b95cfc858db9f2a7a99"
 
 [[projects]]
   branch = "master"
@@ -695,14 +695,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:969f46c9545e188aa37609b2c8340f733cd4fde33499c2abd5d42548fbdb7b3b"
+  digest = "1:1be65b828301ef14c7d698392a00d311d90dc37f2cbdb7cb5ea134c6d98773a4"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "93c9922d18aeb82498a065f07aec7ad7fa60dfb7"
+  revision = "5ed2794edfdc1c54dfb61d619c5944285f35d444"
 
 [[projects]]
   digest = "1:9cba358f138b62040fb7b875085e53425dd4b20758d9170ff5b48e2a14eb558f"
@@ -752,7 +752,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:3a4fb605d25c19758444f236c33a69b12c3e04e0dcd4b1b80de4705c8f0ae414"
+  digest = "1:d9f7cf101a236f0b62821f8463fb704bf357ae6b6faefb04922038e89fc9395f"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -769,7 +769,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "10539ce30318f0464b076b55974ed41fa75159fa"
+  revision = "ed0dc450797fdfbe6a9ee6bf3381a02099b897f9"
 
 [[projects]]
   digest = "1:1f8287cd1650c3490f2f72a83c70d0139d6299f411ec63a2f210bf67a3a92942"
@@ -1234,6 +1234,7 @@
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/rbac/v1",
+    "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",

@@ -21,13 +21,10 @@ import (
 
 func Render(cr *operator.Installation) []runtime.Object {
 	var objs []runtime.Object
-	if cr.Spec.Components.KubeProxy.Required {
-		// Only install KubeProxy if required, and do so before installing Node.
-		objs = appendNotNil(objs, KubeProxy(cr))
-	}
-
+	objs = appendNotNil(objs, CustomResourceDefinitions(cr))
+	objs = appendNotNil(objs, KubeProxy(cr))
 	objs = appendNotNil(objs, Namespaces(cr))
-    objs = appendNotNil(objs, Node(cr))
+	objs = appendNotNil(objs, Node(cr))
 	objs = appendNotNil(objs, KubeControllers(cr))
 	objs = appendNotNil(objs, APIServer(cr))
 	return objs
@@ -41,4 +38,3 @@ func appendNotNil(objs []runtime.Object, newObjs []runtime.Object) []runtime.Obj
 	}
 	return objs
 }
-

@@ -250,8 +250,7 @@ cluster-create: k3d
 
 deploy-crds: kubectl
 	@export KUBECONFIG=./kubeconfig.yaml && \
-		./kubectl apply -f deploy/crds/operator-crd.yaml && \
-		./kubectl apply -f deploy/crds/calico/
+		./kubectl apply -f deploy/crds/operator-crd.yaml
 
 ## Destroy local docker-in-docker cluster
 cluster-destroy: k3d

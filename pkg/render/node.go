@@ -238,26 +238,11 @@ func nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMap {
 }
 
 func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
-	// Build image strings to use.
-	imageName := defaultCalicoNodeImageName
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		imageName = defaultTigeraNodeImageName
-	}
-	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
-	if len(cr.Spec.Components.Node.ImageOverride) > 0 {
-		nodeImage = cr.Spec.Components.Node.ImageOverride
-	}
-	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultCNIImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.CNI.ImageOverride) > 0 {
-		cniImage = cr.Spec.Components.CNI.ImageOverride
-	}
-
 	tolerations := []v1.Toleration{
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
 		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 	}
-	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.Node.Tolerations)
 
 	nodeVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
@@ -265,15 +250,13 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		{MountPath: "/var/run/calico", Name: "var-run-calico"},
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 	}
-	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, cr.Spec.Components.Node.ExtraVolumeMounts)
-
 	cniVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
-	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, cr.Spec.Components.CNI.ExtraVolumeMounts)
 
-	var fileOrCreate = v1.HostPathFileOrCreate
+	fileOrCreate := v1.HostPathFileOrCreate
+	dirOrCreate := v1.HostPathDirectoryOrCreate
 	allVolumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -282,8 +265,6 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
 		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
 	}
-	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.Node.ExtraVolumes)
-	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.CNI.ExtraVolumes)
 
 	// Determine environment to pass to the node container.
 	nodeEnv := []v1.EnvVar{
@@ -319,9 +300,6 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 	}
 
-	// Merge in any user-supplied extra environment variables into the node environment.
-	nodeEnv = setCustomEnv(nodeEnv, cr.Spec.Components.Node.ExtraEnv)
-
 	// Determine environment to pass to the CNI init container.
 	cniEnv := []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
@@ -339,7 +317,6 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 			},
 		},
 	}
-	cniEnv = setCustomEnv(cniEnv, cr.Spec.Components.CNI.ExtraEnv)
 
 	nodeResources := v1.ResourceRequirements{}
 	if len(cr.Spec.Components.Node.Resources.Limits) > 0 || len(cr.Spec.Components.Node.Resources.Requests) > 0 {
@@ -347,9 +324,53 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		nodeResources.Limits = cr.Spec.Components.Node.Resources.Limits
 	}
 
-	var terminationGracePeriod int64 = 0
-	trueBool := true
+	imageName := defaultCalicoNodeImageName
 
+	// Override with Tigera-specific config.
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		imageName = defaultTigeraNodeImageName
+
+		extraVolumes := []v1.Volume{
+			{Name: "var-log-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
+		}
+		allVolumes = append(allVolumes, extraVolumes...)
+
+		extraNodeMounts := []v1.VolumeMount{
+			{MountPath: "/var/log/calico", Name: "var-log-calico"},
+		}
+		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
+
+		extraNodeEnv := []v1.EnvVar{
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+		}
+		nodeEnv = append(nodeEnv, extraNodeEnv...)
+	}
+
+	// Build image strings to use.
+	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
+	if len(cr.Spec.Components.Node.ImageOverride) > 0 {
+		nodeImage = cr.Spec.Components.Node.ImageOverride
+	}
+	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultCNIImageName, cr.Spec.Version)
+	if len(cr.Spec.Components.CNI.ImageOverride) > 0 {
+		cniImage = cr.Spec.Components.CNI.ImageOverride
+	}
+
+	// Merge in any user-supplied overrides.
+	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.Node.Tolerations)
+	nodeEnv = setCustomEnv(nodeEnv, cr.Spec.Components.Node.ExtraEnv)
+	cniEnv = setCustomEnv(cniEnv, cr.Spec.Components.CNI.ExtraEnv)
+	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, cr.Spec.Components.Node.ExtraVolumeMounts)
+	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, cr.Spec.Components.CNI.ExtraVolumeMounts)
+	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.Node.ExtraVolumes)
+	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.CNI.ExtraVolumes)
+
+	var terminationGracePeriod int64 = 0
+	isPrivileged := true
 	return &apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -385,7 +406,7 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 							Name:            "calico-node",
 							Image:           nodeImage,
 							Resources:       nodeResources,
-							SecurityContext: &v1.SecurityContext{Privileged: &trueBool},
+							SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
 							Env:             nodeEnv,
 							VolumeMounts:    nodeVolumeMounts,
 							LivenessProbe: &v1.Probe{

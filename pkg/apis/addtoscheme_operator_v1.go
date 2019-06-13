@@ -16,8 +16,9 @@ package apis
 
 import (
 	configv1 "github.com/openshift/api/config/v1"
-	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
 )
 
 func init() {
@@ -25,4 +26,5 @@ func init() {
 	AddToSchemes = append(AddToSchemes, operator.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, configv1.Install)
 	AddToSchemes = append(AddToSchemes, aggregator.AddToScheme)
+	AddToSchemes = append(AddToSchemes, apiextensions.AddToScheme)
 }

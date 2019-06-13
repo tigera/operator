@@ -32,6 +32,11 @@ var KubeProxyMeta = metav1.ObjectMeta{
 }
 
 func KubeProxy(cr *operator.Installation) []runtime.Object {
+	if !cr.Spec.Components.KubeProxy.Required {
+		// Only install kube-proxy if configured to do so.
+		return nil
+	}
+
 	return []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),

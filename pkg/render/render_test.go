@@ -47,8 +47,9 @@ var _ = Describe("Rendering tests", func() {
 		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		// - 1 namespace
+		// - 14 custom resource definitions
 		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(10))
+		Expect(len(resources)).To(Equal(24))
 	})
 
 	It("should render all resources when kube-proxy is enabled", func() {
@@ -59,9 +60,10 @@ var _ = Describe("Rendering tests", func() {
 		// - kube-proxy ClusterRoleBinding
 		// - kube-proxy ConfigMap
 		// - kube-proxy DaemonSet
+		// - 14 custom resource definitions
 		instance.Spec.Components.KubeProxy.Required = true
 		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(14))
+		Expect(len(resources)).To(Equal(28))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -75,8 +77,10 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 Deployment
 		// - 1 Service
 		// - 1 ServiceAccount
+		// - 14 custom resource definitions (calico)
+		// - 6 custom resource definitions (tsee)
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(42))
 	})
 })

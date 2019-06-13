@@ -266,6 +266,12 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 	}
 	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, cr.Spec.Components.Node.ExtraVolumeMounts)
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraNodeMounts := []v1.VolumeMount{
+			{MountPath: "/var/log/calico", Name: "var-log-calico"},
+		}
+		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
+	}
 
 	cniVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
@@ -274,6 +280,7 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, cr.Spec.Components.CNI.ExtraVolumeMounts)
 
 	var fileOrCreate = v1.HostPathFileOrCreate
+	var dirOrCreate = v1.HostPathDirectoryOrCreate
 	allVolumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -281,6 +288,12 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
 		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
+	}
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraVolumes := []v1.Volume{
+			{Name: "var-log-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
+		}
+		allVolumes = append(allVolumes, extraVolumes...)
 	}
 	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.Node.ExtraVolumes)
 	allVolumes = setCustomVolumes(allVolumes, cr.Spec.Components.CNI.ExtraVolumes)
@@ -305,6 +318,17 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 			},
 		},
+	}
+
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraNodeEnv := []v1.EnvVar{
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+		}
+		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
 	// Determine liveness and readiness configuration for node.

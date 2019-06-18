@@ -260,16 +260,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedTolerations = append(expectedTolerations, tolerations...)
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
-		// Verify readiness and liveness probes.
-		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}}}
-		expectedLiveness := &v1.Probe{Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Host: "localhost",
-				Path: "/liveness",
-				Port: intstr.FromInt(9099),
-			}}}
-		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+		verifyProbes(ds, false)
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
@@ -319,6 +310,8 @@ var _ = Describe("Node rendering tests", func() {
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+
+		verifyProbes(ds, false)
 	})
 
 	It("should render all resources when OPENSHIFT=true", func() {
@@ -366,15 +359,81 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		// Verify readiness and liveness probes.
-		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready"}}}}
-		expectedLiveness := &v1.Probe{Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Host: "localhost",
-				Path: "/liveness",
-				Port: intstr.FromInt(9199),
-			}}}
-		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+		verifyProbes(ds, true)
+	})
+
+	It("should render all resources when variant is TigeraSecureEnterprise and OPENSHIFT=true", func() {
+		err := os.Setenv("OPENSHIFT", "true")
+		Expect(err).To(BeNil())
+		defer os.Unsetenv("OPENSHIFT")
+		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
+		resources := render.Node(defaultInstance)
+		Expect(len(resources)).To(Equal(5))
+
+		// Should render the correct resources.
+		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
+		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
+		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
+		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
+		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+
+		// The DaemonSet should have the correct configuration.
+		ds := resources[4].(*apps.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/cnx-node:test"))
+		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+
+		expectedNodeEnv := []v1.EnvVar{
+			// Default envvars.
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
+			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			// Tigera-specific envvars
+			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			// The OpenShift envvar overrides.
+			{Name: "FELIX_HEALTHPORT", Value: "9199"},
+		}
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+
+		verifyProbes(ds, true)
 	})
 })
+
+// verifyProbes asserts the expected node liveness and readiness probe.
+func verifyProbes(ds *apps.DaemonSet, isOpenshift bool) {
+	// Verify readiness and liveness probes.
+	expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}}}
+	expectedLiveness := &v1.Probe{Handler: v1.Handler{
+		HTTPGet: &v1.HTTPGetAction{
+			Host: "localhost",
+			Path: "/liveness",
+			Port: intstr.FromInt(9099),
+		}}}
+
+	if isOpenshift {
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready"}
+		expectedLiveness.HTTPGet.Port = intstr.FromInt(9199)
+	}
+	Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
+	Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+}

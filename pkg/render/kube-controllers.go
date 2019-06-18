@@ -147,8 +147,8 @@ func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 		imageName = defaultTigeraKubeControllersImageName
 	}
 	controllersImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
-	if len(cr.Spec.Components.KubeControllers.ImageOverride) > 0 {
-		controllersImage = cr.Spec.Components.KubeControllers.ImageOverride
+	if len(cr.Spec.Components.KubeControllers.Image) > 0 {
+		controllersImage = cr.Spec.Components.KubeControllers.Image
 	}
 
 	tolerations := []v1.Toleration{

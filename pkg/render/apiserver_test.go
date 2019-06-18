@@ -143,7 +143,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should render an API server with custom configuration", func() {
 		instance.Spec.Components.APIServer = operator.APIServerSpec{
-			ImageOverride: "test/apiserver",
+			Image: "test/apiserver",
 		}
 
 		resources := render.APIServer(instance)

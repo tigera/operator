@@ -97,7 +97,7 @@ var _ = Describe("Node rendering tests", func() {
 				},
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
-						ImageOverride:     "customNodeRegistry/customNodeImage:customNodeVersion",
+						Image:             "customNodeRegistry/customNodeImage:customNodeVersion",
 						MaxUnavailable:    &maxUnavailable,
 						ExtraEnv:          nodeEnv,
 						ExtraVolumes:      []v1.Volume{nodeVolume},
@@ -106,7 +106,7 @@ var _ = Describe("Node rendering tests", func() {
 						Resources:         nodeResources,
 					},
 					CNI: operator.CNISpec{
-						ImageOverride:     "customCNIRegistry/customCNIImage:customCNIVersion",
+						Image:             "customCNIRegistry/customCNIImage:customCNIVersion",
 						ExtraEnv:          cniEnv,
 						ExtraVolumes:      []v1.Volume{cniVolume},
 						ExtraVolumeMounts: []v1.VolumeMount{cniVolumeMount},

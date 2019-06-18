@@ -365,8 +365,8 @@ func apiServer(cr *operator.Installation) *appsv1.Deployment {
 // apiServerContainer creates the API server container.
 func apiServerContainer(cr *operator.Installation) corev1.Container {
 	apiServerImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultAPIServerImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.APIServer.ImageOverride) > 0 {
-		apiServerImage = cr.Spec.Components.APIServer.ImageOverride
+	if len(cr.Spec.Components.APIServer.Image) > 0 {
+		apiServerImage = cr.Spec.Components.APIServer.Image
 	}
 
 	volumeMounts := []corev1.VolumeMount{
@@ -410,8 +410,8 @@ func apiServerContainer(cr *operator.Installation) corev1.Container {
 // queryServerContainer creates the query server container.
 func queryServerContainer(cr *operator.Installation) corev1.Container {
 	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultQueryServerImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.APIServer.ImageOverride) > 0 {
-		image = cr.Spec.Components.APIServer.ImageOverride
+	if len(cr.Spec.Components.APIServer.Image) > 0 {
+		image = cr.Spec.Components.APIServer.Image
 	}
 	c := corev1.Container{
 		Name:  "tigera-queryserver",

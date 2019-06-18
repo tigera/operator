@@ -68,7 +68,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
-						ImageOverride:  "nodeRegistry/nodeImage:1.2.3",
+						Image:          "nodeRegistry/nodeImage:1.2.3",
 						MaxUnavailable: &maxUnavailable,
 						ExtraEnv: []v1.EnvVar{
 							{
@@ -102,7 +102,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					KubeControllers: operator.KubeControllersSpec{
-						ImageOverride: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
+						Image: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
 								Name:  "project",
@@ -135,7 +135,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					CNI: operator.CNISpec{
-						ImageOverride: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
+						Image: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
 								Name:  "project",

@@ -82,7 +82,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 				Components: operator.ComponentsSpec{
 					KubeControllers: operator.KubeControllersSpec{
-						ImageOverride:     "customRegistry/customImage:customVersion",
+						Image:             "customRegistry/customImage:customVersion",
 						ExtraEnv:          envVars,
 						ExtraVolumes:      []v1.Volume{volume},
 						ExtraVolumeMounts: []v1.VolumeMount{volumeMount},

@@ -375,6 +375,7 @@ func apiServerContainer(cr *operator.Installation) corev1.Container {
 	}
 
 	volumeMounts = setCustomVolumeMounts(volumeMounts, cr.Spec.Components.APIServer.ExtraVolumeMounts)
+	isPrivileged := true
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
@@ -387,7 +388,9 @@ func apiServerContainer(cr *operator.Installation) corev1.Container {
 		Env: []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		},
-		VolumeMounts: volumeMounts,
+		// Needed for permissions to write to the audit log
+		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+		VolumeMounts:    volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{

@@ -84,7 +84,7 @@ LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.20
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
-SRC_FILES+=$(shell find ./cmd -name '*.go)
+SRC_FILES+=$(shell find ./cmd -name '*.go')
 CONTAINERIZED=docker run --rm \
 		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
 		-v $(CURDIR)/.go-pkg-cache:/go-cache/:rw \

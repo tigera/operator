@@ -10,10 +10,6 @@ any time without notice.
 
 	kubectl apply -f crds/operator-crd.yaml
 
-1. Next, install the CRDs required for Calico:
-
-	kubectl apply -f crds/calico/
-
 1. The operator manifests are found in this directory.
 
 	kubectl apply -f .

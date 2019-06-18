@@ -331,8 +331,8 @@ func nodeVolumes(cr *operator.Installation) []v1.Volume {
 // cniContainer creates the node's init container.
 func cniContainer(cr *operator.Installation) v1.Container {
 	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultCNIImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.CNI.ImageOverride) > 0 {
-		cniImage = cr.Spec.Components.CNI.ImageOverride
+	if len(cr.Spec.Components.CNI.Image) > 0 {
+		cniImage = cr.Spec.Components.CNI.Image
 	}
 
 	// Determine environment to pass to the CNI init container.
@@ -385,8 +385,8 @@ func nodeContainer(cr *operator.Installation) v1.Container {
 	}
 
 	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
-	if len(cr.Spec.Components.Node.ImageOverride) > 0 {
-		nodeImage = cr.Spec.Components.Node.ImageOverride
+	if len(cr.Spec.Components.Node.Image) > 0 {
+		nodeImage = cr.Spec.Components.Node.Image
 	}
 
 	lp, rp := nodeLivenessReadinessProbes(cr)

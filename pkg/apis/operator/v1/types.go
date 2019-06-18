@@ -20,13 +20,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NOTE: json tags are required. Any new fields you add must have json tags for the fields to be serialized.
 // NOTE: After modifying this file, run `make gen-files` to regenerate code.
 
 // KubeProxySpec defines the state of a kube-proxy installation.
 // +k8s:openapi-gen=true
 type KubeProxySpec struct {
-	// Required specifies whether kube-Proxy needs to be installed or if it's already provided.
+	// Required specifies whether kube-proxy needs to be installed or if it's already provided.
 	// Default: false
 	// +optional
 	Required bool `json:"required,omitempty"`
@@ -36,7 +36,7 @@ type KubeProxySpec struct {
 	// +optional
 	APIServer string `json:"apiServer,omitempty"`
 
-	// A custom kube-proxy image.
+	// Image is a custom kube-proxy image. The value must be a full qualified image name.
 	// Default: "k8s.gcr.io/kube-proxy:v1.13.6"
 	// +optional
 	Image string `json:"image,omitempty"`
@@ -45,7 +45,7 @@ type KubeProxySpec struct {
 // InstallationSpec defines the desired state of Installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
-	// Version of the product to install.
+	// Version of the product to install. This is the default image tag used for component Docker images.
 	// Default: latest
 	// +optional
 	Version string `json:"version,omitempty"`
@@ -63,12 +63,12 @@ type InstallationSpec struct {
 	// +optional
 	Variant ProductVariant `json:"variant,omitempty"`
 
-	// Registry to use for container images.
-	// Default: docker.io
+	// Registry is the default Docker registry used for component Docker images.
+	// Default: docker.io/
 	// +optional
 	Registry string `json:"registry,omitempty"`
 
-	// ImagePullSecrets is an array of references to registry pull secrets.
+	// ImagePullSecrets is an array of references to Docker registry pull secrets.
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
@@ -120,10 +120,11 @@ type ComponentsSpec struct {
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
 // +k8s:openapi-gen=true
 type KubeControllersSpec struct {
-	// ImageOverride configures a different Docker image for the kube-controllers deployment.
-	// E.g "acme/calico-kube-controllers".
+	// Image configures a different Docker image for the kube-controllers deployment.
+	// The value must be a full qualified image name.
+	// E.g "gcr.io/acme/calico-kube-controllers:beta".
 	// +optional
-	ImageOverride string `json:"imageOverride,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// ExtraEnv adds extra environment variables to the kube-controllers container.
 	// +optional
@@ -150,10 +151,10 @@ type KubeControllersSpec struct {
 // Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
 type APIServerSpec struct {
-	// ImageOverride configures a different Docker image for the API server.
-	// E.g "acme/calico-api-server".
+	// Image configures a different Docker image for the API server. The value must be a full qualified image name.
+	// E.g "gcr.io/acme/calico-api-server:beta".
 	// +optional
-	ImageOverride string `json:"imageOverride,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// ExtraEnv adds extra environment variables to the API server.
 	// +optional
@@ -179,9 +180,10 @@ type APIServerSpec struct {
 // NodeSpec defines optional configuration for the node component.
 // +k8s:openapi-gen=true
 type NodeSpec struct {
-	// ImageOverride configures a different Docker image for the node daemonset. E.g "tigera/cnx-node".
+	// Image configures a different Docker image for the node daemonset. The value must be a full qualified image name
+	// E.g "gcr.io/tigera/cnx-node:beta".
 	// +optional
-	ImageOverride string `json:"imageOverride,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// MaxUnavailable configures the maximum number of pods that can be unavailable during a rolling update of the
 	// node daemonset.
@@ -213,9 +215,10 @@ type NodeSpec struct {
 // CNISpec defines optional configuration for the CNI component.
 // +k8s:openapi-gen=true
 type CNISpec struct {
-	// ImageOverride configures a different Docker image for the CNI image. E.g "acme/calico-cni".
+	// Image configures a different Docker image for the CNI image. The value must be a full qualified image name.
+	// E.g "gcr.io/acme/calico-cni:beta".
 	// +optional
-	ImageOverride string `json:"imageOverride,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// ExtraEnv adds extra environment variables to the CNI container.
 	// +optional

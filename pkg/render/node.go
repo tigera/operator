@@ -191,6 +191,13 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"create"},
+			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
@@ -341,6 +348,7 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 
 		extraNodeEnv := []v1.EnvVar{
+			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},

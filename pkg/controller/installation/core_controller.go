@@ -141,9 +141,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling network installation")
 
+	ctx := context.Background()
+
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
-	err := r.client.Get(context.TODO(), defaultInstanceKey, instance)
+	err := r.client.Get(ctx, defaultInstanceKey, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -169,7 +171,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	if os.Getenv(openshiftEnv) == "true" {
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.V(1).Info("Querying for openshift network config")
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
+		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
 			// Error reading the object - requeue the request.
 			return reconcile.Result{}, err
@@ -206,7 +208,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		err = r.client.Get(context.TODO(), key, old)
+		err = r.client.Get(ctx, key, old)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				// Anything other than "Not found" we should retry.
@@ -216,7 +218,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			logCtx.V(2).Info("Object does not exist", "error", err)
 		} else {
 			logCtx.V(1).Info("Resource already exists, update it")
-			err = r.client.Update(context.TODO(), mergeState(obj, old))
+			err = r.client.Update(ctx, mergeState(obj, old))
 			if err != nil {
 				logCtx.WithValues("key", key).Info("Failed to update object.")
 				return reconcile.Result{}, err
@@ -225,7 +227,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 
 		logCtx.Info("Creating new object.")
-		err = r.client.Create(context.TODO(), obj)
+		err = r.client.Create(ctx, obj)
 		if err != nil {
 			// Hit an error creating desired state object - we need to requeue.
 			return reconcile.Result{}, err
@@ -245,14 +247,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			var key client.ObjectKey
 			key, err = client.ObjectKeyFromObject(o)
 			logCtx.WithValues("key", key).V(1).Info("Checking if we need to delete object")
-			if err = r.client.Get(context.TODO(), key, o); err != nil {
+			if err = r.client.Get(ctx, key, o); err != nil {
 				logCtx.WithValues("key", key, "error", err).Info("Error querying object")
 				continue
 			}
 
 			// Check if we created it.
 			if hasOwnerReference(o, instance, r.scheme) {
-				if err = r.client.Delete(context.TODO(), o); err != nil {
+				if err = r.client.Delete(ctx, o); err != nil {
 					logCtx.WithValues("key", key).Info("Error deleting instance.")
 					return reconcile.Result{}, err
 				}
@@ -268,7 +270,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
 		openshiftConfig.Status.ClusterNetworkMTU = 1440
 		openshiftConfig.Status.NetworkType = "Calico"
-		if err = r.client.Update(context.TODO(), openshiftConfig); err != nil {
+		if err = r.client.Update(ctx, openshiftConfig); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

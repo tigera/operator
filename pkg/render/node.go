@@ -88,7 +88,6 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 			Labels: map[string]string{},
 		},
 
-		// TODO: Comments explaining why each permission is needed.
 		Rules: []rbacv1.PolicyRule{
 			{
 				// The CNI plugin needs to get pods, nodes, namespaces.
@@ -103,26 +102,31 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
+				// Some information is stored on the node status.
 				APIGroups: []string{""},
 				Resources: []string{"nodes/status"},
 				Verbs:     []string{"patch", "update"},
 			},
 			{
+				// For enforcing network policies.
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"watch", "list"},
 			},
 			{
+				// Metadata from these are used in conjunction with network policy.
 				APIGroups: []string{""},
 				Resources: []string{"pods", "namespaces", "serviceaccounts"},
 				Verbs:     []string{"watch", "list"},
 			},
 			{
+				// Calico patches the allocated IP onto the pod.
 				APIGroups: []string{""},
 				Resources: []string{"pods/status"},
 				Verbs:     []string{"patch"},
 			},
 			{
+				// For monitoring Calico-specific configuration.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"bgpconfigurations",
@@ -141,7 +145,8 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Verbs: []string{"get", "list", "watch"},
 			},
 			{
-				// For migration code only. Remove when no longer needed.
+				// For migration code in calico/node startup only. Remove when the migration
+				// code is removed from node.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"globalbgpconfigs",
@@ -150,6 +155,7 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Verbs: []string{"get", "list", "watch"},
 			},
 			{
+				// Calico creates some configuration on startup.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"clusterinformations",
@@ -159,11 +165,14 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Verbs: []string{"create", "update"},
 			},
 			{
+				// Calico monitors nodes for some networking configuration.
 				APIGroups: []string{""},
 				Resources: []string{"nodes"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
+				// Most IPAM resources need full CRUD permissions so we can allocate and
+				// release IP addresses for pods.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
@@ -173,12 +182,13 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
 			{
+				// But, we only need to be able to query for IPAM config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"ipamconfigs"},
 				Verbs:     []string{"get"},
 			},
 			{
-				// confd watches block affinities for route aggregation.
+				// confd (and in some cases, felix) watches block affinities for route aggregation.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
@@ -188,6 +198,7 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
+				// Tigera Secure neesd to be able to read licenses, tiers, and config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"licensekeys",
@@ -197,6 +208,7 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 				Verbs: []string{"get", "list", "watch"},
 			},
 			{
+				// Tigera Secure creates some tiers on startup.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"tiers",
@@ -213,7 +225,7 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 func nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMap {
 	var config = `{
   "name": "k8s-pod-network",
-  "cniVersion": "0.3.0",
+  "cniVersion": "0.3.1",
   "plugins": [
     {
       "type": "calico",
@@ -466,7 +478,7 @@ func nodeEnvVars(cr *operator.Installation) []v1.EnvVar {
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 	if os.Getenv("OPENSHIFT") == "true" {
-		// TODO: For Openshift, we need special configuration since our default port is already in use.
+		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 	}
 
@@ -480,7 +492,7 @@ func nodeLivenessReadinessProbes(cr *operator.Installation) (*v1.Probe, *v1.Prob
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 	if os.Getenv("OPENSHIFT") == "true" {
-		// TODO: For Openshift, we need special configuration since our default port is already in use.
+		// For Openshift, we need special configuration since our default port is already in use.
 		// Additionally, since the node readiness probe doesn't yet support
 		// custom ports, we need to disable felix readiness for now.
 		livenessPort = intstr.FromInt(9199)

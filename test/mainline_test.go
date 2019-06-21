@@ -288,7 +288,7 @@ var _ = Describe("Mainline component function tests", func() {
 			if kc.Status.AvailableReplicas == 1 {
 				return nil
 			}
-			return fmt.Errorf("kube-controllers not yet ready")
+			return fmt.Errorf("kube-controllers not yet ready: %#v", kc.Status)
 		}, 80*time.Second).Should(BeNil())
 
 		By("Verifying the daemonset has the overrides")

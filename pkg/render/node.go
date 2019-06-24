@@ -15,7 +15,6 @@
 package render
 
 import (
-	"fmt"
 	"os"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -26,12 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-)
-
-const (
-	defaultCNIImageName        = "calico/cni"
-	defaultCalicoNodeImageName = "calico/node"
-	defaultTigeraNodeImageName = "tigera/cnx-node"
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -342,11 +335,6 @@ func nodeVolumes(cr *operator.Installation) []v1.Volume {
 
 // cniContainer creates the node's init container.
 func cniContainer(cr *operator.Installation) v1.Container {
-	cniImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultCNIImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.CNI.Image) > 0 {
-		cniImage = cr.Spec.Components.CNI.Image
-	}
-
 	// Determine environment to pass to the CNI init container.
 	cniEnv := cniEnvvars(cr)
 	cniVolumeMounts := []v1.VolumeMount{
@@ -360,7 +348,7 @@ func cniContainer(cr *operator.Installation) v1.Container {
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        cniImage,
+		Image:        cr.Spec.Components.CNI.Image,
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -389,23 +377,11 @@ func cniEnvvars(cr *operator.Installation) []v1.EnvVar {
 
 // nodeContainer creates the main node container.
 func nodeContainer(cr *operator.Installation) v1.Container {
-	imageName := defaultCalicoNodeImageName
-
-	// Override with Tigera-specific config.
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		imageName = defaultTigeraNodeImageName
-	}
-
-	nodeImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
-	if len(cr.Spec.Components.Node.Image) > 0 {
-		nodeImage = cr.Spec.Components.Node.Image
-	}
-
 	lp, rp := nodeLivenessReadinessProbes(cr)
 	isPrivileged := true
 	return v1.Container{
 		Name:            "calico-node",
-		Image:           nodeImage,
+		Image:           cr.Spec.Components.Node.Image,
 		Resources:       nodeResources(cr),
 		SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
 		Env:             nodeEnvVars(cr),

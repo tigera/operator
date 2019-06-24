@@ -24,6 +24,18 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
+const (
+	defaultCNIImageName        = "calico/cni"
+	defaultCalicoNodeImageName = "calico/node"
+	defaultTigeraNodeImageName = "tigera/cnx-node"
+
+	defaultCalicoKubeControllersImageName = "calico/kube-controllers"
+	defaultTigeraKubeControllersImageName = "tigera/kube-controllers"
+
+	defaultAPIServerImageName = "tigera/cnx-apiserver"
+	defaultTigeraRegistry     = "quay.io/"
+)
+
 // fillDefaults fills in the default values for an instance.
 func fillDefaults(instance *operator.Installation) {
 	if len(instance.Spec.Version) == 0 {
@@ -34,6 +46,9 @@ func fillDefaults(instance *operator.Installation) {
 	}
 	if len(instance.Spec.Registry) == 0 {
 		instance.Spec.Registry = "docker.io/"
+		if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+			instance.Spec.Registry = defaultTigeraRegistry
+		}
 	}
 	if !strings.HasSuffix(instance.Spec.Registry, "/") {
 		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
@@ -68,4 +83,29 @@ func fillDefaults(instance *operator.Installation) {
 		mu := intstr.FromInt(1)
 		instance.Spec.Components.Node.MaxUnavailable = &mu
 	}
+
+	if len(instance.Spec.Components.Node.Image) == 0 {
+		instance.Spec.Components.Node.Image = getImageName(instance, defaultCalicoNodeImageName, defaultTigeraNodeImageName)
+	}
+	if len(instance.Spec.Components.CNI.Image) == 0 {
+		// CNI uses calico/CNI image for both Calico and TigeraSecureEnterprise.
+		instance.Spec.Components.CNI.Image = getImageName(instance, defaultCNIImageName, defaultCNIImageName)
+	}
+	if len(instance.Spec.Components.KubeControllers.Image) == 0 {
+		instance.Spec.Components.KubeControllers.Image = getImageName(instance, defaultCalicoKubeControllersImageName, defaultTigeraKubeControllersImageName)
+	}
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		if len(instance.Spec.Components.APIServer.Image) == 0 {
+			instance.Spec.Components.APIServer.Image = getImageName(instance, "", defaultAPIServerImageName)
+		}
+	}
+}
+
+func getImageName(cr *operator.Installation, defaultCalicoImage, defaultTigeraImage string) string {
+	imageName := defaultCalicoImage
+	registry := cr.Spec.Registry
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		imageName = defaultTigeraImage
+	}
+	return fmt.Sprintf("%s%s:%s", registry, imageName, cr.Spec.Version)
 }

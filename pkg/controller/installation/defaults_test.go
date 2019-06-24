@@ -39,6 +39,38 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.KubeProxy.Required).To(BeFalse())
 		Expect(instance.Spec.Components.KubeProxy.APIServer).To(Equal(""))
 
+		// Image override results in correct images.
+		Expect(instance.Spec.Components.Node.Image).To(Equal("docker.io/calico/node:latest"))
+		Expect(instance.Spec.Components.CNI.Image).To(Equal("docker.io/calico/cni:latest"))
+		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("docker.io/calico/kube-controllers:latest"))
+		Expect(instance.Spec.Components.KubeProxy.Image).To(BeEmpty())
+		Expect(instance.Spec.Components.APIServer.Image).To(BeEmpty())
+
+		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
+		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
+	})
+
+	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
+		instance := &operator.Installation{}
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		fillDefaults(instance)
+		Expect(instance.Spec.Version).To(Equal("latest"))
+		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
+		Expect(instance.Spec.Registry).To(Equal("quay.io/"))
+		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
+		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
+		Expect(instance.Spec.IPPools).To(HaveLen(1))
+		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		Expect(instance.Spec.Components.KubeProxy.Required).To(BeFalse())
+		Expect(instance.Spec.Components.KubeProxy.APIServer).To(Equal(""))
+
+		// Image override results in correct images.
+		Expect(instance.Spec.Components.Node.Image).To(Equal("quay.io/tigera/cnx-node:latest"))
+		Expect(instance.Spec.Components.CNI.Image).To(Equal("quay.io/calico/cni:latest"))
+		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("quay.io/tigera/kube-controllers:latest"))
+		Expect(instance.Spec.Components.KubeProxy.Image).To(BeEmpty())
+		Expect(instance.Spec.Components.APIServer.Image).To(Equal("quay.io/tigera/cnx-apiserver:latest"))
+
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
@@ -158,6 +190,42 @@ var _ = Describe("Defaulting logic tests", func() {
 						Required:  true,
 						APIServer: "http://server",
 						Image:     "test-image",
+					},
+					APIServer: operator.APIServerSpec{
+						Image: "apiserver/server:v0.0.1",
+						ExtraEnv: []v1.EnvVar{
+							{
+								Name:  "asenv1",
+								Value: "env1",
+							},
+						},
+						ExtraVolumes: []v1.Volume{
+							{
+								Name: "asvol1",
+								VolumeSource: v1.VolumeSource{
+									NFS: &v1.NFSVolumeSource{
+										Server: "localhost",
+										Path:   "/as",
+									},
+								},
+							},
+						},
+						ExtraVolumeMounts: []v1.VolumeMount{
+							{Name: "asvolmount", MountPath: "/asvolmount"},
+						},
+						Tolerations: []v1.Toleration{
+							{Operator: v1.TolerationOpEqual, Value: "asValue", Effect: v1.TaintEffectNoSchedule, Key: "asKey"},
+						},
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("225m"),
+								v1.ResourceMemory: resource.MustParse("335Mi"),
+							},
+							Limits: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("325m"),
+								v1.ResourceMemory: resource.MustParse("435Mi"),
+							},
+						},
 					},
 				},
 			},

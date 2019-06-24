@@ -84,7 +84,8 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
-		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal("testregistry.com/tigera/cnx-apiserver:test"))
+		// Image is set in defaults.
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 
 		expectedArgs := []string{
 			"--secure-port=5443",

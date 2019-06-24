@@ -194,7 +194,7 @@ func kubeProxyDaemonset(cr *operator.Installation) *apps.DaemonSet {
 					Tolerations: []v1.Toleration{
 						{Operator: "Exists", Effect: "NoSchedule"},
 						{Operator: "Exists", Effect: "NoExecute"},
-						// TODO: Not valid?? {Operator: "Exists", Effect: "CriticalAddonsOnly"},
+						{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 					},
 					Volumes: []v1.Volume{
 						{

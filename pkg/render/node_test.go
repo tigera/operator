@@ -144,7 +144,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/calico/node:test"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 	})
@@ -277,7 +277,8 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/cnx-node:test"))
+		// Image is set in defaults.
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{
@@ -330,7 +331,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/calico/node:test"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{
@@ -379,7 +380,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/cnx-node:test"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{

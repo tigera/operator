@@ -15,8 +15,6 @@
 package render
 
 import (
-	"fmt"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apps "k8s.io/api/apps/v1"
 
@@ -24,11 +22,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-)
-
-const (
-	defaultCalicoKubeControllersImageName = "calico/kube-controllers"
-	defaultTigeraKubeControllersImageName = "tigera/kube-controllers"
 )
 
 var replicas int32 = 1
@@ -142,15 +135,6 @@ func controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBindin
 }
 
 func controllersDeployment(cr *operator.Installation) *apps.Deployment {
-	imageName := defaultCalicoKubeControllersImageName
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		imageName = defaultTigeraKubeControllersImageName
-	}
-	controllersImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
-	if len(cr.Spec.Components.KubeControllers.Image) > 0 {
-		controllersImage = cr.Spec.Components.KubeControllers.Image
-	}
-
 	tolerations := []v1.Toleration{
 		{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
 		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
@@ -218,7 +202,7 @@ func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 					Containers: []v1.Container{
 						{
 							Name:         "calico-kube-controllers",
-							Image:        controllersImage,
+							Image:        cr.Spec.Components.KubeControllers.Image,
 							Resources:    resources,
 							Env:          env,
 							VolumeMounts: volumeMounts,

@@ -28,7 +28,6 @@ import (
 )
 
 const (
-	defaultAPIServerImageName   = "tigera/cnx-apiserver"
 	defaultQueryServerImageName = "tigera/cnx-queryserver"
 	apiServerPort               = 5443
 	queryServerPort             = 8080
@@ -364,11 +363,6 @@ func apiServer(cr *operator.Installation) *appsv1.Deployment {
 
 // apiServerContainer creates the API server container.
 func apiServerContainer(cr *operator.Installation) corev1.Container {
-	apiServerImage := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultAPIServerImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.APIServer.Image) > 0 {
-		apiServerImage = cr.Spec.Components.APIServer.Image
-	}
-
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
 		{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
@@ -379,7 +373,7 @@ func apiServerContainer(cr *operator.Installation) corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: apiServerImage,
+		Image: cr.Spec.Components.APIServer.Image,
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",

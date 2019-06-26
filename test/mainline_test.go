@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	. "github.com/onsi/ginkgo"
@@ -86,8 +89,20 @@ var _ = Describe("Mainline component function tests", func() {
 		err = c.Delete(context.Background(), instance)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Workaround for possible bug in deleting/creating kube-controllers
-		time.Sleep(10 * time.Second)
+		// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
+		// directly instead of using the client cache. This should help with flaky tests.
+		Eventually(func() error {
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			})
+
+			k := client.ObjectKey{Name: "calico-system"}
+			err := c.Get(context.Background(), k, u)
+			return err
+		}, 80*time.Second).ShouldNot(BeNil())
 	})
 
 	It("Should install resources for a CRD with kube-proxy disabled", func() {

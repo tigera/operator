@@ -265,7 +265,7 @@ func nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMap {
 func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 0
 
-	return &apps.DaemonSet{
+	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
@@ -298,6 +298,8 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 			},
 		},
 	}
+	setCriticalPod(&(ds.Spec.Template))
+	return &ds
 }
 
 // nodeTolerations creates the node's tolerations.

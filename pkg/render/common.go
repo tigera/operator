@@ -95,3 +95,7 @@ func setCustomEnv(defaults []v1.EnvVar, custom []v1.EnvVar) []v1.EnvVar {
 	}
 	return defaults
 }
+
+func setCriticalPod(t *v1.PodTemplateSpec) {
+	t.Spec.PriorityClassName = priorityClassName
+}

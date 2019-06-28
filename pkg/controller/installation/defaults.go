@@ -103,9 +103,8 @@ func fillDefaults(instance *operator.Installation) {
 
 func getImageName(cr *operator.Installation, defaultCalicoImage, defaultTigeraImage string) string {
 	imageName := defaultCalicoImage
-	registry := cr.Spec.Registry
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		imageName = defaultTigeraImage
 	}
-	return fmt.Sprintf("%s%s:%s", registry, imageName, cr.Spec.Version)
+	return fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
 }

@@ -15,6 +15,7 @@
 package render
 
 import (
+	"fmt"
 	"os"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -279,7 +280,7 @@ func nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                []v1.Container{cniContainer(cr)},
+					InitContainers:                []v1.Container{cniContainer(cr), flexVolumeContainer(cr)},
 					Containers:                    []v1.Container{nodeContainer(cr)},
 					Volumes:                       nodeVolumes(cr),
 				},
@@ -320,6 +321,8 @@ func nodeVolumes(cr *operator.Installation) []v1.Volume {
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
 		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
+		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+		{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 	}
 
 	// Override with Tigera-specific config.
@@ -335,7 +338,7 @@ func nodeVolumes(cr *operator.Installation) []v1.Volume {
 	return volumes
 }
 
-// cniContainer creates the node's init container.
+// cniContainer creates the node's init container that installs CNI.
 func cniContainer(cr *operator.Installation) v1.Container {
 	// Determine environment to pass to the CNI init container.
 	cniEnv := cniEnvvars(cr)
@@ -354,6 +357,24 @@ func cniContainer(cr *operator.Installation) v1.Container {
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
+	}
+}
+
+// flexVolumeContainer creates the node's init container that installs the Unix Domain Socketo allow Dikastes
+// to communicate with Felix over the Policy Sync API.
+func flexVolumeContainer(cr *operator.Installation) v1.Container {
+	imageName := "calico/pod2daemon-flexvol"
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		imageName = "tigera/pod2daemon-flexvol"
+	}
+	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
+
+	return v1.Container{
+		Name:  "flexvol-driver",
+		Image: image,
+		VolumeMounts: []v1.VolumeMount{
+			{MountPath: "/host/driver", Name: "flexvol-driver-host"},
+		},
 	}
 }
 
@@ -410,6 +431,7 @@ func nodeVolumeMounts(cr *operator.Installation) []v1.VolumeMount {
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/calico", Name: "var-run-calico"},
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 	}
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{

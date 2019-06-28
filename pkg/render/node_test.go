@@ -166,8 +166,14 @@ var _ = Describe("Node rendering tests", func() {
 		// Node image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("customNodeRegistry/customNodeImage:customNodeVersion"))
 
+		// Validate correct number of init containers.
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
+
 		// CNI container uses image override.
 		Expect(ds.Spec.Template.Spec.InitContainers[0].Image).To(Equal("customCNIRegistry/customCNIImage:customCNIVersion"))
+
+		// Verify Flex volume container image. It uses the global registry and version for the full image name.
+		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("test-reg/calico/pod2daemon-flexvol:test"))
 
 		// Verify env
 		expectedNodeEnv := []v1.EnvVar{
@@ -216,6 +222,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Verify volumes.
 		var fileOrCreate = v1.HostPathFileOrCreate
+		var dirOrCreate = v1.HostPathDirectoryOrCreate
 		expectedVols := []v1.Volume{
 			{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -223,6 +230,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/test/cni/bin/dir"}}},
 			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/test/cni/net/dir"}}},
+			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+			{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 			// Custom volumes
 			{Name: "extravolNode", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 			{Name: "extravolCNI", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
@@ -235,6 +244,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			// Custom volumes
 			{MountPath: "/tmp/calico/testing/node", Name: "extravolNode"},
 		}
@@ -280,6 +290,9 @@ var _ = Describe("Node rendering tests", func() {
 		// Image is set in defaults.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+
+		// Verify Flex volume container image. It uses the global registry and version for the full image name.
+		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("test-reg/tigera/pod2daemon-flexvol:test"))
 
 		expectedNodeEnv := []v1.EnvVar{
 			// Default envvars.

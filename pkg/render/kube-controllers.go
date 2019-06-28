@@ -162,16 +162,13 @@ func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 		resources.Limits = cr.Spec.Components.KubeControllers.Resources.Limits
 	}
 
-	return &apps.Deployment{
+	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-kube-controllers",
 			Namespace: calicoNamespace,
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
-			},
-			Annotations: map[string]string{
-				"scheduler.alpha.kubernetes.io/critical-pod": "",
 			},
 		},
 		Spec: apps.DeploymentSpec{
@@ -223,4 +220,6 @@ func controllersDeployment(cr *operator.Installation) *apps.Deployment {
 			},
 		},
 	}
+	setCriticalPod(&(d.Spec.Template))
+	return &d
 }

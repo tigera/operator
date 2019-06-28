@@ -22,6 +22,7 @@ import (
 func Render(cr *operator.Installation) []runtime.Object {
 	var objs []runtime.Object
 	objs = appendNotNil(objs, CustomResourceDefinitions(cr))
+	objs = appendNotNil(objs, PriorityClassDefinitions(cr))
 	objs = appendNotNil(objs, KubeProxy(cr))
 	objs = appendNotNil(objs, Namespaces(cr))
 	objs = appendNotNil(objs, Node(cr))

@@ -58,6 +58,13 @@ rules:
   - '*'
   verbs:
   - '*'
+# Operator needs to manage priorityclasses.
+- apiGroups:
+    - scheduling.k8s.io
+  resources:
+    - priorityclasses
+  verbs:
+    - '*'
 # When running TigeraSecureEnterprise, we need to manage APIServices.
 - apiGroups:
   - apiregistration.k8s.io

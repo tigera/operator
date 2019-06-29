@@ -172,8 +172,8 @@ var _ = Describe("Node rendering tests", func() {
 		// CNI container uses image override.
 		Expect(ds.Spec.Template.Spec.InitContainers[0].Image).To(Equal("customCNIRegistry/customCNIImage:customCNIVersion"))
 
-		// Verify Flex volume container image. It uses the global registry and version for the full image name.
-		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("test-reg/calico/pod2daemon-flexvol:test"))
+		// Verify the hardcoded Flex volume container image.
+		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("quay.io/calico/pod2daemon-flexvol:v3.6.4"))
 
 		// Verify env
 		expectedNodeEnv := []v1.EnvVar{
@@ -291,9 +291,6 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
-		// Verify Flex volume container image. It uses the global registry and version for the full image name.
-		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("test-reg/tigera/pod2daemon-flexvol:test"))
-
 		expectedNodeEnv := []v1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -346,6 +343,22 @@ var _ = Describe("Node rendering tests", func() {
 		ds := resources[4].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+
+		// Verify volumes. In particular, we want to make sure the flexvol-driver-host volume uses the right
+		// host path for flexvolume drivers.
+		var fileOrCreate = v1.HostPathFileOrCreate
+		var dirOrCreate = v1.HostPathDirectoryOrCreate
+		expectedVols := []v1.Volume{
+			{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
+			{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+			{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/test/cni/bin/dir"}}},
+			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/test/cni/net/dir"}}},
+			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+			{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
+		}
+		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
 
 		expectedNodeEnv := []v1.EnvVar{
 			// Default envvars.

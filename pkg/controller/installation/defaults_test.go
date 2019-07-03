@@ -167,7 +167,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					CNI: operator.CNISpec{
-						Image: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
+						Image: "cniRegistry/cniImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
 								Name:  "project",

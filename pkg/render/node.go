@@ -15,7 +15,6 @@
 package render
 
 import (
-	"fmt"
 	"os"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -192,7 +191,7 @@ func nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
-				// Tigera Secure neesd to be able to read licenses, tiers, and config.
+				// Tigera Secure needs to be able to read licenses, tiers, and config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"licensekeys",
@@ -322,16 +321,33 @@ func nodeVolumes(cr *operator.Installation) []v1.Volume {
 		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
 		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
-		{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 	}
 
 	// Override with Tigera-specific config.
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		extraVolumes := []v1.Volume{
-			{Name: "var-log-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
+		// Add volume for calico logs.
+		calicoLogVol := v1.Volume{
+			Name:         "var-log-calico",
+			VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
 		}
-		volumes = append(volumes, extraVolumes...)
+		volumes = append(volumes, calicoLogVol)
 	}
+
+	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+	// In OpenShift 4.x, the location for flexvolume plugins has changed.
+	// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
+	if os.Getenv("OPENSHIFT") == "true" {
+		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
+	}
+
+	// Create and append flexvolume
+	flexVolume := v1.Volume{
+		Name: "flexvol-driver-host",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{Path: flexVolumePluginsPath + "nodeagent~uds", Type: &dirOrCreate},
+		},
+	}
+	volumes = append(volumes, flexVolume)
 
 	volumes = setCustomVolumes(volumes, cr.Spec.Components.Node.ExtraVolumes)
 	volumes = setCustomVolumes(volumes, cr.Spec.Components.CNI.ExtraVolumes)
@@ -360,21 +376,17 @@ func cniContainer(cr *operator.Installation) v1.Container {
 	}
 }
 
-// flexVolumeContainer creates the node's init container that installs the Unix Domain Socketo allow Dikastes
+// flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
 func flexVolumeContainer(cr *operator.Installation) v1.Container {
-	imageName := "calico/pod2daemon-flexvol"
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		imageName = "tigera/pod2daemon-flexvol"
+	flexVolumeMounts := []v1.VolumeMount{
+		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
-	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
 
 	return v1.Container{
-		Name:  "flexvol-driver",
-		Image: image,
-		VolumeMounts: []v1.VolumeMount{
-			{MountPath: "/host/driver", Name: "flexvol-driver-host"},
-		},
+		Name:         "flexvol-driver",
+		Image:        "quay.io/calico/pod2daemon-flexvol:v3.6.4",
+		VolumeMounts: flexVolumeMounts,
 	}
 }
 

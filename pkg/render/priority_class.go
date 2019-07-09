@@ -25,8 +25,10 @@ const (
 	priorityClassName = "calico-priority"
 )
 
-func PriorityClassDefinitions(cr *operator.Installation) []runtime.Object {
-	return []runtime.Object{calicoPriority(cr)}
+func PriorityClassDefinitions(cr *operator.Installation) Component {
+	return &component{
+		objs: []runtime.Object{calicoPriority(cr)},
+	}
 }
 
 func calicoPriority(cr *operator.Installation) *schedv1beta.PriorityClass {

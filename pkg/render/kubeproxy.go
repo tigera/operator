@@ -31,17 +31,19 @@ var KubeProxyMeta = metav1.ObjectMeta{
 	Namespace: "kube-system",
 }
 
-func KubeProxy(cr *operator.Installation) []runtime.Object {
+func KubeProxy(cr *operator.Installation) Component {
 	if !cr.Spec.Components.KubeProxy.Required {
 		// Only install kube-proxy if configured to do so.
-		return nil
+		return &component{}
 	}
-
-	return []runtime.Object{
+	objs := []runtime.Object{
 		kubeProxyServiceAccount(cr),
 		kubeProxyRoleBinding(cr),
 		kubeProxyConfigMap(cr),
 		kubeProxyDaemonset(cr),
+	}
+	return &component{
+		objs: objs,
 	}
 }
 

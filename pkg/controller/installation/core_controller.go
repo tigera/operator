@@ -304,17 +304,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired components based on our configuration. This represents the desired state of the cluster.
 	desiredComponents := render.Render(instance)
 
-	// Get all the objects in our components
-
-	// Set Installation instance as the owner and controller.
-	for _, component := range desiredComponents {
-		for _, obj := range component.GetObjects() {
-			if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
 	// Create the desired state objects.
 	for _, component := range desiredComponents {
 
@@ -326,6 +315,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 
 		for _, obj := range component.GetObjects() {
+			// Set Installation instance as the owner and controller.
+			if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
+				return reconcile.Result{}, err
+			}
+
 			logCtx := contextLoggerForResource(obj)
 			var old runtime.Object = obj.DeepCopyObject()
 			var key client.ObjectKey

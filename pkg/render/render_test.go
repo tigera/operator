@@ -49,8 +49,8 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(25))
+		components := render.Render(instance)
+		Expect(componentCount(components)).To(Equal(25))
 	})
 
 	It("should render all resources when kube-proxy is enabled", func() {
@@ -64,8 +64,8 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
 		instance.Spec.Components.KubeProxy.Required = true
-		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(29))
+		components := render.Render(instance)
+		Expect(componentCount(components)).To(Equal(29))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -83,7 +83,16 @@ var _ = Describe("Rendering tests", func() {
 		// - 14 custom resource definitions (calico)
 		// - 6 custom resource definitions (tsee)
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		resources := render.Render(instance)
-		Expect(len(resources)).To(Equal(43))
+		components := render.Render(instance)
+		Expect(componentCount(components)).To(Equal(43))
 	})
 })
+
+func componentCount(components []render.Component) int {
+	count := 0
+	for _, c := range components {
+		count += len(c.GetObjects())
+	}
+	return count
+}
+

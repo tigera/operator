@@ -28,7 +28,7 @@ const (
 	tigeraSecureNamespace = "tigera-system"
 )
 
-func Namespaces(cr *operator.Installation) []runtime.Object {
+func Namespaces(cr *operator.Installation) Component {
 	ns := []runtime.Object{
 		createNamespace(calicoNamespace),
 	}
@@ -36,7 +36,9 @@ func Namespaces(cr *operator.Installation) []runtime.Object {
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		ns = append(ns, createNamespace(tigeraSecureNamespace))
 	}
-	return ns
+	return &component{
+		objs: ns,
+	}
 }
 
 func createNamespace(name string) *v1.Namespace {

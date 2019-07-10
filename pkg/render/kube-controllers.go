@@ -26,12 +26,15 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation) []runtime.Object {
-	return []runtime.Object{
+func KubeControllers(cr *operator.Installation) Component {
+	objs := []runtime.Object{
 		controllersServiceAccount(cr),
 		controllersRole(cr),
 		controllersRoleBinding(cr),
 		controllersDeployment(cr),
+	}
+	return &component{
+		objs: objs,
 	}
 }
 

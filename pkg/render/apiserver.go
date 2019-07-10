@@ -33,7 +33,7 @@ const (
 	queryServerPort             = 8080
 )
 
-func APIServer(cr *operator.Installation) []runtime.Object {
+func APIServer(cr *operator.Installation) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
@@ -50,7 +50,9 @@ func APIServer(cr *operator.Installation) []runtime.Object {
 		delegateAuthClusterRoleBinding(cr),
 		authReaderRoleBinding(cr),
 	}
-	return objs
+	return &component{
+		objs: objs,
+	}
 }
 
 // apiService creates an API service that registers Tigera Secure APIs (and API server).

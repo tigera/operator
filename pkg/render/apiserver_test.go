@@ -48,7 +48,8 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with default configuration", func() {
-		resources := render.APIServer(instance)
+		component := render.APIServer(instance)
+		resources := component.GetObjects()
 
 		// Should render the correct resources.
 		Expect(len(resources)).To(Equal(11))
@@ -147,7 +148,8 @@ var _ = Describe("API server rendering tests", func() {
 			Image: "test/apiserver",
 		}
 
-		resources := render.APIServer(instance)
+		component := render.APIServer(instance)
+		resources := component.GetObjects()
 
 		// Should render the correct resources.
 		Expect(len(resources)).To(Equal(11))

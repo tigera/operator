@@ -35,7 +35,7 @@ const (
 
 func APIServer(cr *operator.Installation) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
-		return &component{}
+		return nil
 	}
 	objs := []runtime.Object{
 		apiServer(cr),

@@ -50,7 +50,7 @@ func Render(cr *operator.Installation) []Component {
 }
 
 func appendNotNil(components []Component, c Component) []Component {
-	if len(c.GetObjects()) > 0 {
+	if c != nil {
 		components = append(components, c)
 	}
 	return components

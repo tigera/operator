@@ -318,9 +318,10 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Create the desired state objects.
 	for _, component := range desiredComponents {
 
-		// Before creating the object, verify that its component dependencies exist.
+		// Before creating the object, verify that its component dependencies exist. If the component is nil that means
+		// we can skip rendering it.
 		log.Info("Verifying deps for component")
-		if !r.VerifyDependencies(component) {
+		if component == nil || !r.VerifyDependencies(component) {
 			continue
 		}
 

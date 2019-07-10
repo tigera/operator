@@ -189,6 +189,8 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 	return nil
 }
 
+// VerifyDependencies checks whether the given component's dependencies exist and are ready. Returns true if the component
+// has no dependencies or if all of the component's dependencies are ready.
 func (r *ReconcileInstallation) VerifyDependencies(component render.Component) bool {
 	logger := log.WithName("verify_dependencies")
 	for _, obj := range component.GetComponentDeps() {

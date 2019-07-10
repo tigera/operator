@@ -16,9 +16,10 @@ package installation
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"os"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
@@ -63,8 +64,8 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) *ReconcileInstallation {
 	return &ReconcileInstallation{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
+		client:  mgr.GetClient(),
+		scheme:  mgr.GetScheme(),
 		watches: make(map[runtime.Object]struct{}),
 	}
 }
@@ -93,6 +94,25 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
+		}
+	}
+
+	// Add watches on component dependencies.
+	componentDeps := []runtime.Object{
+		&v1.Service{
+			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "elasticsearch-tigera-elasticsearch",
+				Namespace: "calico-monitoring",
+			},
+		},
+	}
+
+	for _, dep := range componentDeps {
+		err = r.AddWatch(dep)
+		if err != nil {
+			objMeta := dep.(metav1.ObjectMetaAccessor).GetObjectMeta()
+			log.Info("Adding watch on dependency failed", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace(), "error", err.Error())
 		}
 	}
 
@@ -135,10 +155,10 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client     client.Client
+	scheme     *runtime.Scheme
 	controller controller.Controller
-	watches map[runtime.Object]struct{}
+	watches    map[runtime.Object]struct{}
 }
 
 // AddWatch creates a watch on the given object. Only Create events are processed.
@@ -192,7 +212,7 @@ func (r *ReconcileInstallation) VerifyDependencies(component render.Component) b
 
 			// If the service exists, check that its ready by looking for at least 1 ready address in all of its
 			// endpoints' subsets.
-			err = wait.PollImmediate(3 * time.Second, 30 * time.Second, func() (bool, error){
+			err = wait.PollImmediate(3*time.Second, 30*time.Second, func() (bool, error) {
 				endpoints := &v1.Endpoints{}
 				err = r.client.Get(context.Background(), svcName, endpoints)
 				if err != nil {

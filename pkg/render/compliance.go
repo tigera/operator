@@ -17,7 +17,9 @@ package render
 import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
+	v3 "github.com/projectcalico/libcalico-go/lib/apis/v3"
 	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,25 +27,117 @@ import (
 
 func Compliance(cr *operator.Installation) []runtime.Object {
 	return []runtime.Object{
-		complianceServiceAccount(cr),
-		complianceRoleBinding(cr),
-		complianceConfigMap(cr),
-		complianceDaemonset(cr),
+		complianceControllerServiceAccount(cr),
+		complianceControllerClusterRole(cr),
+		complianceControllerRoleBinding(cr),
+		complianceControllerClusterRoleBinding(cr),
+		complianceControllerDeployment(cr),
+
+		complianceReporterServiceAccount(cr),
+		complianceReporterClusterRole(cr),
+		complianceReporterClusterRoleBinding(cr),
+		complianceReporterDaemonSet(cr),
+
+		complianceServerServiceAccount(cr),
+		complianceServerClusterRole(cr),
+		complianceServerClusterRoleBinding(cr),
+		complianceServerService(cr),
+		complianceServerDeployment(cr),
+
+		complianceSnapshotterServiceAccount(cr),
+		complianceSnapshotterClusterRole(cr),
+		complianceSnapshotterClusterRoleBinding(cr),
+		complianceSnapshotterDeployment(cr),
+
+		complianceGlobalReportInventory(cr),
+		complianceGlobalReportNetworkAccess(cr),
+		complianceGlobalReportPolicyAudit(cr),
 	}
 }
 
-func complianceServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+// compliance-controller
+func complianceControllerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{}
 }
 
-func complianceRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func complianceControllerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{}
+}
+
+func complianceControllerRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{}
+}
+
+func complianceControllerClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{}
 }
 
-func complianceConfigMap(cr *operator.Installation) *v1.ConfigMap {
-	return &v1.ConfigMap{}
+func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deployment {
+	return &appsv1.Deployment{}
 }
 
-func complianceDaemonset(cr *operator.Installation) *apps.DaemonSet {
+// compliance-reporter
+func complianceReporterServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+	return &v1.ServiceAccount{}
+}
+
+func complianceReporterClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{}
+}
+
+func complianceReporterClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{}
+}
+
+func complianceReporterDaemonSet(cr *operator.Installation) *apps.DaemonSet {
 	return &apps.DaemonSet{}
+}
+
+// compliance-server
+func complianceServerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+	return &v1.ServiceAccount{}
+}
+
+func complianceServerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{}
+}
+
+func complianceServerClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{}
+}
+
+func complianceServerService(cr *operator.Installation) *v1.Service {
+	return &v1.Service{}
+}
+
+func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
+	return &appsv1.Deployment{}
+}
+
+// compliance-snapshotter
+func complianceSnapshotterServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+	return &v1.ServiceAccount{}
+}
+
+func complianceSnapshotterClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{}
+}
+
+func complianceSnapshotterClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{}
+}
+
+func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployment {
+	return &appsv1.Deployment{}
+}
+
+// compliance-report-types
+func complianceGlobalReportInventory(cr *operator.Installation) *v3.GlobalReportType {
+	return &v3.GlobalReportType{}
+}
+func complianceGlobalReportNetworkAccess(cr *operator.Installation) *v3.GlobalReportType {
+	return &v3.GlobalReportType{}
+}
+func complianceGlobalReportPolicyAudit(cr *operator.Installation) *v3.GlobalReportType {
+	return &v3.GlobalReportType{}
 }

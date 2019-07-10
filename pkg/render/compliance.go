@@ -25,33 +25,36 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func Compliance(cr *operator.Installation) []runtime.Object {
-	return []runtime.Object{
-		complianceControllerServiceAccount(cr),
-		complianceControllerClusterRole(cr),
-		complianceControllerRoleBinding(cr),
-		complianceControllerClusterRoleBinding(cr),
-		complianceControllerDeployment(cr),
+func Compliance(cr *operator.Installation) Component {
+	return &component{
+		objs: []runtime.Object{
+			complianceControllerServiceAccount(cr),
+			complianceControllerClusterRole(cr),
+			complianceControllerRoleBinding(cr),
+			complianceControllerClusterRoleBinding(cr),
+			complianceControllerDeployment(cr),
 
-		complianceReporterServiceAccount(cr),
-		complianceReporterClusterRole(cr),
-		complianceReporterClusterRoleBinding(cr),
-		complianceReporterDaemonSet(cr),
+			complianceReporterServiceAccount(cr),
+			complianceReporterClusterRole(cr),
+			complianceReporterClusterRoleBinding(cr),
+			complianceReporterDaemonSet(cr),
 
-		complianceServerServiceAccount(cr),
-		complianceServerClusterRole(cr),
-		complianceServerClusterRoleBinding(cr),
-		complianceServerService(cr),
-		complianceServerDeployment(cr),
+			complianceServerServiceAccount(cr),
+			complianceServerClusterRole(cr),
+			complianceServerClusterRoleBinding(cr),
+			complianceServerService(cr),
+			complianceServerDeployment(cr),
 
-		complianceSnapshotterServiceAccount(cr),
-		complianceSnapshotterClusterRole(cr),
-		complianceSnapshotterClusterRoleBinding(cr),
-		complianceSnapshotterDeployment(cr),
+			complianceSnapshotterServiceAccount(cr),
+			complianceSnapshotterClusterRole(cr),
+			complianceSnapshotterClusterRoleBinding(cr),
+			complianceSnapshotterDeployment(cr),
 
-		complianceGlobalReportInventory(cr),
-		complianceGlobalReportNetworkAccess(cr),
-		complianceGlobalReportPolicyAudit(cr),
+			complianceGlobalReportInventory(cr),
+			complianceGlobalReportNetworkAccess(cr),
+			complianceGlobalReportPolicyAudit(cr),
+		},
+		deps: []runtime.Object{},
 	}
 }
 

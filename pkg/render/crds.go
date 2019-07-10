@@ -23,12 +23,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func CustomResourceDefinitions(cr *operator.Installation) []runtime.Object {
+func CustomResourceDefinitions(cr *operator.Installation) Component {
 	crds := calicoCRDs(cr)
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		crds = append(crds, tigeraSecureCRDs(cr)...)
 	}
-	return crds
+	return &component{
+		objs: crds,
+	}
 }
 
 type desiredCRD struct {

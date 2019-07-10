@@ -51,7 +51,8 @@ var _ = Describe("kube-proxy rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		resources := render.KubeProxy(instance)
+		component := render.KubeProxy(instance)
+		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(4))
 
 		// Should render the correct resources.

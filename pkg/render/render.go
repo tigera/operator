@@ -19,23 +19,39 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func Render(cr *operator.Installation) []runtime.Object {
-	var objs []runtime.Object
-	objs = appendNotNil(objs, CustomResourceDefinitions(cr))
-	objs = appendNotNil(objs, PriorityClassDefinitions(cr))
-	objs = appendNotNil(objs, KubeProxy(cr))
-	objs = appendNotNil(objs, Namespaces(cr))
-	objs = appendNotNil(objs, Node(cr))
-	objs = appendNotNil(objs, KubeControllers(cr))
-	objs = appendNotNil(objs, APIServer(cr))
-	return objs
+
+type Component interface {
+	GetObjects() []runtime.Object
+	GetComponentDeps() []runtime.Object
 }
 
-func appendNotNil(objs []runtime.Object, newObjs []runtime.Object) []runtime.Object {
-	for _, x := range newObjs {
-		if x != nil {
-			objs = append(objs, x)
-		}
+type component struct {
+	objs []runtime.Object
+	deps []runtime.Object
+}
+
+func (c *component) GetObjects() []runtime.Object{
+	return c.objs
+}
+func (c *component) GetComponentDeps() []runtime.Object{
+	return c.deps
+}
+
+func Render(cr *operator.Installation) []Component {
+	var components []Component
+	components = appendNotNil(components, CustomResourceDefinitions(cr))
+	components = appendNotNil(components, PriorityClassDefinitions(cr))
+	components = appendNotNil(components, KubeProxy(cr))
+	components = appendNotNil(components, Namespaces(cr))
+	components = appendNotNil(components, Node(cr))
+	components = appendNotNil(components, KubeControllers(cr))
+	components = appendNotNil(components, APIServer(cr))
+	return components
+}
+
+func appendNotNil(components []Component, c Component) []Component {
+	if c != nil {
+		components = append(components, c)
 	}
-	return objs
+	return components
 }

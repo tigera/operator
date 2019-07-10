@@ -52,7 +52,8 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace", func() {
-		resources := render.Namespaces(instance)
+		component := render.Namespaces(instance)
+		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -63,7 +64,8 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render an additional namespace if this is Tigera Secure", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		resources := render.Namespaces(instance)
+		component := render.Namespaces(instance)
+		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(2))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -81,7 +83,8 @@ var _ = Describe("Namespace rendering tests", func() {
 	It("should render a namespace for openshift", func() {
 		os.Setenv("OPENSHIFT", "true")
 		defer os.Unsetenv("OPENSHIFT")
-		resources := render.Namespaces(instance)
+		component := render.Namespaces(instance)
+		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()

@@ -17,6 +17,9 @@ package installation
 import (
 	"context"
 	"os"
+	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
@@ -59,20 +62,23 @@ func Add(mgr manager.Manager) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager) *ReconcileInstallation {
 	return &ReconcileInstallation{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
+		client:  mgr.GetClient(),
+		scheme:  mgr.GetScheme(),
+		watches: make(map[runtime.Object]struct{}),
 	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Create a new controller
 	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
+
+	r.controller = c
 
 	// Watch for changes to primary resource Installation
 	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
@@ -88,6 +94,25 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
+		}
+	}
+
+	// Add watches on component dependencies.
+	componentDeps := []runtime.Object{
+		&v1.Service{
+			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "elasticsearch-tigera-elasticsearch",
+				Namespace: "calico-monitoring",
+			},
+		},
+	}
+
+	for _, dep := range componentDeps {
+		err = r.AddWatch(dep)
+		if err != nil {
+			objMeta := dep.(metav1.ObjectMetaAccessor).GetObjectMeta()
+			log.Info("Adding watch on dependency failed", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace(), "error", err.Error())
 		}
 	}
 
@@ -130,8 +155,97 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client     client.Client
+	scheme     *runtime.Scheme
+	controller controller.Controller
+	watches    map[runtime.Object]struct{}
+}
+
+// AddWatch creates a watch on the given object. Only Create events are processed.
+func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
+	logger := log.WithName("add_watch")
+	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	if _, exists := r.watches[obj]; !exists {
+		logger.Info("Watch doesn't exist, creating", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace())
+		pred := predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool {
+				return e.Meta.GetName() == objMeta.GetName() && e.Meta.GetNamespace() == objMeta.GetNamespace()
+			},
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				return false
+			},
+			DeleteFunc: func(e event.DeleteEvent) bool {
+				return false
+			},
+		}
+		err := r.controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
+		if err == nil {
+			r.watches[obj] = struct{}{}
+		}
+		return err
+	}
+
+	logger.Info("Watch exists, skipping", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace())
+	return nil
+}
+
+// VerifyDependencies checks whether the given component's dependencies exist and are ready. Returns true if the component
+// has no dependencies or if all of the component's dependencies are ready.
+func (r *ReconcileInstallation) VerifyDependencies(component render.Component) bool {
+	logger := log.WithName("verify_dependencies")
+	for _, obj := range component.GetComponentDeps() {
+		objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
+		objName := objMeta.GetName()
+		objNamespace := objMeta.GetNamespace()
+
+		switch obj.(type) {
+		case *v1.Service:
+			service := &v1.Service{}
+			svcName := types.NamespacedName{Name: objName, Namespace: objNamespace}
+			err := r.client.Get(context.Background(), svcName, service)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					logger.Info("Service dependency doesn't exist yet", "name", objName, "namespace", objNamespace)
+				} else {
+					logger.Info("Error getting service", "name", objName, "namespace", objNamespace, "error", err.Error())
+				}
+				return false
+			}
+
+			// If the service exists, check that its ready by looking for at least 1 ready address in all of its
+			// endpoints' subsets.
+			err = wait.PollImmediate(3*time.Second, 30*time.Second, func() (bool, error) {
+				endpoints := &v1.Endpoints{}
+				err = r.client.Get(context.Background(), svcName, endpoints)
+				if err != nil {
+					// If not found, retry.
+					if apierrors.IsNotFound(err) {
+						logger.Info("Endpoints dependency doesn't exist yet", "name", objName, "namespace", objNamespace)
+						return false, nil
+					}
+
+					// Any other error, just quit
+					return false, err
+				}
+
+				for _, subset := range endpoints.Subsets {
+					if len(subset.Addresses) == 0 {
+						log.Info("Endpoints dependency has 0 ready addresses", "name", objName, "namespace", objNamespace)
+						return false, nil
+					}
+				}
+				// If we reach here, all of the endpoints subsets have at least 1 ready address and the service is ready
+				logger.Info("Service dependency is ready", "name", objName, "namespace", objNamespace)
+				return true, nil
+			})
+
+			if err != nil {
+				logger.Info("Service dependency check failed", "error", err.Error())
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
@@ -189,48 +303,57 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Render the desired objects based on our configuration. This represents the desired state of the cluster.
-	desiredStateObjs := render.Render(instance)
-
-	// Set Installation instance as the owner and controller.
-	for _, obj := range desiredStateObjs {
-		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
+	// Render the desired components based on our configuration. This represents the desired state of the cluster.
+	desiredComponents := render.Render(instance)
 
 	// Create the desired state objects.
-	for _, obj := range desiredStateObjs {
-		logCtx := contextLoggerForResource(obj)
-		var old runtime.Object = obj.DeepCopyObject()
-		var key client.ObjectKey
-		key, err = client.ObjectKeyFromObject(obj)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		err = r.client.Get(ctx, key, old)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				// Anything other than "Not found" we should retry.
-				return reconcile.Result{}, err
-			}
-			// Otherwise, if it was not found, we should create it.
-			logCtx.V(2).Info("Object does not exist", "error", err)
-		} else {
-			logCtx.V(1).Info("Resource already exists, update it")
-			err = r.client.Update(ctx, mergeState(obj, old))
-			if err != nil {
-				logCtx.WithValues("key", key).Info("Failed to update object.")
-				return reconcile.Result{}, err
-			}
+	for _, component := range desiredComponents {
+
+		// Before creating the object, verify that its component dependencies exist. If the component is nil that means
+		// we can skip rendering it.
+		log.Info("Verifying deps for component")
+		if component == nil || !r.VerifyDependencies(component) {
 			continue
 		}
 
-		logCtx.Info("Creating new object.")
-		err = r.client.Create(ctx, obj)
-		if err != nil {
-			// Hit an error creating desired state object - we need to requeue.
-			return reconcile.Result{}, err
+		for _, obj := range component.GetObjects() {
+			// Set Installation instance as the owner and controller.
+			if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			logCtx := contextLoggerForResource(obj)
+			var old runtime.Object = obj.DeepCopyObject()
+			var key client.ObjectKey
+			key, err = client.ObjectKeyFromObject(obj)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+
+			err = r.client.Get(ctx, key, old)
+			if err != nil {
+				if !apierrors.IsNotFound(err) {
+					// Anything other than "Not found" we should retry.
+					return reconcile.Result{}, err
+				}
+				// Otherwise, if it was not found, we should create it.
+				logCtx.V(2).Info("Object does not exist", "error", err)
+			} else {
+				logCtx.V(1).Info("Resource already exists, update it")
+				err = r.client.Update(ctx, mergeState(obj, old))
+				if err != nil {
+					logCtx.WithValues("key", key).Info("Failed to update object.")
+					return reconcile.Result{}, err
+				}
+				continue
+			}
+
+			logCtx.Info("Creating new object.")
+			err = r.client.Create(ctx, obj)
+			if err != nil {
+				// Hit an error creating desired state object - we need to requeue.
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -239,8 +362,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// Render the objects that we might want to delete.
 		cp := instance.DeepCopyObject().(*operator.Installation)
 		cp.Spec.Components.KubeProxy.Required = true
-		objs := render.KubeProxy(cp)
-		for _, o := range objs {
+		kubeProxyComponent := render.KubeProxy(cp)
+		for _, o := range kubeProxyComponent.GetObjects() {
 			logCtx := contextLoggerForResource(o)
 
 			// Check if the object exists.

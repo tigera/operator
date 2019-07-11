@@ -115,6 +115,10 @@ type ComponentsSpec struct {
 	// APIServer is optional configuration for the API server component.
 	// +optional
 	APIServer APIServerSpec `json:"apiServer,omitempty"`
+
+	// Compliance is option configuration for the Compliance component.
+	// +optional
+	Compliance ComplianceSpec `json:"compliance,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
@@ -231,6 +235,15 @@ type CNISpec struct {
 	// ExtraVolumeMounts configures custom volume mounts to be used by the CNI container.
 	// +optional
 	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+}
+
+// ComplianceSpec defines optional configuration for the Compliance component.
+// +k8s:openapi-gen=true
+type ComplianceSpec struct {
+	// Image configures a different Docker image for the Compliance image. The value must be a full qualified image name.
+	// E.g "gcr.io/acme/calico-cni:beta".
+	// +optional
+	Image string `json:"image,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

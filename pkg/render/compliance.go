@@ -17,13 +17,13 @@ package render
 import (
 	v3 "github.com/projectcalico/libcalico-go/lib/apis/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func Compliance(cr *operator.Installation) Component {
@@ -149,6 +149,8 @@ func complianceControllerClusterRoleBinding(cr *operator.Installation) *rbacv1.C
 }
 
 func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deployment {
+	boolTrue := true
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -166,18 +168,116 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-controller"}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{"beta.kubernetes.io/os": "linux"},
+					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+					ServiceAccountName: "tigera-compliance-controller",
+					Tolerations: []corev1.Toleration{
+						{
+							Key:    "node-role.kubernetes.io/master",
+							Effect: corev1.TaintEffectNoSchedule,
+						},
+					},
+					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					Containers: []corev1.Container{
+						{
+							Name:  "compliance-controller",
+							Image: cr.Spec.Components.Compliance.Image,
+							Env: []corev1.EnvVar{
+								{Name: "LOG_LEVEL", Value: "info"},
+								{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
+								{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
+								{Name: "ELASTIC_INDEX_SUFFIX", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "tigera-es-config",
+										},
+										Key:      "tigera.elasticsearch.cluster-name",
+										Optional: &boolTrue},
+								}},
+								{Name: "ELASTIC_SCHEME", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "tigera-es-config",
+										},
+										Key:      "tigera.elasticsearch.scheme",
+										Optional: &boolTrue},
+								}},
+								{Name: "ELASTIC_HOST", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "tigera-es-config",
+										},
+										Key:      "tigera.elasticsearch.host",
+										Optional: &boolTrue},
+								}},
+								{Name: "ELASTIC_PORT", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "tigera-es-config",
+										},
+										Key:      "tigera.elasticsearch.port",
+										Optional: &boolTrue},
+								}},
+								{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "elastic-compliance-user",
+										},
+										Key:      "controller.username",
+										Optional: &boolTrue},
+								}},
+								{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "elastic-compliance-user",
+										},
+										Key:      "controller.password",
+										Optional: &boolTrue},
+								}},
+								{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
+								{Name: "ELASTIC_CA", ValueFrom: &v1.EnvVarSource{
+									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{
+											Name: "tigera-es-config",
+										},
+										Key:      "tigera.elasticsearch.ca.path",
+										Optional: &boolTrue},
+								}},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "elastic-ca-cert-volume",
+									MountPath: "/etc/ssl/elastic/",
+								},
+							},
+							LivenessProbe: &corev1.Probe{
+								Handler: corev1.Handler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/liveness",
+										Port: intstr.FromInt(9099),
+										Host: "localhost",
+									},
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "elastic-ca-cert-volume",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									Optional: &boolTrue,
+									Items: []corev1.KeyToPath{
+										{
+											Key:  "tigera.elasticsearch.ca",
+											Path: "ca.pem",
+										},
+									},
+									SecretName: "tigera-es-config",
+								},
+							},
+						},
+					},
 				},
-			},
-			ServiceAccountName: "tigera-compliance-controller",
-			Tolerations: []corev1.Toleration{
-				Key:    "node-role.kubernetes.io/master",
-				Effect: corev1.TaintEffectNoSchedule,
-			},
-			ImagePullSecrets: cr.Spec.ImagePullSecrets,
-			Containers: []corev1.Container{
-				Name:  "compliance-controller",
-				Image: cr.Spec.Components.ComplianceSpec.Image,
 			},
 		},
 	}
@@ -193,7 +293,7 @@ func complianceReporterServiceAccount(cr *operator.Installation) *v1.ServiceAcco
 
 func complianceReporterClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -206,11 +306,26 @@ func complianceReporterClusterRole(cr *operator.Installation) *rbacv1.ClusterRol
 }
 
 func complianceReporterClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{}
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-compliance-reporter",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-compliance-reporter",
+				Namespace: "calico-monitoring",
+			},
+		},
+	}
 }
 
-func complianceReporterDaemonSet(cr *operator.Installation) *apps.DaemonSet {
-	return &apps.DaemonSet{}
+func complianceReporterDaemonSet(cr *operator.Installation) *corev1.PodTemplateSpec {
+	return &corev1.PodTemplateSpec{}
 }
 
 // compliance-server

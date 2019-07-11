@@ -39,7 +39,7 @@ func Compliance(cr *operator.Installation) Component {
 			complianceReporterServiceAccount(cr),
 			complianceReporterClusterRole(cr),
 			complianceReporterClusterRoleBinding(cr),
-			complianceReporterDaemonSet(cr),
+			complianceReporterPodTemplate(cr),
 
 			complianceServerServiceAccount(cr),
 			complianceServerClusterRole(cr),
@@ -148,8 +148,75 @@ func complianceControllerClusterRoleBinding(cr *operator.Installation) *rbacv1.C
 	}
 }
 
+var complianceBoolTrue = true
+
+var complianceElasticEnvVars = []corev1.EnvVar{
+	{Name: "ELASTIC_INDEX_SUFFIX", ValueFrom: &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "tigera-es-config",
+			},
+			Key:      "tigera.elasticsearch.cluster-name",
+			Optional: &complianceBoolTrue},
+	}},
+	{Name: "ELASTIC_SCHEME", ValueFrom: &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "tigera-es-config",
+			},
+			Key:      "tigera.elasticsearch.scheme",
+			Optional: &complianceBoolTrue},
+	}},
+	{Name: "ELASTIC_HOST", ValueFrom: &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "tigera-es-config",
+			},
+			Key:      "tigera.elasticsearch.host",
+			Optional: &complianceBoolTrue},
+	}},
+	{Name: "ELASTIC_PORT", ValueFrom: &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "tigera-es-config",
+			},
+			Key:      "tigera.elasticsearch.port",
+			Optional: &complianceBoolTrue},
+	}},
+	{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
+	{Name: "ELASTIC_CA", ValueFrom: &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "tigera-es-config",
+			},
+			Key:      "tigera.elasticsearch.ca.path",
+			Optional: &complianceBoolTrue},
+	}},
+}
+
 func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deployment {
-	boolTrue := true
+	envVars := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
+		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
+		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "controller.username",
+				Optional: &complianceBoolTrue},
+		}},
+		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "controller.password",
+				Optional: &complianceBoolTrue},
+		}},
+	}
+	envVars = append(envVars, complianceElasticEnvVars...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -180,69 +247,8 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 					Containers: []corev1.Container{
 						{
 							Name:  "compliance-controller",
-							Image: cr.Spec.Components.Compliance.Image,
-							Env: []corev1.EnvVar{
-								{Name: "LOG_LEVEL", Value: "info"},
-								{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
-								{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
-								{Name: "ELASTIC_INDEX_SUFFIX", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "tigera-es-config",
-										},
-										Key:      "tigera.elasticsearch.cluster-name",
-										Optional: &boolTrue},
-								}},
-								{Name: "ELASTIC_SCHEME", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "tigera-es-config",
-										},
-										Key:      "tigera.elasticsearch.scheme",
-										Optional: &boolTrue},
-								}},
-								{Name: "ELASTIC_HOST", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "tigera-es-config",
-										},
-										Key:      "tigera.elasticsearch.host",
-										Optional: &boolTrue},
-								}},
-								{Name: "ELASTIC_PORT", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "tigera-es-config",
-										},
-										Key:      "tigera.elasticsearch.port",
-										Optional: &boolTrue},
-								}},
-								{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "elastic-compliance-user",
-										},
-										Key:      "controller.username",
-										Optional: &boolTrue},
-								}},
-								{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "elastic-compliance-user",
-										},
-										Key:      "controller.password",
-										Optional: &boolTrue},
-								}},
-								{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-								{Name: "ELASTIC_CA", ValueFrom: &v1.EnvVarSource{
-									ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-										LocalObjectReference: v1.LocalObjectReference{
-											Name: "tigera-es-config",
-										},
-										Key:      "tigera.elasticsearch.ca.path",
-										Optional: &boolTrue},
-								}},
-							},
+							Image: cr.Spec.Components.Compliance.ControllerImage,
+							Env:   envVars,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "elastic-ca-cert-volume",
@@ -265,7 +271,7 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 							Name: "elastic-ca-cert-volume",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									Optional: &boolTrue,
+									Optional: &complianceBoolTrue,
 									Items: []corev1.KeyToPath{
 										{
 											Key:  "tigera.elasticsearch.ca",
@@ -324,8 +330,96 @@ func complianceReporterClusterRoleBinding(cr *operator.Installation) *rbacv1.Clu
 	}
 }
 
-func complianceReporterDaemonSet(cr *operator.Installation) *corev1.PodTemplateSpec {
-	return &corev1.PodTemplateSpec{}
+func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplate {
+	envVars := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "warning"},
+		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "reporter.username",
+				Optional: &complianceBoolTrue},
+		}},
+		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "reporter.password",
+				Optional: &complianceBoolTrue},
+		}},
+	}
+	envVars = append(envVars, complianceElasticEnvVars...)
+
+	return &corev1.PodTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera.io.report",
+			Namespace: "calico-monitoring",
+			Labels: map[string]string{
+				"k8s-app": "compliance-reporter",
+			},
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tigera.io.report",
+				Namespace: "calico-monitoring",
+				Labels: map[string]string{
+					"k8s-app": "compliance-reporter",
+				},
+			},
+			Spec: corev1.PodSpec{
+				NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+				ServiceAccountName: "tigera-compliance-reporter",
+				Tolerations: []corev1.Toleration{
+					{
+						Key:    "node-role.kubernetes.io/master",
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
+				ImagePullSecrets: cr.Spec.ImagePullSecrets,
+				Containers: []corev1.Container{
+					{
+						Name:  "reporter",
+						Image: cr.Spec.Components.Compliance.ReporterImage,
+						Env:   envVars,
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "elastic-ca-cert-volume",
+								MountPath: "/etc/ssl/elastic/",
+							},
+						},
+						LivenessProbe: &corev1.Probe{
+							Handler: corev1.Handler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
+									Host: "localhost",
+								},
+							},
+						},
+					},
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: "elastic-ca-cert-volume",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								Optional: &complianceBoolTrue,
+								Items: []corev1.KeyToPath{
+									{
+										Key:  "tigera.elasticsearch.ca",
+										Path: "ca.pem",
+									},
+								},
+								SecretName: "tigera-es-config",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // compliance-server

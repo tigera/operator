@@ -240,10 +240,15 @@ type CNISpec struct {
 // ComplianceSpec defines optional configuration for the Compliance component.
 // +k8s:openapi-gen=true
 type ComplianceSpec struct {
-	// Image configures a different Docker image for the Compliance image. The value must be a full qualified image name.
+	// ControllerImage configures a different Docker image for the Controller image. The value must be a full qualified image name.
 	// E.g "gcr.io/acme/calico-cni:beta".
 	// +optional
-	Image string `json:"image,omitempty"`
+	ControllerImage string `json:"image,omitempty"`
+
+	// ReporterImage configures a different Docker image for the Reporter image. The value must be a full qualified image name.
+	// E.g "gcr.io/acme/calico-cni:beta".
+	// +optional
+	ReporterImage string `json:"image,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

@@ -17,6 +17,8 @@ package render
 import (
 	"os"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,16 +31,30 @@ const (
 )
 
 func Namespaces(cr *operator.Installation) Component {
+	return &namespaceComponent{cr: cr}
+}
+
+type namespaceComponent struct {
+	cr *operator.Installation
+}
+
+func (c *namespaceComponent) GetObjects() []runtime.Object {
 	ns := []runtime.Object{
 		createNamespace(calicoNamespace),
 	}
 
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		ns = append(ns, createNamespace(tigeraSecureNamespace))
 	}
-	return &component{
-		objs: ns,
-	}
+	return ns
+}
+
+func (c *namespaceComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *namespaceComponent) Ready(client client.Client) bool {
+	return true
 }
 
 func createNamespace(name string) *v1.Namespace {

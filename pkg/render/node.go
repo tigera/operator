@@ -17,6 +17,8 @@ package render
 import (
 	"os"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
@@ -29,16 +31,29 @@ import (
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(cr *operator.Installation) Component {
-	objs := []runtime.Object{
-		nodeServiceAccount(cr),
-		nodeRole(cr),
-		nodeRoleBinding(cr),
-		nodeCNIConfigMap(cr),
-		nodeDaemonset(cr),
+	return &nodeComponent{cr: cr}
+}
+
+type nodeComponent struct {
+	cr *operator.Installation
+}
+
+func (c *nodeComponent) GetObjects() []runtime.Object {
+	return []runtime.Object{
+		nodeServiceAccount(c.cr),
+		nodeRole(c.cr),
+		nodeRoleBinding(c.cr),
+		nodeCNIConfigMap(c.cr),
+		nodeDaemonset(c.cr),
 	}
-	return &component{
-		objs: objs,
-	}
+}
+
+func (c *nodeComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *nodeComponent) Ready(client client.Client) bool {
+	return true
 }
 
 // nodeServiceAccount creates the node's service account.

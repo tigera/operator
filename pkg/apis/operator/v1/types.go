@@ -261,6 +261,14 @@ type ComplianceServerSpec struct {
 	Image string `json:"image,omitempty"`
 }
 
+// ComplianceReporterSpec defines optional configuration for the Compliance Benchmarker component.
+// +k8s:openapi-gen=true
+type ComplianceBenchmarkerSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
 // ComplianceSpec defines optional configuration for the Compliance component.
 // +k8s:openapi-gen=true
 type ComplianceSpec struct {
@@ -275,6 +283,10 @@ type ComplianceSpec struct {
 	// Reporter is option configuration for the Compliance Server component.
 	// +optional
 	Server ComplianceServerSpec `json:"reporter,omitempty"`
+
+	// Reporter is option configuration for the Compliance Benchmarker component.
+	// +optional
+	Benchmarker ComplianceBenchmarkerSpec `json:"reporter,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

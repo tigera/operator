@@ -469,7 +469,67 @@ func complianceServerService(cr *operator.Installation) *v1.Service {
 }
 
 func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
-	return &appsv1.Deployment{}
+	envVars := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "server.username",
+				Optional: &complianceBoolTrue},
+		}},
+		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "server.password",
+				Optional: &complianceBoolTrue},
+		}},
+	}
+	envVars = append(envVars, complianceElasticEnvVars...)
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "compliance-server",
+			Namespace: "calico-monitoring",
+			Labels: map[string]string{
+				"k8s-app": "compliance-server",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-server"}},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+					ServiceAccountName: "tigera-compliance-server",
+					Tolerations: []corev1.Toleration{
+						{
+							Key:    "node-role.kubernetes.io/master",
+							Effect: corev1.TaintEffectNoSchedule,
+						},
+					},
+					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					Containers: []corev1.Container{
+						{
+							Name:          "compliance-server",
+							Image:         cr.Spec.Components.Compliance.Server.Image,
+							Env:           envVars,
+							VolumeMounts:  complianceVolumeMounts,
+							LivenessProbe: complianceLivenessProbe,
+						},
+					},
+					Volumes: complianceVolumes,
+				},
+			},
+		},
+	}
 }
 
 // compliance-snapshotter
@@ -502,11 +562,89 @@ func complianceSnapshotterClusterRole(cr *operator.Installation) *rbacv1.Cluster
 }
 
 func complianceSnapshotterClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{}
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-compliance-snapshotter",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-compliance-snapshotter",
+				Namespace: "calico-monitoring",
+			},
+		},
+	}
 }
 
 func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployment {
-	return &appsv1.Deployment{}
+	envVars := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
+		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
+		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "snapshotter.username",
+				Optional: &complianceBoolTrue},
+		}},
+		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "elastic-compliance-user",
+				},
+				Key:      "snapshotter.password",
+				Optional: &complianceBoolTrue},
+		}},
+	}
+	envVars = append(envVars, complianceElasticEnvVars...)
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "compliance-snapshotter",
+			Namespace: "calico-monitoring",
+			Labels: map[string]string{
+				"k8s-app": "compliance-snapshotter",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-snapshotter"}},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+					ServiceAccountName: "tigera-compliance-snapshotter",
+					Tolerations: []corev1.Toleration{
+						{
+							Key:    "node-role.kubernetes.io/master",
+							Effect: corev1.TaintEffectNoSchedule,
+						},
+					},
+					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					Containers: []corev1.Container{
+						{
+							Name:          "compliance-controller",
+							Image:         cr.Spec.Components.Compliance.Controller.Image,
+							Env:           envVars,
+							VolumeMounts:  complianceVolumeMounts,
+							LivenessProbe: complianceLivenessProbe,
+						},
+					},
+					Volumes: complianceVolumes,
+				},
+			},
+		},
+	}
+
 }
 
 // compliance-report-types

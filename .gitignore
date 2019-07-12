@@ -4,6 +4,7 @@ kubectl
 kubeconfig.yaml
 # Vendor
 vendor/
+.vendor-new/
 # Temporary Build Files
 build/_output
 build/_test

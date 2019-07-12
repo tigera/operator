@@ -15,8 +15,6 @@
 package render
 
 import (
-	"fmt"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -25,10 +23,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-)
-
-const (
-	defaultIntrusionDetectionJobInstallerImageName = "tigera/intrusion-detection-job-installer"
 )
 
 func IntrusionDetection(cr *operator.Installation) Component {
@@ -88,10 +82,9 @@ func intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job 
 }
 
 func intrusionDetectionJobContainer(cr *operator.Installation) v1.Container {
-	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultIntrusionDetectionJobInstallerImageName, cr.Spec.Version)
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: image,
+		Image: cr.Spec.Components.IntrusionDetection.JobInstallerImage,
 		Env: []corev1.EnvVar{
 			{Name: "ELASTIC_HOST", Value: "elasticsearch-tigera-elasticsearch.calico-monitoring.svc.cluster.local"},
 			{Name: "ELASTIC_PORT", Value: "9200"},

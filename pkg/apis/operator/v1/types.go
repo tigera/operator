@@ -128,8 +128,8 @@ type ComponentsSpec struct {
 type ComponentInstalledFlag string
 
 const (
-	ComponentInstallEnabled  = "enabled"
-	ComponentInstallDisabled = "disabled"
+	ComponentInstallEnabled  = "Enabled"
+	ComponentInstallDisabled = "Disabled"
 )
 
 // IntrusionDetectionSpec defines optional configuration for the intrusion detection component.
@@ -141,8 +141,14 @@ type IntrusionDetectionSpec struct {
 	// +optional
 	Image string
 
+	// JobInstallerImage configures a different Docker image for the intrusion detection elasticsearch job installer.
+	// The value must be a full qualified image name.
+	// E.g "gcr.io/acme/job-installer:beta".
+	// +optional
+	JobInstallerImage string
+
 	// Enabled configures whether the intrusion detection component will be installed.
-	// Default: "enabled"
+	// Default: "Enabled"
 	// +optional
 	Enabled ComponentInstalledFlag
 }

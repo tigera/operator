@@ -41,7 +41,8 @@ const (
 	defaultComplianceSnapshotterImage = "tigera/compliance-snapshotter"
 	defaultComplianceBenchmarkerImage = "tigera/compliance-benchmarker"
 
-	defaultIntrusionDetectionImageName = "tigera/intrusion-detection-controller"
+	defaultIntrusionDetectionImageName             = "tigera/intrusion-detection-controller"
+	defaultIntrusionDetectionJobInstallerImageName = "tigera/intrusion-detection-job-installer"
 )
 
 // fillDefaults fills in the default values for an instance.
@@ -131,6 +132,9 @@ func fillDefaults(instance *operator.Installation) {
 		}
 		if instance.Spec.Components.IntrusionDetection.Enabled == "" {
 			instance.Spec.Components.IntrusionDetection.Enabled = operator.ComponentInstallEnabled
+		}
+		if instance.Spec.Components.IntrusionDetection.JobInstallerImage == "" {
+			instance.Spec.Components.IntrusionDetection.JobInstallerImage = defaultIntrusionDetectionJobInstallerImageName
 		}
 	}
 }

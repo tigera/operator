@@ -72,7 +72,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.APIServer.Image).To(Equal("quay.io/tigera/cnx-apiserver:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
 
-		Expect(string(instance.Spec.Components.IntrusionDetection.Enabled)).To(Equal("enabled"))
+		Expect(string(instance.Spec.Components.IntrusionDetection.Enabled)).To(Equal("Enabled"))
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
@@ -248,7 +248,8 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 					IntrusionDetection: operator.IntrusionDetectionSpec{
 						Image:   "intrusionreg/something:v1",
-						Enabled: "disabled",
+						JobInstallerImage: "intrusionreg/job:v2",
+						Enabled: "Disabled",
 					},
 				},
 			},

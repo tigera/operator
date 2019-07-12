@@ -149,8 +149,6 @@ var complianceVolumes = []corev1.Volume{
 	},
 }
 
-// compliance-controller
-
 func complianceControllerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -176,6 +174,7 @@ func complianceControllerRole(cr *operator.Installation) *rbacv1.Role {
 		},
 	}
 }
+
 func complianceControllerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -304,8 +303,6 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 	}
 }
 
-// compliance-reporter
-
 func complianceReporterServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -408,8 +405,6 @@ func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplat
 		},
 	}
 }
-
-// compliance-server
 
 func complianceServerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
@@ -543,8 +538,6 @@ func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
 	}
 }
 
-// compliance-snapshotter
-
 func complianceSnapshotterServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -657,8 +650,6 @@ func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployme
 		},
 	}
 }
-
-// compliance-benchmarker
 
 func complianceBenchmarkerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
@@ -831,8 +822,6 @@ func complianceBenchmarkerSecurityContextConstraints(cr *operator.Installation) 
 		Volumes:                  []ocsv1.FSType{"*"},
 	}
 }
-
-// compliance-report-types
 
 func complianceGlobalReportInventory(cr *operator.Installation) *v3.GlobalReportType {
 	return &v3.GlobalReportType{

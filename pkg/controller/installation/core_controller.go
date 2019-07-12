@@ -30,6 +30,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 
 	apps "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -415,6 +416,16 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		ds := desired.(*v1.Service)
 		ds.Spec.ClusterIP = cs.Spec.ClusterIP
 		return ds
+	case *batchv1.Job:
+		// Jobs have controller-uid values added to spec.selector and spec.template.metadata.labels.
+		// spec.selector and podtemplatespec are immutable so just copy real values over to desired state.
+		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
+		cj := current.(*batchv1.Job)
+		dj := desired.(*batchv1.Job)
+		dj.Spec.Selector = cj.Spec.Selector
+		dj.Spec.Template = cj.Spec.Template
+		return dj
 	default:
 		// Default to just using the desired state, with an updated RV.
 		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()

@@ -421,9 +421,6 @@ func apiServerContainer(cr *operator.Installation) corev1.Container {
 // queryServerContainer creates the query server container.
 func queryServerContainer(cr *operator.Installation) corev1.Container {
 	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultQueryServerImageName, cr.Spec.Version)
-	if len(cr.Spec.Components.APIServer.Image) > 0 {
-		image = cr.Spec.Components.APIServer.Image
-	}
 	c := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

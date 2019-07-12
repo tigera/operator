@@ -119,6 +119,32 @@ type ComponentsSpec struct {
 	// Compliance is option configuration for the Compliance component.
 	// +optional
 	Compliance ComplianceSpec `json:"compliance,omitempty"`
+
+	// IntrusionDetection is optional configuration for the Intrusion Detection feature in Tigera Secure.
+	// +optional
+	IntrusionDetection IntrusionDetectionSpec `json:"intrusionDetection,omitempty"`
+}
+
+type ComponentInstalledFlag string
+
+const (
+	ComponentInstallEnabled  = "enabled"
+	ComponentInstallDisabled = "disabled"
+)
+
+// IntrusionDetectionSpec defines optional configuration for the intrusion detection component.
+// +k8s:openapi-gen=true
+type IntrusionDetectionSpec struct {
+	// Image configures a different Docker image for the intrusion detection controller deployment.
+	// The value must be a full qualified image name.
+	// E.g "gcr.io/acme/intrusion-detection-controller:beta".
+	// +optional
+	Image string
+
+	// Enabled configures whether the intrusion detection component will be installed.
+	// Default: "enabled"
+	// +optional
+	Enabled ComponentInstalledFlag
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.

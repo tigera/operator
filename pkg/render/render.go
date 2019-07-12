@@ -53,7 +53,7 @@ func Render(cr *operator.Installation) []Component {
 	components = appendNotNil(components, KubeControllers(cr))
 	components = appendNotNil(components, APIServer(cr))
 	components = appendNotNil(components, Compliance(cr))
-
+	components = appendNotNil(components, IntrusionDetection(cr))
 	return components
 }
 

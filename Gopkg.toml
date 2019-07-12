@@ -96,3 +96,7 @@ required = [
 [[constraint]]
   name = "github.com/tigera/api"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/openshift/api/security/v1"
+  branch = "master"

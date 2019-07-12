@@ -15,6 +15,8 @@
 package render
 
 import (
+	"os"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -28,43 +30,49 @@ import (
 )
 
 func Compliance(cr *operator.Installation) Component {
+	complianceObjs := []runtime.Object{
+		complianceControllerServiceAccount(cr),
+		complianceControllerRole(cr),
+		complianceControllerClusterRole(cr),
+		complianceControllerRoleBinding(cr),
+		complianceControllerClusterRoleBinding(cr),
+		complianceControllerDeployment(cr),
+
+		complianceReporterServiceAccount(cr),
+		complianceReporterClusterRole(cr),
+		complianceReporterClusterRoleBinding(cr),
+		complianceReporterPodTemplate(cr),
+
+		complianceServerServiceAccount(cr),
+		complianceServerClusterRole(cr),
+		complianceServerClusterRoleBinding(cr),
+		complianceServerService(cr),
+		complianceServerDeployment(cr),
+
+		complianceSnapshotterServiceAccount(cr),
+		complianceSnapshotterClusterRole(cr),
+		complianceSnapshotterClusterRoleBinding(cr),
+		complianceSnapshotterDeployment(cr),
+
+		complianceGlobalReportInventory(cr),
+		complianceGlobalReportNetworkAccess(cr),
+		complianceGlobalReportPolicyAudit(cr),
+		complianceGlobalReportCISBenchmark(cr),
+	}
+
+	complianceDeps := []runtime.Object{}
+
+	if os.Getenv("OPENSHIFT") == "true" {
+		complianceObjs = append(complianceObjs, complianceBenchmarkerServiceAccount(cr))
+		complianceObjs = append(complianceObjs, complianceBenchmarkerClusterRole(cr))
+		complianceObjs = append(complianceObjs, complianceBenchmarkerClusterRoleBinding(cr))
+		complianceObjs = append(complianceObjs, complianceBenchmarkerDaemonSet(cr))
+		complianceObjs = append(complianceObjs, complianceBenchmarkerSecurityContextConstraints(cr))
+	}
+
 	return &component{
-		objs: []runtime.Object{
-			complianceControllerServiceAccount(cr),
-			complianceControllerRole(cr),
-			complianceControllerClusterRole(cr),
-			complianceControllerRoleBinding(cr),
-			complianceControllerClusterRoleBinding(cr),
-			complianceControllerDeployment(cr),
-
-			complianceReporterServiceAccount(cr),
-			complianceReporterClusterRole(cr),
-			complianceReporterClusterRoleBinding(cr),
-			complianceReporterPodTemplate(cr),
-
-			complianceServerServiceAccount(cr),
-			complianceServerClusterRole(cr),
-			complianceServerClusterRoleBinding(cr),
-			complianceServerService(cr),
-			complianceServerDeployment(cr),
-
-			complianceSnapshotterServiceAccount(cr),
-			complianceSnapshotterClusterRole(cr),
-			complianceSnapshotterClusterRoleBinding(cr),
-			complianceSnapshotterDeployment(cr),
-
-			complianceBenchmarkerServiceAccount(cr),
-			complianceBenchmarkerClusterRole(cr),
-			complianceBenchmarkerClusterRoleBinding(cr),
-			complianceBenchmarkerDaemonSet(cr),
-			complianceBenchmarkerSecurityContextConstraints(cr),
-
-			complianceGlobalReportInventory(cr),
-			complianceGlobalReportNetworkAccess(cr),
-			complianceGlobalReportPolicyAudit(cr),
-			complianceGlobalReportCISBenchmark(cr),
-		},
-		deps: []runtime.Object{},
+		objs: complianceObjs,
+		deps: complianceDeps,
 	}
 }
 

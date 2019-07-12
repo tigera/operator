@@ -23,6 +23,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func IntrusionDetection(cr *operator.Installation) Component {
@@ -30,16 +31,27 @@ func IntrusionDetection(cr *operator.Installation) Component {
 		return nil
 	}
 
-	objs := []runtime.Object{
+	return &intrusionDetectionComponent{cr: cr}
+}
+
+type intrusionDetectionComponent struct {
+	cr *operator.Installation
+}
+
+func (c *intrusionDetectionComponent) GetObjects() []runtime.Object {
+	return []runtime.Object{
 		intrusionDetectionServiceAccount(),
 		intrusionDetectionClusterRole(),
 		intrusionDetectionClusterRoleBinding(),
 		intrusionDetectionRole(),
 		intrusionDetectionRoleBinding(),
-		intrusionDetectionDeployment(cr),
-		intrusionDetectionElasticsearchJob(cr),
+		intrusionDetectionDeployment(c.cr),
+		intrusionDetectionElasticsearchJob(c.cr),
 	}
-	deps := []runtime.Object{
+}
+
+func (c *intrusionDetectionComponent) GetComponentDeps() []runtime.Object {
+	return []runtime.Object{
 		&v1.Service{
 			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -48,10 +60,10 @@ func IntrusionDetection(cr *operator.Installation) Component {
 			},
 		},
 	}
-	return &component{
-		objs: objs,
-		deps: deps,
-	}
+}
+
+func (c *intrusionDetectionComponent) Ready(client client.Client) bool {
+	return verifyComponentDependenciesReady(c, client)
 }
 
 func intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job {

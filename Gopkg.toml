@@ -94,5 +94,5 @@ required = [
   name = "k8s.io/kube-aggregator"
 
 [[constraint]]
-  name = "github.com/projectcalico/libcalico-go"
-  source = "github.com/tigera/libcalico-go-private"
+  name = "github.com/tigera/api"
+  branch = "master"

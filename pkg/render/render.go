@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-
 type Component interface {
 	GetObjects() []runtime.Object
 	GetComponentDeps() []runtime.Object
@@ -30,10 +29,10 @@ type component struct {
 	deps []runtime.Object
 }
 
-func (c *component) GetObjects() []runtime.Object{
+func (c *component) GetObjects() []runtime.Object {
 	return c.objs
 }
-func (c *component) GetComponentDeps() []runtime.Object{
+func (c *component) GetComponentDeps() []runtime.Object {
 	return c.deps
 }
 
@@ -46,6 +45,11 @@ func Render(cr *operator.Installation) []Component {
 	components = appendNotNil(components, Node(cr))
 	components = appendNotNil(components, KubeControllers(cr))
 	components = appendNotNil(components, APIServer(cr))
+
+	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		components = appendNotNil(components, Compliance(cr))
+	}
+
 	return components
 }
 

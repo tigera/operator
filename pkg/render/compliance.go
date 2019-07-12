@@ -646,8 +646,8 @@ func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployme
 					ImagePullSecrets: cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
-							Name:          "compliance-controller",
-							Image:         cr.Spec.Components.Compliance.Controller.Image,
+							Name:          "compliance-snapshotter",
+							Image:         cr.Spec.Components.Compliance.Snapshotter.Image,
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,

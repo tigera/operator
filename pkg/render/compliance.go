@@ -69,6 +69,7 @@ func Compliance(cr *operator.Installation) Component {
 }
 
 var complianceBoolTrue = true
+var complianceReplicas int32 = 1
 
 var complianceElasticEnvVars = []corev1.EnvVar{
 	{Name: "ELASTIC_INDEX_SUFFIX", ValueFrom: &v1.EnvVarSource{
@@ -271,7 +272,7 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -506,7 +507,7 @@ func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -619,7 +620,7 @@ func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployme
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

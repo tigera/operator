@@ -17,6 +17,8 @@ package render
 import (
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
@@ -36,15 +38,28 @@ func KubeProxy(cr *operator.Installation) Component {
 		// Only install kube-proxy if configured to do so.
 		return nil
 	}
-	objs := []runtime.Object{
-		kubeProxyServiceAccount(cr),
-		kubeProxyRoleBinding(cr),
-		kubeProxyConfigMap(cr),
-		kubeProxyDaemonset(cr),
+	return &kubeproxyComponent{cr: cr}
+}
+
+type kubeproxyComponent struct {
+	cr *operator.Installation
+}
+
+func (c *kubeproxyComponent) GetObjects() []runtime.Object {
+	return []runtime.Object{
+		kubeProxyServiceAccount(c.cr),
+		kubeProxyRoleBinding(c.cr),
+		kubeProxyConfigMap(c.cr),
+		kubeProxyDaemonset(c.cr),
 	}
-	return &component{
-		objs: objs,
-	}
+}
+
+func (c *kubeproxyComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *kubeproxyComponent) Ready(client client.Client) bool {
+	return true
 }
 
 func kubeProxyServiceAccount(cr *operator.Installation) *v1.ServiceAccount {

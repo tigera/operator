@@ -237,18 +237,32 @@ type CNISpec struct {
 	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 }
 
+// ComplianceControllerSpec defines optional configuration for the Compliance Controller component.
+// +k8s:openapi-gen=true
+type ComplianceControllerSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// ComplianceReporterSpec defines optional configuration for the Compliance Reporter component.
+// +k8s:openapi-gen=true
+type ComplianceReporterSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
 // ComplianceSpec defines optional configuration for the Compliance component.
 // +k8s:openapi-gen=true
 type ComplianceSpec struct {
-	// ControllerImage configures a different Docker image for the Controller image. The value must be a full qualified image name.
-	// E.g "gcr.io/acme/calico-cni:beta".
+	// Controller is option configuration for the Compliance Controller component.
 	// +optional
-	ControllerImage string `json:"image,omitempty"`
+	Controller ComplianceControllerSpec `json:"controller,omitempty"`
 
-	// ReporterImage configures a different Docker image for the Reporter image. The value must be a full qualified image name.
-	// E.g "gcr.io/acme/calico-cni:beta".
+	// Reporter is option configuration for the Compliance Reporter component.
 	// +optional
-	ReporterImage string `json:"image,omitempty"`
+	Reporter ComplianceReporterSpec `json:"reporter,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

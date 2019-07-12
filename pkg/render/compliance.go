@@ -282,7 +282,7 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-controller",
-							Image:         cr.Spec.Components.Compliance.ControllerImage,
+							Image:         cr.Spec.Components.Compliance.Controller.Image,
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -387,7 +387,7 @@ func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplat
 				Containers: []corev1.Container{
 					{
 						Name:          "reporter",
-						Image:         cr.Spec.Components.Compliance.ReporterImage,
+						Image:         cr.Spec.Components.Compliance.Reporter.Image,
 						Env:           envVars,
 						VolumeMounts:  complianceVolumeMounts,
 						LivenessProbe: complianceLivenessProbe,

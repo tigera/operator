@@ -80,19 +80,6 @@
   version = "v0.2.0"
 
 [[projects]]
-  digest = "1:0c4193043b1a33c7f9ba4ea42b8af2c09bb3d51970212d42e4dac8aa217b4ca5"
-  name = "github.com/coreos/prometheus-operator"
-  packages = [
-    "pkg/apis/monitoring",
-    "pkg/apis/monitoring/v1",
-    "pkg/client/versioned/scheme",
-    "pkg/client/versioned/typed/monitoring/v1",
-  ]
-  pruneopts = "NT"
-  revision = "7a25bf6b6bb2347dacb235659b73bc210117acc7"
-  version = "v0.29.0"
-
-[[projects]]
   digest = "1:4b8b5811da6970495e04d1f4e98bb89518cc3cfc3b3f456bdb876ed7b6c74049"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -364,14 +351,6 @@
   version = "v1.1.6"
 
 [[projects]]
-  digest = "1:58999a98719fddbac6303cb17e8d85b945f60b72f48e3a2df6b950b97fa926f1"
-  name = "github.com/konsorten/go-windows-terminal-sequences"
-  packages = ["."]
-  pruneopts = "NT"
-  revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
-  version = "v1.0.2"
-
-[[projects]]
   branch = "master"
   digest = "1:782fb677791a7fe7b5b8e637bcf695efb13950ce09e3e8e3b1cf21c57649be7c"
   name = "github.com/mailru/easyjson"
@@ -480,7 +459,6 @@
     "pkg/k8sutil",
     "pkg/leader",
     "pkg/log/zap",
-    "pkg/metrics",
     "pkg/restmapper",
     "version",
   ]
@@ -518,27 +496,6 @@
   pruneopts = "NT"
   revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
   version = "v0.8.1"
-
-[[projects]]
-  digest = "1:57b97b32911f7476e23e785870c591d5ce4f7f2b948c594f248e8cb08b55c234"
-  name = "github.com/projectcalico/libcalico-go"
-  packages = [
-    "lib/apis/v1",
-    "lib/apis/v1/unversioned",
-    "lib/apis/v3",
-    "lib/hash",
-    "lib/ipip",
-    "lib/net",
-    "lib/numorstring",
-    "lib/scope",
-    "lib/selector",
-    "lib/selector/parser",
-    "lib/selector/tokenizer",
-  ]
-  pruneopts = "NT"
-  revision = "67e911b54b5bd6b9418934c45c446cab31489b92"
-  source = "github.com/tigera/libcalico-go-private"
-  version = "v2.4.2"
 
 [[projects]]
   digest = "1:e2fde2e6d46505f0d91d6d350410ca82f382870c90d6b05227302f45f78828a7"
@@ -596,14 +553,6 @@
   version = "v1.3.0"
 
 [[projects]]
-  digest = "1:efe8ddffa78bddbd1d826faf622cca77dbf7ddc72df04077d69a688cac657148"
-  name = "github.com/sirupsen/logrus"
-  packages = ["."]
-  pruneopts = "NT"
-  revision = "839c75faf7f98a33d445d181f3018b5c3409a45e"
-  version = "v1.4.2"
-
-[[projects]]
   digest = "1:49b6e0d199dc20969bf7c9d14647313e1dd1b102178fad4ca999d8a9584edfab"
   name = "github.com/spf13/afero"
   packages = [
@@ -621,6 +570,14 @@
   pruneopts = "NT"
   revision = "298182f68c66c05229eb03ac171abe6e309ee79a"
   version = "v1.0.3"
+
+[[projects]]
+  branch = "master"
+  digest = "1:2d86d2752f196c1199062517bfa3e110e4aa0c0d4e4d5215861b98f50eb8bbf0"
+  name = "github.com/tigera/api"
+  packages = ["pkg/apis/projectcalico/v3"]
+  pruneopts = "NT"
+  revision = "5383a1a7d251d474022e3d0b4a0dca7a9c4fa541"
 
 [[projects]]
   digest = "1:8bcb2616463bc981681c4b26f2aa817be8167682b76fb7884ec3fafdc9f82372"
@@ -1023,14 +980,6 @@
   revision = "2b1284ed4c93a43499e781493253e2ac5959c4fd"
 
 [[projects]]
-  branch = "master"
-  digest = "1:a4737faf4684b95aef187348bab7c2b2702bf9b8e10b46c76698cffc5d0d796a"
-  name = "k8s.io/apiserver"
-  packages = ["pkg/apis/audit"]
-  pruneopts = "NT"
-  revision = "7f6005dcdcb223052bfafe218394255919c64c8c"
-
-[[projects]]
   digest = "1:c904a3d70131b33df36e4e51b574226b82308fc1ea66964aa21095a95d453fc9"
   name = "k8s.io/client-go"
   packages = [
@@ -1272,11 +1221,10 @@
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/log/zap",
-    "github.com/operator-framework/operator-sdk/pkg/metrics",
     "github.com/operator-framework/operator-sdk/pkg/restmapper",
     "github.com/operator-framework/operator-sdk/version",
-    "github.com/projectcalico/libcalico-go/lib/apis/v3",
     "github.com/spf13/pflag",
+    "github.com/tigera/api/pkg/apis/projectcalico/v3",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/rbac/v1",
@@ -1290,6 +1238,7 @@
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/intstr",
+    "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/client-go/plugin/pkg/client/auth",
     "k8s.io/client-go/tools/clientcmd",
     "k8s.io/code-generator/cmd/client-gen",

@@ -132,25 +132,37 @@ const (
 	ComponentInstallDisabled = "Disabled"
 )
 
-// IntrusionDetectionSpec defines optional configuration for the intrusion detection component.
+// IntrusionDetectionSpec defines optional configuration for the Intrusion Detection component.
 // +k8s:openapi-gen=true
 type IntrusionDetectionSpec struct {
-	// Image configures a different Docker image for the intrusion detection controller deployment.
-	// The value must be a full qualified image name.
-	// E.g "gcr.io/acme/intrusion-detection-controller:beta".
+	// Controller is optional configuration for the Intrusion Detection controller.
 	// +optional
-	Image string
+	Controller IntrusionDetectionControllerSpec `json:"controller,omitempty"`
 
-	// JobInstallerImage configures a different Docker image for the intrusion detection elasticsearch job installer.
-	// The value must be a full qualified image name.
-	// E.g "gcr.io/acme/job-installer:beta".
+	// Installer is optional configuration for the Intrusion Detection elasticsearch job installer.
 	// +optional
-	JobInstallerImage string
+	Installer IntrusionDetectionInstallerSpec `json:"installer,omitempty"`
 
 	// Enabled configures whether the intrusion detection component will be installed.
 	// Default: "Enabled"
 	// +optional
-	Enabled ComponentInstalledFlag
+	Enabled ComponentInstalledFlag `json:"enabled,omitempty"`
+}
+
+// IntrusionDetectionControllerSpec defines optional configuration for the Intrusion Detection controller.
+// +k8s:openapi-gen=true
+type IntrusionDetectionControllerSpec struct {
+	// Image configures a different Docker image for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// IntrusionDetectionInstallerSpec defines optional configuration for the Intrusion Detection job installer.
+// +k8s:openapi-gen=true
+type IntrusionDetectionInstallerSpec struct {
+	// Image configures a different Docker image for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.

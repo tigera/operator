@@ -70,7 +70,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("quay.io/tigera/kube-controllers:latest"))
 		Expect(instance.Spec.Components.KubeProxy.Image).To(BeEmpty())
 		Expect(instance.Spec.Components.APIServer.Image).To(Equal("quay.io/tigera/cnx-apiserver:latest"))
-		Expect(instance.Spec.Components.IntrusionDetection.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
+		Expect(instance.Spec.Components.IntrusionDetection.Controller.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
+		Expect(instance.Spec.Components.IntrusionDetection.Installer.Image).To(Equal("quay.io/tigera/intrusion-detection-job-installer:latest"))
 
 		Expect(string(instance.Spec.Components.IntrusionDetection.Enabled)).To(Equal("Enabled"))
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
@@ -247,8 +248,12 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					IntrusionDetection: operator.IntrusionDetectionSpec{
-						Image:   "intrusionreg/something:v1",
-						JobInstallerImage: "intrusionreg/job:v2",
+						Controller: operator.IntrusionDetectionControllerSpec{
+							Image: "intrusionreg/ctrl:v1",
+						},
+						Installer: operator.IntrusionDetectionInstallerSpec{
+							Image: "intrusionreg/job:v2",
+						},
 						Enabled: "Disabled",
 					},
 				},

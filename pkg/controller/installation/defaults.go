@@ -41,7 +41,7 @@ const (
 	defaultComplianceSnapshotterImage = "tigera/compliance-snapshotter"
 	defaultComplianceBenchmarkerImage = "tigera/compliance-benchmarker"
 
-	defaultIntrusionDetectionImageName             = "tigera/intrusion-detection-controller"
+	defaultIntrusionDetectionControllerImageName   = "tigera/intrusion-detection-controller"
 	defaultIntrusionDetectionJobInstallerImageName = "tigera/intrusion-detection-job-installer"
 )
 
@@ -127,14 +127,14 @@ func fillDefaults(instance *operator.Installation) {
 			instance.Spec.Components.Compliance.Benchmarker.Image = getImageName(instance, "",
 				defaultComplianceBenchmarkerImage)
 		}
-		if len(instance.Spec.Components.IntrusionDetection.Image) == 0 {
-			instance.Spec.Components.IntrusionDetection.Image = getImageName(instance, "", defaultIntrusionDetectionImageName)
+		if len(instance.Spec.Components.IntrusionDetection.Controller.Image) == 0 {
+			instance.Spec.Components.IntrusionDetection.Controller.Image = getImageName(instance, "", defaultIntrusionDetectionControllerImageName)
 		}
-		if instance.Spec.Components.IntrusionDetection.Enabled == "" {
+		if len(instance.Spec.Components.IntrusionDetection.Installer.Image) == 0 {
+			instance.Spec.Components.IntrusionDetection.Installer.Image = getImageName(instance, "", defaultIntrusionDetectionJobInstallerImageName)
+		}
+		if len(instance.Spec.Components.IntrusionDetection.Enabled) == 0 {
 			instance.Spec.Components.IntrusionDetection.Enabled = operator.ComponentInstallEnabled
-		}
-		if instance.Spec.Components.IntrusionDetection.JobInstallerImage == "" {
-			instance.Spec.Components.IntrusionDetection.JobInstallerImage = defaultIntrusionDetectionJobInstallerImageName
 		}
 	}
 }

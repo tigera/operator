@@ -96,7 +96,7 @@ func intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job 
 func intrusionDetectionJobContainer(cr *operator.Installation) v1.Container {
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: cr.Spec.Components.IntrusionDetection.JobInstallerImage,
+		Image: cr.Spec.Components.IntrusionDetection.Controller.Image,
 		Env: []corev1.EnvVar{
 			{Name: "ELASTIC_HOST", Value: "elasticsearch-tigera-elasticsearch.calico-monitoring.svc.cluster.local"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
@@ -250,7 +250,7 @@ func intrusionDetectionDeployment(cr *operator.Installation) *appsv1.Deployment 
 func intrusionDetectionControllerContainer(cr *operator.Installation) v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: cr.Spec.Components.IntrusionDetection.Image,
+		Image: cr.Spec.Components.IntrusionDetection.Controller.Image,
 		Env: []corev1.EnvVar{
 			{Name: "CLUSTER_NAME", Value: "kubernetes"},
 			{Name: "ELASTIC_HOST", Value: "elasticsearch-tigera-elasticsearch.calico-monitoring.svc.cluster.local"},

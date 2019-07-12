@@ -54,6 +54,11 @@ func Compliance(cr *operator.Installation) Component {
 		complianceSnapshotterClusterRoleBinding(cr),
 		complianceSnapshotterDeployment(cr),
 
+		complianceBenchmarkerServiceAccount(cr),
+		complianceBenchmarkerClusterRole(cr),
+		complianceBenchmarkerClusterRoleBinding(cr),
+		complianceBenchmarkerDaemonSet(cr),
+
 		complianceGlobalReportInventory(cr),
 		complianceGlobalReportNetworkAccess(cr),
 		complianceGlobalReportPolicyAudit(cr),
@@ -63,10 +68,6 @@ func Compliance(cr *operator.Installation) Component {
 	complianceDeps := []runtime.Object{}
 
 	if os.Getenv("OPENSHIFT") == "true" {
-		complianceObjs = append(complianceObjs, complianceBenchmarkerServiceAccount(cr))
-		complianceObjs = append(complianceObjs, complianceBenchmarkerClusterRole(cr))
-		complianceObjs = append(complianceObjs, complianceBenchmarkerClusterRoleBinding(cr))
-		complianceObjs = append(complianceObjs, complianceBenchmarkerDaemonSet(cr))
 		complianceObjs = append(complianceObjs, complianceBenchmarkerSecurityContextConstraints(cr))
 	}
 

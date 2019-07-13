@@ -85,6 +85,11 @@ GO_BUILD_VER?=v0.20
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
+
+ifdef SSH_AUTH_SOCK
+  EXTRA_DOCKER_ARGS += -v $(SSH_AUTH_SOCK):/ssh-agent --env SSH_AUTH_SOCK=/ssh-agent
+endif
+
 CONTAINERIZED=docker run --rm \
 		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
 		-v $(CURDIR)/.go-pkg-cache:/go-cache/:rw \
@@ -93,6 +98,7 @@ CONTAINERIZED=docker run --rm \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
+		$(EXTRA_DOCKER_ARGS) \
 		$(CALICO_BUILD)
 
 BUILD_IMAGE?=tigera/operator

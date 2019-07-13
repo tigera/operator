@@ -30,6 +30,10 @@ import (
 )
 
 func Compliance(cr *operator.Installation) Component {
+	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
+		return nil
+	}
+
 	complianceObjs := []runtime.Object{
 		complianceControllerServiceAccount(cr),
 		complianceControllerRole(cr),

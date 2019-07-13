@@ -447,7 +447,10 @@
   branch = "master"
   digest = "1:912ce7773e1d6d3a3fac3426f00108564c930b99e0a6f15944f7337e81edd014"
   name = "github.com/openshift/api"
-  packages = ["config/v1"]
+  packages = [
+    "config/v1",
+    "security/v1",
+  ]
   pruneopts = "NT"
   revision = "5114e14c97ff18657b68d15224a520a278861e8a"
 
@@ -1218,6 +1221,7 @@
     "github.com/onsi/ginkgo/reporters",
     "github.com/onsi/gomega",
     "github.com/openshift/api/config/v1",
+    "github.com/openshift/api/security/v1",
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/log/zap",

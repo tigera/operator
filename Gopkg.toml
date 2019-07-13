@@ -98,5 +98,5 @@ required = [
   branch = "master"
 
 [[constraint]]
-  name = "github.com/openshift/api/security/v1"
+  name = "github.com/openshift/api"
   branch = "master"

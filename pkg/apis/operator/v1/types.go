@@ -123,6 +123,10 @@ type ComponentsSpec struct {
 	// IntrusionDetection is optional configuration for the Intrusion Detection feature in Tigera Secure.
 	// +optional
 	IntrusionDetection IntrusionDetectionSpec `json:"intrusionDetection,omitempty"`
+
+	// WebApp is optional configuration for the Tigera Secure manager web application.
+	// +optional
+	WebApp WebAppSpec `json:"ui,omitempty"`
 }
 
 // IntrusionDetectionSpec defines optional configuration for the Intrusion Detection component.
@@ -212,6 +216,79 @@ type APIServerSpec struct {
 	// +optional
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }
+
+// WebAppManagerSpec defines optional configuration for the Tigera Secure web app manager.
+// +k8s:openapi-gen=true
+type WebAppManagerSpec struct {
+	// Image configures a different Docker image for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// WebAppProxySpec defines optional configuration for the Tigera Secure web app proxy.
+// +k8s:openapi-gen=true
+type WebAppProxySpec struct {
+	// Image configures a different Docker image for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// WebAppEsProxySpec defines optional configuration for the Tigera Secure web app ES proxy.
+// +k8s:openapi-gen=true
+type WebAppEsProxySpec struct {
+	// Image configures a different Docker image for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// WebAppSpec defines optional configuration for the Tigera Secure web application.
+// Valid only for the variant 'TigeraSecureEnterprise'.
+// +k8s:openapi-gen=true
+type WebAppSpec struct {
+	// Manager is optional configuration for the Tigera Secure web app manager.
+	// +optional
+	Manager WebAppManagerSpec `json:"manager,omitempty"`
+
+	// Proxy is optional configuration for the Tigera Secure web app proxy.
+	// +optional
+	Proxy WebAppProxySpec `json:"proxy,omitempty"`
+
+	// EsProxy is optional configuration for the Tigera Secure web app ES proxy.
+	// +optional
+	EsProxy WebAppEsProxySpec `json:"esProxy,omitempty"`
+
+	// AuthenticationType configures the authentication used by the manager.
+	// Default: "Basic"
+	// +optional
+	AuthenticationType AuthType `json:"authType,omitempty"`
+
+	// OAuth2Authority configures the OAuth2 authority/issuer when using OAuth2 login.
+	// Default: ""https://accounts.google.com"
+	// +optional
+	OAuth2Authority string
+
+	// OAuth2ClientId configures the client ID to use for OAuth2 login.
+	// +optional
+	OAuth2ClientId string
+
+	// OIDCAuthority configures the OIDC authority/issuer when using OIDC login.
+	// Default: ""https://accounts.google.com"
+	// +optional
+	OIDCAuthority string
+
+	// OIDCClientId configures the client ID to use for OIDC login.
+	// +optional
+	OIDCClientId string
+}
+
+type AuthType string
+
+const (
+	AuthTypeToken = "Token"
+	AuthTypeBasic = "Basic"
+	AuthTypeOIDC  = "OIDC"
+	AuthTypeOAuth = "OAuth"
+)
 
 // NodeSpec defines optional configuration for the node component.
 // +k8s:openapi-gen=true

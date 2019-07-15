@@ -114,3 +114,15 @@ func envVarSourceFromConfigmap(configmapName, key string) *v1.EnvVarSource {
 		},
 	}
 }
+
+// envVarSourceFromSecret returns an EnvVarSource using the given secret name and key.
+func envVarSourceFromSecret(secretName, key string) *v1.EnvVarSource {
+	return &v1.EnvVarSource{
+		SecretKeyRef: &v1.SecretKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: secretName,
+			},
+			Key: key,
+		},
+	}
+}

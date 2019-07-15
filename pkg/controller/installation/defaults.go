@@ -44,9 +44,9 @@ const (
 	defaultIntrusionDetectionControllerImageName   = "tigera/intrusion-detection-controller"
 	defaultIntrusionDetectionJobInstallerImageName = "tigera/intrusion-detection-job-installer"
 
-	defaultWebAppManagerImageName = "tigera/cnx-manager"
-	defaultWebAppProxyImageName   = "tigera/cnx-manager-proxy"
-	defaultWebAppEsProxyImageName = "tigera/es-proxy"
+	defaultConsoleManagerImageName = "tigera/cnx-manager"
+	defaultConsoleProxyImageName   = "tigera/cnx-manager-proxy"
+	defaultConsoleEsProxyImageName = "tigera/es-proxy"
 )
 
 // fillDefaults fills in the default values for an instance.
@@ -137,17 +137,17 @@ func fillDefaults(instance *operator.Installation) {
 		if len(instance.Spec.Components.IntrusionDetection.Installer.Image) == 0 {
 			instance.Spec.Components.IntrusionDetection.Installer.Image = getImageName(instance, "", defaultIntrusionDetectionJobInstallerImageName)
 		}
-		if len(instance.Spec.Components.WebApp.Manager.Image) == 0 {
-			instance.Spec.Components.WebApp.Manager.Image = getImageName(instance, "", defaultWebAppManagerImageName)
+		if len(instance.Spec.Components.Console.Manager.Image) == 0 {
+			instance.Spec.Components.Console.Manager.Image = getImageName(instance, "", defaultConsoleManagerImageName)
 		}
-		if len(instance.Spec.Components.WebApp.Proxy.Image) == 0 {
-			instance.Spec.Components.WebApp.Proxy.Image = getImageName(instance, "", defaultWebAppProxyImageName)
+		if len(instance.Spec.Components.Console.Proxy.Image) == 0 {
+			instance.Spec.Components.Console.Proxy.Image = getImageName(instance, "", defaultConsoleProxyImageName)
 		}
-		if len(instance.Spec.Components.WebApp.EsProxy.Image) == 0 {
-			instance.Spec.Components.WebApp.EsProxy.Image = getImageName(instance, "", defaultWebAppEsProxyImageName)
+		if len(instance.Spec.Components.Console.EsProxy.Image) == 0 {
+			instance.Spec.Components.Console.EsProxy.Image = getImageName(instance, "", defaultConsoleEsProxyImageName)
 		}
-		if len(instance.Spec.Components.WebApp.AuthenticationType) == 0 {
-			instance.Spec.Components.WebApp.AuthenticationType = operator.AuthTypeBasic
+		if len(instance.Spec.Components.Console.AuthenticationType) == 0 {
+			instance.Spec.Components.Console.AuthenticationType = operator.AuthTypeBasic
 		}
 	}
 }

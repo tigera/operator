@@ -45,9 +45,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("docker.io/calico/kube-controllers:latest"))
 		Expect(instance.Spec.Components.KubeProxy.Image).To(BeEmpty())
 		Expect(instance.Spec.Components.APIServer.Image).To(BeEmpty())
-		Expect(instance.Spec.Components.WebApp.Manager.Image).To(BeEmpty())
-		Expect(instance.Spec.Components.WebApp.Proxy.Image).To(BeEmpty())
-		Expect(instance.Spec.Components.WebApp.EsProxy.Image).To(BeEmpty())
+		Expect(instance.Spec.Components.Console.Manager.Image).To(BeEmpty())
+		Expect(instance.Spec.Components.Console.Proxy.Image).To(BeEmpty())
+		Expect(instance.Spec.Components.Console.EsProxy.Image).To(BeEmpty())
 
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
@@ -75,10 +75,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.APIServer.Image).To(Equal("quay.io/tigera/cnx-apiserver:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Controller.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Installer.Image).To(Equal("quay.io/tigera/intrusion-detection-job-installer:latest"))
-		Expect(instance.Spec.Components.WebApp.Manager.Image).To(Equal("quay.io/tigera/cnx-manager:latest"))
-		Expect(string(instance.Spec.Components.WebApp.AuthenticationType)).To(Equal("Basic"))
-		Expect(instance.Spec.Components.WebApp.Proxy.Image).To(Equal("quay.io/tigera/cnx-manager-proxy:latest"))
-		Expect(instance.Spec.Components.WebApp.EsProxy.Image).To(Equal("quay.io/tigera/es-proxy:latest"))
+		Expect(instance.Spec.Components.Console.Manager.Image).To(Equal("quay.io/tigera/cnx-manager:latest"))
+		Expect(string(instance.Spec.Components.Console.AuthenticationType)).To(Equal("Basic"))
+		Expect(instance.Spec.Components.Console.Proxy.Image).To(Equal("quay.io/tigera/cnx-manager-proxy:latest"))
+		Expect(instance.Spec.Components.Console.EsProxy.Image).To(Equal("quay.io/tigera/es-proxy:latest"))
 
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
@@ -261,15 +261,15 @@ var _ = Describe("Defaulting logic tests", func() {
 							Image: "intrusionreg/job:v2",
 						},
 					},
-					WebApp: operator.WebAppSpec{
-						Manager: operator.WebAppManagerSpec{
-							Image: "webappregistry/manager:beta",
+					Console: operator.ConsoleSpec{
+						Manager: operator.ConsoleManagerSpec{
+							Image: "consoleRegistry/manager:beta",
 						},
-						Proxy: operator.WebAppProxySpec{
-							Image: "webappregistry/proxy:v1",
+						Proxy: operator.ConsoleProxySpec{
+							Image: "consoleRegistry/proxy:v1",
 						},
-						EsProxy: operator.WebAppEsProxySpec{
-							Image: "webappregistry/esproxy:v2",
+						EsProxy: operator.ConsoleEsProxySpec{
+							Image: "consoleRegistry/esproxy:v2",
 						},
 						AuthenticationType: operator.AuthTypeToken,
 						OAuth2Authority:    "https://api.tigera.io",

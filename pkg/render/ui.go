@@ -21,36 +21,36 @@ const (
 	tigeraEsSecretName    = "tigera-es-config"
 )
 
-func WebApp(cr *operator.Installation) Component {
-	return &webAppComponent{cr: cr}
+func Console(cr *operator.Installation) Component {
+	return &consoleComponent{cr: cr}
 }
 
-type webAppComponent struct {
+type consoleComponent struct {
 	cr *operator.Installation
 }
 
-func (c *webAppComponent) GetObjects() []runtime.Object {
+func (c *consoleComponent) GetObjects() []runtime.Object {
 	return []runtime.Object{
-		webAppServiceAccount(),
-		webAppClusterRole(),
-		webAppClusterRoleBinding(),
-		webAppDeployment(c.cr),
-		webAppService(c.cr),
+		consoleManagerServiceAccount(),
+		consoleManagerClusterRole(),
+		consoleManagerClusterRoleBinding(),
+		consoleManagerDeployment(c.cr),
+		consoleManagerService(c.cr),
 		tigeraUserClusterRole(),
 		tigeraNetworkAdminClusterRole(),
 	}
 }
 
-func (c *webAppComponent) GetComponentDeps() []runtime.Object {
+func (c *consoleComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *webAppComponent) Ready(client client.Client) bool {
+func (c *consoleComponent) Ready(client client.Client) bool {
 	return true
 }
 
-// webAppDeployment creates a deployment for the WebApp component.
-func webAppDeployment(cr *operator.Installation) *appsv1.Deployment {
+// consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
+func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 	var replicas int32 = 1
 
 	d := &appsv1.Deployment{
@@ -86,14 +86,14 @@ func webAppDeployment(cr *operator.Installation) *appsv1.Deployment {
 						"beta.kubernetes.io/os": "linux",
 					},
 					ServiceAccountName: "cnx-manager",
-					Tolerations:        webAppTolerations(),
+					Tolerations:        consoleTolerations(),
 					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
-						webAppManagerContainer(cr),
-						webAppEsProxyContainer(cr),
-						webAppProxyContainer(cr),
+						consoleManagerContainer(cr),
+						consoleEsProxyContainer(cr),
+						consoleProxyContainer(cr),
 					},
-					Volumes: webAppVolumes(),
+					Volumes: consoleManagerVolumes(),
 				},
 			},
 		},
@@ -101,8 +101,8 @@ func webAppDeployment(cr *operator.Installation) *appsv1.Deployment {
 	return d
 }
 
-// webAppVolumes returns the volumes for the WebApp component.
-func webAppVolumes() []v1.Volume {
+// consoleManagerVolumes returns the volumes for the Tigera Secure console component.
+func consoleManagerVolumes() []v1.Volume {
 	optional := true
 	return []v1.Volume{
 		{
@@ -128,8 +128,8 @@ func webAppVolumes() []v1.Volume {
 	}
 }
 
-// webAppManagerProbe returns the probe for the manager container.
-func webAppManagerProbe() *v1.Probe {
+// consoleManagerProbe returns the probe for the manager container.
+func consoleManagerProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -143,8 +143,8 @@ func webAppManagerProbe() *v1.Probe {
 	}
 }
 
-// webAppEsProxyProbe returns the probe for the ES proxy container.
-func webAppEsProxyProbe() *v1.Probe {
+// consoleEsProxyProbe returns the probe for the ES proxy container.
+func consoleEsProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -158,8 +158,8 @@ func webAppEsProxyProbe() *v1.Probe {
 	}
 }
 
-// webAppProxyProbe returns the probe for the proxy container.
-func webAppProxyProbe() *v1.Probe {
+// consoleProxyProbe returns the probe for the proxy container.
+func consoleProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -173,18 +173,18 @@ func webAppProxyProbe() *v1.Probe {
 	}
 }
 
-// webAppManagerContainer returns the manager container.
-func webAppManagerContainer(cr *operator.Installation) corev1.Container {
+// consoleManagerContainer returns the manager container.
+func consoleManagerContainer(cr *operator.Installation) corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	return corev1.Container{
 		Name:  "cnx-manager",
-		Image: cr.Spec.Components.WebApp.Manager.Image,
+		Image: cr.Spec.Components.Console.Manager.Image,
 		Env: []corev1.EnvVar{
-			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.WebApp.AuthenticationType)},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.WebApp.OAuth2Authority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.WebApp.OAuth2ClientId},
+			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.AuthenticationType)},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.OAuth2Authority},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.OAuth2ClientId},
 			{Name: "CNX_PROMETHEUS_API_URL", Value: "/api/v1/namespaces/calico-monitoring/services/calico-node-prometheus:9090/proxy/api/v1"},
 			{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 			{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/kube-system/services/https:tigera-api:8080/proxy"},
@@ -195,31 +195,31 @@ func webAppManagerContainer(cr *operator.Installation) corev1.Container {
 			{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		},
 		VolumeMounts:  volumeMounts,
-		LivenessProbe: webAppManagerProbe(),
+		LivenessProbe: consoleManagerProbe(),
 	}
 }
 
-// webAppProxyContainer returns the container for the WebApp proxy container.
-func webAppProxyContainer(cr *operator.Installation) corev1.Container {
+// consoleProxyContainer returns the container for the console proxy container.
+func consoleProxyContainer(cr *operator.Installation) corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
-		Image: cr.Spec.Components.WebApp.Proxy.Image,
+		Image: cr.Spec.Components.Console.Proxy.Image,
 		Env: []corev1.EnvVar{
-			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.WebApp.AuthenticationType)},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.WebApp.OIDCAuthority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.WebApp.OIDCClientId},
-			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.WebApp.OAuth2Authority},
-			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.WebApp.OAuth2ClientId},
+			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.AuthenticationType)},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.OIDCAuthority},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.OIDCClientId},
+			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.Console.OAuth2Authority},
+			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.Console.OAuth2ClientId},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "cnx-manager-tls", MountPath: "/etc/cnx-manager-web-tls"},
 		},
-		LivenessProbe: webAppProxyProbe(),
+		LivenessProbe: consoleProxyProbe(),
 	}
 }
 
-// webAppEsProxyEnv returns the env vars for the ES proxy container.
-func webAppEsProxyEnv() []corev1.EnvVar {
+// consoleEsProxyEnv returns the env vars for the ES proxy container.
+func consoleEsProxyEnv() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{
@@ -257,24 +257,24 @@ func webAppEsProxyEnv() []corev1.EnvVar {
 	}
 }
 
-// webAppEsProxyContainer returns the ES proxy container
-func webAppEsProxyContainer(cr *operator.Installation) corev1.Container {
+// consoleEsProxyContainer returns the ES proxy container
+func consoleEsProxyContainer(cr *operator.Installation) corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
-		Image:         cr.Spec.Components.WebApp.EsProxy.Image,
-		Env:           webAppEsProxyEnv(),
+		Image:         cr.Spec.Components.Console.EsProxy.Image,
+		Env:           consoleEsProxyEnv(),
 		VolumeMounts:  volumeMounts,
-		LivenessProbe: webAppEsProxyProbe(),
+		LivenessProbe: consoleEsProxyProbe(),
 	}
 
 	return apiServer
 }
 
-// webAppTolerations returns the tolerations for the WebApp deployment pods.
-func webAppTolerations() []v1.Toleration {
+// consoleTolerations returns the tolerations for the Tigera Secure console deployment pods.
+func consoleTolerations() []v1.Toleration {
 	return []v1.Toleration{
 		{
 			Key:    "node-role.kubernetes.io/master",
@@ -289,8 +289,8 @@ func webAppTolerations() []v1.Toleration {
 	}
 }
 
-// webAppService returns the service exposing the Tigera Secure web app.
-func webAppService(cr *operator.Installation) *v1.Service {
+// consoleManagerService returns the service exposing the Tigera Secure web app.
+func consoleManagerService(cr *operator.Installation) *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -313,16 +313,16 @@ func webAppService(cr *operator.Installation) *v1.Service {
 	}
 }
 
-// webAppServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-func webAppServiceAccount() *v1.ServiceAccount {
+// consoleManagerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
+func consoleManagerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: "calico-monitoring"},
 	}
 }
 
-// webAppClusterRole returns a clusterrole that allows authn/authz review requests.
-func webAppClusterRole() *rbacv1.ClusterRole {
+// consoleManagerClusterRole returns a clusterrole that allows authn/authz review requests.
+func consoleManagerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -343,9 +343,9 @@ func webAppClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// webAppClusterRoleBinding returns a clusterrolebinding that gives the cnx-manager serviceaccount
+// consoleManagerClusterRoleBinding returns a clusterrolebinding that gives the cnx-manager serviceaccount
 // the permissions in the cnx-manager-role.
-func webAppClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager-binding"},
@@ -364,7 +364,7 @@ func webAppClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
-// tigeraUserClusterRole returns a cluster role for a default Tigera WebApp user.
+// tigeraUserClusterRole returns a cluster role for a default Tigera Secure user.
 func tigeraUserClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
@@ -419,7 +419,7 @@ func tigeraUserClusterRole() *rbacv1.ClusterRole {
 				ResourceNames: []string{"default"},
 				Verbs:         []string{"get"},
 			},
-			// List and download the reports in the WebApp.
+			// List and download the reports in the Tigera Secure console.
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -434,7 +434,7 @@ func tigeraUserClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// tigeraNetworkAdminClusterRole returns a cluster role for a Tigera WebApp network admin.
+// tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure console network admin.
 func tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
@@ -462,7 +462,7 @@ func tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 			},
-			// Additional "list" requests that the Tigera EE WebApp needs
+			// Additional "list" requests that the Tigera Secure console needs
 			{
 				APIGroups: []string{""},
 				Resources: []string{"namespaces"},
@@ -486,7 +486,7 @@ func tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"get"},
 			},
-			// Manage globalreport configuration, view report generation status, and list reports in the WebApp.
+			// Manage globalreport configuration, view report generation status, and list reports in the Tigera Secure console.
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -497,7 +497,7 @@ func tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"globalreports/status"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			// List and download the reports in the WebApp.
+			// List and download the reports in the Tigera Secure console.
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},

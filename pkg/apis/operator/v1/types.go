@@ -124,9 +124,9 @@ type ComponentsSpec struct {
 	// +optional
 	IntrusionDetection IntrusionDetectionSpec `json:"intrusionDetection,omitempty"`
 
-	// WebApp is optional configuration for the Tigera Secure manager web application.
+	// Console is optional configuration for the Tigera Secure management console.
 	// +optional
-	WebApp WebAppSpec `json:"ui,omitempty"`
+	Console ConsoleSpec `json:"ui,omitempty"`
 }
 
 // IntrusionDetectionSpec defines optional configuration for the Intrusion Detection component.
@@ -217,45 +217,45 @@ type APIServerSpec struct {
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// WebAppManagerSpec defines optional configuration for the Tigera Secure web app manager.
+// ConsoleManagerSpec defines optional configuration for the Tigera Secure management console manager.
 // +k8s:openapi-gen=true
-type WebAppManagerSpec struct {
+type ConsoleManagerSpec struct {
 	// Image configures a different Docker image for this component. The value must be a full qualified image name.
 	// +optional
 	Image string `json:"image,omitempty"`
 }
 
-// WebAppProxySpec defines optional configuration for the Tigera Secure web app proxy.
+// ConsoleProxySpec defines optional configuration for the Tigera Secure management console proxy.
 // +k8s:openapi-gen=true
-type WebAppProxySpec struct {
+type ConsoleProxySpec struct {
 	// Image configures a different Docker image for this component. The value must be a full qualified image name.
 	// +optional
 	Image string `json:"image,omitempty"`
 }
 
-// WebAppEsProxySpec defines optional configuration for the Tigera Secure web app ES proxy.
+// ConsoleEsProxySpec defines optional configuration for the Tigera Secure management console ES proxy.
 // +k8s:openapi-gen=true
-type WebAppEsProxySpec struct {
+type ConsoleEsProxySpec struct {
 	// Image configures a different Docker image for this component. The value must be a full qualified image name.
 	// +optional
 	Image string `json:"image,omitempty"`
 }
 
-// WebAppSpec defines optional configuration for the Tigera Secure web application.
+// ConsoleSpec defines optional configuration for the Tigera Secure management console.
 // Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
-type WebAppSpec struct {
-	// Manager is optional configuration for the Tigera Secure web app manager.
+type ConsoleSpec struct {
+	// Manager is optional configuration for the Tigera Secure management console manager.
 	// +optional
-	Manager WebAppManagerSpec `json:"manager,omitempty"`
+	Manager ConsoleManagerSpec `json:"manager,omitempty"`
 
-	// Proxy is optional configuration for the Tigera Secure web app proxy.
+	// Proxy is optional configuration for the Tigera Secure management console proxy.
 	// +optional
-	Proxy WebAppProxySpec `json:"proxy,omitempty"`
+	Proxy ConsoleProxySpec `json:"proxy,omitempty"`
 
-	// EsProxy is optional configuration for the Tigera Secure web app ES proxy.
+	// EsProxy is optional configuration for the Tigera Secure management console ES proxy.
 	// +optional
-	EsProxy WebAppEsProxySpec `json:"esProxy,omitempty"`
+	EsProxy ConsoleEsProxySpec `json:"esProxy,omitempty"`
 
 	// AuthenticationType configures the authentication used by the manager.
 	// Default: "Basic"

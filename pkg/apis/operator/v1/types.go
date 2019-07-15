@@ -280,25 +280,25 @@ type ComplianceBenchmarkerSpec struct {
 // ComplianceSpec defines optional configuration for the Compliance component.
 // +k8s:openapi-gen=true
 type ComplianceSpec struct {
-	// Controller is option configuration for the Compliance Controller component.
+	// Controller is an optional configuration for the Compliance Controller component.
 	// +optional
-	Controller ComplianceControllerSpec `json:"complianceController,omitempty"`
+	Controller ComplianceControllerSpec `json:"controller,omitempty"`
 
-	// Reporter is option configuration for the Compliance Reporter component.
+	// Reporter is an optional configuration for the Compliance Reporter component.
 	// +optional
-	Reporter ComplianceReporterSpec `json:"complianceReporter,omitempty"`
+	Reporter ComplianceReporterSpec `json:"reporter,omitempty"`
 
-	// Reporter is option configuration for the Compliance Server component.
+	// Server is an optional configuration for the Compliance Server component.
 	// +optional
-	Server ComplianceServerSpec `json:"complianceServer,omitempty"`
+	Server ComplianceServerSpec `json:"server,omitempty"`
 
-	// Reporter is option configuration for the Compliance Snapshotter component.
+	// Snapshotter is an optional configuration for the Compliance Snapshotter component.
 	// +optional
-	Snapshotter ComplianceSnapshotterSpec `json:"complianceSnapshotter,omitempty"`
+	Snapshotter ComplianceSnapshotterSpec `json:"snapshotter,omitempty"`
 
-	// Reporter is option configuration for the Compliance Benchmarker component.
+	// Benchmarker is an optional configuration for the Compliance Benchmarker component.
 	// +optional
-	Benchmarker ComplianceBenchmarkerSpec `json:"complianceBencharmker,omitempty"`
+	Benchmarker ComplianceBenchmarkerSpec `json:"bencharmker,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

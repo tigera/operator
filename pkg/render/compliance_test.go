@@ -89,24 +89,22 @@ var _ = Describe("compliance rendering tests", func() {
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1beta1", "ClusterRoleBinding")
 		idx++
-		ExpectResource(resources[idx], "compliance-snapshotter", "", apps, "v1", "Deployment")
+		ExpectResource(resources[idx], "compliance-snapshotter", ns, "apps", "v1", "Deployment")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, "", "v1", "ServiceAccount")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, rbac, "v1beta1", "Role")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1beta1", "ClusterRole")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, rbac, "v1beta1", "RoleBinding")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, "", "appsv1", "DaemonSet")
+		ExpectResource(resources[idx], "compliance-benchmarker", ns, "apps", "v1", "DaemonSet")
 		idx++
-		ExpectResource(resources[idx], "inventory", "", "projectcalico.org/v3", "appsv1", "GlobalReportType")
+		ExpectResource(resources[idx], "inventory", "", "projectcalico.org", "v3", "GlobalReportType")
 		idx++
-		ExpectResource(resources[idx], "network-access", "", "projectcalico.org/v3", "appsv1", "GlobalReportType")
+		ExpectResource(resources[idx], "network-access", "", "projectcalico.org", "v3", "GlobalReportType")
 		idx++
-		ExpectResource(resources[idx], "policy-audit", "", "projectcalico.org/v3", "appsv1", "GlobalReportType")
+		ExpectResource(resources[idx], "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType")
 		idx++
-		ExpectResource(resources[idx], "cis-benchmark", "", "projectcalico.org/v3", "appsv1", "GlobalReportType")
+		ExpectResource(resources[idx], "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType")
 	})
 })

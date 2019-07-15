@@ -17,6 +17,8 @@ package render
 import (
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,22 +39,35 @@ func APIServer(cr *operator.Installation) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
-	objs := []runtime.Object{
-		apiServer(cr),
-		auditPolicyConfigMap(cr),
-		apiServerServiceAccount(cr),
-		apiService(cr),
-		apiServerService(cr),
-		apiServiceAccountClusterRole(cr),
-		apiServiceAccountClusterRoleBinding(cr),
-		tieredPolicyPassthruClusterRole(cr),
-		tieredPolicyPassthruClusterRolebinding(cr),
-		delegateAuthClusterRoleBinding(cr),
-		authReaderRoleBinding(cr),
+	return &apiserverComponent{cr: cr}
+}
+
+type apiserverComponent struct {
+	cr *operator.Installation
+}
+
+func (c *apiserverComponent) GetObjects() []runtime.Object {
+	return []runtime.Object{
+		apiServer(c.cr),
+		auditPolicyConfigMap(c.cr),
+		apiServerServiceAccount(c.cr),
+		apiService(c.cr),
+		apiServerService(c.cr),
+		apiServiceAccountClusterRole(c.cr),
+		apiServiceAccountClusterRoleBinding(c.cr),
+		tieredPolicyPassthruClusterRole(c.cr),
+		tieredPolicyPassthruClusterRolebinding(c.cr),
+		delegateAuthClusterRoleBinding(c.cr),
+		authReaderRoleBinding(c.cr),
 	}
-	return &component{
-		objs: objs,
-	}
+}
+
+func (c *apiserverComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *apiserverComponent) Ready(client client.Client) bool {
+	return true
 }
 
 // apiService creates an API service that registers Tigera Secure APIs (and API server).

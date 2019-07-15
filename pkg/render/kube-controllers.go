@@ -17,6 +17,7 @@ package render
 import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apps "k8s.io/api/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -26,16 +27,31 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation) Component {
-	objs := []runtime.Object{
-		controllersServiceAccount(cr),
-		controllersRole(cr),
-		controllersRoleBinding(cr),
-		controllersDeployment(cr),
+func KubeControllers(cr *operator.Installation) *kubeControllersComponent {
+	return &kubeControllersComponent{
+		cr: cr,
 	}
-	return &component{
-		objs: objs,
+}
+
+type kubeControllersComponent struct {
+	cr *operator.Installation
+}
+
+func (c *kubeControllersComponent) GetObjects() []runtime.Object {
+	return []runtime.Object{
+		controllersServiceAccount(c.cr),
+		controllersRole(c.cr),
+		controllersRoleBinding(c.cr),
+		controllersDeployment(c.cr),
 	}
+}
+
+func (c *kubeControllersComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *kubeControllersComponent) Ready(client client.Client) bool {
+	return true
 }
 
 func controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {

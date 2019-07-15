@@ -17,11 +17,18 @@ package render
 import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Component interface {
+	// GetObjects returns all objects this component contains.
 	GetObjects() []runtime.Object
+
+	// GetComponentDeps returns all objects this component depends on.
 	GetComponentDeps() []runtime.Object
+
+	// Ready returns true if the component is ready to be created.
+	Ready(client client.Client) bool
 }
 
 type component struct {

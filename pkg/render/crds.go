@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -28,9 +29,27 @@ func CustomResourceDefinitions(cr *operator.Installation) Component {
 	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		crds = append(crds, tigeraSecureCRDs(cr)...)
 	}
-	return &component{
-		objs: crds,
+	return &crdComponent{cr: cr}
+}
+
+type crdComponent struct {
+	cr *operator.Installation
+}
+
+func (c *crdComponent) GetObjects() []runtime.Object {
+	crds := calicoCRDs(c.cr)
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		crds = append(crds, tigeraSecureCRDs(c.cr)...)
 	}
+	return crds
+}
+
+func (c *crdComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *crdComponent) Ready(client client.Client) bool {
+	return true
 }
 
 type desiredCRD struct {

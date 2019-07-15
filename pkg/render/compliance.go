@@ -302,8 +302,17 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-controller"}},
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "compliance-controller",
+					Namespace: "calico-monitoring",
+					Labels: map[string]string{
+						"k8s-app": "compliance-controller",
+					},
+				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+					NodeSelector: map[string]string{
+						"beta.kubernetes.io/os": "linux",
+					},
 					ServiceAccountName: "tigera-compliance-controller",
 					Tolerations: []corev1.Toleration{
 						{
@@ -538,6 +547,13 @@ func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-server"}},
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "compliance-server",
+					Namespace: "calico-monitoring",
+					Labels: map[string]string{
+						"k8s-app": "compliance-server",
+					},
+				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
 					ServiceAccountName: "tigera-compliance-server",
@@ -651,6 +667,13 @@ func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployme
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-snapshotter"}},
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "compliance-snapshotter",
+					Namespace: "calico-monitoring",
+					Labels: map[string]string{
+						"k8s-app": "compliance-snapshotter",
+					},
+				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
 					ServiceAccountName: "tigera-compliance-snapshotter",
@@ -748,7 +771,7 @@ func complianceBenchmarkerDaemonSet(cr *operator.Installation) *appsv1.DaemonSet
 		{Name: "var-lib-etcd", MountPath: "/var/lib/etcd", ReadOnly: true},
 		{Name: "var-lib-kubelet", MountPath: "/var/lib/kubelet", ReadOnly: true},
 		{Name: "etc-systemd", MountPath: "/etc/systemd", ReadOnly: true},
-		{Name: "etc-kubernetes", MountPath: "/etcd/kubernetes", ReadOnly: true},
+		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
 		{Name: "usr-bin", MountPath: "/usr/bin", ReadOnly: true},
 	}
 	volMounts = append(volMounts, complianceVolumeMounts...)
@@ -763,11 +786,11 @@ func complianceBenchmarkerDaemonSet(cr *operator.Installation) *appsv1.DaemonSet
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/kubelet"}},
 		},
 		{
-			Name:         "etcd-systemd",
+			Name:         "etc-systemd",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/systemd"}},
 		},
 		{
-			Name:         "etcd-kubernetes",
+			Name:         "etc-kubernetes",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/kubernetes"}},
 		},
 		{
@@ -791,7 +814,9 @@ func complianceBenchmarkerDaemonSet(cr *operator.Installation) *appsv1.DaemonSet
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "compliance-benchmarker",
 					Namespace: "calico-monitoring",
-					Labels:    map[string]string{"k8s-app": "compliance-benchmarker"},
+					Labels: map[string]string{
+						"k8s-app": "compliance-benchmarker",
+					},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},

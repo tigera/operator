@@ -133,9 +133,6 @@ func fillDefaults(instance *operator.Installation) {
 		if len(instance.Spec.Components.IntrusionDetection.Installer.Image) == 0 {
 			instance.Spec.Components.IntrusionDetection.Installer.Image = getImageName(instance, "", defaultIntrusionDetectionJobInstallerImageName)
 		}
-		if len(instance.Spec.Components.IntrusionDetection.Enabled) == 0 {
-			instance.Spec.Components.IntrusionDetection.Enabled = operator.ComponentInstallEnabled
-		}
 	}
 }
 

@@ -31,7 +31,7 @@ const (
 )
 
 func IntrusionDetection(cr *operator.Installation) Component {
-	if cr.Spec.Variant != operator.TigeraSecureEnterprise || cr.Spec.Components.IntrusionDetection.Enabled != operator.ComponentInstallEnabled {
+	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
 

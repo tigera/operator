@@ -125,13 +125,6 @@ type ComponentsSpec struct {
 	IntrusionDetection IntrusionDetectionSpec `json:"intrusionDetection,omitempty"`
 }
 
-type ComponentInstalledFlag string
-
-const (
-	ComponentInstallEnabled  = "Enabled"
-	ComponentInstallDisabled = "Disabled"
-)
-
 // IntrusionDetectionSpec defines optional configuration for the Intrusion Detection component.
 // +k8s:openapi-gen=true
 type IntrusionDetectionSpec struct {
@@ -142,11 +135,6 @@ type IntrusionDetectionSpec struct {
 	// Installer is optional configuration for the Intrusion Detection elasticsearch job installer.
 	// +optional
 	Installer IntrusionDetectionInstallerSpec `json:"installer,omitempty"`
-
-	// Enabled configures whether the intrusion detection component will be installed.
-	// Default: "Enabled"
-	// +optional
-	Enabled ComponentInstalledFlag `json:"enabled,omitempty"`
 }
 
 // IntrusionDetectionControllerSpec defines optional configuration for the Intrusion Detection controller.

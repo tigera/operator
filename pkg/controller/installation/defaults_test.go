@@ -73,7 +73,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.IntrusionDetection.Controller.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Installer.Image).To(Equal("quay.io/tigera/intrusion-detection-job-installer:latest"))
 
-		Expect(string(instance.Spec.Components.IntrusionDetection.Enabled)).To(Equal("Enabled"))
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
@@ -254,7 +253,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						Installer: operator.IntrusionDetectionInstallerSpec{
 							Image: "intrusionreg/job:v2",
 						},
-						Enabled: "Disabled",
 					},
 				},
 			},

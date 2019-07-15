@@ -227,6 +227,23 @@ var _ = Describe("Defaulting logic tests", func() {
 							},
 						},
 					},
+					Compliance: operator.ComplianceSpec{
+						Controller: operator.ComplianceControllerSpec{
+							Image: "complianceController-test-image",
+						},
+						Reporter: operator.ComplianceReporterSpec{
+							Image: "complianceReporter-test-image",
+						},
+						Server: operator.ComplianceServerSpec{
+							Image: "complianceServerer-test-mage",
+						},
+						Snapshotter: operator.ComplianceSnapshotterSpec{
+							Image: "complianceSnapshotter-test-image",
+						},
+						Benchmarker: operator.ComplianceBenchmarkerSpec{
+							Image: "complianceBenchmarker-test-Image",
+						},
+					},
 				},
 			},
 		}

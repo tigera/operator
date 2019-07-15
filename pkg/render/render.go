@@ -52,6 +52,8 @@ func Render(cr *operator.Installation) []Component {
 	components = appendNotNil(components, Node(cr))
 	components = appendNotNil(components, KubeControllers(cr))
 	components = appendNotNil(components, APIServer(cr))
+	components = appendNotNil(components, Compliance(cr))
+
 	return components
 }
 

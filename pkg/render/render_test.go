@@ -85,7 +85,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 27 Compliance
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		components := render.Render(instance)
-		Expect(componentCount(components)).To(Equal(70))
+		Expect(componentCount(components)).To(Equal(71))
 	})
 })
 

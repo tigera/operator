@@ -298,7 +298,7 @@ type ComplianceSpec struct {
 
 	// Benchmarker is an optional configuration for the Compliance Benchmarker component.
 	// +optional
-	Benchmarker ComplianceBenchmarkerSpec `json:"bencharmker,omitempty"`
+	Benchmarker ComplianceBenchmarkerSpec `json:"benchmarker,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

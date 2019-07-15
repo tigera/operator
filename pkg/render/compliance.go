@@ -27,58 +27,69 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func Compliance(cr *operator.Installation) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
+	return &complianceComponent{cr: cr}
+}
 
+type complianceComponent struct {
+	cr *operator.Installation
+}
+
+func (c *complianceComponent) GetObjects() []runtime.Object {
 	complianceObjs := []runtime.Object{
-		complianceControllerServiceAccount(cr),
-		complianceControllerRole(cr),
-		complianceControllerClusterRole(cr),
-		complianceControllerRoleBinding(cr),
-		complianceControllerClusterRoleBinding(cr),
-		complianceControllerDeployment(cr),
+		complianceControllerServiceAccount(c.cr),
+		complianceControllerRole(c.cr),
+		complianceControllerClusterRole(c.cr),
+		complianceControllerRoleBinding(c.cr),
+		complianceControllerClusterRoleBinding(c.cr),
+		complianceControllerDeployment(c.cr),
 
-		complianceReporterServiceAccount(cr),
-		complianceReporterClusterRole(cr),
-		complianceReporterClusterRoleBinding(cr),
-		complianceReporterPodTemplate(cr),
+		complianceReporterServiceAccount(c.cr),
+		complianceReporterClusterRole(c.cr),
+		complianceReporterClusterRoleBinding(c.cr),
+		complianceReporterPodTemplate(c.cr),
 
-		complianceServerServiceAccount(cr),
-		complianceServerClusterRole(cr),
-		complianceServerClusterRoleBinding(cr),
-		complianceServerService(cr),
-		complianceServerDeployment(cr),
+		complianceServerServiceAccount(c.cr),
+		complianceServerClusterRole(c.cr),
+		complianceServerClusterRoleBinding(c.cr),
+		complianceServerService(c.cr),
+		complianceServerDeployment(c.cr),
 
-		complianceSnapshotterServiceAccount(cr),
-		complianceSnapshotterClusterRole(cr),
-		complianceSnapshotterClusterRoleBinding(cr),
-		complianceSnapshotterDeployment(cr),
+		complianceSnapshotterServiceAccount(c.cr),
+		complianceSnapshotterClusterRole(c.cr),
+		complianceSnapshotterClusterRoleBinding(c.cr),
+		complianceSnapshotterDeployment(c.cr),
 
-		complianceBenchmarkerServiceAccount(cr),
-		complianceBenchmarkerClusterRole(cr),
-		complianceBenchmarkerClusterRoleBinding(cr),
-		complianceBenchmarkerDaemonSet(cr),
+		complianceBenchmarkerServiceAccount(c.cr),
+		complianceBenchmarkerClusterRole(c.cr),
+		complianceBenchmarkerClusterRoleBinding(c.cr),
+		complianceBenchmarkerDaemonSet(c.cr),
 
-		complianceGlobalReportInventory(cr),
-		complianceGlobalReportNetworkAccess(cr),
-		complianceGlobalReportPolicyAudit(cr),
-		complianceGlobalReportCISBenchmark(cr),
+		complianceGlobalReportInventory(c.cr),
+		complianceGlobalReportNetworkAccess(c.cr),
+		complianceGlobalReportPolicyAudit(c.cr),
+		complianceGlobalReportCISBenchmark(c.cr),
 	}
-
-	complianceDeps := []runtime.Object{}
 
 	if os.Getenv("OPENSHIFT") == "true" {
-		complianceObjs = append(complianceObjs, complianceBenchmarkerSecurityContextConstraints(cr))
+		complianceObjs = append(complianceObjs, complianceBenchmarkerSecurityContextConstraints(c.cr))
 	}
 
-	return &component{
-		objs: complianceObjs,
-		deps: complianceDeps,
-	}
+	return complianceObjs
+}
+
+func (c *complianceComponent) GetComponentDeps() []runtime.Object {
+	return nil
+}
+
+func (c *complianceComponent) Ready(client client.Client) bool {
+	return true
 }
 
 var complianceBoolTrue = true

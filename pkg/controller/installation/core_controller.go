@@ -56,8 +56,8 @@ var openshiftEnv = "OPENSHIFT"
 var defaultInstanceKey = client.ObjectKey{Name: "default"}
 var openshiftNetworkConfig = "cluster"
 
-// Add creates a new Installation Controller and adds it to the WebApp. The WebApp will set fields on the Controller
-// and Start it when the WebApp is Started.
+// Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
+// and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
 }

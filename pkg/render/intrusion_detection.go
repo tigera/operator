@@ -26,6 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	tigeraEsConfigMapName = "tigera-es-config"
+)
+
 func IntrusionDetection(cr *operator.Installation) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise || cr.Spec.Components.IntrusionDetection.Enabled != operator.ComponentInstallEnabled {
 		return nil
@@ -98,13 +102,34 @@ func intrusionDetectionJobContainer(cr *operator.Installation) v1.Container {
 		Name:  "elasticsearch-job-installer",
 		Image: cr.Spec.Components.IntrusionDetection.Controller.Image,
 		Env: []corev1.EnvVar{
-			{Name: "ELASTIC_HOST", Value: "elasticsearch-tigera-elasticsearch.calico-monitoring.svc.cluster.local"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
-			{Name: "KIBANA_HOST", Value: "kibana-tigera-elasticsearch.calico-monitoring.svc.cluster.local"},
-			{Name: "KIBANA_PORT", Value: "80"},
-			{Name: "ELASTIC_SCHEME", Value: "http"},
-			{Name: "KIBANA_SCHEME", Value: "http"},
-			{Name: "START_XPACK_TRIAL", Value: "true"},
+			{
+				Name:      "ELASTIC_HOST",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.host"),
+			},
+			{
+				Name:      "ELASTIC_PORT",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.port"),
+			},
+			{
+				Name:      "ELASTIC_SCHEME",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.scheme"),
+			},
+			{
+				Name:      "KIBANA_HOST",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.kibana.host"),
+			},
+			{
+				Name:      "KIBANA_PORT",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.kibana.port"),
+			},
+			{
+				Name:      "ELASTIC_SCHEME",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.kibana.scheme"),
+			},
+			{
+				Name:      "START_XPACK_TRIAL",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.startXPackTrial"),
+			},
 		},
 	}
 }
@@ -240,6 +265,18 @@ func intrusionDetectionDeployment(cr *operator.Installation) *appsv1.Deployment 
 					Containers: []corev1.Container{
 						intrusionDetectionControllerContainer(cr),
 					},
+					Volumes: []v1.Volume{
+						{
+							Name: "es-config",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: tigeraEsConfigMapName,
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -252,10 +289,22 @@ func intrusionDetectionControllerContainer(cr *operator.Installation) v1.Contain
 		Name:  "controller",
 		Image: cr.Spec.Components.IntrusionDetection.Controller.Image,
 		Env: []corev1.EnvVar{
-			{Name: "CLUSTER_NAME", Value: "kubernetes"},
-			{Name: "ELASTIC_HOST", Value: "elasticsearch-tigera-elasticsearch.calico-monitoring.svc.cluster.local"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
-			{Name: "ELASTIC_SCHEME", Value: "http"},
+			{
+				Name:      "CLUSTER_NAME",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.cluster-name"),
+			},
+			{
+				Name:      "ELASTIC_HOST",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.host"),
+			},
+			{
+				Name:      "ELASTIC_PORT",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.port"),
+			},
+			{
+				Name:      "ELASTIC_SCHEME",
+				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.scheme"),
+			},
 		},
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{

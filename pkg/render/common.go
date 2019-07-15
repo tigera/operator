@@ -175,3 +175,15 @@ func verifyServiceReady(client client.Client, name, namespace string) bool {
 
 	return true
 }
+
+// envVarSourceFromConfigmap returns an EnvVarSource using the given configmap name and configmap key.
+func envVarSourceFromConfigmap(configmapName, key string) *v1.EnvVarSource {
+	return &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: configmapName,
+			},
+			Key: key,
+		},
+	}
+}

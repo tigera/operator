@@ -282,23 +282,23 @@ type ComplianceBenchmarkerSpec struct {
 type ComplianceSpec struct {
 	// Controller is option configuration for the Compliance Controller component.
 	// +optional
-	Controller ComplianceControllerSpec `json:"controller,omitempty"`
+	Controller ComplianceControllerSpec `json:"complianceController,omitempty"`
 
 	// Reporter is option configuration for the Compliance Reporter component.
 	// +optional
-	Reporter ComplianceReporterSpec `json:"reporter,omitempty"`
+	Reporter ComplianceReporterSpec `json:"complianceReporter,omitempty"`
 
 	// Reporter is option configuration for the Compliance Server component.
 	// +optional
-	Server ComplianceServerSpec `json:"reporter,omitempty"`
+	Server ComplianceServerSpec `json:"complianceServer,omitempty"`
 
 	// Reporter is option configuration for the Compliance Snapshotter component.
 	// +optional
-	Snapshotter ComplianceSnapshotterSpec `json:"reporter,omitempty"`
+	Snapshotter ComplianceSnapshotterSpec `json:"complianceSnapshotter,omitempty"`
 
 	// Reporter is option configuration for the Compliance Benchmarker component.
 	// +optional
-	Benchmarker ComplianceBenchmarkerSpec `json:"reporter,omitempty"`
+	Benchmarker ComplianceBenchmarkerSpec `json:"complianceBencharmker,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

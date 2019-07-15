@@ -15,15 +15,7 @@
 package render
 
 import (
-	"context"
-	"time"
-
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -109,71 +101,6 @@ func setCustomEnv(defaults []v1.EnvVar, custom []v1.EnvVar) []v1.EnvVar {
 
 func setCriticalPod(t *v1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = priorityClassName
-}
-
-func verifyComponentDependenciesReady(component Component, client client.Client) bool {
-	for _, obj := range component.GetComponentDeps() {
-		objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-		objName := objMeta.GetName()
-		objNamespace := objMeta.GetNamespace()
-
-		switch obj.(type) {
-		case *v1.Service:
-			if ready := verifyServiceReady(client, objName, objNamespace); !ready {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func verifyServiceReady(client client.Client, name, namespace string) bool {
-	logger := log.WithName("verify_service_ready")
-	service := &v1.Service{}
-	svcName := types.NamespacedName{Name: name, Namespace: namespace}
-	err := client.Get(context.Background(), svcName, service)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("Service dependency doesn't exist yet", "name", name, "namespace", namespace)
-		} else {
-			logger.Info("Error getting service", "name", name, "namespace", namespace, "error", err.Error())
-		}
-		return false
-	}
-
-	// If the service exists, check that its ready by looking for at least 1 ready address in all of its
-	// endpoints' subsets.
-	err = wait.PollImmediate(3*time.Second, 30*time.Second, func() (bool, error) {
-		endpoints := &v1.Endpoints{}
-		err = client.Get(context.Background(), svcName, endpoints)
-		if err != nil {
-			// If not found, retry.
-			if apierrors.IsNotFound(err) {
-				logger.Info("Endpoints dependency doesn't exist yet", "name", name, "namespace", namespace)
-				return false, nil
-			}
-
-			// Any other error, just quit
-			return false, err
-		}
-
-		for _, subset := range endpoints.Subsets {
-			if len(subset.Addresses) == 0 {
-				logger.Info("Endpoints dependency has 0 ready addresses", "name", name, "namespace", namespace)
-				return false, nil
-			}
-		}
-		// If we reach here, all of the endpoints subsets have at least 1 ready address and the service is ready
-		logger.Info("Service dependency is ready", "name", name, "namespace", namespace)
-		return true, nil
-	})
-
-	if err != nil {
-		logger.Info("Service dependency check failed", "error", err.Error())
-		return false
-	}
-
-	return true
 }
 
 // envVarSourceFromConfigmap returns an EnvVarSource using the given configmap name and configmap key.

@@ -172,7 +172,7 @@ func complianceControllerServiceAccount(cr *operator.Installation) *v1.ServiceAc
 
 func complianceControllerRole(cr *operator.Installation) *rbacv1.Role {
 	return &rbacv1.Role{
-		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -191,7 +191,7 @@ func complianceControllerRole(cr *operator.Installation) *rbacv1.Role {
 
 func complianceControllerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -215,7 +215,7 @@ func complianceControllerClusterRole(cr *operator.Installation) *rbacv1.ClusterR
 
 func complianceControllerRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -380,6 +380,7 @@ func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplat
 	envVars = append(envVars, complianceElasticEnvVars...)
 
 	return &corev1.PodTemplate{
+		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera.io.report",
 			Namespace: "calico-monitoring",
@@ -429,7 +430,7 @@ func complianceServerServiceAccount(cr *operator.Installation) *v1.ServiceAccoun
 
 func complianceServerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -561,7 +562,7 @@ func complianceSnapshotterServiceAccount(cr *operator.Installation) *v1.ServiceA
 
 func complianceSnapshotterClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -674,7 +675,7 @@ func complianceBenchmarkerServiceAccount(cr *operator.Installation) *v1.ServiceA
 
 func complianceBenchmarkerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -693,7 +694,7 @@ func complianceBenchmarkerClusterRole(cr *operator.Installation) *rbacv1.Cluster
 
 func complianceBenchmarkerClusterRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: "calico-monitoring"},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",

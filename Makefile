@@ -238,7 +238,7 @@ GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
 ## Run the full set of tests
-ut: cluster-create run-uts cluster-destroy
+ut: cluster-destroy cluster-create run-uts cluster-destroy
 run-uts: vendor
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) ginkgo -r --skipPackage vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)

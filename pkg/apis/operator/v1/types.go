@@ -126,7 +126,7 @@ type ComponentsSpec struct {
 
 	// Console is optional configuration for the Tigera Secure management console.
 	// +optional
-	Console ConsoleSpec `json:"ui,omitempty"`
+	Console ConsoleSpec `json:"console,omitempty"`
 }
 
 // IntrusionDetectionSpec defines optional configuration for the Intrusion Detection component.
@@ -262,23 +262,14 @@ type ConsoleSpec struct {
 	// +optional
 	AuthenticationType AuthType `json:"authType,omitempty"`
 
-	// OAuth2Authority configures the OAuth2 authority/issuer when using OAuth2 login.
+	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
 	// Default: ""https://accounts.google.com"
 	// +optional
-	OAuth2Authority string
+	Authority string
 
-	// OAuth2ClientId configures the client ID to use for OAuth2 login.
+	// ClientId configures the OAuth2/OIDC client ID to use for OAuth2 or OIDC login.
 	// +optional
-	OAuth2ClientId string
-
-	// OIDCAuthority configures the OIDC authority/issuer when using OIDC login.
-	// Default: ""https://accounts.google.com"
-	// +optional
-	OIDCAuthority string
-
-	// OIDCClientId configures the client ID to use for OIDC login.
-	// +optional
-	OIDCClientId string
+	ClientId string
 }
 
 type AuthType string

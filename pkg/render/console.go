@@ -17,7 +17,6 @@ const (
 	managerPort           = 9443
 	managerTargetPort     = 9443
 	managerNodePort       = 30003
-	tigeraEsConfigMapName = "tigera-es-config"
 	tigeraEsSecretName    = "tigera-es-config"
 )
 
@@ -173,30 +172,58 @@ func consoleProxyProbe() *v1.Probe {
 	}
 }
 
+// consoleManagerEnvVars returns the envvars for the console manager container.
+func consoleManagerEnvVars(cr *operator.Installation) []v1.EnvVar {
+	envs := []v1.EnvVar{
+		{Name: "CNX_PROMETHEUS_API_URL", Value: "/api/v1/namespaces/calico-monitoring/services/calico-node-prometheus:9090/proxy/api/v1"},
+		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
+		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/kube-system/services/https:tigera-api:8080/proxy"},
+		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
+		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: "http://127.0.0.1:30601"},
+		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
+		{Name: "CNX_ALP_SUPPORT", Value: "false"},
+		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
+	}
+
+	envs = append(envs, consoleOAuth2EnvVars(cr)...)
+	return envs
+}
+
 // consoleManagerContainer returns the manager container.
 func consoleManagerContainer(cr *operator.Installation) corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	return corev1.Container{
-		Name:  "cnx-manager",
-		Image: cr.Spec.Components.Console.Manager.Image,
-		Env: []corev1.EnvVar{
-			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.AuthenticationType)},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.OAuth2Authority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.OAuth2ClientId},
-			{Name: "CNX_PROMETHEUS_API_URL", Value: "/api/v1/namespaces/calico-monitoring/services/calico-node-prometheus:9090/proxy/api/v1"},
-			{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
-			{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/kube-system/services/https:tigera-api:8080/proxy"},
-			{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
-			{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: "http://127.0.0.1:30601"},
-			{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
-			{Name: "CNX_ALP_SUPPORT", Value: "false"},
-			{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
-		},
+		Name:          "cnx-manager",
+		Image:         cr.Spec.Components.Console.Manager.Image,
+		Env:           consoleManagerEnvVars(cr),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: consoleManagerProbe(),
 	}
+}
+
+// consoleOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
+func consoleOAuth2EnvVars(cr *operator.Installation) []v1.EnvVar {
+	envs := []corev1.EnvVar{
+		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.AuthenticationType)},
+	}
+
+	switch cr.Spec.Components.Console.AuthenticationType {
+	case operator.AuthTypeOIDC:
+		oidcEnvs := []corev1.EnvVar{
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.Authority},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.ClientId},
+		}
+		envs = append(envs, oidcEnvs...)
+	case operator.AuthTypeOAuth:
+		oauthEnvs := []corev1.EnvVar{
+			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.Console.Authority},
+			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.Console.ClientId},
+		}
+		envs = append(envs, oauthEnvs...)
+	}
+	return envs
 }
 
 // consoleProxyContainer returns the container for the console proxy container.
@@ -204,13 +231,7 @@ func consoleProxyContainer(cr *operator.Installation) corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
 		Image: cr.Spec.Components.Console.Proxy.Image,
-		Env: []corev1.EnvVar{
-			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.AuthenticationType)},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.OIDCAuthority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.OIDCClientId},
-			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.Console.OAuth2Authority},
-			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.Console.OAuth2ClientId},
-		},
+		Env:   consoleOAuth2EnvVars(cr),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "cnx-manager-tls", MountPath: "/etc/cnx-manager-web-tls"},
 		},

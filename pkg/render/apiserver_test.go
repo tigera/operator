@@ -44,7 +44,6 @@ var _ = Describe("API server rendering tests", func() {
 				},
 			},
 		}
-
 	})
 
 	It("should render an API server with default configuration", func() {

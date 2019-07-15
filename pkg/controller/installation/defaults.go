@@ -34,6 +34,12 @@ const (
 
 	defaultAPIServerImageName = "tigera/cnx-apiserver"
 	defaultTigeraRegistry     = "quay.io/"
+
+	defaultComplianceControllerImage  = "tigera/compliance-controller"
+	defaultComplianceReporterImage    = "tigera/compliance-reporter"
+	defaultComplianceServerImage      = "tigera/compliance-server"
+	defaultComplianceSnapshotterImage = "tigera/compliance-snapshotter"
+	defaultComplianceBenchmarkerImage = "tigera/compliance-benchmarker"
 )
 
 // fillDefaults fills in the default values for an instance.
@@ -97,6 +103,26 @@ func fillDefaults(instance *operator.Installation) {
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		if len(instance.Spec.Components.APIServer.Image) == 0 {
 			instance.Spec.Components.APIServer.Image = getImageName(instance, "", defaultAPIServerImageName)
+		}
+		if len(instance.Spec.Components.Compliance.Controller.Image) == 0 {
+			instance.Spec.Components.Compliance.Controller.Image = getImageName(instance, "",
+				defaultComplianceControllerImage)
+		}
+		if len(instance.Spec.Components.Compliance.Reporter.Image) == 0 {
+			instance.Spec.Components.Compliance.Reporter.Image = getImageName(instance, "",
+				defaultComplianceReporterImage)
+		}
+		if len(instance.Spec.Components.Compliance.Server.Image) == 0 {
+			instance.Spec.Components.Compliance.Server.Image = getImageName(instance, "",
+				defaultComplianceServerImage)
+		}
+		if len(instance.Spec.Components.Compliance.Snapshotter.Image) == 0 {
+			instance.Spec.Components.Compliance.Snapshotter.Image = getImageName(instance, "",
+				defaultComplianceSnapshotterImage)
+		}
+		if len(instance.Spec.Components.Compliance.Benchmarker.Image) == 0 {
+			instance.Spec.Components.Compliance.Benchmarker.Image = getImageName(instance, "",
+				defaultComplianceBenchmarkerImage)
 		}
 	}
 }

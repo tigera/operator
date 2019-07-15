@@ -92,3 +92,11 @@ required = [
 [[constraint]]
   branch = "master"
   name = "k8s.io/kube-aggregator"
+
+[[constraint]]
+  name = "github.com/tigera/api"
+  branch = "master"
+
+[[constraint]]
+  name = "github.com/openshift/api"
+  branch = "master"

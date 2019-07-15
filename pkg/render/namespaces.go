@@ -26,8 +26,9 @@ import (
 )
 
 const (
-	calicoNamespace       = "calico-system"
-	tigeraSecureNamespace = "tigera-system"
+	calicoNamespace           = "calico-system"
+	tigeraSecureNamespace     = "tigera-system"
+	calicoMonitoringNamespace = "calico-monitoring"
 )
 
 func Namespaces(cr *operator.Installation) Component {
@@ -45,6 +46,7 @@ func (c *namespaceComponent) GetObjects() []runtime.Object {
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		ns = append(ns, createNamespace(tigeraSecureNamespace))
+		ns = append(ns, createNamespace(calicoMonitoringNamespace))
 	}
 	return ns
 }

@@ -115,6 +115,10 @@ type ComponentsSpec struct {
 	// APIServer is optional configuration for the API server component.
 	// +optional
 	APIServer APIServerSpec `json:"apiServer,omitempty"`
+
+	// Compliance is option configuration for the Compliance component.
+	// +optional
+	Compliance ComplianceSpec `json:"compliance,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
@@ -231,6 +235,70 @@ type CNISpec struct {
 	// ExtraVolumeMounts configures custom volume mounts to be used by the CNI container.
 	// +optional
 	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+}
+
+// ComplianceControllerSpec defines optional configuration for the Compliance Controller component.
+// +k8s:openapi-gen=true
+type ComplianceControllerSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// ComplianceReporterSpec defines optional configuration for the Compliance Reporter component.
+// +k8s:openapi-gen=true
+type ComplianceReporterSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// ComplianceServerSpec defines optional configuration for the Compliance Server component.
+// +k8s:openapi-gen=true
+type ComplianceServerSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// ComplianceSnapshotterSpec defines optional configuration for the Compliance Snapshotter component.
+// +k8s:openapi-gen=true
+type ComplianceSnapshotterSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// ComplianceBenchmarkerSpec defines optional configuration for the Compliance Benchmarker component.
+// +k8s:openapi-gen=true
+type ComplianceBenchmarkerSpec struct {
+	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// ComplianceSpec defines optional configuration for the Compliance component.
+// +k8s:openapi-gen=true
+type ComplianceSpec struct {
+	// Controller is an optional configuration for the Compliance Controller component.
+	// +optional
+	Controller ComplianceControllerSpec `json:"controller,omitempty"`
+
+	// Reporter is an optional configuration for the Compliance Reporter component.
+	// +optional
+	Reporter ComplianceReporterSpec `json:"reporter,omitempty"`
+
+	// Server is an optional configuration for the Compliance Server component.
+	// +optional
+	Server ComplianceServerSpec `json:"server,omitempty"`
+
+	// Snapshotter is an optional configuration for the Compliance Snapshotter component.
+	// +optional
+	Snapshotter ComplianceSnapshotterSpec `json:"snapshotter,omitempty"`
+
+	// Benchmarker is an optional configuration for the Compliance Benchmarker component.
+	// +optional
+	Benchmarker ComplianceBenchmarkerSpec `json:"benchmarker,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

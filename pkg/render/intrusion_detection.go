@@ -55,19 +55,13 @@ func (c *intrusionDetectionComponent) GetObjects() []runtime.Object {
 }
 
 func (c *intrusionDetectionComponent) GetComponentDeps() []runtime.Object {
-	return []runtime.Object{
-		&v1.Service{
-			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "elasticsearch-tigera-elasticsearch",
-				Namespace: "calico-monitoring",
-			},
-		},
-	}
+	// Intrusion Detection depends on the configmap tigera-es-config to exist but we don't need to explicitly
+	// check if the configmap exists. The resources depending on the configmap will be pending.
+	return nil
 }
 
 func (c *intrusionDetectionComponent) Ready(client client.Client) bool {
-	return verifyComponentDependenciesReady(c, client)
+	return true
 }
 
 func intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job {

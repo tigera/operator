@@ -345,7 +345,7 @@ func consoleManagerServiceAccount() *v1.ServiceAccount {
 // consoleManagerClusterRole returns a clusterrole that allows authn/authz review requests.
 func consoleManagerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cnx-manager-role",
 		},
@@ -388,7 +388,7 @@ func consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 // tigeraUserClusterRole returns a cluster role for a default Tigera Secure user.
 func tigeraUserClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-ui-user",
 		},
@@ -458,7 +458,7 @@ func tigeraUserClusterRole() *rbacv1.ClusterRole {
 // tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure console network admin.
 func tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-network-admin",
 		},

@@ -96,7 +96,7 @@ func apiService(cr *operator.Installation) *v1beta1.APIService {
 // mechanism for Tigera Secure tiered policy.
 func tieredPolicyPassthruClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-tiered-policy-passthrough",
 		},
@@ -113,7 +113,7 @@ func tieredPolicyPassthruClusterRole(cr *operator.Installation) *rbacv1.ClusterR
 // tieredPolicyPassthruClusterRolebinding creates a clusterrolebinding that applies tieredPolicyPassthruClusterRole to all users.
 func tieredPolicyPassthruClusterRolebinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-tiered-policy-passthrough",
 		},
@@ -141,7 +141,7 @@ func tieredPolicyPassthruClusterRolebinding(cr *operator.Installation) *rbacv1.C
 // authn/authz requests to main API server.
 func delegateAuthClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-apiserver-delegate-auth",
 		},
@@ -165,7 +165,7 @@ func delegateAuthClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRo
 // the main API server was configured with.
 func authReaderRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-auth-reader",
 			Namespace: "kube-system",
@@ -200,7 +200,7 @@ func apiServerServiceAccount(cr *operator.Installation) *corev1.ServiceAccount {
 // k8s networkpolicies.
 func apiServiceAccountClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-crds",
 		},
@@ -248,7 +248,7 @@ func apiServiceAccountClusterRole(cr *operator.Installation) *rbacv1.ClusterRole
 // the tigera-apiserver service account.
 func apiServiceAccountClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-apiserver-access-crds",
 		},

@@ -55,10 +55,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			kind    string
 		}{
 			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1beta1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1beta1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1beta1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1beta1", kind: "RoleBinding"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "", version: "v1", kind: "Deployment"},
 			{name: "intrusion-detection-es-job-installer", ns: "calico-monitoring", group: "batch", version: "v1", kind: "Job"},
 		}

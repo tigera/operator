@@ -265,11 +265,11 @@ type ConsoleSpec struct {
 	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
 	// Default: ""https://accounts.google.com"
 	// +optional
-	Authority string
+	Authority string `json:"authority,omitempty"`
 
 	// ClientId configures the OAuth2/OIDC client ID to use for OAuth2 or OIDC login.
 	// +optional
-	ClientId string
+	ClientId string `json:"clientID,omitempty"`
 }
 
 type AuthType string

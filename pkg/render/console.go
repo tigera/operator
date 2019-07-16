@@ -16,7 +16,6 @@ import (
 const (
 	managerPort           = 9443
 	managerTargetPort     = 9443
-	managerNodePort       = 30003
 	tigeraEsSecretName    = "tigera-es-config"
 )
 
@@ -324,7 +323,6 @@ func consoleManagerService(cr *operator.Installation) *v1.Service {
 					Port:       managerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(managerTargetPort),
-					NodePort:   managerNodePort,
 				},
 			},
 			Selector: map[string]string{

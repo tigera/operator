@@ -69,7 +69,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
-		// For this scenario, we expect the basic resources plus the following 10 resources for Tigera Secure:
+		// For this scenario, we expect the basic resources plus the following 17 resources for Tigera Secure:
 		// - 1 additional namespace
 		// - 1 APIService
 		// - 2 ClusterRole
@@ -83,9 +83,10 @@ var _ = Describe("Rendering tests", func() {
 		// - 14 custom resource definitions (calico)
 		// - 6 custom resource definitions (tsee)
 		// - 27 Compliance
+		// - 7 Intrusion Detection
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		components := render.Render(instance)
-		Expect(componentCount(components)).To(Equal(71))
+		Expect(componentCount(components)).To(Equal(78))
 	})
 })
 

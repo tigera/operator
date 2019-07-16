@@ -16,7 +16,10 @@ package render
 
 import (
 	v1 "k8s.io/api/core/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+var log = logf.Log.WithName("render")
 
 // setCustomVolumeMounts merges a custom list of volume mounts into a default list. A custom volume mount
 // overrides a default volume mount if they have the same name.
@@ -98,4 +101,16 @@ func setCustomEnv(defaults []v1.EnvVar, custom []v1.EnvVar) []v1.EnvVar {
 
 func setCriticalPod(t *v1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = priorityClassName
+}
+
+// envVarSourceFromConfigmap returns an EnvVarSource using the given configmap name and configmap key.
+func envVarSourceFromConfigmap(configmapName, key string) *v1.EnvVarSource {
+	return &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: configmapName,
+			},
+			Key: key,
+		},
+	}
 }

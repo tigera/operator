@@ -22,7 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-var _ = Describe("Intrusion Detection rendering tests", func() {
+var _ = Describe("Tigera Secure Console rendering tests", func() {
 	var instance *operator.Installation
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -42,7 +42,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.IntrusionDetection(instance)
+		component := render.Console(instance)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(7))
 
@@ -54,13 +54,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "", version: "v1", kind: "Deployment"},
-			{name: "intrusion-detection-es-job-installer", ns: "calico-monitoring", group: "batch", version: "v1", kind: "Job"},
+			{name: "cnx-manager", ns: "calico-monitoring", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "cnx-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "cnx-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "cnx-manager", ns: "calico-monitoring", group: "", version: "v1", kind: "Deployment"},
+			{name: "cnx-manager", ns: "calico-monitoring", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 		}
 
 		i := 0

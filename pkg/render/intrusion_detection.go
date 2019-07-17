@@ -140,7 +140,7 @@ func intrusionDetectionServiceAccount() *v1.ServiceAccount {
 
 func intrusionDetectionClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "intrusion-detection-controller",
 		},
@@ -164,7 +164,7 @@ func intrusionDetectionClusterRole() *rbacv1.ClusterRole {
 
 func intrusionDetectionClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "intrusion-detection-controller",
 		},
@@ -185,7 +185,7 @@ func intrusionDetectionClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 
 func intrusionDetectionRole() *rbacv1.Role {
 	return &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
 			Namespace: "calico-monitoring",
@@ -208,7 +208,7 @@ func intrusionDetectionRole() *rbacv1.Role {
 }
 func intrusionDetectionRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
 			Namespace: "calico-monitoring",

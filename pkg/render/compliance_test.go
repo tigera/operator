@@ -55,29 +55,29 @@ var _ = Describe("compliance rendering tests", func() {
 		// Should render the correct resources.
 		ExpectResource(resources[idx], "tigera-compliance-controller", ns, "", "v1", "ServiceAccount")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1beta1", "Role")
+		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1", "Role")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", "", rbac, "v1beta1", "ClusterRole")
+		ExpectResource(resources[idx], "tigera-compliance-controller", "", rbac, "v1", "ClusterRole")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1beta1", "RoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1", "RoleBinding")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", "", rbac, "v1beta1", "ClusterRoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding")
 		idx++
 		ExpectResource(resources[idx], "compliance-controller", ns, "apps", "v1", "Deployment")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-reporter", ns, "", "v1", "ServiceAccount")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-reporter", "", rbac, "v1beta1", "ClusterRole")
+		ExpectResource(resources[idx], "tigera-compliance-reporter", "", rbac, "v1", "ClusterRole")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-reporter", "", rbac, "v1beta1", "ClusterRoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding")
 		idx++
 		ExpectResource(resources[idx], "tigera.io.report", ns, "", "v1", "PodTemplate")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-server", ns, "", "v1", "ServiceAccount")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-server", "", rbac, "v1beta1", "ClusterRole")
+		ExpectResource(resources[idx], "tigera-compliance-server", "", rbac, "v1", "ClusterRole")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-server", "", rbac, "v1beta1", "ClusterRoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding")
 		idx++
 		ExpectResource(resources[idx], "compliance", ns, "", "v1", "Service")
 		idx++
@@ -85,17 +85,17 @@ var _ = Describe("compliance rendering tests", func() {
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-snapshotter", ns, "", "v1", "ServiceAccount")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1beta1", "ClusterRole")
+		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1beta1", "ClusterRoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding")
 		idx++
 		ExpectResource(resources[idx], "compliance-snapshotter", ns, "apps", "v1", "Deployment")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, "", "v1", "ServiceAccount")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1beta1", "ClusterRole")
+		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, rbac, "v1beta1", "RoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, rbac, "v1", "RoleBinding")
 		idx++
 		ExpectResource(resources[idx], "compliance-benchmarker", ns, "apps", "v1", "DaemonSet")
 		idx++

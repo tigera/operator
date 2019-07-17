@@ -1,19 +1,21 @@
-# Operator
+# Tigera operator
 <img src="http://docs.projectcalico.org/images/felix.png" width="100" height="100">
 
-This repository contains a Kubernetes operator which manages the lifecycle of a Calico installation.
+This repository contains a Kubernetes operator which manages the lifecycle of a Calico installation. It can also install [Tigera Secure Enterprise Edition](https://www.tigera.io/tigera-secure-ee/).
 
 Calico is a Tigera open source project, and is primarily maintained by the Tigera team. However any members of the community – individuals or organizations – are welcome to get involved and contribute to the project.
 
-## Get Started Using Calico
+### Project status
 
-For users who want to learn more about the project or get started with Calico, see the documentation on [docs.projectcalico.org](https://docs.projectcalico.org).
+The Tigera operator is currently in tech-preview state and is not intended for production use.
 
-## Get Started Developing Calico
+### Installing the Tigera operator
+
+For installation instructions using OpenShift v4, follow the instructions in [docs/openshift.md](docs/openshift.md).
 
 ### Testing locally
 
-You can create a local docker-in-docker cluster with the Makefile:
+If you're doing local development, you can create a local docker-in-docker cluster with the Makefile:
 
 	make cluster-create
 

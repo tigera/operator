@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tigera-operator
+  namespace: tigera-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: tigera-operator
+  template:
+    metadata:
+      labels:
+        name: tigera-operator
+    spec:
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+        - effect: NoSchedule
+          operator: Exists
+      serviceAccountName: tigera-operator
+      hostNetwork: true
+      containers:
+        - name: tigera-operator
+          image: quay.io/tigera/operator:master
+          command:
+            - operator
+            - --url-only-kubeconfig=/etc/kubernetes/kubeconfig
+          imagePullPolicy: Always
+          volumeMounts:
+            - mountPath: /etc/kubernetes/kubeconfig
+              name: host-kubeconfig
+              readOnly: true
+          env:
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: OPENSHIFT
+              value: "true"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "tigera-operator"
+      initContainers:
+        - name: configure-security-groups
+          image: quay.io/tigera/operator-init:master
+          env:
+            - name: OPENSHIFT
+              value: "true"
+            - name: REQUIRE_AWS
+              value: "true"
+            - name: KUBELET_KUBECONFIG
+              value: /etc/kubernetes/kubeconfig
+          volumeMounts:
+            - mountPath: /etc/kubernetes/kubeconfig
+              name: host-kubeconfig
+              readOnly: true
+      volumes:
+      - hostPath:
+          path: /etc/kubernetes/kubeconfig
+        name: host-kubeconfig

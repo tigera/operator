@@ -1,0 +1,10 @@
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  cniBinDir: "/var/lib/cni/bin"
+  cniNetDir: "/etc/kubernetes/cni/net.d"
+  components:
+    kubeProxy:
+      required: true

@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	managerPort           = 9443
-	managerTargetPort     = 9443
-	tigeraEsSecretName    = "tigera-es-config"
+	managerPort        = 9443
+	managerTargetPort  = 9443
+	tigeraEsSecretName = "tigera-es-config"
 )
 
 func Console(cr *operator.Installation) Component {
@@ -205,20 +205,20 @@ func consoleManagerContainer(cr *operator.Installation) corev1.Container {
 // consoleOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
 func consoleOAuth2EnvVars(cr *operator.Installation) []v1.EnvVar {
 	envs := []corev1.EnvVar{
-		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.AuthenticationType)},
+		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.Auth.Type)},
 	}
 
-	switch cr.Spec.Components.Console.AuthenticationType {
+	switch cr.Spec.Components.Console.Auth.Type {
 	case operator.AuthTypeOIDC:
 		oidcEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.Authority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.ClientId},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.Auth.Authority},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.Auth.ClientID},
 		}
 		envs = append(envs, oidcEnvs...)
 	case operator.AuthTypeOAuth:
 		oauthEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.Console.Authority},
-			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.Console.ClientId},
+			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.Console.Auth.Authority},
+			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.Console.Auth.ClientID},
 		}
 		envs = append(envs, oauthEnvs...)
 	}

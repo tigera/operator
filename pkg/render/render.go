@@ -31,18 +31,6 @@ type Component interface {
 	Ready(client client.Client) bool
 }
 
-type component struct {
-	objs []runtime.Object
-	deps []runtime.Object
-}
-
-func (c *component) GetObjects() []runtime.Object {
-	return c.objs
-}
-func (c *component) GetComponentDeps() []runtime.Object {
-	return c.deps
-}
-
 func Render(cr *operator.Installation) []Component {
 	var components []Component
 	components = appendNotNil(components, CustomResourceDefinitions(cr))

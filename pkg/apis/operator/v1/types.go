@@ -257,10 +257,18 @@ type ConsoleSpec struct {
 	// +optional
 	EsProxy ConsoleEsProxySpec `json:"esProxy,omitempty"`
 
-	// AuthenticationType configures the authentication used by the manager.
+	// Auth is optional authentication configuration for the Tigera Secure management console.
+	// +optional
+	Auth Auth `json:"auth,omitempty"`
+}
+
+// Auth defines authentication configuration.
+// +k8s:openapi-gen=true
+type Auth struct {
+	// Type configures the type of authentication used by the manager.
 	// Default: "Basic"
 	// +optional
-	AuthenticationType AuthType `json:"authType,omitempty"`
+	Type AuthType `json:"type,omitempty"`
 
 	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
 	// Default: ""https://accounts.google.com"
@@ -269,7 +277,7 @@ type ConsoleSpec struct {
 
 	// ClientId configures the OAuth2/OIDC client ID to use for OAuth2 or OIDC login.
 	// +optional
-	ClientId string `json:"clientID,omitempty"`
+	ClientID string `json:"clientID,omitempty"`
 }
 
 type AuthType string

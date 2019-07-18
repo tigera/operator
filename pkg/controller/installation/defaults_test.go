@@ -76,7 +76,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Components.IntrusionDetection.Controller.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Installer.Image).To(Equal("quay.io/tigera/intrusion-detection-job-installer:latest"))
 		Expect(instance.Spec.Components.Console.Manager.Image).To(Equal("quay.io/tigera/cnx-manager:latest"))
-		Expect(string(instance.Spec.Components.Console.AuthenticationType)).To(Equal("Basic"))
+		Expect(string(instance.Spec.Components.Console.Auth.Type)).To(Equal("Basic"))
 		Expect(instance.Spec.Components.Console.Proxy.Image).To(Equal("quay.io/tigera/cnx-manager-proxy:latest"))
 		Expect(instance.Spec.Components.Console.EsProxy.Image).To(Equal("quay.io/tigera/es-proxy:latest"))
 
@@ -271,9 +271,11 @@ var _ = Describe("Defaulting logic tests", func() {
 						EsProxy: operator.ConsoleEsProxySpec{
 							Image: "consoleRegistry/esproxy:v2",
 						},
-						AuthenticationType: operator.AuthTypeOAuth,
-						Authority:          "https://api.tigera.io",
-						ClientId:           "oauth2-client-id",
+						Auth: operator.Auth{
+							Type:      operator.AuthTypeOAuth,
+							Authority: "https://api.tigera.io",
+							ClientID:  "oauth2-client-id",
+						},
 					},
 				},
 			},

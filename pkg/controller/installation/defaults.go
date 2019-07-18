@@ -146,8 +146,8 @@ func fillDefaults(instance *operator.Installation) {
 		if len(instance.Spec.Components.Console.EsProxy.Image) == 0 {
 			instance.Spec.Components.Console.EsProxy.Image = getImageName(instance, "", defaultConsoleEsProxyImageName)
 		}
-		if len(instance.Spec.Components.Console.AuthenticationType) == 0 {
-			instance.Spec.Components.Console.AuthenticationType = operator.AuthTypeBasic
+		if len(instance.Spec.Components.Console.Auth.Type) == 0 {
+			instance.Spec.Components.Console.Auth.Type = operator.AuthTypeBasic
 		}
 	}
 }

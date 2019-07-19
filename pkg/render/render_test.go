@@ -84,9 +84,10 @@ var _ = Describe("Rendering tests", func() {
 		// - 6 custom resource definitions (tsee)
 		// - 27 Compliance
 		// - 7 Intrusion Detection
+		// - 7 Console
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		components := render.Render(instance)
-		Expect(componentCount(components)).To(Equal(78))
+		Expect(componentCount(components)).To(Equal(85))
 	})
 })
 

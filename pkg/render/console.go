@@ -20,6 +20,9 @@ const (
 )
 
 func Console(cr *operator.Installation) Component {
+	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
+		return nil
+	}
 	return &consoleComponent{cr: cr}
 }
 
@@ -61,6 +64,11 @@ func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": "cnx-manager",
+				},
+			},
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,

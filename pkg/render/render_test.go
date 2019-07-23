@@ -15,15 +15,25 @@
 package render_test
 
 import (
+	"bufio"
+	"bytes"
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var _ = Describe("Rendering tests", func() {
 	var instance *operator.Installation
+	var client client.Client
+	var logBuffer bytes.Buffer
+	var logWriter *bufio.Writer
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -39,6 +49,16 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 
+		client = fake.NewFakeClient()
+
+		logWriter = bufio.NewWriter(&logBuffer)
+		render.SetTestLogger(logf.ZapLoggerTo(logWriter, true))
+	})
+	AfterEach(func() {
+		if CurrentGinkgoTestDescription().Failed {
+			logWriter.Flush()
+			fmt.Printf("Logs:\n%s\n", logBuffer.String())
+		}
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -49,7 +69,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		components := render.Render(instance)
+		components := render.Render(instance, client)
 		Expect(componentCount(components)).To(Equal(25))
 	})
 
@@ -64,7 +84,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
 		instance.Spec.Components.KubeProxy.Required = true
-		components := render.Render(instance)
+		components := render.Render(instance, client)
 		Expect(componentCount(components)).To(Equal(29))
 	})
 
@@ -84,10 +104,10 @@ var _ = Describe("Rendering tests", func() {
 		// - 6 custom resource definitions (tsee)
 		// - 27 Compliance
 		// - 7 Intrusion Detection
-		// - 7 Console
+		// - 9 Console
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		components := render.Render(instance)
-		Expect(componentCount(components)).To(Equal(85))
+		components := render.Render(instance, client)
+		Expect(componentCount(components)).To(Equal(87))
 	})
 })
 

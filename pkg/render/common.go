@@ -15,11 +15,16 @@
 package render
 
 import (
+	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var log = logf.Log.WithName("render")
+
+func SetTestLogger(l logr.Logger) {
+	log = l
+}
 
 // setCustomVolumeMounts merges a custom list of volume mounts into a default list. A custom volume mount
 // overrides a default volume mount if they have the same name.

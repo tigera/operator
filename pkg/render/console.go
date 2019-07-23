@@ -1,45 +1,88 @@
 package render
 
 import (
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"bytes"
+	"context"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"time"
 
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
+
+	crypto "github.com/openshift/library-go/pkg/crypto"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
-	managerPort        = 9443
-	managerTargetPort  = 9443
-	tigeraEsSecretName = "tigera-es-config"
+	managerPort           = 9443
+	managerTargetPort     = 9443
+	tigeraEsSecretName    = "tigera-es-config"
+	managerNamespace      = "calico-monitoring"
+	managerTlsSecretName  = "cnx-manager-tls"
+	managerSecretKeyName  = "key"
+	managerSecretCertName = "cert"
 )
 
-func Console(cr *operator.Installation) Component {
+var operatorNamespace = "tigera-operator"
+
+func Console(cr *operator.Installation, client client.Client) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
-	return &consoleComponent{cr: cr}
+	v, ok := os.LookupEnv("OPERATOR_NAMESPACE")
+	if ok {
+		operatorNamespace = v
+	}
+	return &consoleComponent{cr: cr, client: client}
 }
 
 type consoleComponent struct {
-	cr *operator.Installation
+	cr          *operator.Installation
+	client      client.Client
+	managerKey  []byte
+	managerCert []byte
 }
 
 func (c *consoleComponent) GetObjects() []runtime.Object {
-	return []runtime.Object{
+	key, cert, ok := readOperatorSecret(c.client)
+	if !ok {
+		return nil
+	}
+	objs := []runtime.Object{
 		consoleManagerServiceAccount(),
 		consoleManagerClusterRole(),
 		consoleManagerClusterRoleBinding(),
+	}
+	key, cert, s := consoleOperatorSecret(key, cert)
+	if key == nil || cert == nil {
+		log.Info("Key or Cert not created")
+		return nil
+	}
+	if s != nil {
+		objs = append(objs, s)
+	}
+	objs = append(objs,
+		consoleManagerCertificates(key, cert),
 		consoleManagerDeployment(c.cr),
 		consoleManagerService(c.cr),
 		tigeraUserClusterRole(),
 		tigeraNetworkAdminClusterRole(),
-	}
+	)
+
+	return objs
 }
 
 func (c *consoleComponent) GetComponentDeps() []runtime.Object {
@@ -47,7 +90,15 @@ func (c *consoleComponent) GetComponentDeps() []runtime.Object {
 }
 
 func (c *consoleComponent) Ready(client client.Client) bool {
-	return true
+	// Check that if the manager-tls secret exists that it is valid (has key and cert fields)
+	// If it does not exist then this function still returns true
+	_, err := validateManagerCertPair(client)
+	if err != nil {
+		log.Error(err, "Checking Ready for Console indicates error with Manager TLS Cert")
+	}
+	// TODO: When we have status I think if err != nil then we should be
+	// reporting in status the the error.
+	return err == nil
 }
 
 // consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
@@ -58,7 +109,7 @@ func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cnx-manager",
-			Namespace: "calico-monitoring",
+			Namespace: managerNamespace,
 			Labels: map[string]string{
 				"k8s-app": "cnx-manager",
 			},
@@ -76,7 +127,7 @@ func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "cnx-manager",
-					Namespace: "calico-monitoring",
+					Namespace: managerNamespace,
 					Labels: map[string]string{
 						"k8s-app": "cnx-manager",
 					},
@@ -112,10 +163,10 @@ func consoleManagerVolumes() []v1.Volume {
 	optional := true
 	return []v1.Volume{
 		{
-			Name: "cnx-manager-tls",
+			Name: managerTlsSecretName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: "cnx-manager-tls",
+					SecretName: managerTlsSecretName,
 				},
 			},
 		},
@@ -240,7 +291,7 @@ func consoleProxyContainer(cr *operator.Installation) corev1.Container {
 		Image: cr.Spec.Components.Console.Proxy.Image,
 		Env:   consoleOAuth2EnvVars(cr),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: "cnx-manager-tls", MountPath: "/etc/cnx-manager-web-tls"},
+			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
 		LivenessProbe: consoleProxyProbe(),
 	}
@@ -323,7 +374,7 @@ func consoleManagerService(cr *operator.Installation) *v1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cnx-manager",
-			Namespace: "calico-monitoring",
+			Namespace: managerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -344,7 +395,7 @@ func consoleManagerService(cr *operator.Installation) *v1.Service {
 func consoleManagerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: managerNamespace},
 	}
 }
 
@@ -385,9 +436,137 @@ func consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "cnx-manager",
-				Namespace: "calico-monitoring",
+				Namespace: managerNamespace,
 			},
 		},
+	}
+}
+
+// validateManagerCertPair checks if the manager-tls secret exists and if so
+// that it contains key and cert fields. If a secret exists then it is returned.
+// If there is an error accessing the secret (except NotFound) or the cert
+// does not have both a key and cert field then an appropriate error is returned.
+// If no secret exists then nil, nil is returned to represent that no cert is valid.
+func validateManagerCertPair(c client.Client) (*v1.Secret, error) {
+	secret := &v1.Secret{}
+	secretNamespacedName := types.NamespacedName{Name: "manager-tls", Namespace: operatorNamespace}
+	err := c.Get(context.Background(), secretNamespacedName, secret)
+	if err != nil {
+		// If the reason for the error is not found then that is acceptable
+		// so return valid in that case.
+		statErr, ok := err.(*kerrors.StatusError)
+		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
+			return nil, nil
+		} else {
+			return nil, fmt.Errorf("Failed to read manager cert from datastore: %s", err)
+		}
+	}
+
+	if val, ok := secret.Data[managerSecretKeyName]; !ok || len(val) == 0 {
+		return secret, fmt.Errorf("manager-tls Secret does not have a field named 'key'")
+	}
+	if val, ok := secret.Data[managerSecretCertName]; !ok || len(val) == 0 {
+		return secret, fmt.Errorf("manager-tls Secret does not have a field named 'cert'")
+	}
+
+	return secret, nil
+}
+
+func readOperatorSecret(c client.Client) (key, cert []byte, ok bool) {
+	secret, err := validateManagerCertPair(c)
+	if err != nil {
+		log.Error(err, "Failed to validate cert pair")
+		return nil, nil, false
+	}
+
+	if secret != nil {
+		key = secret.Data[managerSecretKeyName]
+		cert = secret.Data[managerSecretCertName]
+	}
+	return key, cert, true
+}
+
+// consoleOperatorSecret if the key (k) or cert (c) passed in are empty
+// then a new cert/key pair is created, they are returned as key/cert and a
+// Secret secret is returned populated with the key/cert.
+// If k,c are populated then this indicates the tigera-operator secret
+// already exists so no new key/cert is created and no Secret is returned,
+// but the passed in k,c values are returned as key,cert.
+func consoleOperatorSecret(k, c []byte) (key, cert []byte, s *v1.Secret) {
+	if len(k) != 0 && len(c) != 0 {
+		// If the secret already exists in the operator NS then nothing to do,
+		// so no need to return it to be created.
+		return k, c, nil
+	}
+
+	log.Info("Creating self-signed certificate", managerTlsSecretName, managerTlsSecretName)
+	// Create cert
+	var err error
+	key, cert, err = makeSignedCertKeyPair()
+	if err != nil {
+		log.Error(err, "Unable to create signed cert pair")
+		return nil, nil, nil
+	}
+
+	data := make(map[string][]byte)
+	data[managerSecretKeyName] = key
+	data[managerSecretCertName] = cert
+	return key, cert, &v1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "manager-tls",
+			Namespace: operatorNamespace,
+		},
+		Data: data,
+	}
+}
+
+// makeSignedCertKeyPair generates and returns a key pair for a self signed
+// cert.
+// This code came from:
+// https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
+func makeSignedCertKeyPair() (key, cert []byte, err error) {
+	temporaryCertDir, err := ioutil.TempDir("", "serving-cert-")
+	if err != nil {
+		return nil, nil, err
+	}
+	signerName := fmt.Sprintf("%s-signer@%d", "tigera-operator", time.Now().Unix())
+	ca, err := crypto.MakeSelfSignedCA(
+		filepath.Join(temporaryCertDir, "serving-signer.crt"),
+		filepath.Join(temporaryCertDir, "serving-signer.key"),
+		filepath.Join(temporaryCertDir, "serving-signer.serial"),
+		signerName,
+		0,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// nothing can trust this, so we don't really care about hostnames
+	servingCert, err := ca.MakeServerCert(sets.NewString("localhost"), 30)
+	if err != nil {
+		return nil, nil, err
+	}
+	crtContent := &bytes.Buffer{}
+	keyContent := &bytes.Buffer{}
+	if err := servingCert.WriteCertConfig(crtContent, keyContent); err != nil {
+		return nil, nil, err
+	}
+
+	return keyContent.Bytes(), crtContent.Bytes(), nil
+}
+
+func consoleManagerCertificates(key, cert []byte) *v1.Secret {
+	data := make(map[string][]byte)
+	data[managerSecretKeyName] = key
+	data[managerSecretCertName] = cert
+	return &v1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      managerTlsSecretName,
+			Namespace: managerNamespace,
+		},
+		Data: data,
 	}
 }
 

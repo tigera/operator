@@ -107,6 +107,14 @@
   version = "v2.9.6"
 
 [[projects]]
+  digest = "1:448bf60e9dce6d5fd9dfa8fd9eb9a23163424ff4e4f142456405781e942e3998"
+  name = "github.com/evanphx/json-patch"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "026c730a0dcc5d11f93f1cf1cc65b01247ea7b6f"
+  version = "v4.5.0"
+
+[[projects]]
   digest = "1:81466b4218bf6adddac2572a30ac733a9255919bc2f470b4827a317bd4ee1756"
   name = "github.com/ghodss/yaml"
   packages = ["."]
@@ -453,6 +461,14 @@
   ]
   pruneopts = "NT"
   revision = "5114e14c97ff18657b68d15224a520a278861e8a"
+
+[[projects]]
+  branch = "master"
+  digest = "1:a4daed397112f986835f13a11abbeff41359a3bdfda585a2f2e4675c8fa0f387"
+  name = "github.com/openshift/library-go"
+  packages = ["pkg/crypto"]
+  pruneopts = "NT"
+  revision = "83581c469d2eeb6dadfe86a4b6d8033b465ffd15"
 
 [[projects]]
   branch = "master"
@@ -983,6 +999,14 @@
   revision = "2b1284ed4c93a43499e781493253e2ac5959c4fd"
 
 [[projects]]
+  branch = "master"
+  digest = "1:6feba2b415019b7c731ce68604e23443333a5f26ba7e6d668bdc30e1b2d6baa4"
+  name = "k8s.io/apiserver"
+  packages = ["pkg/authentication/user"]
+  pruneopts = "NT"
+  revision = "1e59c150c171832461e763ee26292ae0c6bca402"
+
+[[projects]]
   digest = "1:c904a3d70131b33df36e4e51b574226b82308fc1ea66964aa21095a95d453fc9"
   name = "k8s.io/client-go"
   packages = [
@@ -1035,6 +1059,7 @@
     "rest",
     "rest/watch",
     "restmapper",
+    "testing",
     "third_party/forked/golang/template",
     "tools/auth",
     "tools/cache",
@@ -1159,6 +1184,7 @@
     "pkg/client",
     "pkg/client/apiutil",
     "pkg/client/config",
+    "pkg/client/fake",
     "pkg/controller",
     "pkg/controller/controllerutil",
     "pkg/event",
@@ -1222,6 +1248,7 @@
     "github.com/onsi/gomega",
     "github.com/openshift/api/config/v1",
     "github.com/openshift/api/security/v1",
+    "github.com/openshift/library-go/pkg/crypto",
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/log/zap",
@@ -1230,6 +1257,7 @@
     "github.com/spf13/pflag",
     "github.com/tigera/api/pkg/apis/projectcalico/v3",
     "k8s.io/api/apps/v1",
+    "k8s.io/api/batch/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/rbac/v1",
     "k8s.io/api/scheduling/v1beta1",
@@ -1242,6 +1270,7 @@
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/intstr",
+    "k8s.io/apimachinery/pkg/util/sets",
     "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/client-go/plugin/pkg/client/auth",
     "k8s.io/client-go/tools/clientcmd",
@@ -1257,6 +1286,7 @@
     "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/apiutil",
     "sigs.k8s.io/controller-runtime/pkg/client/config",
+    "sigs.k8s.io/controller-runtime/pkg/client/fake",
     "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil",
     "sigs.k8s.io/controller-runtime/pkg/event",

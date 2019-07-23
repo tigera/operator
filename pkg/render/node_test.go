@@ -386,6 +386,7 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
@@ -441,8 +442,10 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))

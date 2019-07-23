@@ -184,7 +184,7 @@ func consoleManagerEnvVars(cr *operator.Installation) []v1.EnvVar {
 	envs := []v1.EnvVar{
 		{Name: "CNX_PROMETHEUS_API_URL", Value: "/api/v1/namespaces/calico-monitoring/services/calico-node-prometheus:9090/proxy/api/v1"},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
-		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/kube-system/services/https:tigera-api:8080/proxy"},
+		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
 		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: "http://127.0.0.1:30601"},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},

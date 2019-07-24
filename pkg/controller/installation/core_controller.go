@@ -304,6 +304,21 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// TODO: Do this when we know that just calico has deployed, the calico-node,
+	// resources have been created, or at least don't gate updating the Status
+	// on TSEE components/resource being created.
+	if os.Getenv(openshiftEnv) == "true" {
+		// If configured to run in openshift, update the config status with the current state.
+		reqLogger.V(1).Info("Updating openshift cluster network status")
+		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
+		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
+		openshiftConfig.Status.ClusterNetworkMTU = 1440
+		openshiftConfig.Status.NetworkType = "Calico"
+		if err = r.client.Update(ctx, openshiftConfig); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Render the desired components based on our configuration. This represents the desired state of the cluster.
 	desiredComponents := render.Render(instance)
 
@@ -384,18 +399,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 				}
 				logCtx.WithValues("key", key).Info("Object deleted.")
 			}
-		}
-	}
-
-	if os.Getenv(openshiftEnv) == "true" {
-		// If configured to run in openshift, update the config status with the current state.
-		reqLogger.V(1).Info("Updating openshift cluster network status")
-		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
-		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
-		openshiftConfig.Status.ClusterNetworkMTU = 1440
-		openshiftConfig.Status.NetworkType = "Calico"
-		if err = r.client.Update(ctx, openshiftConfig); err != nil {
-			return reconcile.Result{}, err
 		}
 	}
 

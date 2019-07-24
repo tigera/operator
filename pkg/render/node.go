@@ -510,6 +510,9 @@ func nodeEnvVars(cr *operator.Installation) []v1.EnvVar {
 	if os.Getenv("OPENSHIFT") == "true" {
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
+
+		// Use iptables in nftables mode.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
 	}
 
 	nodeEnv = setCustomEnv(nodeEnv, cr.Spec.Components.Node.ExtraEnv)

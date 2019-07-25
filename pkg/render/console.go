@@ -323,11 +323,11 @@ func consoleEsProxyEnv() []corev1.EnvVar {
 		},
 		{
 			Name:      "ELASTIC_USERNAME",
-			ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.username"),
+			ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.username", Optional),
 		},
 		{
 			Name:      "ELASTIC_PASSWORD",
-			ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.password"),
+			ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.password", Optional),
 		},
 		{
 			Name:      "ELASTIC_CA",

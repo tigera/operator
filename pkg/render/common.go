@@ -20,6 +20,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
+const (
+	Optional = true
+)
+
 var log = logf.Log.WithName("render")
 
 func SetTestLogger(l logr.Logger) {
@@ -121,13 +125,19 @@ func envVarSourceFromConfigmap(configmapName, key string) *v1.EnvVarSource {
 }
 
 // envVarSourceFromSecret returns an EnvVarSource using the given secret name and key.
-func envVarSourceFromSecret(secretName, key string) *v1.EnvVarSource {
+func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSource {
+	var opt *bool
+	if optional {
+		real := optional
+		opt = &real
+	}
 	return &v1.EnvVarSource{
 		SecretKeyRef: &v1.SecretKeySelector{
 			LocalObjectReference: v1.LocalObjectReference{
 				Name: secretName,
 			},
-			Key: key,
+			Key:      key,
+			Optional: opt,
 		},
 	}
 }

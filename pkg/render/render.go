@@ -31,7 +31,7 @@ type Component interface {
 	Ready(client client.Client) bool
 }
 
-func Render(cr *operator.Installation) []Component {
+func Render(cr *operator.Installation, cli client.Client) []Component {
 	var components []Component
 	components = appendNotNil(components, CustomResourceDefinitions(cr))
 	components = appendNotNil(components, PriorityClassDefinitions(cr))
@@ -40,9 +40,9 @@ func Render(cr *operator.Installation) []Component {
 	components = appendNotNil(components, Node(cr))
 	components = appendNotNil(components, KubeControllers(cr))
 	components = appendNotNil(components, APIServer(cr))
+	components = appendNotNil(components, Console(cr, cli))
 	components = appendNotNil(components, Compliance(cr))
 	components = appendNotNil(components, IntrusionDetection(cr))
-	components = appendNotNil(components, Console(cr))
 	return components
 }
 

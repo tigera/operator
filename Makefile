@@ -81,7 +81,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.20
+GO_BUILD_VER?=v0.22
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
@@ -222,6 +222,7 @@ sub-image-%:
 	$(MAKE) images ARCH=$*
 
 vendor:
+	mkdir -p .go-pkg-cache
 	$(CONTAINERIZED) dep ensure
 
 clean:
@@ -245,6 +246,8 @@ run-uts: vendor
 
 ## Create a local docker-in-docker cluster.
 cluster-create: k3d
+	# First make sure any previous cluster is deleted
+	-./k3d delete --name "operator-test-cluster"
 	./k3d create \
 		--workers 2 \
 		--worker-arg="--no-flannel" \

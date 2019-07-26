@@ -107,6 +107,14 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 				Namespace: "calico-monitoring",
 			},
 		},
+		&v1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manager-tls",
+				//TODO: Read this in from env or something
+				Namespace: "tigera-operator",
+			},
+		},
 	}
 
 	for _, dep := range componentDeps {
@@ -173,7 +181,7 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 				return e.Meta.GetName() == objMeta.GetName() && e.Meta.GetNamespace() == objMeta.GetNamespace()
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				return false
+				return e.MetaNew.GetName() == objMeta.GetName() && e.MetaNew.GetNamespace() == objMeta.GetNamespace()
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				return false
@@ -320,7 +328,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Render the desired components based on our configuration. This represents the desired state of the cluster.
-	desiredComponents := render.Render(instance)
+	desiredComponents := render.Render(instance, r.client)
 
 	// Create the desired state objects.
 	for _, component := range desiredComponents {

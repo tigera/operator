@@ -44,7 +44,7 @@ type apiserverComponent struct {
 	cr *operator.Installation
 }
 
-func (c *apiserverComponent) GetObjects() []runtime.Object {
+func (c *apiserverComponent) Objects() []runtime.Object {
 	return []runtime.Object{
 		c.apiServer(),
 		c.auditPolicyConfigMap(),
@@ -58,10 +58,6 @@ func (c *apiserverComponent) GetObjects() []runtime.Object {
 		c.delegateAuthClusterRoleBinding(),
 		c.authReaderRoleBinding(),
 	}
-}
-
-func (c *apiserverComponent) GetComponentDeps() []runtime.Object {
-	return nil
 }
 
 func (c *apiserverComponent) Ready() bool {

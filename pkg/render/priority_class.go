@@ -32,12 +32,8 @@ func PriorityClassDefinitions(cr *operator.Installation) Component {
 type priorityClassComponent struct {
 }
 
-func (c *priorityClassComponent) GetObjects() []runtime.Object {
+func (c *priorityClassComponent) Objects() []runtime.Object {
 	return []runtime.Object{c.calicoPriority()}
-}
-
-func (c *priorityClassComponent) GetComponentDeps() []runtime.Object {
-	return nil
 }
 
 func (c *priorityClassComponent) Ready() bool {

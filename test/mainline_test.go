@@ -34,42 +34,11 @@ import (
 	"github.com/tigera/operator/pkg/controller"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
-
-func expectKubeProxyCreated(c client.Client, proxyMeta metav1.ObjectMeta) {
-	By("Verifying the kube-proxy ServiceAccount was created")
-	proxySA := &v1.ServiceAccount{ObjectMeta: proxyMeta}
-	ExpectResourceCreated(c, proxySA)
-	By("Verifying the kube-proxy ClusterRoleBinding was created")
-	proxyCR := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy"}}
-	ExpectResourceCreated(c, proxyCR)
-	By("Verifying the kube-proxy ConfigMap was created")
-	proxyCM := &v1.ConfigMap{ObjectMeta: proxyMeta}
-	ExpectResourceCreated(c, proxyCM)
-	By("Verifying the kube-proxy DaemonSet was created")
-	proxyDS := &apps.DaemonSet{ObjectMeta: proxyMeta}
-	ExpectResourceCreated(c, proxyDS)
-}
-
-func expectKubeProxyDestroyed(c client.Client, proxyMeta metav1.ObjectMeta) {
-	By("Verifying the kube-proxy ServiceAccount was destroyed")
-	proxySA := &v1.ServiceAccount{ObjectMeta: proxyMeta}
-	ExpectResourceDestroyed(c, proxySA)
-	By("Verifying the kube-proxy ClusterRoleBinding was destroyed")
-	proxyCR := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy"}}
-	ExpectResourceDestroyed(c, proxyCR)
-	By("Verifying the kube-proxy ConfigMap was destroyed")
-	proxyCM := &v1.ConfigMap{ObjectMeta: proxyMeta}
-	ExpectResourceDestroyed(c, proxyCM)
-	By("Verifying the kube-proxy DaemonSet was destroyed")
-	proxyDS := &apps.DaemonSet{ObjectMeta: proxyMeta}
-	ExpectResourceDestroyed(c, proxyDS)
-}
 
 var _ = Describe("Mainline component function tests", func() {
 	var c client.Client
@@ -105,8 +74,8 @@ var _ = Describe("Mainline component function tests", func() {
 		}, 80*time.Second).ShouldNot(BeNil())
 	})
 
-	It("Should install resources for a CRD with kube-proxy disabled", func() {
-		By("Creating a CRD with Spec.KubeProxy.Required=false")
+	It("Should install resources for a CRD", func() {
+		By("Creating a CRD")
 		instance := &operator.Installation{
 			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -149,71 +118,6 @@ var _ = Describe("Mainline component function tests", func() {
 			}
 			return fmt.Errorf("kube-controllers not yet ready")
 		}, 80*time.Second).Should(BeNil())
-	})
-
-	It("Should install resources for a CRD with kube-proxy enabled", func() {
-		By("Creating a CRD with Spec.KubeProxy.Required=true")
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Spec: operator.InstallationSpec{
-				Components: operator.ComponentsSpec{
-					KubeProxy: operator.KubeProxySpec{
-						Required:  true,
-						APIServer: "https://localhost:6443",
-					},
-				},
-			},
-		}
-		err := c.Create(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("Running the operator")
-		stopChan := RunOperator(mgr)
-		defer close(stopChan)
-
-		By("Verifying the resources were created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, kc)
-
-		proxyMeta := metav1.ObjectMeta{Name: "kube-proxy", Namespace: "kube-system"}
-		expectKubeProxyCreated(c, proxyMeta)
-
-		// TODO: We can't verify that the kube-proxy becomes ready and functional in this suite just yet, since
-		// the k3s cluster we use to test this already has kube-proxy installed. Once we update the test cluster to
-		// remove kube-proxy, we can verify that our installation of the proxy is functioning properly. Until then,
-		// we can only verify that we successfully create the daemonset.
-
-		By("Checking that Spec.KubeProxy.Version is set to the default value.")
-		proxyDS := &apps.DaemonSet{ObjectMeta: proxyMeta}
-		GetResource(c, proxyDS)
-		Expect(proxyDS.Spec.Template.Spec.Containers[0].Image).To(Equal("k8s.gcr.io/kube-proxy:v1.13.6"))
-
-		By("Setting Spec.KubeProxy.Version to a new value.")
-		instance.Spec.Components.KubeProxy.Image = "k8s.gcr.io/foo-bar:v1.2.3"
-		c.Update(context.Background(), instance)
-		Eventually(func() error {
-			err = GetResource(c, proxyDS)
-			if err != nil {
-				return err
-			}
-			if proxyDS.Spec.Template.Spec.Containers[0].Image == "k8s.gcr.io/foo-bar:v1.2.3" {
-				return nil
-			}
-			return fmt.Errorf("Failed to update kube-proxy's Image field.")
-		}, 10*time.Second).Should(BeNil())
-
-		By("Setting Spec.KubeProxy.Required to false.")
-		instance.Spec.Components.KubeProxy.Required = false
-		c.Update(context.Background(), instance)
-		expectKubeProxyDestroyed(c, proxyMeta)
-
-		By("Setting Spec.KubeProxy.Required back to true.")
-		instance.Spec.Components.KubeProxy.Required = true
-		c.Update(context.Background(), instance)
-		expectKubeProxyCreated(c, proxyMeta)
 	})
 
 	It("Should install resources for a CRD with node overrides", func() {

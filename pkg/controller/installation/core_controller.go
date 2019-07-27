@@ -16,9 +16,6 @@ package installation
 
 import (
 	"context"
-	"time"
-
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
@@ -204,65 +201,6 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 	return nil
 }
 
-// VerifyDependencies checks whether the given component's dependencies exist and are ready. Returns true if the component
-// has no dependencies or if all of the component's dependencies are ready.
-func (r *ReconcileInstallation) VerifyDependencies(component render.Component) bool {
-	logger := log.WithName("verify_dependencies")
-	for _, obj := range component.GetComponentDeps() {
-		objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-		objName := objMeta.GetName()
-		objNamespace := objMeta.GetNamespace()
-
-		switch obj.(type) {
-		case *v1.Service:
-			service := &v1.Service{}
-			svcName := types.NamespacedName{Name: objName, Namespace: objNamespace}
-			err := r.client.Get(context.Background(), svcName, service)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					logger.Info("Service dependency doesn't exist yet", "name", objName, "namespace", objNamespace)
-				} else {
-					logger.Info("Error getting service", "name", objName, "namespace", objNamespace, "error", err.Error())
-				}
-				return false
-			}
-
-			// If the service exists, check that its ready by looking for at least 1 ready address in all of its
-			// endpoints' subsets.
-			err = wait.PollImmediate(3*time.Second, 30*time.Second, func() (bool, error) {
-				endpoints := &v1.Endpoints{}
-				err = r.client.Get(context.Background(), svcName, endpoints)
-				if err != nil {
-					// If not found, retry.
-					if apierrors.IsNotFound(err) {
-						logger.Info("Endpoints dependency doesn't exist yet", "name", objName, "namespace", objNamespace)
-						return false, nil
-					}
-
-					// Any other error, just quit
-					return false, err
-				}
-
-				for _, subset := range endpoints.Subsets {
-					if len(subset.Addresses) == 0 {
-						log.Info("Endpoints dependency has 0 ready addresses", "name", objName, "namespace", objNamespace)
-						return false, nil
-					}
-				}
-				// If we reach here, all of the endpoints subsets have at least 1 ready address and the service is ready
-				logger.Info("Service dependency is ready", "name", objName, "namespace", objNamespace)
-				return true, nil
-			})
-
-			if err != nil {
-				logger.Info("Service dependency check failed", "error", err.Error())
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
 // and what is in the Installation.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -319,9 +257,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// TODO: Do this when we know that just calico has deployed, the calico-node,
-	// resources have been created, or at least don't gate updating the Status
-	// on TSEE components/resource being created.
+	// Render the desired Calico components based on our configuration and then
+	// create or update them.
+	calico := render.Calico(instance, r.client, r.openshift)
+	for _, component := range calico.Render() {
+		if err := r.createOrUpdateComponent(ctx, instance, component); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	// We have successfully reconciled the Calico installation.
 	if r.openshift {
 		// If configured to run in openshift, update the config status with the current state.
 		reqLogger.V(1).Info("Updating openshift cluster network status")
@@ -334,92 +279,75 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	// Render the desired components based on our configuration. This represents the desired state of the cluster.
-	renderer := render.New(instance, r.client, r.openshift)
-	desiredComponents := renderer.Render()
-
-	// Create the desired state objects.
-	for _, component := range desiredComponents {
-		// Before creating the object, verify that its component dependencies exist. If the component is nil that means
-		// we can skip rendering it.
-		log.Info("Verifying deps for component")
-		if component == nil || !component.Ready() {
-			continue
-		}
-
-		for _, obj := range component.GetObjects() {
-			// Set Installation instance as the owner and controller.
-			if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
-				return reconcile.Result{}, err
-			}
-
-			logCtx := contextLoggerForResource(obj)
-			var old runtime.Object = obj.DeepCopyObject()
-			var key client.ObjectKey
-			key, err = client.ObjectKeyFromObject(obj)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-
-			err = r.client.Get(ctx, key, old)
-			if err != nil {
-				if !apierrors.IsNotFound(err) {
-					// Anything other than "Not found" we should retry.
-					return reconcile.Result{}, err
-				}
-				// Otherwise, if it was not found, we should create it.
-				logCtx.V(2).Info("Object does not exist", "error", err)
-			} else {
-				logCtx.V(1).Info("Resource already exists, update it")
-				err = r.client.Update(ctx, mergeState(obj, old))
-				if err != nil {
-					logCtx.WithValues("key", key).Info("Failed to update object.")
-					return reconcile.Result{}, err
-				}
-				continue
-			}
-
-			logCtx.Info("Creating new object.")
-			err = r.client.Create(ctx, obj)
-			if err != nil {
-				// Hit an error creating desired state object - we need to requeue.
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
-	// If the new spec does not require a kube-proxy installation, check if we have one and delete it.
-	if !instance.Spec.Components.KubeProxy.Required {
-		// Render the objects that we might want to delete.
-		cp := instance.DeepCopyObject().(*operator.Installation)
-		cp.Spec.Components.KubeProxy.Required = true
-		kubeProxyComponent := render.KubeProxy(cp)
-		for _, o := range kubeProxyComponent.GetObjects() {
-			logCtx := contextLoggerForResource(o)
-
-			// Check if the object exists.
-			var key client.ObjectKey
-			key, err = client.ObjectKeyFromObject(o)
-			logCtx.WithValues("key", key).V(1).Info("Checking if we need to delete object")
-			if err = r.client.Get(ctx, key, o); err != nil {
-				logCtx.WithValues("key", key, "error", err).Info("Error querying object")
-				continue
-			}
-
-			// Check if we created it.
-			if hasOwnerReference(o, instance, r.scheme) {
-				if err = r.client.Delete(ctx, o); err != nil {
-					logCtx.WithValues("key", key).Info("Error deleting instance.")
-					return reconcile.Result{}, err
-				}
-				logCtx.WithValues("key", key).Info("Object deleted.")
-			}
+	// Render any TigeraSecure resources, if configured to do so.
+	tigeraSecure := render.TigeraSecure(instance, r.client, r.openshift)
+	for _, component := range tigeraSecure.Render() {
+		if err := r.createOrUpdateComponent(ctx, instance, component); err != nil {
+			return reconcile.Result{}, err
 		}
 	}
 
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+// createOrUpdateComponent checks if the given component is ready, and creates or updates it in the cluster
+// if it is.
+func (r *ReconcileInstallation) createOrUpdateComponent(ctx context.Context, instance *operator.Installation, component render.Component) error {
+	// Before creating the component, make sure that it is ready. This provides a hook to do
+	// dependency checking for the component.
+	cmpLog := log.WithValues("component", component)
+	cmpLog.Info("Checking if component is ready to install")
+	if !component.Ready() {
+		cmpLog.Info("Component is not ready, skipping")
+		return nil
+	}
+	cmpLog.Info("Reconciling")
+
+	// Iterate through each object that comprises the component and attempt to create it,
+	// or update it if needed.
+	for _, obj := range component.Objects() {
+		// Set Installation instance as the owner and controller.
+		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
+			return err
+		}
+
+		logCtx := contextLoggerForResource(obj)
+		var old runtime.Object = obj.DeepCopyObject()
+		var key client.ObjectKey
+		key, err := client.ObjectKeyFromObject(obj)
+		if err != nil {
+			return err
+		}
+
+		err = r.client.Get(ctx, key, old)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				// Anything other than "Not found" we should retry.
+				return err
+			}
+			// Otherwise, if it was not found, we should create it.
+			logCtx.V(2).Info("Object does not exist", "error", err)
+		} else {
+			logCtx.V(1).Info("Resource already exists, update it")
+			err = r.client.Update(ctx, mergeState(obj, old))
+			if err != nil {
+				logCtx.WithValues("key", key).Info("Failed to update object.")
+				return err
+			}
+			continue
+		}
+
+		logCtx.Info("Creating new object.")
+		err = r.client.Create(ctx, obj)
+		if err != nil {
+			// Hit an error creating desired state object - we need to requeue.
+			return err
+		}
+	}
+	cmpLog.Info("Done reconciling")
+	return nil
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.

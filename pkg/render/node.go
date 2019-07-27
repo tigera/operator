@@ -35,7 +35,7 @@ type nodeComponent struct {
 	openshift bool
 }
 
-func (c *nodeComponent) GetObjects() []runtime.Object {
+func (c *nodeComponent) Objects() []runtime.Object {
 	return []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
@@ -43,10 +43,6 @@ func (c *nodeComponent) GetObjects() []runtime.Object {
 		c.nodeCNIConfigMap(),
 		c.nodeDaemonset(),
 	}
-}
-
-func (c *nodeComponent) GetComponentDeps() []runtime.Object {
-	return nil
 }
 
 func (c *nodeComponent) Ready() bool {

@@ -39,7 +39,7 @@ type complianceComponent struct {
 	openshift bool
 }
 
-func (c *complianceComponent) GetObjects() []runtime.Object {
+func (c *complianceComponent) Objects() []runtime.Object {
 	complianceObjs := []runtime.Object{
 		c.complianceControllerServiceAccount(),
 		c.complianceControllerRole(),
@@ -80,10 +80,6 @@ func (c *complianceComponent) GetObjects() []runtime.Object {
 	}
 
 	return complianceObjs
-}
-
-func (c *complianceComponent) GetComponentDeps() []runtime.Object {
-	return nil
 }
 
 func (c *complianceComponent) Ready() bool {

@@ -16,7 +16,6 @@ package installation
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -86,18 +85,6 @@ func fillDefaults(instance *operator.Installation, openshift bool) {
 	if len(instance.Spec.IPPools) == 0 {
 		instance.Spec.IPPools = []operator.IPPool{
 			{CIDR: "192.168.0.0/16"},
-		}
-	}
-	if instance.Spec.Components.KubeProxy.Required {
-		if len(instance.Spec.Components.KubeProxy.Image) == 0 {
-			// Openshift's latest release uses Kubernetes 1.13. This is the latest stable kube-proxy version under that
-			// release as of 5.21.19.
-			instance.Spec.Components.KubeProxy.Image = "k8s.gcr.io/kube-proxy:v1.13.6"
-		}
-		if len(instance.Spec.Components.KubeProxy.APIServer) == 0 {
-			// Default to using the injected environment variables. If configured with the --url-only-kubeconfig, these will be set
-			// to the correct values based on the provided kubeconfig file.
-			instance.Spec.Components.KubeProxy.APIServer = fmt.Sprintf("https://%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
 		}
 	}
 	if instance.Spec.Components.Node.MaxUnavailable == nil {

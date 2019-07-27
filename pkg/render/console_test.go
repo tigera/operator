@@ -17,10 +17,10 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -49,7 +49,7 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Console(instance, client)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(9))
 
 		// Should render the correct resources.
@@ -91,7 +91,7 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 		})
 		It("should not render any resources", func() {
 			component := render.Console(instance, client)
-			resources := component.GetObjects()
+			resources := component.Objects()
 			Expect(len(resources)).To(Equal(0))
 		})
 	})

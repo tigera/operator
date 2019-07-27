@@ -56,7 +56,7 @@ type consoleComponent struct {
 	managerCert []byte
 }
 
-func (c *consoleComponent) GetObjects() []runtime.Object {
+func (c *consoleComponent) Objects() []runtime.Object {
 	key, cert, ok := c.readOperatorSecret()
 	if !ok {
 		return nil
@@ -83,10 +83,6 @@ func (c *consoleComponent) GetObjects() []runtime.Object {
 	)
 
 	return objs
-}
-
-func (c *consoleComponent) GetComponentDeps() []runtime.Object {
-	return nil
 }
 
 func (c *consoleComponent) Ready() bool {

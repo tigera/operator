@@ -136,7 +136,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Node(defaultInstance, notOpenshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -155,7 +155,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a custom configuration", func() {
 		component := render.Node(instance, notOpenshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -281,7 +281,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, notOpenshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -333,7 +333,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when running on openshift", func() {
 		component := render.Node(defaultInstance, openshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -397,7 +397,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, openshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.

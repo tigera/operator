@@ -21,11 +21,8 @@ import (
 )
 
 type Component interface {
-	// GetObjects returns all objects this component contains.
-	GetObjects() []runtime.Object
-
-	// GetComponentDeps returns all objects this component depends on.
-	GetComponentDeps() []runtime.Object
+	// Objects returns all objects this component contains.
+	Objects() []runtime.Object
 
 	// Ready returns true if the component is ready to be created.
 	Ready() bool
@@ -36,24 +33,38 @@ type Renderer interface {
 	Render() []Component
 }
 
-func New(cr *operator.Installation, client client.Client, openshift bool) Renderer {
-	return renderer{cr, client, openshift}
+func Calico(cr *operator.Installation, c client.Client, openshift bool) Renderer {
+	return calicoRenderer{cr, c, openshift}
 }
 
-type renderer struct {
+func TigeraSecure(cr *operator.Installation, c client.Client, openshift bool) Renderer {
+	return tigeraRenderer{cr, c, openshift}
+}
+
+type calicoRenderer struct {
 	installation *operator.Installation
 	client       client.Client
 	openshift    bool
 }
 
-func (r renderer) Render() []Component {
+func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
 	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
-	components = appendNotNil(components, KubeProxy(r.installation))
 	components = appendNotNil(components, Namespaces(r.installation, r.openshift))
 	components = appendNotNil(components, Node(r.installation, r.openshift))
 	components = appendNotNil(components, KubeControllers(r.installation))
+	return components
+}
+
+type tigeraRenderer struct {
+	installation *operator.Installation
+	client       client.Client
+	openshift    bool
+}
+
+func (r tigeraRenderer) Render() []Component {
+	var components []Component
 	components = appendNotNil(components, APIServer(r.installation))
 	components = appendNotNil(components, Console(r.installation, r.client))
 	components = appendNotNil(components, Compliance(r.installation, r.openshift))

@@ -46,7 +46,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Compliance(instance, notOpenshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(27))
 		ns := "calico-monitoring"
 		rbac := "rbac.authorization.k8s.io"

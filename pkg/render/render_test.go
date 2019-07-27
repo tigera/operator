@@ -69,25 +69,10 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		r := render.New(instance, client, notOpenshift)
-		components := r.Render()
+		c := render.Calico(instance, client, notOpenshift)
+		t := render.TigeraSecure(instance, client, notOpenshift)
+		components := append(c.Render(), t.Render()...)
 		Expect(componentCount(components)).To(Equal(25))
-	})
-
-	It("should render all resources when kube-proxy is enabled", func() {
-		// In this scenario, we expect the basic resources from the default
-		// configuration plus resources for the kube-proxy, which includes
-		// an additional 4 resources:
-		// - kube-proxy ServiceAccount
-		// - kube-proxy ClusterRoleBinding
-		// - kube-proxy ConfigMap
-		// - kube-proxy DaemonSet
-		// - 1 PriorityClass
-		// - 14 custom resource definitions
-		instance.Spec.Components.KubeProxy.Required = true
-		r := render.New(instance, client, notOpenshift)
-		components := r.Render()
-		Expect(componentCount(components)).To(Equal(29))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -108,8 +93,9 @@ var _ = Describe("Rendering tests", func() {
 		// - 7 Intrusion Detection
 		// - 9 Console
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		r := render.New(instance, client, notOpenshift)
-		components := r.Render()
+		c := render.Calico(instance, client, notOpenshift)
+		t := render.TigeraSecure(instance, client, notOpenshift)
+		components := append(c.Render(), t.Render()...)
 		Expect(componentCount(components)).To(Equal(87))
 	})
 })
@@ -117,7 +103,7 @@ var _ = Describe("Rendering tests", func() {
 func componentCount(components []render.Component) int {
 	count := 0
 	for _, c := range components {
-		count += len(c.GetObjects())
+		count += len(c.Objects())
 	}
 	return count
 }

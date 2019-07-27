@@ -37,13 +37,6 @@ var _ = Describe("Namespace rendering tests", func() {
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				Components: operator.ComponentsSpec{
-					KubeProxy: operator.KubeProxySpec{
-						Required:  true,
-						APIServer: "https://apiserver:443",
-						Image:     "k8s.gcr.io/kube-proxy:v1.13.6",
-					},
-				},
 			},
 		}
 
@@ -51,7 +44,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace", func() {
 		component := render.Namespaces(instance, notOpenshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -64,7 +57,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		// We expect calico-system, tigera-system, and calico-monitoring.
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Namespaces(instance, notOpenshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -87,7 +80,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace for openshift", func() {
 		component := render.Namespaces(instance, openshift)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()

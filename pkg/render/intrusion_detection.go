@@ -44,13 +44,13 @@ type intrusionDetectionComponent struct {
 
 func (c *intrusionDetectionComponent) GetObjects() []runtime.Object {
 	return []runtime.Object{
-		intrusionDetectionServiceAccount(),
-		intrusionDetectionClusterRole(),
-		intrusionDetectionClusterRoleBinding(),
-		intrusionDetectionRole(),
-		intrusionDetectionRoleBinding(),
-		intrusionDetectionDeployment(c.cr),
-		intrusionDetectionElasticsearchJob(c.cr),
+		c.intrusionDetectionServiceAccount(),
+		c.intrusionDetectionClusterRole(),
+		c.intrusionDetectionClusterRoleBinding(),
+		c.intrusionDetectionRole(),
+		c.intrusionDetectionRoleBinding(),
+		c.intrusionDetectionDeployment(c.cr),
+		c.intrusionDetectionElasticsearchJob(c.cr),
 	}
 }
 
@@ -64,7 +64,7 @@ func (c *intrusionDetectionComponent) Ready(client client.Client) bool {
 	return true
 }
 
-func intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job {
+func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job {
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -84,14 +84,14 @@ func intrusionDetectionElasticsearchJob(cr *operator.Installation) *batchv1.Job 
 				Spec: v1.PodSpec{
 					RestartPolicy:    v1.RestartPolicyOnFailure,
 					ImagePullSecrets: cr.Spec.ImagePullSecrets,
-					Containers:       []v1.Container{intrusionDetectionJobContainer(cr)},
+					Containers:       []v1.Container{c.intrusionDetectionJobContainer(cr)},
 				},
 			},
 		},
 	}
 }
 
-func intrusionDetectionJobContainer(cr *operator.Installation) v1.Container {
+func (c *intrusionDetectionComponent) intrusionDetectionJobContainer(cr *operator.Installation) v1.Container {
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
 		Image: cr.Spec.Components.IntrusionDetection.Controller.Image,
@@ -128,7 +128,7 @@ func intrusionDetectionJobContainer(cr *operator.Installation) v1.Container {
 	}
 }
 
-func intrusionDetectionServiceAccount() *v1.ServiceAccount {
+func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,7 +138,7 @@ func intrusionDetectionServiceAccount() *v1.ServiceAccount {
 	}
 }
 
-func intrusionDetectionClusterRole() *rbacv1.ClusterRole {
+func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -162,7 +162,7 @@ func intrusionDetectionClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func intrusionDetectionClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -183,7 +183,7 @@ func intrusionDetectionClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
-func intrusionDetectionRole() *rbacv1.Role {
+func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -206,7 +206,7 @@ func intrusionDetectionRole() *rbacv1.Role {
 		},
 	}
 }
-func intrusionDetectionRoleBinding() *rbacv1.RoleBinding {
+func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -228,7 +228,7 @@ func intrusionDetectionRoleBinding() *rbacv1.RoleBinding {
 	}
 }
 
-func intrusionDetectionDeployment(cr *operator.Installation) *appsv1.Deployment {
+func (c *intrusionDetectionComponent) intrusionDetectionDeployment(cr *operator.Installation) *appsv1.Deployment {
 	var replicas int32 = 1
 
 	d := &appsv1.Deployment{
@@ -257,7 +257,7 @@ func intrusionDetectionDeployment(cr *operator.Installation) *appsv1.Deployment 
 					ServiceAccountName: "intrusion-detection-controller",
 					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
-						intrusionDetectionControllerContainer(cr),
+						c.intrusionDetectionControllerContainer(cr),
 					},
 					Volumes: []v1.Volume{
 						{
@@ -278,7 +278,7 @@ func intrusionDetectionDeployment(cr *operator.Installation) *appsv1.Deployment 
 	return d
 }
 
-func intrusionDetectionControllerContainer(cr *operator.Installation) v1.Container {
+func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer(cr *operator.Installation) v1.Container {
 	return corev1.Container{
 		Name:  "controller",
 		Image: cr.Spec.Components.IntrusionDetection.Controller.Image,

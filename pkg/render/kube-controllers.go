@@ -39,10 +39,10 @@ type kubeControllersComponent struct {
 
 func (c *kubeControllersComponent) GetObjects() []runtime.Object {
 	return []runtime.Object{
-		controllersServiceAccount(c.cr),
-		controllersRole(c.cr),
-		controllersRoleBinding(c.cr),
-		controllersDeployment(c.cr),
+		c.controllersServiceAccount(c.cr),
+		c.controllersRole(c.cr),
+		c.controllersRoleBinding(c.cr),
+		c.controllersDeployment(c.cr),
 	}
 }
 
@@ -54,7 +54,7 @@ func (c *kubeControllersComponent) Ready(client client.Client) bool {
 	return true
 }
 
-func controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *kubeControllersComponent) controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,7 +65,7 @@ func controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
 	}
 }
 
-func controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *kubeControllersComponent) controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -131,7 +131,7 @@ func controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
 	return role
 }
 
-func controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *kubeControllersComponent) controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -153,7 +153,7 @@ func controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBindin
 	}
 }
 
-func controllersDeployment(cr *operator.Installation) *apps.Deployment {
+func (c *kubeControllersComponent) controllersDeployment(cr *operator.Installation) *apps.Deployment {
 	tolerations := []v1.Toleration{
 		{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
 		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -25,10 +26,6 @@ import (
 )
 
 func CustomResourceDefinitions(cr *operator.Installation) Component {
-	crds := calicoCRDs(cr)
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		crds = append(crds, tigeraSecureCRDs(cr)...)
-	}
 	return &crdComponent{cr: cr}
 }
 
@@ -37,9 +34,9 @@ type crdComponent struct {
 }
 
 func (c *crdComponent) GetObjects() []runtime.Object {
-	crds := calicoCRDs(c.cr)
+	crds := c.calicoCRDs(c.cr)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		crds = append(crds, tigeraSecureCRDs(c.cr)...)
+		crds = append(crds, c.tigeraSecureCRDs(c.cr)...)
 	}
 	return crds
 }
@@ -57,7 +54,7 @@ type desiredCRD struct {
 	names apiextensions.CustomResourceDefinitionNames
 }
 
-func calicoCRDs(cr *operator.Installation) []runtime.Object {
+func (c *crdComponent) calicoCRDs(cr *operator.Installation) []runtime.Object {
 	desiredNames := []desiredCRD{
 		{
 			scope: apiextensions.ClusterScoped,
@@ -175,12 +172,12 @@ func calicoCRDs(cr *operator.Installation) []runtime.Object {
 
 	crds := []runtime.Object{}
 	for _, names := range desiredNames {
-		crds = append(crds, buildCRD(names))
+		crds = append(crds, c.buildCRD(names))
 	}
 	return crds
 }
 
-func tigeraSecureCRDs(cr *operator.Installation) []runtime.Object {
+func (c *crdComponent) tigeraSecureCRDs(cr *operator.Installation) []runtime.Object {
 	desiredNames := []desiredCRD{
 		{
 			scope: apiextensions.ClusterScoped,
@@ -234,12 +231,12 @@ func tigeraSecureCRDs(cr *operator.Installation) []runtime.Object {
 
 	crds := []runtime.Object{}
 	for _, names := range desiredNames {
-		crds = append(crds, buildCRD(names))
+		crds = append(crds, c.buildCRD(names))
 	}
 	return crds
 }
 
-func buildCRD(d desiredCRD) runtime.Object {
+func (c *crdComponent) buildCRD(d desiredCRD) runtime.Object {
 	return &apiextensions.CustomResourceDefinition{
 		TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s.crd.projectcalico.org", d.names.Plural)},

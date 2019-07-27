@@ -57,16 +57,16 @@ type consoleComponent struct {
 }
 
 func (c *consoleComponent) GetObjects() []runtime.Object {
-	key, cert, ok := readOperatorSecret(c.client)
+	key, cert, ok := c.readOperatorSecret()
 	if !ok {
 		return nil
 	}
 	objs := []runtime.Object{
-		consoleManagerServiceAccount(),
-		consoleManagerClusterRole(),
-		consoleManagerClusterRoleBinding(),
+		c.consoleManagerServiceAccount(),
+		c.consoleManagerClusterRole(),
+		c.consoleManagerClusterRoleBinding(),
 	}
-	key, cert, s := consoleOperatorSecret(key, cert)
+	key, cert, s := c.consoleOperatorSecret(key, cert)
 	if key == nil || cert == nil {
 		log.Info("Key or Cert not created")
 		return nil
@@ -75,11 +75,11 @@ func (c *consoleComponent) GetObjects() []runtime.Object {
 		objs = append(objs, s)
 	}
 	objs = append(objs,
-		consoleManagerCertificates(key, cert),
-		consoleManagerDeployment(c.cr),
-		consoleManagerService(c.cr),
-		tigeraUserClusterRole(),
-		tigeraNetworkAdminClusterRole(),
+		c.consoleManagerCertificates(key, cert),
+		c.consoleManagerDeployment(c.cr),
+		c.consoleManagerService(c.cr),
+		c.tigeraUserClusterRole(),
+		c.tigeraNetworkAdminClusterRole(),
 	)
 
 	return objs
@@ -92,7 +92,7 @@ func (c *consoleComponent) GetComponentDeps() []runtime.Object {
 func (c *consoleComponent) Ready(client client.Client) bool {
 	// Check that if the manager-tls secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function still returns true
-	_, err := validateManagerCertPair(client)
+	_, err := c.validateManagerCertPair()
 	if err != nil {
 		log.Error(err, "Checking Ready for Console indicates error with Manager TLS Cert")
 	}
@@ -102,7 +102,7 @@ func (c *consoleComponent) Ready(client client.Client) bool {
 }
 
 // consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
-func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
+func (c *consoleComponent) consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 	var replicas int32 = 1
 
 	d := &appsv1.Deployment{
@@ -143,14 +143,14 @@ func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 						"beta.kubernetes.io/os": "linux",
 					},
 					ServiceAccountName: "cnx-manager",
-					Tolerations:        consoleTolerations(),
+					Tolerations:        c.consoleTolerations(),
 					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
-						consoleManagerContainer(cr),
-						consoleEsProxyContainer(cr),
-						consoleProxyContainer(cr),
+						c.consoleManagerContainer(cr),
+						c.consoleEsProxyContainer(cr),
+						c.consoleProxyContainer(cr),
 					},
-					Volumes: consoleManagerVolumes(),
+					Volumes: c.consoleManagerVolumes(),
 				},
 			},
 		},
@@ -159,7 +159,7 @@ func consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
 }
 
 // consoleManagerVolumes returns the volumes for the Tigera Secure console component.
-func consoleManagerVolumes() []v1.Volume {
+func (c *consoleComponent) consoleManagerVolumes() []v1.Volume {
 	optional := true
 	return []v1.Volume{
 		{
@@ -186,7 +186,7 @@ func consoleManagerVolumes() []v1.Volume {
 }
 
 // consoleManagerProbe returns the probe for the manager container.
-func consoleManagerProbe() *v1.Probe {
+func (c *consoleComponent) consoleManagerProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -201,7 +201,7 @@ func consoleManagerProbe() *v1.Probe {
 }
 
 // consoleEsProxyProbe returns the probe for the ES proxy container.
-func consoleEsProxyProbe() *v1.Probe {
+func (c *consoleComponent) consoleEsProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -216,7 +216,7 @@ func consoleEsProxyProbe() *v1.Probe {
 }
 
 // consoleProxyProbe returns the probe for the proxy container.
-func consoleProxyProbe() *v1.Probe {
+func (c *consoleComponent) consoleProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -231,7 +231,7 @@ func consoleProxyProbe() *v1.Probe {
 }
 
 // consoleManagerEnvVars returns the envvars for the console manager container.
-func consoleManagerEnvVars(cr *operator.Installation) []v1.EnvVar {
+func (c *consoleComponent) consoleManagerEnvVars(cr *operator.Installation) []v1.EnvVar {
 	envs := []v1.EnvVar{
 		{Name: "CNX_PROMETHEUS_API_URL", Value: "/api/v1/namespaces/calico-monitoring/services/calico-node-prometheus:9090/proxy/api/v1"},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
@@ -243,26 +243,26 @@ func consoleManagerEnvVars(cr *operator.Installation) []v1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 	}
 
-	envs = append(envs, consoleOAuth2EnvVars(cr)...)
+	envs = append(envs, c.consoleOAuth2EnvVars(cr)...)
 	return envs
 }
 
 // consoleManagerContainer returns the manager container.
-func consoleManagerContainer(cr *operator.Installation) corev1.Container {
+func (c *consoleComponent) consoleManagerContainer(cr *operator.Installation) corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	return corev1.Container{
 		Name:          "cnx-manager",
 		Image:         cr.Spec.Components.Console.Manager.Image,
-		Env:           consoleManagerEnvVars(cr),
+		Env:           c.consoleManagerEnvVars(cr),
 		VolumeMounts:  volumeMounts,
-		LivenessProbe: consoleManagerProbe(),
+		LivenessProbe: c.consoleManagerProbe(),
 	}
 }
 
 // consoleOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
-func consoleOAuth2EnvVars(cr *operator.Installation) []v1.EnvVar {
+func (c *consoleComponent) consoleOAuth2EnvVars(cr *operator.Installation) []v1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.Auth.Type)},
 	}
@@ -285,20 +285,20 @@ func consoleOAuth2EnvVars(cr *operator.Installation) []v1.EnvVar {
 }
 
 // consoleProxyContainer returns the container for the console proxy container.
-func consoleProxyContainer(cr *operator.Installation) corev1.Container {
+func (c *consoleComponent) consoleProxyContainer(cr *operator.Installation) corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
 		Image: cr.Spec.Components.Console.Proxy.Image,
-		Env:   consoleOAuth2EnvVars(cr),
+		Env:   c.consoleOAuth2EnvVars(cr),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
-		LivenessProbe: consoleProxyProbe(),
+		LivenessProbe: c.consoleProxyProbe(),
 	}
 }
 
 // consoleEsProxyEnv returns the env vars for the ES proxy container.
-func consoleEsProxyEnv() []corev1.EnvVar {
+func (c *consoleComponent) consoleEsProxyEnv() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{
@@ -337,23 +337,23 @@ func consoleEsProxyEnv() []corev1.EnvVar {
 }
 
 // consoleEsProxyContainer returns the ES proxy container
-func consoleEsProxyContainer(cr *operator.Installation) corev1.Container {
+func (c *consoleComponent) consoleEsProxyContainer(cr *operator.Installation) corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
 		Image:         cr.Spec.Components.Console.EsProxy.Image,
-		Env:           consoleEsProxyEnv(),
+		Env:           c.consoleEsProxyEnv(),
 		VolumeMounts:  volumeMounts,
-		LivenessProbe: consoleEsProxyProbe(),
+		LivenessProbe: c.consoleEsProxyProbe(),
 	}
 
 	return apiServer
 }
 
 // consoleTolerations returns the tolerations for the Tigera Secure console deployment pods.
-func consoleTolerations() []v1.Toleration {
+func (c *consoleComponent) consoleTolerations() []v1.Toleration {
 	return []v1.Toleration{
 		{
 			Key:    "node-role.kubernetes.io/master",
@@ -369,7 +369,7 @@ func consoleTolerations() []v1.Toleration {
 }
 
 // consoleManagerService returns the service exposing the Tigera Secure web app.
-func consoleManagerService(cr *operator.Installation) *v1.Service {
+func (c *consoleComponent) consoleManagerService(cr *operator.Installation) *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -392,7 +392,7 @@ func consoleManagerService(cr *operator.Installation) *v1.Service {
 }
 
 // consoleManagerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-func consoleManagerServiceAccount() *v1.ServiceAccount {
+func (c *consoleComponent) consoleManagerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: managerNamespace},
@@ -400,7 +400,7 @@ func consoleManagerServiceAccount() *v1.ServiceAccount {
 }
 
 // consoleManagerClusterRole returns a clusterrole that allows authn/authz review requests.
-func consoleManagerClusterRole() *rbacv1.ClusterRole {
+func (c *consoleComponent) consoleManagerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -423,7 +423,7 @@ func consoleManagerClusterRole() *rbacv1.ClusterRole {
 
 // consoleManagerClusterRoleBinding returns a clusterrolebinding that gives the cnx-manager serviceaccount
 // the permissions in the cnx-manager-role.
-func consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager-binding"},
@@ -447,10 +447,10 @@ func consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
-func validateManagerCertPair(c client.Client) (*v1.Secret, error) {
+func (c *consoleComponent) validateManagerCertPair() (*v1.Secret, error) {
 	secret := &v1.Secret{}
 	secretNamespacedName := types.NamespacedName{Name: "manager-tls", Namespace: operatorNamespace}
-	err := c.Get(context.Background(), secretNamespacedName, secret)
+	err := c.client.Get(context.Background(), secretNamespacedName, secret)
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable
 		// so return valid in that case.
@@ -472,8 +472,8 @@ func validateManagerCertPair(c client.Client) (*v1.Secret, error) {
 	return secret, nil
 }
 
-func readOperatorSecret(c client.Client) (key, cert []byte, ok bool) {
-	secret, err := validateManagerCertPair(c)
+func (c *consoleComponent) readOperatorSecret() (key, cert []byte, ok bool) {
+	secret, err := c.validateManagerCertPair()
 	if err != nil {
 		log.Error(err, "Failed to validate cert pair")
 		return nil, nil, false
@@ -492,17 +492,17 @@ func readOperatorSecret(c client.Client) (key, cert []byte, ok bool) {
 // If k,c are populated then this indicates the tigera-operator secret
 // already exists so no new key/cert is created and no Secret is returned,
 // but the passed in k,c values are returned as key,cert.
-func consoleOperatorSecret(k, c []byte) (key, cert []byte, s *v1.Secret) {
-	if len(k) != 0 && len(c) != 0 {
+func (c *consoleComponent) consoleOperatorSecret(kk, cc []byte) (key, cert []byte, s *v1.Secret) {
+	if len(kk) != 0 && len(cc) != 0 {
 		// If the secret already exists in the operator NS then nothing to do,
 		// so no need to return it to be created.
-		return k, c, nil
+		return kk, cc, nil
 	}
 
 	log.Info("Creating self-signed certificate", managerTlsSecretName, managerTlsSecretName)
 	// Create cert
 	var err error
-	key, cert, err = makeSignedCertKeyPair()
+	key, cert, err = c.makeSignedCertKeyPair()
 	if err != nil {
 		log.Error(err, "Unable to create signed cert pair")
 		return nil, nil, nil
@@ -521,11 +521,10 @@ func consoleOperatorSecret(k, c []byte) (key, cert []byte, s *v1.Secret) {
 	}
 }
 
-// makeSignedCertKeyPair generates and returns a key pair for a self signed
-// cert.
+// makeSignedCertKeyPair generates and returns a key pair for a self signed cert.
 // This code came from:
 // https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
-func makeSignedCertKeyPair() (key, cert []byte, err error) {
+func (c *consoleComponent) makeSignedCertKeyPair() (key, cert []byte, err error) {
 	temporaryCertDir, err := ioutil.TempDir("", "serving-cert-")
 	if err != nil {
 		return nil, nil, err
@@ -556,7 +555,7 @@ func makeSignedCertKeyPair() (key, cert []byte, err error) {
 	return keyContent.Bytes(), crtContent.Bytes(), nil
 }
 
-func consoleManagerCertificates(key, cert []byte) *v1.Secret {
+func (c *consoleComponent) consoleManagerCertificates(key, cert []byte) *v1.Secret {
 	data := make(map[string][]byte)
 	data[managerSecretKeyName] = key
 	data[managerSecretCertName] = cert
@@ -571,7 +570,7 @@ func consoleManagerCertificates(key, cert []byte) *v1.Secret {
 }
 
 // tigeraUserClusterRole returns a cluster role for a default Tigera Secure user.
-func tigeraUserClusterRole() *rbacv1.ClusterRole {
+func (c *consoleComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -641,7 +640,7 @@ func tigeraUserClusterRole() *rbacv1.ClusterRole {
 }
 
 // tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure console network admin.
-func tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
+func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

@@ -16,7 +16,6 @@ package installation
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -25,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/openshift"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -52,7 +52,6 @@ import (
 )
 
 var log = logf.Log.WithName("installation_controller")
-var openshiftEnv = "OPENSHIFT"
 var defaultInstanceKey = client.ObjectKey{Name: "default"}
 var openshiftNetworkConfig = "cluster"
 
@@ -64,10 +63,16 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) *ReconcileInstallation {
+	openshift, err := openshift.IsOpenshift(mgr.GetConfig())
+	if err != nil {
+		panic(err)
+	}
+	log.WithValues("openshift", openshift).Info("Checking type of cluster")
 	return &ReconcileInstallation{
-		client:  mgr.GetClient(),
-		scheme:  mgr.GetScheme(),
-		watches: make(map[runtime.Object]struct{}),
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		watches:   make(map[runtime.Object]struct{}),
+		openshift: openshift,
 	}
 }
 
@@ -87,7 +92,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return err
 	}
 
-	if os.Getenv(openshiftEnv) == "true" {
+	if r.openshift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
@@ -168,6 +173,7 @@ type ReconcileInstallation struct {
 	scheme     *runtime.Scheme
 	controller controller.Controller
 	watches    map[runtime.Object]struct{}
+	openshift  bool
 }
 
 // AddWatch creates a watch on the given object. Only Create events are processed.
@@ -291,7 +297,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	openshiftConfig := &configv1.Network{}
-	if os.Getenv(openshiftEnv) == "true" {
+	if r.openshift {
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.V(1).Info("Querying for openshift network config")
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
@@ -315,7 +321,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// TODO: Do this when we know that just calico has deployed, the calico-node,
 	// resources have been created, or at least don't gate updating the Status
 	// on TSEE components/resource being created.
-	if os.Getenv(openshiftEnv) == "true" {
+	if r.openshift {
 		// If configured to run in openshift, update the config status with the current state.
 		reqLogger.V(1).Info("Updating openshift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
@@ -328,11 +334,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Render the desired components based on our configuration. This represents the desired state of the cluster.
-	desiredComponents := render.Render(instance, r.client)
+	renderer := render.New(instance, r.client, r.openshift)
+	desiredComponents := renderer.Render()
 
 	// Create the desired state objects.
 	for _, component := range desiredComponents {
-
 		// Before creating the object, verify that its component dependencies exist. If the component is nil that means
 		// we can skip rendering it.
 		log.Info("Verifying deps for component")
@@ -467,6 +473,5 @@ func hasOwnerReference(obj runtime.Object, instance metav1.Object, scheme *runti
 			return true
 		}
 	}
-
 	return false
 }

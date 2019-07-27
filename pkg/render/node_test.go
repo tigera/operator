@@ -15,8 +15,6 @@
 package render_test
 
 import (
-	"os"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -26,6 +24,11 @@ import (
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+)
+
+var (
+	openshift    = true
+	notOpenshift = false
 )
 
 var _ = Describe("Node rendering tests", func() {
@@ -132,7 +135,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Node(defaultInstance)
+		component := render.Node(defaultInstance, notOpenshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -151,7 +154,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a custom configuration", func() {
-		component := render.Node(instance)
+		component := render.Node(instance, notOpenshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -277,7 +280,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance)
+		component := render.Node(defaultInstance, notOpenshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -328,11 +331,8 @@ var _ = Describe("Node rendering tests", func() {
 		verifyProbes(ds, false)
 	})
 
-	It("should render all resources when OPENSHIFT=true", func() {
-		err := os.Setenv("OPENSHIFT", "true")
-		Expect(err).To(BeNil())
-		defer os.Unsetenv("OPENSHIFT")
-		component := render.Node(defaultInstance)
+	It("should render all resources when running on openshift", func() {
+		component := render.Node(defaultInstance, openshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -394,12 +394,9 @@ var _ = Describe("Node rendering tests", func() {
 		verifyProbes(ds, true)
 	})
 
-	It("should render all resources when variant is TigeraSecureEnterprise and OPENSHIFT=true", func() {
-		err := os.Setenv("OPENSHIFT", "true")
-		Expect(err).To(BeNil())
-		defer os.Unsetenv("OPENSHIFT")
+	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance)
+		component := render.Node(defaultInstance, openshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(5))
 

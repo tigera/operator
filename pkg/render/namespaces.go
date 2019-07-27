@@ -15,8 +15,6 @@
 package render
 
 import (
-	"os"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -31,22 +29,23 @@ const (
 	calicoMonitoringNamespace = "calico-monitoring"
 )
 
-func Namespaces(cr *operator.Installation) Component {
-	return &namespaceComponent{cr: cr}
+func Namespaces(cr *operator.Installation, openshift bool) Component {
+	return &namespaceComponent{cr: cr, openshift: openshift}
 }
 
 type namespaceComponent struct {
-	cr *operator.Installation
+	cr        *operator.Installation
+	openshift bool
 }
 
 func (c *namespaceComponent) GetObjects() []runtime.Object {
 	ns := []runtime.Object{
-		createNamespace(calicoNamespace),
+		c.createNamespace(calicoNamespace),
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		ns = append(ns, createNamespace(tigeraSecureNamespace))
-		ns = append(ns, createNamespace(calicoMonitoringNamespace))
+		ns = append(ns, c.createNamespace(tigeraSecureNamespace))
+		ns = append(ns, c.createNamespace(calicoMonitoringNamespace))
 	}
 	return ns
 }
@@ -59,7 +58,7 @@ func (c *namespaceComponent) Ready(client client.Client) bool {
 	return true
 }
 
-func createNamespace(name string) *v1.Namespace {
+func (c *namespaceComponent) createNamespace(name string) *v1.Namespace {
 	ns := &v1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,7 +69,7 @@ func createNamespace(name string) *v1.Namespace {
 	}
 
 	// OpenShift requires special labels and annotations.
-	if os.Getenv("OPENSHIFT") == "true" {
+	if c.openshift {
 		ns.Labels["openshift.io/run-level"] = "0"
 		ns.Annotations["openshift.io/node-selector"] = ""
 	}

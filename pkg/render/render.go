@@ -31,18 +31,33 @@ type Component interface {
 	Ready(client client.Client) bool
 }
 
-func Render(cr *operator.Installation, cli client.Client) []Component {
+// A Renderer is capable of generating components to be installed on the cluster.
+type Renderer interface {
+	Render() []Component
+}
+
+func New(cr *operator.Installation, client client.Client, openshift bool) Renderer {
+	return renderer{cr, client, openshift}
+}
+
+type renderer struct {
+	installation *operator.Installation
+	client       client.Client
+	openshift    bool
+}
+
+func (r renderer) Render() []Component {
 	var components []Component
-	components = appendNotNil(components, CustomResourceDefinitions(cr))
-	components = appendNotNil(components, PriorityClassDefinitions(cr))
-	components = appendNotNil(components, KubeProxy(cr))
-	components = appendNotNil(components, Namespaces(cr))
-	components = appendNotNil(components, Node(cr))
-	components = appendNotNil(components, KubeControllers(cr))
-	components = appendNotNil(components, APIServer(cr))
-	components = appendNotNil(components, Console(cr, cli))
-	components = appendNotNil(components, Compliance(cr))
-	components = appendNotNil(components, IntrusionDetection(cr))
+	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
+	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
+	components = appendNotNil(components, KubeProxy(r.installation))
+	components = appendNotNil(components, Namespaces(r.installation, r.openshift))
+	components = appendNotNil(components, Node(r.installation, r.openshift))
+	components = appendNotNil(components, KubeControllers(r.installation))
+	components = appendNotNil(components, APIServer(r.installation))
+	components = appendNotNil(components, Console(r.installation, r.client))
+	components = appendNotNil(components, Compliance(r.installation, r.openshift))
+	components = appendNotNil(components, IntrusionDetection(r.installation))
 	return components
 }
 

@@ -293,7 +293,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	fillDefaults(instance)
+	// Populate the instance with defaults for any fields not provided by the user.
+	fillDefaults(instance, r.openshift)
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	openshiftConfig := &configv1.Network{}

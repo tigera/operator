@@ -28,7 +28,7 @@ var _ = Describe("Defaulting logic tests", func() {
 	maxUnavailable := intstr.FromInt(2)
 	It("should properly fill defaults on an empty instance", func() {
 		instance := &operator.Installation{}
-		fillDefaults(instance)
+		fillDefaults(instance, false)
 		Expect(instance.Spec.Version).To(Equal("latest"))
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(Equal("docker.io/"))
@@ -56,7 +56,7 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		fillDefaults(instance)
+		fillDefaults(instance, false)
 		Expect(instance.Spec.Version).To(Equal("latest"))
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(Equal("quay.io/"))
@@ -281,7 +281,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
-		fillDefaults(instanceCopy)
+		fillDefaults(instanceCopy, false)
 		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
 	})
 
@@ -291,7 +291,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				Registry: "test-reg",
 			},
 		}
-		fillDefaults(instance)
+		fillDefaults(instance, false)
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
 	})
 })

@@ -39,11 +39,11 @@ type nodeComponent struct {
 
 func (c *nodeComponent) GetObjects() []runtime.Object {
 	return []runtime.Object{
-		c.nodeServiceAccount(c.cr),
-		c.nodeRole(c.cr),
-		c.nodeRoleBinding(c.cr),
-		c.nodeCNIConfigMap(c.cr),
-		c.nodeDaemonset(c.cr),
+		c.nodeServiceAccount(),
+		c.nodeRole(),
+		c.nodeRoleBinding(),
+		c.nodeCNIConfigMap(),
+		c.nodeDaemonset(),
 	}
 }
 
@@ -56,7 +56,7 @@ func (c *nodeComponent) Ready(client client.Client) bool {
 }
 
 // nodeServiceAccount creates the node's service account.
-func (c *nodeComponent) nodeServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *nodeComponent) nodeServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -67,7 +67,7 @@ func (c *nodeComponent) nodeServiceAccount(cr *operator.Installation) *v1.Servic
 }
 
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
-func (c *nodeComponent) nodeRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -90,7 +90,7 @@ func (c *nodeComponent) nodeRoleBinding(cr *operator.Installation) *rbacv1.Clust
 }
 
 // nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
-func (c *nodeComponent) nodeRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -205,7 +205,7 @@ func (c *nodeComponent) nodeRole(cr *operator.Installation) *rbacv1.ClusterRole 
 			},
 		},
 	}
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -232,7 +232,7 @@ func (c *nodeComponent) nodeRole(cr *operator.Installation) *rbacv1.ClusterRole 
 }
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
-func (c *nodeComponent) nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMap {
+func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 	var config = `{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -272,7 +272,7 @@ func (c *nodeComponent) nodeCNIConfigMap(cr *operator.Installation) *v1.ConfigMa
 }
 
 // nodeDaemonset creates the node damonset.
-func (c *nodeComponent) nodeDaemonset(cr *operator.Installation) *apps.DaemonSet {
+func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	var terminationGracePeriod int64 = 0
 
 	ds := apps.DaemonSet{
@@ -291,19 +291,19 @@ func (c *nodeComponent) nodeDaemonset(cr *operator.Installation) *apps.DaemonSet
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:                  map[string]string{},
-					Tolerations:                   c.nodeTolerations(cr),
-					ImagePullSecrets:              cr.Spec.ImagePullSecrets,
+					Tolerations:                   c.nodeTolerations(),
+					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                []v1.Container{c.cniContainer(cr), c.flexVolumeContainer(cr)},
-					Containers:                    []v1.Container{c.nodeContainer(cr)},
-					Volumes:                       c.nodeVolumes(cr),
+					InitContainers:                []v1.Container{c.cniContainer(), c.flexVolumeContainer()},
+					Containers:                    []v1.Container{c.nodeContainer()},
+					Volumes:                       c.nodeVolumes(),
 				},
 			},
 			UpdateStrategy: apps.DaemonSetUpdateStrategy{
 				RollingUpdate: &apps.RollingUpdateDaemonSet{
-					MaxUnavailable: cr.Spec.Components.Node.MaxUnavailable,
+					MaxUnavailable: c.cr.Spec.Components.Node.MaxUnavailable,
 				},
 			},
 		},
@@ -313,7 +313,7 @@ func (c *nodeComponent) nodeDaemonset(cr *operator.Installation) *apps.DaemonSet
 }
 
 // nodeTolerations creates the node's tolerations.
-func (c *nodeComponent) nodeTolerations(cr *operator.Installation) []v1.Toleration {
+func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 	tolerations := []v1.Toleration{
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
@@ -321,12 +321,12 @@ func (c *nodeComponent) nodeTolerations(cr *operator.Installation) []v1.Tolerati
 	}
 
 	// Merge in any user-supplied overrides.
-	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.Node.Tolerations)
+	tolerations = setCustomTolerations(tolerations, c.cr.Spec.Components.Node.Tolerations)
 	return tolerations
 }
 
 // nodeVolumes creates the node's volumes.
-func (c *nodeComponent) nodeVolumes(cr *operator.Installation) []v1.Volume {
+func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
 
@@ -335,13 +335,13 @@ func (c *nodeComponent) nodeVolumes(cr *operator.Installation) []v1.Volume {
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNIBinDir}}},
-		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cr.Spec.CNINetDir}}},
+		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNIBinDir}}},
+		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNINetDir}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 	}
 
 	// Override with Tigera-specific config.
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Add volume for calico logs.
 		calicoLogVol := v1.Volume{
 			Name:         "var-log-calico",
@@ -366,27 +366,27 @@ func (c *nodeComponent) nodeVolumes(cr *operator.Installation) []v1.Volume {
 	}
 	volumes = append(volumes, flexVolume)
 
-	volumes = setCustomVolumes(volumes, cr.Spec.Components.Node.ExtraVolumes)
-	volumes = setCustomVolumes(volumes, cr.Spec.Components.CNI.ExtraVolumes)
+	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.Node.ExtraVolumes)
+	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.CNI.ExtraVolumes)
 	return volumes
 }
 
 // cniContainer creates the node's init container that installs CNI.
-func (c *nodeComponent) cniContainer(cr *operator.Installation) v1.Container {
+func (c *nodeComponent) cniContainer() v1.Container {
 	// Determine environment to pass to the CNI init container.
-	cniEnv := c.cniEnvvars(cr)
+	cniEnv := c.cniEnvvars()
 	cniVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
 	// Merge in any user-supplied overrides.
-	cniEnv = setCustomEnv(cniEnv, cr.Spec.Components.CNI.ExtraEnv)
-	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, cr.Spec.Components.CNI.ExtraVolumeMounts)
+	cniEnv = setCustomEnv(cniEnv, c.cr.Spec.Components.CNI.ExtraEnv)
+	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, c.cr.Spec.Components.CNI.ExtraVolumeMounts)
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        cr.Spec.Components.CNI.Image,
+		Image:        c.cr.Spec.Components.CNI.Image,
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -395,7 +395,7 @@ func (c *nodeComponent) cniContainer(cr *operator.Installation) v1.Container {
 
 // flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
-func (c *nodeComponent) flexVolumeContainer(cr *operator.Installation) v1.Container {
+func (c *nodeComponent) flexVolumeContainer() v1.Container {
 	flexVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
@@ -408,11 +408,11 @@ func (c *nodeComponent) flexVolumeContainer(cr *operator.Installation) v1.Contai
 }
 
 // cniEnvvars creates the CNI container's envvars.
-func (c *nodeComponent) cniEnvvars(cr *operator.Installation) []v1.EnvVar {
+func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 	return []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
-		{Name: "CNI_NET_DIR", Value: cr.Spec.CNINetDir},
+		{Name: "CNI_NET_DIR", Value: c.cr.Spec.CNINetDir},
 		{
 			Name: "CNI_NETWORK_CONFIG",
 			ValueFrom: &v1.EnvVarSource{
@@ -428,33 +428,33 @@ func (c *nodeComponent) cniEnvvars(cr *operator.Installation) []v1.EnvVar {
 }
 
 // nodeContainer creates the main node container.
-func (c *nodeComponent) nodeContainer(cr *operator.Installation) v1.Container {
-	lp, rp := c.nodeLivenessReadinessProbes(cr)
+func (c *nodeComponent) nodeContainer() v1.Container {
+	lp, rp := c.nodeLivenessReadinessProbes()
 	isPrivileged := true
 	return v1.Container{
 		Name:            "calico-node",
-		Image:           cr.Spec.Components.Node.Image,
-		Resources:       c.nodeResources(cr),
+		Image:           c.cr.Spec.Components.Node.Image,
+		Resources:       c.nodeResources(),
 		SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
-		Env:             c.nodeEnvVars(cr),
-		VolumeMounts:    c.nodeVolumeMounts(cr),
+		Env:             c.nodeEnvVars(),
+		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
 		ReadinessProbe:  rp,
 	}
 }
 
 // nodeResources creates the node's resource requirements.
-func (c *nodeComponent) nodeResources(cr *operator.Installation) v1.ResourceRequirements {
+func (c *nodeComponent) nodeResources() v1.ResourceRequirements {
 	res := v1.ResourceRequirements{}
-	if len(cr.Spec.Components.Node.Resources.Limits) > 0 || len(cr.Spec.Components.Node.Resources.Requests) > 0 {
-		res.Requests = cr.Spec.Components.Node.Resources.Requests
-		res.Limits = cr.Spec.Components.Node.Resources.Limits
+	if len(c.cr.Spec.Components.Node.Resources.Limits) > 0 || len(c.cr.Spec.Components.Node.Resources.Requests) > 0 {
+		res.Requests = c.cr.Spec.Components.Node.Resources.Requests
+		res.Limits = c.cr.Spec.Components.Node.Resources.Limits
 	}
 	return res
 }
 
 // nodeVolumeMounts creates the node's volume mounts.
-func (c *nodeComponent) nodeVolumeMounts(cr *operator.Installation) []v1.VolumeMount {
+func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	nodeVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
@@ -462,26 +462,26 @@ func (c *nodeComponent) nodeVolumeMounts(cr *operator.Installation) []v1.VolumeM
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 	}
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	}
 
-	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, cr.Spec.Components.Node.ExtraVolumeMounts)
+	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, c.cr.Spec.Components.Node.ExtraVolumeMounts)
 	return nodeVolumeMounts
 }
 
 // nodeEnvVars creates the node's envvars.
-func (c *nodeComponent) nodeEnvVars(cr *operator.Installation) []v1.EnvVar {
+func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	nodeEnv := []v1.EnvVar{
-		{Name: "DATASTORE_TYPE", Value: string(cr.Spec.Datastore.Type)},
+		{Name: "DATASTORE_TYPE", Value: string(c.cr.Spec.Datastore.Type)},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 		{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
 		{Name: "IP", Value: "autodetect"},
-		{Name: "CALICO_IPV4POOL_CIDR", Value: cr.Spec.IPPools[0].CIDR},
+		{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.IPPools[0].CIDR},
 		{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_IPINIPMTU", Value: "1440"},
@@ -495,7 +495,7 @@ func (c *nodeComponent) nodeEnvVars(cr *operator.Installation) []v1.EnvVar {
 			},
 		},
 	}
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -514,12 +514,12 @@ func (c *nodeComponent) nodeEnvVars(cr *operator.Installation) []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
 	}
 
-	nodeEnv = setCustomEnv(nodeEnv, cr.Spec.Components.Node.ExtraEnv)
+	nodeEnv = setCustomEnv(nodeEnv, c.cr.Spec.Components.Node.ExtraEnv)
 	return nodeEnv
 }
 
 // nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
-func (c *nodeComponent) nodeLivenessReadinessProbes(cr *operator.Installation) (*v1.Probe, *v1.Probe) {
+func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}

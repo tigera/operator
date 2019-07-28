@@ -76,8 +76,8 @@ func (c *consoleComponent) GetObjects() []runtime.Object {
 	}
 	objs = append(objs,
 		c.consoleManagerCertificates(key, cert),
-		c.consoleManagerDeployment(c.cr),
-		c.consoleManagerService(c.cr),
+		c.consoleManagerDeployment(),
+		c.consoleManagerService(),
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 	)
@@ -102,7 +102,7 @@ func (c *consoleComponent) Ready(client client.Client) bool {
 }
 
 // consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
-func (c *consoleComponent) consoleManagerDeployment(cr *operator.Installation) *appsv1.Deployment {
+func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	d := &appsv1.Deployment{
@@ -144,11 +144,11 @@ func (c *consoleComponent) consoleManagerDeployment(cr *operator.Installation) *
 					},
 					ServiceAccountName: "cnx-manager",
 					Tolerations:        c.consoleTolerations(),
-					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
-						c.consoleManagerContainer(cr),
-						c.consoleEsProxyContainer(cr),
-						c.consoleProxyContainer(cr),
+						c.consoleManagerContainer(),
+						c.consoleEsProxyContainer(),
+						c.consoleProxyContainer(),
 					},
 					Volumes: c.consoleManagerVolumes(),
 				},
@@ -231,7 +231,7 @@ func (c *consoleComponent) consoleProxyProbe() *v1.Probe {
 }
 
 // consoleManagerEnvVars returns the envvars for the console manager container.
-func (c *consoleComponent) consoleManagerEnvVars(cr *operator.Installation) []v1.EnvVar {
+func (c *consoleComponent) consoleManagerEnvVars() []v1.EnvVar {
 	envs := []v1.EnvVar{
 		{Name: "CNX_PROMETHEUS_API_URL", Value: "/api/v1/namespaces/calico-monitoring/services/calico-node-prometheus:9090/proxy/api/v1"},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
@@ -243,41 +243,41 @@ func (c *consoleComponent) consoleManagerEnvVars(cr *operator.Installation) []v1
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 	}
 
-	envs = append(envs, c.consoleOAuth2EnvVars(cr)...)
+	envs = append(envs, c.consoleOAuth2EnvVars()...)
 	return envs
 }
 
 // consoleManagerContainer returns the manager container.
-func (c *consoleComponent) consoleManagerContainer(cr *operator.Installation) corev1.Container {
+func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	return corev1.Container{
 		Name:          "cnx-manager",
-		Image:         cr.Spec.Components.Console.Manager.Image,
-		Env:           c.consoleManagerEnvVars(cr),
+		Image:         c.cr.Spec.Components.Console.Manager.Image,
+		Env:           c.consoleManagerEnvVars(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
 	}
 }
 
 // consoleOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
-func (c *consoleComponent) consoleOAuth2EnvVars(cr *operator.Installation) []v1.EnvVar {
+func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 	envs := []corev1.EnvVar{
-		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(cr.Spec.Components.Console.Auth.Type)},
+		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(c.cr.Spec.Components.Console.Auth.Type)},
 	}
 
-	switch cr.Spec.Components.Console.Auth.Type {
+	switch c.cr.Spec.Components.Console.Auth.Type {
 	case operator.AuthTypeOIDC:
 		oidcEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: cr.Spec.Components.Console.Auth.Authority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: cr.Spec.Components.Console.Auth.ClientID},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.cr.Spec.Components.Console.Auth.Authority},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cr.Spec.Components.Console.Auth.ClientID},
 		}
 		envs = append(envs, oidcEnvs...)
 	case operator.AuthTypeOAuth:
 		oauthEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: cr.Spec.Components.Console.Auth.Authority},
-			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: cr.Spec.Components.Console.Auth.ClientID},
+			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: c.cr.Spec.Components.Console.Auth.Authority},
+			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: c.cr.Spec.Components.Console.Auth.ClientID},
 		}
 		envs = append(envs, oauthEnvs...)
 	}
@@ -285,11 +285,11 @@ func (c *consoleComponent) consoleOAuth2EnvVars(cr *operator.Installation) []v1.
 }
 
 // consoleProxyContainer returns the container for the console proxy container.
-func (c *consoleComponent) consoleProxyContainer(cr *operator.Installation) corev1.Container {
+func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
-		Image: cr.Spec.Components.Console.Proxy.Image,
-		Env:   c.consoleOAuth2EnvVars(cr),
+		Image: c.cr.Spec.Components.Console.Proxy.Image,
+		Env:   c.consoleOAuth2EnvVars(),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
@@ -337,13 +337,13 @@ func (c *consoleComponent) consoleEsProxyEnv() []corev1.EnvVar {
 }
 
 // consoleEsProxyContainer returns the ES proxy container
-func (c *consoleComponent) consoleEsProxyContainer(cr *operator.Installation) corev1.Container {
+func (c *consoleComponent) consoleEsProxyContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
-		Image:         cr.Spec.Components.Console.EsProxy.Image,
+		Image:         c.cr.Spec.Components.Console.EsProxy.Image,
 		Env:           c.consoleEsProxyEnv(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleEsProxyProbe(),
@@ -369,7 +369,7 @@ func (c *consoleComponent) consoleTolerations() []v1.Toleration {
 }
 
 // consoleManagerService returns the service exposing the Tigera Secure web app.
-func (c *consoleComponent) consoleManagerService(cr *operator.Installation) *v1.Service {
+func (c *consoleComponent) consoleManagerService() *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

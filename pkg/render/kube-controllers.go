@@ -39,10 +39,10 @@ type kubeControllersComponent struct {
 
 func (c *kubeControllersComponent) GetObjects() []runtime.Object {
 	return []runtime.Object{
-		c.controllersServiceAccount(c.cr),
-		c.controllersRole(c.cr),
-		c.controllersRoleBinding(c.cr),
-		c.controllersDeployment(c.cr),
+		c.controllersServiceAccount(),
+		c.controllersRole(),
+		c.controllersRoleBinding(),
+		c.controllersDeployment(),
 	}
 }
 
@@ -54,7 +54,7 @@ func (c *kubeControllersComponent) Ready(client client.Client) bool {
 	return true
 }
 
-func (c *kubeControllersComponent) controllersServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *kubeControllersComponent) controllersServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,7 +65,7 @@ func (c *kubeControllersComponent) controllersServiceAccount(cr *operator.Instal
 	}
 }
 
-func (c *kubeControllersComponent) controllersRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -104,7 +104,7 @@ func (c *kubeControllersComponent) controllersRole(cr *operator.Installation) *r
 		},
 	}
 
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Needs access to update clusterinformations.
@@ -131,7 +131,7 @@ func (c *kubeControllersComponent) controllersRole(cr *operator.Installation) *r
 	return role
 }
 
-func (c *kubeControllersComponent) controllersRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -153,32 +153,32 @@ func (c *kubeControllersComponent) controllersRoleBinding(cr *operator.Installat
 	}
 }
 
-func (c *kubeControllersComponent) controllersDeployment(cr *operator.Installation) *apps.Deployment {
+func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	tolerations := []v1.Toleration{
 		{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
 		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
 	}
-	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.KubeControllers.Tolerations)
+	tolerations = setCustomTolerations(tolerations, c.cr.Spec.Components.KubeControllers.Tolerations)
 
 	volumeMounts := []v1.VolumeMount{}
-	volumeMounts = setCustomVolumeMounts(volumeMounts, cr.Spec.Components.KubeControllers.ExtraVolumeMounts)
+	volumeMounts = setCustomVolumeMounts(volumeMounts, c.cr.Spec.Components.KubeControllers.ExtraVolumeMounts)
 
 	volumes := []v1.Volume{}
-	volumes = setCustomVolumes(volumes, cr.Spec.Components.KubeControllers.ExtraVolumes)
+	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.KubeControllers.ExtraVolumes)
 
 	env := []v1.EnvVar{
 		{Name: "ENABLED_CONTROLLERS", Value: "node"},
-		{Name: "DATASTORE_TYPE", Value: string(cr.Spec.Datastore.Type)},
+		{Name: "DATASTORE_TYPE", Value: string(c.cr.Spec.Datastore.Type)},
 	}
-	env = setCustomEnv(env, cr.Spec.Components.KubeControllers.ExtraEnv)
+	env = setCustomEnv(env, c.cr.Spec.Components.KubeControllers.ExtraEnv)
 
 	resources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{},
 		Limits:   v1.ResourceList{},
 	}
-	if len(cr.Spec.Components.KubeControllers.Resources.Limits) > 0 || len(cr.Spec.Components.KubeControllers.Resources.Requests) > 0 {
-		resources.Requests = cr.Spec.Components.KubeControllers.Resources.Requests
-		resources.Limits = cr.Spec.Components.KubeControllers.Resources.Limits
+	if len(c.cr.Spec.Components.KubeControllers.Resources.Limits) > 0 || len(c.cr.Spec.Components.KubeControllers.Resources.Requests) > 0 {
+		resources.Requests = c.cr.Spec.Components.KubeControllers.Resources.Requests
+		resources.Limits = c.cr.Spec.Components.KubeControllers.Resources.Limits
 	}
 
 	d := apps.Deployment{
@@ -213,12 +213,12 @@ func (c *kubeControllersComponent) controllersDeployment(cr *operator.Installati
 						"beta.kubernetes.io/os": "linux",
 					},
 					Tolerations:        tolerations,
-					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
 							Name:         "calico-kube-controllers",
-							Image:        cr.Spec.Components.KubeControllers.Image,
+							Image:        c.cr.Spec.Components.KubeControllers.Image,
 							Resources:    resources,
 							Env:          env,
 							VolumeMounts: volumeMounts,

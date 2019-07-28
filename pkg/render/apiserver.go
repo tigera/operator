@@ -48,17 +48,17 @@ type apiserverComponent struct {
 
 func (c *apiserverComponent) GetObjects() []runtime.Object {
 	return []runtime.Object{
-		c.apiServer(c.cr),
-		c.auditPolicyConfigMap(c.cr),
-		c.apiServerServiceAccount(c.cr),
-		c.apiService(c.cr),
-		c.apiServerService(c.cr),
-		c.apiServiceAccountClusterRole(c.cr),
-		c.apiServiceAccountClusterRoleBinding(c.cr),
-		c.tieredPolicyPassthruClusterRole(c.cr),
-		c.tieredPolicyPassthruClusterRolebinding(c.cr),
-		c.delegateAuthClusterRoleBinding(c.cr),
-		c.authReaderRoleBinding(c.cr),
+		c.apiServer(),
+		c.auditPolicyConfigMap(),
+		c.apiServerServiceAccount(),
+		c.apiService(),
+		c.apiServerService(),
+		c.apiServiceAccountClusterRole(),
+		c.apiServiceAccountClusterRoleBinding(),
+		c.tieredPolicyPassthruClusterRole(),
+		c.tieredPolicyPassthruClusterRolebinding(),
+		c.delegateAuthClusterRoleBinding(),
+		c.authReaderRoleBinding(),
 	}
 }
 
@@ -71,7 +71,7 @@ func (c *apiserverComponent) Ready(client client.Client) bool {
 }
 
 // apiService creates an API service that registers Tigera Secure APIs (and API server).
-func (c *apiserverComponent) apiService(cr *operator.Installation) *v1beta1.APIService {
+func (c *apiserverComponent) apiService() *v1beta1.APIService {
 	s := &v1beta1.APIService{
 		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -94,7 +94,7 @@ func (c *apiserverComponent) apiService(cr *operator.Installation) *v1beta1.APIS
 
 // tieredPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
 // mechanism for Tigera Secure tiered policy.
-func (c *apiserverComponent) tieredPolicyPassthruClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *apiserverComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -111,7 +111,7 @@ func (c *apiserverComponent) tieredPolicyPassthruClusterRole(cr *operator.Instal
 }
 
 // tieredPolicyPassthruClusterRolebinding creates a clusterrolebinding that applies tieredPolicyPassthruClusterRole to all users.
-func (c *apiserverComponent) tieredPolicyPassthruClusterRolebinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *apiserverComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -139,7 +139,7 @@ func (c *apiserverComponent) tieredPolicyPassthruClusterRolebinding(cr *operator
 
 // delegateAuthClusterRoleBinding creates a clusterrolebinding that allows the API server to delegate
 // authn/authz requests to main API server.
-func (c *apiserverComponent) delegateAuthClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *apiserverComponent) delegateAuthClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -163,7 +163,7 @@ func (c *apiserverComponent) delegateAuthClusterRoleBinding(cr *operator.Install
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
 // extension-apiserver-authentication configmap. That configmap contains the client CA file that
 // the main API server was configured with.
-func (c *apiserverComponent) authReaderRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
+func (c *apiserverComponent) authReaderRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -186,7 +186,7 @@ func (c *apiserverComponent) authReaderRoleBinding(cr *operator.Installation) *r
 }
 
 // apiServerServiceAccount creates the service account used by the API server.
-func (c *apiserverComponent) apiServerServiceAccount(cr *operator.Installation) *corev1.ServiceAccount {
+func (c *apiserverComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -198,7 +198,7 @@ func (c *apiserverComponent) apiServerServiceAccount(cr *operator.Installation) 
 
 // apiServiceAccountClusterRole creates a clusterrole that gives permissions to access backing CRDs and
 // k8s networkpolicies.
-func (c *apiserverComponent) apiServiceAccountClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *apiserverComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -246,7 +246,7 @@ func (c *apiserverComponent) apiServiceAccountClusterRole(cr *operator.Installat
 
 // apiServiceAccountClusterRoleBinding creates a clusterrolebinding that applies apiServiceAccountClusterRole to
 // the tigera-apiserver service account.
-func (c *apiserverComponent) apiServiceAccountClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *apiserverComponent) apiServiceAccountClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -268,7 +268,7 @@ func (c *apiserverComponent) apiServiceAccountClusterRoleBinding(cr *operator.In
 }
 
 // apiServerService creates a service backed by the API server and query server.
-func (c *apiserverComponent) apiServerService(cr *operator.Installation) *corev1.Service {
+func (c *apiserverComponent) apiServerService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -297,7 +297,7 @@ func (c *apiserverComponent) apiServerService(cr *operator.Installation) *corev1
 	}
 }
 
-func (c *apiserverComponent) auditPolicyConfigMap(cr *operator.Installation) *corev1.ConfigMap {
+func (c *apiserverComponent) auditPolicyConfigMap() *corev1.ConfigMap {
 	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
 kind: Policy
 rules:
@@ -331,7 +331,7 @@ rules:
 }
 
 // apiServer creates a deployment containing the API and query servers.
-func (c *apiserverComponent) apiServer(cr *operator.Installation) *appsv1.Deployment {
+func (c *apiserverComponent) apiServer() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	d := &appsv1.Deployment{
@@ -364,13 +364,13 @@ func (c *apiserverComponent) apiServer(cr *operator.Installation) *appsv1.Deploy
 						"beta.kubernetes.io/os": "linux",
 					},
 					ServiceAccountName: "tigera-apiserver",
-					Tolerations:        c.tolerations(cr),
-					ImagePullSecrets:   cr.Spec.ImagePullSecrets,
+					Tolerations:        c.tolerations(),
+					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
-						c.apiServerContainer(cr),
-						c.queryServerContainer(cr),
+						c.apiServerContainer(),
+						c.queryServerContainer(),
 					},
-					Volumes: c.apiServerVolumes(cr),
+					Volumes: c.apiServerVolumes(),
 				},
 			},
 		},
@@ -379,18 +379,18 @@ func (c *apiserverComponent) apiServer(cr *operator.Installation) *appsv1.Deploy
 }
 
 // apiServerContainer creates the API server container.
-func (c *apiserverComponent) apiServerContainer(cr *operator.Installation) corev1.Container {
+func (c *apiserverComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
 		{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
 	}
 
-	volumeMounts = setCustomVolumeMounts(volumeMounts, cr.Spec.Components.APIServer.ExtraVolumeMounts)
+	volumeMounts = setCustomVolumeMounts(volumeMounts, c.cr.Spec.Components.APIServer.ExtraVolumeMounts)
 	isPrivileged := true
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: cr.Spec.Components.APIServer.Image,
+		Image: c.cr.Spec.Components.APIServer.Image,
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -419,8 +419,8 @@ func (c *apiserverComponent) apiServerContainer(cr *operator.Installation) corev
 }
 
 // queryServerContainer creates the query server container.
-func (c *apiserverComponent) queryServerContainer(cr *operator.Installation) corev1.Container {
-	image := fmt.Sprintf("%s%s:%s", cr.Spec.Registry, defaultQueryServerImageName, cr.Spec.Version)
+func (c *apiserverComponent) queryServerContainer() corev1.Container {
+	image := fmt.Sprintf("%s%s:%s", c.cr.Spec.Registry, defaultQueryServerImageName, c.cr.Spec.Version)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,
@@ -445,7 +445,7 @@ func (c *apiserverComponent) queryServerContainer(cr *operator.Installation) cor
 }
 
 // apiServerVolumes creates the volumes used by the API server deployment.
-func (c *apiserverComponent) apiServerVolumes(cr *operator.Installation) []corev1.Volume {
+func (c *apiserverComponent) apiServerVolumes() []corev1.Volume {
 	hostPathType := corev1.HostPathDirectoryOrCreate
 	volumes := []corev1.Volume{
 		{
@@ -472,15 +472,15 @@ func (c *apiserverComponent) apiServerVolumes(cr *operator.Installation) []corev
 			},
 		},
 	}
-	volumes = setCustomVolumes(volumes, cr.Spec.Components.APIServer.ExtraVolumes)
+	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.APIServer.ExtraVolumes)
 	return volumes
 }
 
 // tolerations creates the tolerations used by the API server deployment.
-func (c *apiserverComponent) tolerations(cr *operator.Installation) []corev1.Toleration {
+func (c *apiserverComponent) tolerations() []corev1.Toleration {
 	tolerations := []corev1.Toleration{
 		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
 	}
-	tolerations = setCustomTolerations(tolerations, cr.Spec.Components.APIServer.Tolerations)
+	tolerations = setCustomTolerations(tolerations, c.cr.Spec.Components.APIServer.Tolerations)
 	return tolerations
 }

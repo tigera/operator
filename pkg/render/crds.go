@@ -34,9 +34,9 @@ type crdComponent struct {
 }
 
 func (c *crdComponent) GetObjects() []runtime.Object {
-	crds := c.calicoCRDs(c.cr)
+	crds := c.calicoCRDs()
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		crds = append(crds, c.tigeraSecureCRDs(c.cr)...)
+		crds = append(crds, c.tigeraSecureCRDs()...)
 	}
 	return crds
 }
@@ -54,7 +54,7 @@ type desiredCRD struct {
 	names apiextensions.CustomResourceDefinitionNames
 }
 
-func (c *crdComponent) calicoCRDs(cr *operator.Installation) []runtime.Object {
+func (c *crdComponent) calicoCRDs() []runtime.Object {
 	desiredNames := []desiredCRD{
 		{
 			scope: apiextensions.ClusterScoped,
@@ -177,7 +177,7 @@ func (c *crdComponent) calicoCRDs(cr *operator.Installation) []runtime.Object {
 	return crds
 }
 
-func (c *crdComponent) tigeraSecureCRDs(cr *operator.Installation) []runtime.Object {
+func (c *crdComponent) tigeraSecureCRDs() []runtime.Object {
 	desiredNames := []desiredCRD{
 		{
 			scope: apiextensions.ClusterScoped,

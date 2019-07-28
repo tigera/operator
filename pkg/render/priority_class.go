@@ -27,15 +27,14 @@ const (
 )
 
 func PriorityClassDefinitions(cr *operator.Installation) Component {
-	return &priorityClassComponent{cr: cr}
+	return &priorityClassComponent{}
 }
 
 type priorityClassComponent struct {
-	cr *operator.Installation
 }
 
 func (c *priorityClassComponent) GetObjects() []runtime.Object {
-	return []runtime.Object{c.calicoPriority(c.cr)}
+	return []runtime.Object{c.calicoPriority()}
 }
 
 func (c *priorityClassComponent) GetComponentDeps() []runtime.Object {
@@ -46,7 +45,7 @@ func (c *priorityClassComponent) Ready(client client.Client) bool {
 	return true
 }
 
-func (c *priorityClassComponent) calicoPriority(cr *operator.Installation) *schedv1beta.PriorityClass {
+func (c *priorityClassComponent) calicoPriority() *schedv1beta.PriorityClass {
 	return &schedv1beta.PriorityClass{
 		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{

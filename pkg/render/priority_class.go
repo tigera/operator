@@ -19,7 +19,6 @@ import (
 	schedv1beta "k8s.io/api/scheduling/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -41,7 +40,7 @@ func (c *priorityClassComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *priorityClassComponent) Ready(client client.Client) bool {
+func (c *priorityClassComponent) Ready() bool {
 	return true
 }
 

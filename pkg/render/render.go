@@ -28,7 +28,7 @@ type Component interface {
 	GetComponentDeps() []runtime.Object
 
 	// Ready returns true if the component is ready to be created.
-	Ready(client client.Client) bool
+	Ready() bool
 }
 
 // A Renderer is capable of generating components to be installed on the cluster.

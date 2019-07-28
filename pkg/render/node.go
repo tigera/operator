@@ -15,8 +15,6 @@
 package render
 
 import (
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
@@ -51,7 +49,7 @@ func (c *nodeComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *nodeComponent) Ready(client client.Client) bool {
+func (c *nodeComponent) Ready() bool {
 	return true
 }
 

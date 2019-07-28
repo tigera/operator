@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func Compliance(cr *operator.Installation, openshift bool) Component {
@@ -87,7 +86,7 @@ func (c *complianceComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *complianceComponent) Ready(client client.Client) bool {
+func (c *complianceComponent) Ready() bool {
 	return true
 }
 

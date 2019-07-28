@@ -89,7 +89,7 @@ func (c *consoleComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *consoleComponent) Ready(client client.Client) bool {
+func (c *consoleComponent) Ready() bool {
 	// Check that if the manager-tls secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function still returns true
 	_, err := c.validateManagerCertPair()

@@ -343,7 +343,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// Before creating the object, verify that its component dependencies exist. If the component is nil that means
 		// we can skip rendering it.
 		log.Info("Verifying deps for component")
-		if component == nil || !component.Ready(r.client) {
+		if component == nil || !component.Ready() {
 			continue
 		}
 

@@ -23,7 +23,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -60,7 +59,7 @@ func (c *intrusionDetectionComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *intrusionDetectionComponent) Ready(client client.Client) bool {
+func (c *intrusionDetectionComponent) Ready() bool {
 	return true
 }
 

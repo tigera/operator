@@ -17,7 +17,6 @@ package render
 import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apps "k8s.io/api/apps/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -50,7 +49,7 @@ func (c *kubeControllersComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *kubeControllersComponent) Ready(client client.Client) bool {
+func (c *kubeControllersComponent) Ready() bool {
 	return true
 }
 

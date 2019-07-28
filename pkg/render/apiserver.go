@@ -17,8 +17,6 @@ package render
 import (
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -66,7 +64,7 @@ func (c *apiserverComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *apiserverComponent) Ready(client client.Client) bool {
+func (c *apiserverComponent) Ready() bool {
 	return true
 }
 

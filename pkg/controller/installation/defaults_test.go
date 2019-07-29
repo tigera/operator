@@ -29,23 +29,12 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should properly fill defaults on an empty instance", func() {
 		instance := &operator.Installation{}
 		fillDefaults(instance, false)
-		Expect(instance.Spec.Version).To(Equal("latest"))
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
-		Expect(instance.Spec.Registry).To(Equal("docker.io/"))
+		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
-
-		// Image override results in correct images.
-		Expect(instance.Spec.Components.Node.Image).To(Equal("docker.io/calico/node:latest"))
-		Expect(instance.Spec.Components.CNI.Image).To(Equal("docker.io/calico/cni:latest"))
-		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("docker.io/calico/kube-controllers:latest"))
-		Expect(instance.Spec.Components.APIServer.Image).To(BeEmpty())
-		Expect(instance.Spec.Components.Console.Manager.Image).To(BeEmpty())
-		Expect(instance.Spec.Components.Console.Proxy.Image).To(BeEmpty())
-		Expect(instance.Spec.Components.Console.EsProxy.Image).To(BeEmpty())
-
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
@@ -54,26 +43,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		fillDefaults(instance, false)
-		Expect(instance.Spec.Version).To(Equal("latest"))
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
-		Expect(instance.Spec.Registry).To(Equal("quay.io/"))
+		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
-
-		// Image override results in correct images.
-		Expect(instance.Spec.Components.Node.Image).To(Equal("quay.io/tigera/cnx-node:latest"))
-		Expect(instance.Spec.Components.CNI.Image).To(Equal("quay.io/calico/cni:latest"))
-		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("quay.io/tigera/kube-controllers:latest"))
-		Expect(instance.Spec.Components.APIServer.Image).To(Equal("quay.io/tigera/cnx-apiserver:latest"))
-		Expect(instance.Spec.Components.IntrusionDetection.Controller.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
-		Expect(instance.Spec.Components.IntrusionDetection.Installer.Image).To(Equal("quay.io/tigera/intrusion-detection-job-installer:latest"))
-		Expect(instance.Spec.Components.Console.Manager.Image).To(Equal("quay.io/tigera/cnx-manager:latest"))
-		Expect(string(instance.Spec.Components.Console.Auth.Type)).To(Equal("Basic"))
-		Expect(instance.Spec.Components.Console.Proxy.Image).To(Equal("quay.io/tigera/cnx-manager-proxy:latest"))
-		Expect(instance.Spec.Components.Console.EsProxy.Image).To(Equal("quay.io/tigera/es-proxy:latest"))
-
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
 		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
@@ -81,10 +56,8 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration", func() {
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Version:                "test",
-				MinimumOperatorVersion: "0.9.1",
-				Variant:                operator.TigeraSecureEnterprise,
-				Registry:               "test-reg/",
+				Variant:  operator.TigeraSecureEnterprise,
+				Registry: "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",
@@ -103,7 +76,6 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
-						Image:          "nodeRegistry/nodeImage:1.2.3",
 						MaxUnavailable: &maxUnavailable,
 						ExtraEnv: []v1.EnvVar{
 							{
@@ -137,7 +109,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					KubeControllers: operator.KubeControllersSpec{
-						Image: "kubecontrollersRegistry/kubecontrollersImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
 								Name:  "project",
@@ -170,7 +141,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					CNI: operator.CNISpec{
-						Image: "cniRegistry/cniImage:1.2.3",
 						ExtraEnv: []v1.EnvVar{
 							{
 								Name:  "project",
@@ -190,7 +160,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					APIServer: operator.APIServerSpec{
-						Image: "apiserver/server:v0.0.1",
 						ExtraEnv: []v1.EnvVar{
 							{
 								Name:  "asenv1",
@@ -225,41 +194,7 @@ var _ = Describe("Defaulting logic tests", func() {
 							},
 						},
 					},
-					Compliance: operator.ComplianceSpec{
-						Controller: operator.ComplianceControllerSpec{
-							Image: "complianceController-test-image",
-						},
-						Reporter: operator.ComplianceReporterSpec{
-							Image: "complianceReporter-test-image",
-						},
-						Server: operator.ComplianceServerSpec{
-							Image: "complianceServerer-test-mage",
-						},
-						Snapshotter: operator.ComplianceSnapshotterSpec{
-							Image: "complianceSnapshotter-test-image",
-						},
-						Benchmarker: operator.ComplianceBenchmarkerSpec{
-							Image: "complianceBenchmarker-test-Image",
-						},
-					},
-					IntrusionDetection: operator.IntrusionDetectionSpec{
-						Controller: operator.IntrusionDetectionControllerSpec{
-							Image: "intrusionreg/ctrl:v1",
-						},
-						Installer: operator.IntrusionDetectionInstallerSpec{
-							Image: "intrusionreg/job:v2",
-						},
-					},
 					Console: operator.ConsoleSpec{
-						Manager: operator.ConsoleManagerSpec{
-							Image: "consoleRegistry/manager:beta",
-						},
-						Proxy: operator.ConsoleProxySpec{
-							Image: "consoleRegistry/proxy:v1",
-						},
-						EsProxy: operator.ConsoleEsProxySpec{
-							Image: "consoleRegistry/esproxy:v2",
-						},
 						Auth: operator.Auth{
 							Type:      operator.AuthTypeOAuth,
 							Authority: "https://api.tigera.io",

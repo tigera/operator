@@ -380,7 +380,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        c.cr.Spec.Components.CNI.Image,
+		Image:        constructImage(CNIImageName, c.cr),
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -396,7 +396,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        "quay.io/calico/pod2daemon-flexvol:v3.6.4",
+		Image:        constructImage(FlexVolumeImageName, c.cr),
 		VolumeMounts: flexVolumeMounts,
 	}
 }
@@ -425,9 +425,15 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
 	isPrivileged := true
+
+	// Select which image to use.
+	image := constructImage(NodeImageNameCalico, c.cr)
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		image = constructImage(NodeImageNameTigera, c.cr)
+	}
 	return v1.Container{
 		Name:            "calico-node",
-		Image:           c.cr.Spec.Components.Node.Image,
+		Image:           image,
 		Resources:       c.nodeResources(),
 		SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
 		Env:             c.nodeEnvVars(),

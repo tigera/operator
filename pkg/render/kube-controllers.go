@@ -176,6 +176,12 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		resources.Limits = c.cr.Spec.Components.KubeControllers.Resources.Limits
 	}
 
+	// Pick which image to use based on variant.
+	image := constructImage(KubeControllersImageNameCalico, c.cr)
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		image = constructImage(KubeControllersImageNameTigera, c.cr)
+	}
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -213,7 +219,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Containers: []v1.Container{
 						{
 							Name:         "calico-kube-controllers",
-							Image:        c.cr.Spec.Components.KubeControllers.Image,
+							Image:        image,
 							Resources:    resources,
 							Env:          env,
 							VolumeMounts: volumeMounts,

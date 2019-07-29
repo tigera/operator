@@ -91,8 +91,6 @@ var _ = Describe("Node rendering tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Version:   "test",
-				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
 				Datastore: operator.DatastoreConfig{
@@ -100,7 +98,6 @@ var _ = Describe("Node rendering tests", func() {
 				},
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
-						Image:             "customNodeRegistry/customNodeImage:customNodeVersion",
 						MaxUnavailable:    &maxUnavailable,
 						ExtraEnv:          nodeEnv,
 						ExtraVolumes:      []v1.Volume{nodeVolume},
@@ -109,7 +106,6 @@ var _ = Describe("Node rendering tests", func() {
 						Resources:         nodeResources,
 					},
 					CNI: operator.CNISpec{
-						Image:             "customCNIRegistry/customCNIImage:customCNIVersion",
 						ExtraEnv:          cniEnv,
 						ExtraVolumes:      []v1.Volume{cniVolume},
 						ExtraVolumeMounts: []v1.VolumeMount{cniVolumeMount},
@@ -126,8 +122,6 @@ var _ = Describe("Node rendering tests", func() {
 				Datastore: operator.DatastoreConfig{
 					Type: operator.Kubernetes,
 				},
-				Version:   "test",
-				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
 			},
@@ -148,7 +142,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
 		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 	})
@@ -169,16 +163,16 @@ var _ = Describe("Node rendering tests", func() {
 		ds := resources[4].(*apps.DaemonSet)
 
 		// Node image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("customNodeRegistry/customNodeImage:customNodeVersion"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
 
 		// Validate correct number of init containers.
 		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 		// CNI container uses image override.
-		Expect(ds.Spec.Template.Spec.InitContainers[0].Image).To(Equal("customCNIRegistry/customCNIImage:customCNIVersion"))
+		Expect(ds.Spec.Template.Spec.InitContainers[0].Image).To(Equal("docker.io/calico/cni:v3.8.1"))
 
-		// Verify the hardcoded Flex volume container image.
-		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("quay.io/calico/pod2daemon-flexvol:v3.6.4"))
+		// Verify the Flex volume container image.
+		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("docker.io/calico/pod2daemon-flexvol:v3.8.1"))
 
 		// Verify env
 		expectedNodeEnv := []v1.EnvVar{
@@ -293,8 +287,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		// Image is set in defaults.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:nft-1fd1d3"))
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{
@@ -345,7 +338,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		// Verify volumes. In particular, we want to make sure the flexvol-driver-host volume uses the right
@@ -409,7 +402,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:nft-1fd1d3"))
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{

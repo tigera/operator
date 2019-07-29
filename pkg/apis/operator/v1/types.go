@@ -26,15 +26,6 @@ import (
 // InstallationSpec defines the desired state of Installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
-	// Version of the product to install. This is the default image tag used for component Docker images.
-	// Default: latest
-	// +optional
-	Version string `json:"version,omitempty"`
-
-	// MinimumOperatorVersion is the minimum required version of Operator for the specified Version.
-	// +optional
-	MinimumOperatorVersion string `json:"minimumOperatorVersion,omitempty"`
-
 	// Datastore is datastore configuration.
 	// +optional
 	Datastore DatastoreConfig `json:"datastore,omitempty"`
@@ -93,56 +84,14 @@ type ComponentsSpec struct {
 	// +optional
 	APIServer APIServerSpec `json:"apiServer,omitempty"`
 
-	// Compliance is option configuration for the Compliance component.
-	// +optional
-	Compliance ComplianceSpec `json:"compliance,omitempty"`
-
-	// IntrusionDetection is optional configuration for the Intrusion Detection feature in Tigera Secure.
-	// +optional
-	IntrusionDetection IntrusionDetectionSpec `json:"intrusionDetection,omitempty"`
-
 	// Console is optional configuration for the Tigera Secure management console.
 	// +optional
 	Console ConsoleSpec `json:"console,omitempty"`
 }
 
-// IntrusionDetectionSpec defines optional configuration for the Intrusion Detection component.
-// +k8s:openapi-gen=true
-type IntrusionDetectionSpec struct {
-	// Controller is optional configuration for the Intrusion Detection controller.
-	// +optional
-	Controller IntrusionDetectionControllerSpec `json:"controller,omitempty"`
-
-	// Installer is optional configuration for the Intrusion Detection elasticsearch job installer.
-	// +optional
-	Installer IntrusionDetectionInstallerSpec `json:"installer,omitempty"`
-}
-
-// IntrusionDetectionControllerSpec defines optional configuration for the Intrusion Detection controller.
-// +k8s:openapi-gen=true
-type IntrusionDetectionControllerSpec struct {
-	// Image configures a different Docker image for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// IntrusionDetectionInstallerSpec defines optional configuration for the Intrusion Detection job installer.
-// +k8s:openapi-gen=true
-type IntrusionDetectionInstallerSpec struct {
-	// Image configures a different Docker image for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
 // +k8s:openapi-gen=true
 type KubeControllersSpec struct {
-	// Image configures a different Docker image for the kube-controllers deployment.
-	// The value must be a full qualified image name.
-	// E.g "gcr.io/acme/calico-kube-controllers:beta".
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// ExtraEnv adds extra environment variables to the kube-controllers container.
 	// +optional
 	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
@@ -168,11 +117,6 @@ type KubeControllersSpec struct {
 // Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
 type APIServerSpec struct {
-	// Image configures a different Docker image for the API server. The value must be a full qualified image name.
-	// E.g "gcr.io/acme/calico-api-server:beta".
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// ExtraEnv adds extra environment variables to the API server.
 	// +optional
 	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
@@ -194,46 +138,10 @@ type APIServerSpec struct {
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// ConsoleManagerSpec defines optional configuration for the Tigera Secure management console manager.
-// +k8s:openapi-gen=true
-type ConsoleManagerSpec struct {
-	// Image configures a different Docker image for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ConsoleProxySpec defines optional configuration for the Tigera Secure management console proxy.
-// +k8s:openapi-gen=true
-type ConsoleProxySpec struct {
-	// Image configures a different Docker image for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ConsoleEsProxySpec defines optional configuration for the Tigera Secure management console ES proxy.
-// +k8s:openapi-gen=true
-type ConsoleEsProxySpec struct {
-	// Image configures a different Docker image for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
 // ConsoleSpec defines optional configuration for the Tigera Secure management console.
 // Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
 type ConsoleSpec struct {
-	// Manager is optional configuration for the Tigera Secure management console manager.
-	// +optional
-	Manager ConsoleManagerSpec `json:"manager,omitempty"`
-
-	// Proxy is optional configuration for the Tigera Secure management console proxy.
-	// +optional
-	Proxy ConsoleProxySpec `json:"proxy,omitempty"`
-
-	// EsProxy is optional configuration for the Tigera Secure management console ES proxy.
-	// +optional
-	EsProxy ConsoleEsProxySpec `json:"esProxy,omitempty"`
-
 	// Auth is optional authentication configuration for the Tigera Secure management console.
 	// +optional
 	Auth Auth `json:"auth,omitempty"`
@@ -269,11 +177,6 @@ const (
 // NodeSpec defines optional configuration for the node component.
 // +k8s:openapi-gen=true
 type NodeSpec struct {
-	// Image configures a different Docker image for the node daemonset. The value must be a full qualified image name
-	// E.g "gcr.io/tigera/cnx-node:beta".
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// MaxUnavailable configures the maximum number of pods that can be unavailable during a rolling update of the
 	// node daemonset.
 	// Default: 1
@@ -304,11 +207,6 @@ type NodeSpec struct {
 // CNISpec defines optional configuration for the CNI component.
 // +k8s:openapi-gen=true
 type CNISpec struct {
-	// Image configures a different Docker image for the CNI image. The value must be a full qualified image name.
-	// E.g "gcr.io/acme/calico-cni:beta".
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// ExtraEnv adds extra environment variables to the CNI container.
 	// +optional
 	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
@@ -320,70 +218,6 @@ type CNISpec struct {
 	// ExtraVolumeMounts configures custom volume mounts to be used by the CNI container.
 	// +optional
 	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-}
-
-// ComplianceControllerSpec defines optional configuration for the Compliance Controller component.
-// +k8s:openapi-gen=true
-type ComplianceControllerSpec struct {
-	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ComplianceReporterSpec defines optional configuration for the Compliance Reporter component.
-// +k8s:openapi-gen=true
-type ComplianceReporterSpec struct {
-	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ComplianceServerSpec defines optional configuration for the Compliance Server component.
-// +k8s:openapi-gen=true
-type ComplianceServerSpec struct {
-	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ComplianceSnapshotterSpec defines optional configuration for the Compliance Snapshotter component.
-// +k8s:openapi-gen=true
-type ComplianceSnapshotterSpec struct {
-	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ComplianceBenchmarkerSpec defines optional configuration for the Compliance Benchmarker component.
-// +k8s:openapi-gen=true
-type ComplianceBenchmarkerSpec struct {
-	// Image configures a different Docker imagee for this component. The value must be a full qualified image name.
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
-// ComplianceSpec defines optional configuration for the Compliance component.
-// +k8s:openapi-gen=true
-type ComplianceSpec struct {
-	// Controller is an optional configuration for the Compliance Controller component.
-	// +optional
-	Controller ComplianceControllerSpec `json:"controller,omitempty"`
-
-	// Reporter is an optional configuration for the Compliance Reporter component.
-	// +optional
-	Reporter ComplianceReporterSpec `json:"reporter,omitempty"`
-
-	// Server is an optional configuration for the Compliance Server component.
-	// +optional
-	Server ComplianceServerSpec `json:"server,omitempty"`
-
-	// Snapshotter is an optional configuration for the Compliance Snapshotter component.
-	// +optional
-	Snapshotter ComplianceSnapshotterSpec `json:"snapshotter,omitempty"`
-
-	// Benchmarker is an optional configuration for the Compliance Benchmarker component.
-	// +optional
-	Benchmarker ComplianceBenchmarkerSpec `json:"benchmarker,omitempty"`
 }
 
 // DatastoreConfig specifies the product's datastore configuration.

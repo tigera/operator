@@ -87,7 +87,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: c.cr.Spec.Components.IntrusionDetection.Controller.Image,
+		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.cr),
 		Env: []corev1.EnvVar{
 			{
 				Name:      "ELASTIC_HOST",
@@ -274,7 +274,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: c.cr.Spec.Components.IntrusionDetection.Controller.Image,
+		Image: constructImage(IntrusionDetectionControllerImageName, c.cr),
 		Env: []corev1.EnvVar{
 			{
 				Name:      "CLUSTER_NAME",

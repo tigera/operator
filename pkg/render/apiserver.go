@@ -28,9 +28,8 @@ import (
 )
 
 const (
-	defaultQueryServerImageName = "tigera/cnx-queryserver"
-	apiServerPort               = 5443
-	queryServerPort             = 8080
+	apiServerPort   = 5443
+	queryServerPort = 8080
 )
 
 func APIServer(cr *operator.Installation) Component {
@@ -384,7 +383,7 @@ func (c *apiserverComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: c.cr.Spec.Components.APIServer.Image,
+		Image: constructImage(APIServerImageName, c.cr),
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -414,7 +413,7 @@ func (c *apiserverComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiserverComponent) queryServerContainer() corev1.Container {
-	image := fmt.Sprintf("%s%s:%s", c.cr.Spec.Registry, defaultQueryServerImageName, c.cr.Spec.Version)
+	image := constructImage(QueryServerImageName, c.cr)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

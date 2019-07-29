@@ -117,7 +117,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}
 			return fmt.Errorf("kube-controllers not yet ready")
-		}, 80*time.Second).Should(BeNil())
+		}, 120*time.Second).Should(BeNil())
 	})
 
 	It("Should install resources for a CRD with node overrides", func() {
@@ -208,7 +208,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}
 			return fmt.Errorf("kube-controllers not yet ready: %#v", kc.Status)
-		}, 80*time.Second).Should(BeNil())
+		}, 120*time.Second).Should(BeNil())
 
 		By("Verifying the daemonset has the overrides")
 		err = GetResource(c, ds)

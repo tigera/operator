@@ -69,7 +69,8 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		components := render.Render(instance, client)
+		r := render.New(instance, client, notOpenshift)
+		components := r.Render()
 		Expect(componentCount(components)).To(Equal(25))
 	})
 
@@ -84,7 +85,8 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
 		instance.Spec.Components.KubeProxy.Required = true
-		components := render.Render(instance, client)
+		r := render.New(instance, client, notOpenshift)
+		components := r.Render()
 		Expect(componentCount(components)).To(Equal(29))
 	})
 
@@ -106,7 +108,8 @@ var _ = Describe("Rendering tests", func() {
 		// - 7 Intrusion Detection
 		// - 9 Console
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		components := render.Render(instance, client)
+		r := render.New(instance, client, notOpenshift)
+		components := r.Render()
 		Expect(componentCount(components)).To(Equal(87))
 	})
 })

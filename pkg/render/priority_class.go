@@ -19,7 +19,6 @@ import (
 	schedv1beta "k8s.io/api/scheduling/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -27,26 +26,25 @@ const (
 )
 
 func PriorityClassDefinitions(cr *operator.Installation) Component {
-	return &priorityClassComponent{cr: cr}
+	return &priorityClassComponent{}
 }
 
 type priorityClassComponent struct {
-	cr *operator.Installation
 }
 
 func (c *priorityClassComponent) GetObjects() []runtime.Object {
-	return []runtime.Object{calicoPriority(c.cr)}
+	return []runtime.Object{c.calicoPriority()}
 }
 
 func (c *priorityClassComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *priorityClassComponent) Ready(client client.Client) bool {
+func (c *priorityClassComponent) Ready() bool {
 	return true
 }
 
-func calicoPriority(cr *operator.Installation) *schedv1beta.PriorityClass {
+func (c *priorityClassComponent) calicoPriority() *schedv1beta.PriorityClass {
 	return &schedv1beta.PriorityClass{
 		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{

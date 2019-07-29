@@ -17,8 +17,6 @@ package render
 import (
 	"strings"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
@@ -58,7 +56,7 @@ func (c *kubeproxyComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *kubeproxyComponent) Ready(client client.Client) bool {
+func (c *kubeproxyComponent) Ready() bool {
 	return true
 }
 

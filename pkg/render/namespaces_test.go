@@ -15,8 +15,6 @@
 package render_test
 
 import (
-	"os"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +50,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace", func() {
-		component := render.Namespaces(instance)
+		component := render.Namespaces(instance, notOpenshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
@@ -65,7 +63,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	It("should render an additional namespace if this is Tigera Secure", func() {
 		// We expect calico-system, tigera-system, and calico-monitoring.
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Namespaces(instance)
+		component := render.Namespaces(instance, notOpenshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(3))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
@@ -88,9 +86,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for openshift", func() {
-		os.Setenv("OPENSHIFT", "true")
-		defer os.Unsetenv("OPENSHIFT")
-		component := render.Namespaces(instance)
+		component := render.Namespaces(instance, openshift)
 		resources := component.GetObjects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")

@@ -15,8 +15,6 @@
 package render
 
 import (
-	"os"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -27,58 +25,58 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func Compliance(cr *operator.Installation) Component {
+func Compliance(cr *operator.Installation, openshift bool) Component {
 	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
 		return nil
 	}
-	return &complianceComponent{cr: cr}
+	return &complianceComponent{cr: cr, openshift: openshift}
 }
 
 type complianceComponent struct {
-	cr *operator.Installation
+	cr        *operator.Installation
+	openshift bool
 }
 
 func (c *complianceComponent) GetObjects() []runtime.Object {
 	complianceObjs := []runtime.Object{
-		complianceControllerServiceAccount(c.cr),
-		complianceControllerRole(c.cr),
-		complianceControllerClusterRole(c.cr),
-		complianceControllerRoleBinding(c.cr),
-		complianceControllerClusterRoleBinding(c.cr),
-		complianceControllerDeployment(c.cr),
+		c.complianceControllerServiceAccount(),
+		c.complianceControllerRole(),
+		c.complianceControllerClusterRole(),
+		c.complianceControllerRoleBinding(),
+		c.complianceControllerClusterRoleBinding(),
+		c.complianceControllerDeployment(),
 
-		complianceReporterServiceAccount(c.cr),
-		complianceReporterClusterRole(c.cr),
-		complianceReporterClusterRoleBinding(c.cr),
-		complianceReporterPodTemplate(c.cr),
+		c.complianceReporterServiceAccount(),
+		c.complianceReporterClusterRole(),
+		c.complianceReporterClusterRoleBinding(),
+		c.complianceReporterPodTemplate(),
 
-		complianceServerServiceAccount(c.cr),
-		complianceServerClusterRole(c.cr),
-		complianceServerClusterRoleBinding(c.cr),
-		complianceServerService(c.cr),
-		complianceServerDeployment(c.cr),
+		c.complianceServerServiceAccount(),
+		c.complianceServerClusterRole(),
+		c.complianceServerClusterRoleBinding(),
+		c.complianceServerService(),
+		c.complianceServerDeployment(),
 
-		complianceSnapshotterServiceAccount(c.cr),
-		complianceSnapshotterClusterRole(c.cr),
-		complianceSnapshotterClusterRoleBinding(c.cr),
-		complianceSnapshotterDeployment(c.cr),
+		c.complianceSnapshotterServiceAccount(),
+		c.complianceSnapshotterClusterRole(),
+		c.complianceSnapshotterClusterRoleBinding(),
+		c.complianceSnapshotterDeployment(),
 
-		complianceBenchmarkerServiceAccount(c.cr),
-		complianceBenchmarkerClusterRole(c.cr),
-		complianceBenchmarkerClusterRoleBinding(c.cr),
-		complianceBenchmarkerDaemonSet(c.cr),
+		c.complianceBenchmarkerServiceAccount(),
+		c.complianceBenchmarkerClusterRole(),
+		c.complianceBenchmarkerClusterRoleBinding(),
+		c.complianceBenchmarkerDaemonSet(),
 
-		complianceGlobalReportInventory(c.cr),
-		complianceGlobalReportNetworkAccess(c.cr),
-		complianceGlobalReportPolicyAudit(c.cr),
-		complianceGlobalReportCISBenchmark(c.cr),
+		c.complianceGlobalReportInventory(),
+		c.complianceGlobalReportNetworkAccess(),
+		c.complianceGlobalReportPolicyAudit(),
+		c.complianceGlobalReportCISBenchmark(),
 	}
 
-	if os.Getenv("OPENSHIFT") == "true" {
-		complianceObjs = append(complianceObjs, complianceBenchmarkerSecurityContextConstraints(c.cr))
+	if c.openshift {
+		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	}
 
 	return complianceObjs
@@ -88,7 +86,7 @@ func (c *complianceComponent) GetComponentDeps() []runtime.Object {
 	return nil
 }
 
-func (c *complianceComponent) Ready(client client.Client) bool {
+func (c *complianceComponent) Ready() bool {
 	return true
 }
 
@@ -174,14 +172,14 @@ var complianceVolumes = []corev1.Volume{
 	},
 }
 
-func complianceControllerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *complianceComponent) complianceControllerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
 	}
 }
 
-func complianceControllerRole(cr *operator.Installation) *rbacv1.Role {
+func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
@@ -200,7 +198,7 @@ func complianceControllerRole(cr *operator.Installation) *rbacv1.Role {
 	}
 }
 
-func complianceControllerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"},
@@ -224,7 +222,7 @@ func complianceControllerClusterRole(cr *operator.Installation) *rbacv1.ClusterR
 	}
 }
 
-func complianceControllerRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
+func (c *complianceComponent) complianceControllerRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
@@ -243,7 +241,7 @@ func complianceControllerRoleBinding(cr *operator.Installation) *rbacv1.RoleBind
 	}
 }
 
-func complianceControllerClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"},
@@ -262,7 +260,7 @@ func complianceControllerClusterRoleBinding(cr *operator.Installation) *rbacv1.C
 	}
 }
 
-func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deployment {
+func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
@@ -320,11 +318,11 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-controller",
-							Image:         cr.Spec.Components.Compliance.Controller.Image,
+							Image:         c.cr.Spec.Components.Compliance.Controller.Image,
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -337,14 +335,14 @@ func complianceControllerDeployment(cr *operator.Installation) *appsv1.Deploymen
 	}
 }
 
-func complianceReporterServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *complianceComponent) complianceReporterServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: "calico-monitoring"},
 	}
 }
 
-func complianceReporterClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"},
@@ -358,7 +356,7 @@ func complianceReporterClusterRole(cr *operator.Installation) *rbacv1.ClusterRol
 	}
 }
 
-func complianceReporterClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"},
@@ -377,7 +375,7 @@ func complianceReporterClusterRoleBinding(cr *operator.Installation) *rbacv1.Clu
 	}
 }
 
-func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplate {
+func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "warning"},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
@@ -425,11 +423,11 @@ func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplat
 						Effect: corev1.TaintEffectNoSchedule,
 					},
 				},
-				ImagePullSecrets: cr.Spec.ImagePullSecrets,
+				ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Name:          "reporter",
-						Image:         cr.Spec.Components.Compliance.Reporter.Image,
+						Image:         c.cr.Spec.Components.Compliance.Reporter.Image,
 						Env:           envVars,
 						VolumeMounts:  complianceVolumeMounts,
 						LivenessProbe: complianceLivenessProbe,
@@ -441,14 +439,14 @@ func complianceReporterPodTemplate(cr *operator.Installation) *corev1.PodTemplat
 	}
 }
 
-func complianceServerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *complianceComponent) complianceServerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: "calico-monitoring"},
 	}
 }
 
-func complianceServerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"},
@@ -472,7 +470,7 @@ func complianceServerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole 
 	}
 }
 
-func complianceServerClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"},
@@ -491,7 +489,7 @@ func complianceServerClusterRoleBinding(cr *operator.Installation) *rbacv1.Clust
 	}
 }
 
-func complianceServerService(cr *operator.Installation) *v1.Service {
+func (c *complianceComponent) complianceServerService() *v1.Service {
 	return &v1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: "calico-monitoring"},
@@ -509,7 +507,7 @@ func complianceServerService(cr *operator.Installation) *v1.Service {
 	}
 }
 
-func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
+func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
@@ -563,11 +561,11 @@ func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-server",
-							Image:         cr.Spec.Components.Compliance.Server.Image,
+							Image:         c.cr.Spec.Components.Compliance.Server.Image,
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -580,14 +578,14 @@ func complianceServerDeployment(cr *operator.Installation) *appsv1.Deployment {
 	}
 }
 
-func complianceSnapshotterServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *complianceComponent) complianceSnapshotterServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: "calico-monitoring"},
 	}
 }
 
-func complianceSnapshotterClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"},
@@ -608,7 +606,7 @@ func complianceSnapshotterClusterRole(cr *operator.Installation) *rbacv1.Cluster
 	}
 }
 
-func complianceSnapshotterClusterRoleBinding(cr *operator.Installation) *rbacv1.ClusterRoleBinding {
+func (c *complianceComponent) complianceSnapshotterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"},
@@ -627,7 +625,7 @@ func complianceSnapshotterClusterRoleBinding(cr *operator.Installation) *rbacv1.
 	}
 }
 
-func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployment {
+func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
@@ -683,11 +681,11 @@ func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployme
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-snapshotter",
-							Image:         cr.Spec.Components.Compliance.Snapshotter.Image,
+							Image:         c.cr.Spec.Components.Compliance.Snapshotter.Image,
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -700,14 +698,14 @@ func complianceSnapshotterDeployment(cr *operator.Installation) *appsv1.Deployme
 	}
 }
 
-func complianceBenchmarkerServiceAccount(cr *operator.Installation) *v1.ServiceAccount {
+func (c *complianceComponent) complianceBenchmarkerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: "calico-monitoring"},
 	}
 }
 
-func complianceBenchmarkerClusterRole(cr *operator.Installation) *rbacv1.ClusterRole {
+func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"},
@@ -726,7 +724,7 @@ func complianceBenchmarkerClusterRole(cr *operator.Installation) *rbacv1.Cluster
 	}
 }
 
-func complianceBenchmarkerClusterRoleBinding(cr *operator.Installation) *rbacv1.RoleBinding {
+func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: "calico-monitoring"},
@@ -745,7 +743,7 @@ func complianceBenchmarkerClusterRoleBinding(cr *operator.Installation) *rbacv1.
 	}
 }
 
-func complianceBenchmarkerDaemonSet(cr *operator.Installation) *appsv1.DaemonSet {
+func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
@@ -836,11 +834,11 @@ func complianceBenchmarkerDaemonSet(cr *operator.Installation) *appsv1.DaemonSet
 							Operator: corev1.TolerationOpExists,
 						},
 					},
-					ImagePullSecrets: cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-benchmarker",
-							Image:         cr.Spec.Components.Compliance.Benchmarker.Image,
+							Image:         c.cr.Spec.Components.Compliance.Benchmarker.Image,
 							Env:           envVars,
 							VolumeMounts:  volMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -853,7 +851,7 @@ func complianceBenchmarkerDaemonSet(cr *operator.Installation) *appsv1.DaemonSet
 	}
 }
 
-func complianceBenchmarkerSecurityContextConstraints(cr *operator.Installation) *ocsv1.SecurityContextConstraints {
+func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
 		ObjectMeta:               metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"},
@@ -874,7 +872,7 @@ func complianceBenchmarkerSecurityContextConstraints(cr *operator.Installation) 
 	}
 }
 
-func complianceGlobalReportInventory(cr *operator.Installation) *v3.GlobalReportType {
+func (c *complianceComponent) complianceGlobalReportInventory() *v3.GlobalReportType {
 	return &v3.GlobalReportType{
 		TypeMeta: metav1.TypeMeta{Kind: "GlobalReportType", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -911,7 +909,7 @@ func complianceGlobalReportInventory(cr *operator.Installation) *v3.GlobalReport
 	}
 }
 
-func complianceGlobalReportNetworkAccess(cr *operator.Installation) *v3.GlobalReportType {
+func (c *complianceComponent) complianceGlobalReportNetworkAccess() *v3.GlobalReportType {
 	return &v3.GlobalReportType{
 		TypeMeta: metav1.TypeMeta{Kind: "GlobalReportType", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -940,7 +938,7 @@ func complianceGlobalReportNetworkAccess(cr *operator.Installation) *v3.GlobalRe
 	}
 }
 
-func complianceGlobalReportPolicyAudit(cr *operator.Installation) *v3.GlobalReportType {
+func (c *complianceComponent) complianceGlobalReportPolicyAudit() *v3.GlobalReportType {
 	return &v3.GlobalReportType{
 		TypeMeta: metav1.TypeMeta{Kind: "GlobalReportType", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -973,7 +971,7 @@ func complianceGlobalReportPolicyAudit(cr *operator.Installation) *v3.GlobalRepo
 	}
 }
 
-func complianceGlobalReportCISBenchmark(cr *operator.Installation) *v3.GlobalReportType {
+func (c *complianceComponent) complianceGlobalReportCISBenchmark() *v3.GlobalReportType {
 	return &v3.GlobalReportType{
 		TypeMeta: metav1.TypeMeta{Kind: "GlobalReportType", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

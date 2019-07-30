@@ -2,7 +2,6 @@ package render
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -10,11 +9,10 @@ import (
 	"time"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	crypto "github.com/openshift/library-go/pkg/crypto"
+	"github.com/openshift/library-go/pkg/crypto"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -22,8 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -88,7 +84,7 @@ func (c *consoleComponent) Objects() []runtime.Object {
 func (c *consoleComponent) Ready() bool {
 	// Check that if the manager-tls secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function still returns true
-	_, err := c.validateManagerCertPair()
+	_, err := validateManagerCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
 	if err != nil {
 		log.Error(err, "Checking Ready for Console indicates error with Manager TLS Cert")
 	}
@@ -438,38 +434,8 @@ func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRol
 	}
 }
 
-// validateManagerCertPair checks if the manager-tls secret exists and if so
-// that it contains key and cert fields. If a secret exists then it is returned.
-// If there is an error accessing the secret (except NotFound) or the cert
-// does not have both a key and cert field then an appropriate error is returned.
-// If no secret exists then nil, nil is returned to represent that no cert is valid.
-func (c *consoleComponent) validateManagerCertPair() (*v1.Secret, error) {
-	secret := &v1.Secret{}
-	secretNamespacedName := types.NamespacedName{Name: "manager-tls", Namespace: operatorNamespace}
-	err := c.client.Get(context.Background(), secretNamespacedName, secret)
-	if err != nil {
-		// If the reason for the error is not found then that is acceptable
-		// so return valid in that case.
-		statErr, ok := err.(*kerrors.StatusError)
-		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
-			return nil, nil
-		} else {
-			return nil, fmt.Errorf("Failed to read manager cert from datastore: %s", err)
-		}
-	}
-
-	if val, ok := secret.Data[managerSecretKeyName]; !ok || len(val) == 0 {
-		return secret, fmt.Errorf("manager-tls Secret does not have a field named 'key'")
-	}
-	if val, ok := secret.Data[managerSecretCertName]; !ok || len(val) == 0 {
-		return secret, fmt.Errorf("manager-tls Secret does not have a field named 'cert'")
-	}
-
-	return secret, nil
-}
-
 func (c *consoleComponent) readOperatorSecret() (key, cert []byte, ok bool) {
-	secret, err := c.validateManagerCertPair()
+	secret, err := validateManagerCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
 	if err != nil {
 		log.Error(err, "Failed to validate cert pair")
 		return nil, nil, false

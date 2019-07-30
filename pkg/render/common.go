@@ -15,9 +15,17 @@
 package render
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -140,4 +148,34 @@ func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSou
 			Optional: opt,
 		},
 	}
+}
+
+// validateManagerCertPair checks if the given secret exists and if so
+// that it contains key and cert fields. If a secret exists then it is returned.
+// If there is an error accessing the secret (except NotFound) or the cert
+// does not have both a key and cert field then an appropriate error is returned.
+// If no secret exists then nil, nil is returned to represent that no cert is valid.
+func validateManagerCertPair(client client.Client, certPairSecretName, keyName, certName string) (*v1.Secret, error) {
+	secret := &v1.Secret{}
+	secretNamespacedName := types.NamespacedName{Name: certPairSecretName, Namespace: operatorNamespace}
+	err := client.Get(context.Background(), secretNamespacedName, secret)
+	if err != nil {
+		// If the reason for the error is not found then that is acceptable
+		// so return valid in that case.
+		statErr, ok := err.(*kerrors.StatusError)
+		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
+			return nil, nil
+		} else {
+			return nil, fmt.Errorf("Failed to read cert %q from datastore: %s", certPairSecretName, err)
+		}
+	}
+
+	if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
+		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
+	}
+	if val, ok := secret.Data[certName]; !ok || len(val) == 0 {
+		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, certName)
+	}
+
+	return secret, nil
 }

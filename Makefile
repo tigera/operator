@@ -193,7 +193,7 @@ $(BINDIR)/operator-$(ARCH): vendor $(SRC_FILES)
 image: vendor build $(BUILD_IMAGE)
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) -f ./build/Dockerfile.$(ARCH) .
+	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) -f ./build/Dockerfile.$(ARCH) ./build
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif

@@ -298,7 +298,7 @@ func (r *ReconcileInstallation) createOrUpdateComponent(ctx context.Context, ins
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := log.WithValues("component", component)
-	cmpLog.Info("Checking if component is ready to install")
+	cmpLog.Info("Checking if component is ready")
 	if !component.Ready() {
 		cmpLog.Info("Component is not ready, skipping")
 		return nil

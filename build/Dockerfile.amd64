@@ -5,9 +5,9 @@ ENV OPERATOR=/usr/local/bin/operator \
     USER_NAME=operator
 
 # install operator binary
-COPY build/_output/bin/operator-amd64 ${OPERATOR}
+COPY _output/bin/operator-amd64 ${OPERATOR}
 
-COPY build/bin /usr/local/bin
+COPY bin /usr/local/bin
 RUN  /usr/local/bin/user_setup
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

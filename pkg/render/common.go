@@ -220,3 +220,38 @@ func makeSignedCertKeyPair() (key, cert []byte, err error) {
 
 	return keyContent.Bytes(), crtContent.Bytes(), nil
 }
+
+// createTLSSecret if the key (k) or cert (c) passed in are empty
+// then a new cert/key pair is created, they are returned as key/cert and a
+// secret is returned populated with the key/cert.
+// If k,c are populated then this indicates the secret already exists in the tigera-operator
+// namespace so no new key/cert is created and no Secret is returned,
+// but the passed in k,c values are returned as key,cert.
+func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName string) (key, cert []byte, s *v1.Secret) {
+	if len(kk) != 0 && len(cc) != 0 {
+		// If the secret already exists in the tigera-operator NS then nothing to do,
+		// so no need to return it to be created.
+		return kk, cc, nil
+	}
+
+	log.Info("Creating self-signed certificate", "secret", secretName)
+	// Create cert
+	var err error
+	key, cert, err = makeSignedCertKeyPair()
+	if err != nil {
+		log.Error(err, "Unable to create signed cert pair")
+		return nil, nil, nil
+	}
+
+	data := make(map[string][]byte)
+	data[secretKeyName] = key
+	data[secretCertName] = cert
+	return key, cert, &v1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: operatorNamespace,
+		},
+		Data: data,
+	}
+}

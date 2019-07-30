@@ -55,7 +55,7 @@ func (c *consoleComponent) Objects() []runtime.Object {
 		c.consoleManagerClusterRole(),
 		c.consoleManagerClusterRoleBinding(),
 	}
-	key, cert, s := c.consoleOperatorSecret(key, cert)
+	key, cert, s := createTLSSecret(key, cert, "manager-tls", managerSecretKeyName, managerSecretCertName)
 	if key == nil || cert == nil {
 		log.Info("Key or Cert not created")
 		return nil
@@ -439,41 +439,6 @@ func (c *consoleComponent) readOperatorSecret() (key, cert []byte, ok bool) {
 		cert = secret.Data[managerSecretCertName]
 	}
 	return key, cert, true
-}
-
-// consoleOperatorSecret if the key (k) or cert (c) passed in are empty
-// then a new cert/key pair is created, they are returned as key/cert and a
-// Secret secret is returned populated with the key/cert.
-// If k,c are populated then this indicates the tigera-operator secret
-// already exists so no new key/cert is created and no Secret is returned,
-// but the passed in k,c values are returned as key,cert.
-func (c *consoleComponent) consoleOperatorSecret(kk, cc []byte) (key, cert []byte, s *v1.Secret) {
-	if len(kk) != 0 && len(cc) != 0 {
-		// If the secret already exists in the operator NS then nothing to do,
-		// so no need to return it to be created.
-		return kk, cc, nil
-	}
-
-	log.Info("Creating self-signed certificate", managerTlsSecretName, managerTlsSecretName)
-	// Create cert
-	var err error
-	key, cert, err = makeSignedCertKeyPair()
-	if err != nil {
-		log.Error(err, "Unable to create signed cert pair")
-		return nil, nil, nil
-	}
-
-	data := make(map[string][]byte)
-	data[managerSecretKeyName] = key
-	data[managerSecretCertName] = cert
-	return key, cert, &v1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "manager-tls",
-			Namespace: operatorNamespace,
-		},
-		Data: data,
-	}
 }
 
 func (c *consoleComponent) consoleManagerCertificates(key, cert []byte) *v1.Secret {

@@ -54,7 +54,7 @@ type apiserverComponent struct {
 }
 
 func (c *apiserverComponent) readCertPair() (key, cert []byte, ok bool) {
-	secret, err := validateManagerCertPair(c.client, apiserverTLSSecretName, apiserverSecretKeyName, apiserverSecretCertName)
+	secret, err := validateCertPair(c.client, apiserverTLSSecretName, apiserverSecretKeyName, apiserverSecretCertName)
 	if err != nil {
 		log.Error(err, "Failed to validate cert pair")
 		return nil, nil, false
@@ -102,7 +102,7 @@ func (c *apiserverComponent) Objects() []runtime.Object {
 func (c *apiserverComponent) Ready() bool {
 	// Check that if the apiserver certpair secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function still returns true
-	_, err := validateManagerCertPair(c.client, "cnx-apiserver-certs", apiserverSecretKeyName, apiserverSecretCertName)
+	_, err := validateCertPair(c.client, "cnx-apiserver-certs", apiserverSecretKeyName, apiserverSecretCertName)
 	if err != nil {
 		log.Error(err, "Checking Ready for APIServer indicates error with TLS Cert")
 	}

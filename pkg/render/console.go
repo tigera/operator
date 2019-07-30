@@ -77,7 +77,7 @@ func (c *consoleComponent) Objects() []runtime.Object {
 func (c *consoleComponent) Ready() bool {
 	// Check that if the manager-tls secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function still returns true
-	_, err := validateManagerCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
+	_, err := validateCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
 	if err != nil {
 		log.Error(err, "Checking Ready for Console indicates error with Manager TLS Cert")
 	}
@@ -428,7 +428,7 @@ func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRol
 }
 
 func (c *consoleComponent) readOperatorSecret() (key, cert []byte, ok bool) {
-	secret, err := validateManagerCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
+	secret, err := validateCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
 	if err != nil {
 		log.Error(err, "Failed to validate cert pair")
 		return nil, nil, false

@@ -157,12 +157,12 @@ func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSou
 	}
 }
 
-// validateManagerCertPair checks if the given secret exists and if so
+// validateCertPair checks if the given secret exists and if so
 // that it contains key and cert fields. If a secret exists then it is returned.
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
-func validateManagerCertPair(client client.Client, certPairSecretName, keyName, certName string) (*v1.Secret, error) {
+func validateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*v1.Secret, error) {
 	secret := &v1.Secret{}
 	secretNamespacedName := types.NamespacedName{Name: certPairSecretName, Namespace: operatorNamespace}
 	err := client.Get(context.Background(), secretNamespacedName, secret)

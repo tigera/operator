@@ -15,13 +15,20 @@
 package render
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+	"time"
+
+	"github.com/openshift/library-go/pkg/crypto"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
@@ -178,4 +185,38 @@ func validateManagerCertPair(client client.Client, certPairSecretName, keyName, 
 	}
 
 	return secret, nil
+}
+
+// makeSignedCertKeyPair generates and returns a key pair for a self signed cert.
+// This code came from:
+// https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
+func makeSignedCertKeyPair() (key, cert []byte, err error) {
+	temporaryCertDir, err := ioutil.TempDir("", "serving-cert-")
+	if err != nil {
+		return nil, nil, err
+	}
+	signerName := fmt.Sprintf("%s-signer@%d", "tigera-operator", time.Now().Unix())
+	ca, err := crypto.MakeSelfSignedCA(
+		filepath.Join(temporaryCertDir, "serving-signer.crt"),
+		filepath.Join(temporaryCertDir, "serving-signer.key"),
+		filepath.Join(temporaryCertDir, "serving-signer.serial"),
+		signerName,
+		0,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// nothing can trust this, so we don't really care about hostnames
+	servingCert, err := ca.MakeServerCert(sets.NewString("localhost"), 30)
+	if err != nil {
+		return nil, nil, err
+	}
+	crtContent := &bytes.Buffer{}
+	keyContent := &bytes.Buffer{}
+	if err := servingCert.WriteCertConfig(crtContent, keyContent); err != nil {
+		return nil, nil, err
+	}
+
+	return keyContent.Bytes(), crtContent.Bytes(), nil
 }

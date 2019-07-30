@@ -19,6 +19,8 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -26,6 +28,7 @@ import (
 
 var _ = Describe("API server rendering tests", func() {
 	var instance *operator.Installation
+	var client client.Client
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -43,14 +46,43 @@ var _ = Describe("API server rendering tests", func() {
 				},
 			},
 		}
+		client = fake.NewFakeClient()
 	})
 
 	It("should render an API server with default configuration", func() {
-		component := render.APIServer(instance)
+		component := render.APIServer(instance, client)
 		resources := component.Objects()
 
 		// Should render the correct resources.
-		Expect(len(resources)).To(Equal(11))
+		Expect(len(resources)).To(Equal(13))
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "cnx-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "cnx-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+		}
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
 		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
@@ -96,7 +128,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(BeNil())
 
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/var/log/calico/audit"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-audit-logs"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/tigera/audit"))
@@ -129,7 +161,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-audit-logs"))
 		Expect(d.Spec.Template.Spec.Volumes[0].HostPath.Path).To(Equal("/var/log/calico/audit"))
 		Expect(*d.Spec.Template.Spec.Volumes[0].HostPath.Type).To(BeEquivalentTo("DirectoryOrCreate"))
@@ -144,15 +176,15 @@ var _ = Describe("API server rendering tests", func() {
 		// TODO
 		instance.Spec.Components.APIServer = operator.APIServerSpec{}
 
-		component := render.APIServer(instance)
+		component := render.APIServer(instance, client)
 		resources := component.Objects()
 
 		// Should render the correct resources.
-		Expect(len(resources)).To(Equal(11))
+		Expect(len(resources)).To(Equal(13))
 		ExpectResource(resources[0], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[0].(*v1.Deployment)
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 	})
 })

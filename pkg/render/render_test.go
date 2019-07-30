@@ -86,6 +86,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 Service
 		// - 1 ServiceAccount
 		// - 1 PriorityClass
+		// - 2 Secrets
 		// - 14 custom resource definitions (calico)
 		// - 6 custom resource definitions (tsee)
 		// - 27 Compliance
@@ -95,7 +96,7 @@ var _ = Describe("Rendering tests", func() {
 		c := render.Calico(instance, client, notOpenshift)
 		t := render.TigeraSecure(instance, client, notOpenshift)
 		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal(87))
+		Expect(componentCount(components)).To(Equal(89))
 	})
 })
 

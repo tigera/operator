@@ -36,7 +36,7 @@ type namespaceComponent struct {
 	openshift bool
 }
 
-func (c *namespaceComponent) GetObjects() []runtime.Object {
+func (c *namespaceComponent) Objects() []runtime.Object {
 	ns := []runtime.Object{
 		c.createNamespace(calicoNamespace),
 	}
@@ -46,10 +46,6 @@ func (c *namespaceComponent) GetObjects() []runtime.Object {
 		ns = append(ns, c.createNamespace(calicoMonitoringNamespace))
 	}
 	return ns
-}
-
-func (c *namespaceComponent) GetComponentDeps() []runtime.Object {
-	return nil
 }
 
 func (c *namespaceComponent) Ready() bool {

@@ -36,14 +36,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
-		Expect(instance.Spec.Components.KubeProxy.Required).To(BeFalse())
-		Expect(instance.Spec.Components.KubeProxy.APIServer).To(Equal(""))
 
 		// Image override results in correct images.
 		Expect(instance.Spec.Components.Node.Image).To(Equal("docker.io/calico/node:latest"))
 		Expect(instance.Spec.Components.CNI.Image).To(Equal("docker.io/calico/cni:latest"))
 		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("docker.io/calico/kube-controllers:latest"))
-		Expect(instance.Spec.Components.KubeProxy.Image).To(BeEmpty())
 		Expect(instance.Spec.Components.APIServer.Image).To(BeEmpty())
 		Expect(instance.Spec.Components.Console.Manager.Image).To(BeEmpty())
 		Expect(instance.Spec.Components.Console.Proxy.Image).To(BeEmpty())
@@ -64,14 +61,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
-		Expect(instance.Spec.Components.KubeProxy.Required).To(BeFalse())
-		Expect(instance.Spec.Components.KubeProxy.APIServer).To(Equal(""))
 
 		// Image override results in correct images.
 		Expect(instance.Spec.Components.Node.Image).To(Equal("quay.io/tigera/cnx-node:latest"))
 		Expect(instance.Spec.Components.CNI.Image).To(Equal("quay.io/calico/cni:latest"))
 		Expect(instance.Spec.Components.KubeControllers.Image).To(Equal("quay.io/tigera/kube-controllers:latest"))
-		Expect(instance.Spec.Components.KubeProxy.Image).To(BeEmpty())
 		Expect(instance.Spec.Components.APIServer.Image).To(Equal("quay.io/tigera/cnx-apiserver:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Controller.Image).To(Equal("quay.io/tigera/intrusion-detection-controller:latest"))
 		Expect(instance.Spec.Components.IntrusionDetection.Installer.Image).To(Equal("quay.io/tigera/intrusion-detection-job-installer:latest"))
@@ -194,11 +188,6 @@ var _ = Describe("Defaulting logic tests", func() {
 								},
 							},
 						},
-					},
-					KubeProxy: operator.KubeProxySpec{
-						Required:  true,
-						APIServer: "http://server",
-						Image:     "test-image",
 					},
 					APIServer: operator.APIServerSpec{
 						Image: "apiserver/server:v0.0.1",

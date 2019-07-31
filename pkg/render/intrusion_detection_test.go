@@ -43,7 +43,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.IntrusionDetection(instance)
-		resources := component.GetObjects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(7))
 
 		// Should render the correct resources.

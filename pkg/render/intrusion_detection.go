@@ -41,7 +41,7 @@ type intrusionDetectionComponent struct {
 	cr *operator.Installation
 }
 
-func (c *intrusionDetectionComponent) GetObjects() []runtime.Object {
+func (c *intrusionDetectionComponent) Objects() []runtime.Object {
 	return []runtime.Object{
 		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
@@ -51,12 +51,6 @@ func (c *intrusionDetectionComponent) GetObjects() []runtime.Object {
 		c.intrusionDetectionDeployment(),
 		c.intrusionDetectionElasticsearchJob(),
 	}
-}
-
-func (c *intrusionDetectionComponent) GetComponentDeps() []runtime.Object {
-	// Intrusion Detection depends on the configmap tigera-es-config to exist but we don't need to explicitly
-	// check if the configmap exists. The resources depending on the configmap will be pending.
-	return nil
 }
 
 func (c *intrusionDetectionComponent) Ready() bool {

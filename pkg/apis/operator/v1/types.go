@@ -23,25 +23,6 @@ import (
 // NOTE: json tags are required. Any new fields you add must have json tags for the fields to be serialized.
 // NOTE: After modifying this file, run `make gen-files` to regenerate code.
 
-// KubeProxySpec defines the state of a kube-proxy installation.
-// +k8s:openapi-gen=true
-type KubeProxySpec struct {
-	// Required specifies whether kube-proxy needs to be installed or if it's already provided.
-	// Default: false
-	// +optional
-	Required bool `json:"required,omitempty"`
-
-	// APIServer is a mandatory string containing a server:port URL.
-	// Default: ""
-	// +optional
-	APIServer string `json:"apiServer,omitempty"`
-
-	// Image is a custom kube-proxy image. The value must be a full qualified image name.
-	// Default: "k8s.gcr.io/kube-proxy:v1.13.6"
-	// +optional
-	Image string `json:"image,omitempty"`
-}
-
 // InstallationSpec defines the desired state of Installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
@@ -107,10 +88,6 @@ type ComponentsSpec struct {
 	// KubeControllers is optional configuration for the kube-controllers component.
 	// +optional
 	KubeControllers KubeControllersSpec `json:"kubeControllers,omitempty"`
-
-	// KubeProxy is optional configuration for kube-proxy.
-	// +optional
-	KubeProxy KubeProxySpec `json:"kubeProxy,omitempty"`
 
 	// APIServer is optional configuration for the API server component.
 	// +optional

@@ -49,8 +49,6 @@ func APIServer(cr *operator.Installation, client client.Client) Component {
 type apiserverComponent struct {
 	cr            *operator.Installation
 	client        client.Client
-	apiserverKey  []byte
-	apiserverCert []byte
 }
 
 func (c *apiserverComponent) readCertPair() (key, cert []byte, ok bool) {
@@ -73,10 +71,8 @@ func (c *apiserverComponent) Objects() []runtime.Object {
 		return nil
 	}
 	objs := []runtime.Object{
-		c.apiServer(),
 		c.auditPolicyConfigMap(),
 		c.apiServerServiceAccount(),
-		c.apiServerService(),
 		c.apiServiceAccountClusterRole(),
 		c.apiServiceAccountClusterRoleBinding(),
 		c.tieredPolicyPassthruClusterRole(),
@@ -93,8 +89,10 @@ func (c *apiserverComponent) Objects() []runtime.Object {
 		objs = append(objs, secret)
 	}
 	objs = append(objs,
-		c.apiService(cert),
 		c.apiServerCertificate(key, cert),
+		c.apiServer(),
+		c.apiService(cert),
+		c.apiServerService(),
 	)
 	return objs
 }

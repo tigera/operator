@@ -138,8 +138,8 @@ func (c *apiserverComponent) apiService(cert []byte) *v1beta1.APIService {
 
 func (c *apiserverComponent) apiServerCertificate(key, cert []byte) *corev1.Secret {
 	data := make(map[string][]byte)
-	data[apiserverSecretKeyName] = key
-	data[apiserverSecretCertName] = cert
+	base64.StdEncoding.Encode(data[apiserverSecretKeyName], key)
+	base64.StdEncoding.Encode(data[apiserverSecretCertName], cert)
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

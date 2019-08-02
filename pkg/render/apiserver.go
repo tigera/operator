@@ -33,7 +33,7 @@ const (
 	apiServerPort               = 5443
 	queryServerPort             = 8080
 	apiserverNamespace          = "tigera-system"
-	apiserverTLSSecretName      = "cnx-apiserver-certs"
+	apiserverTLSSecretName      = "tigera-apiserver-certs"
 	apiserverSecretKeyName      = "apiserver.key"
 	apiserverSecretCertName     = "apiserver.crt"
 	apiServiceName              = "tigera-api"
@@ -92,7 +92,7 @@ func (c *apiserverComponent) Objects() []runtime.Object {
 	objs = append(objs,
 		c.apiServerCertificate(key, cert),
 		c.apiServer(),
-		c.apiService(cert),
+		c.apiServiceRegistration(cert),
 		c.apiServerService(),
 	)
 	return objs
@@ -110,8 +110,8 @@ func (c *apiserverComponent) Ready() bool {
 	return err == nil
 }
 
-// apiService creates an API service that registers Tigera Secure APIs (and API server).
-func (c *apiserverComponent) apiService(cert []byte) *v1beta1.APIService {
+// apiServiceRegistration creates an API service that registers Tigera Secure APIs (and API server).
+func (c *apiserverComponent) apiServiceRegistration(cert []byte) *v1beta1.APIService {
 	s := &v1beta1.APIService{
 		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{

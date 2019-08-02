@@ -227,12 +227,14 @@ func makeSignedCertKeyPair(hostnames ...string) (key, cert []byte, err error) {
 	return keyContent.Bytes(), crtContent.Bytes(), nil
 }
 
-// createTLSSecret if the key (k) or cert (c) passed in are empty
+// createTLSSecret if the key (kk) or cert (cc) passed in are empty
 // then a new cert/key pair is created, they are returned as key/cert and a
 // secret is returned populated with the key/cert.
 // If k,c are populated then this indicates the secret already exists in the tigera-operator
 // namespace so no new key/cert is created and no Secret is returned,
 // but the passed in k,c values are returned as key,cert.
+// hostnames are used in the cert generation, with the first hostname used as the CN. If none are provided,
+// then localhost is used.
 func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName string, hostnames ...string) (key, cert []byte, s *v1.Secret) {
 	if len(kk) != 0 && len(cc) != 0 {
 		// If the secret already exists in the tigera-operator NS then nothing to do,

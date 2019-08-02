@@ -41,8 +41,6 @@ func Console(cr *operator.Installation, client client.Client) Component {
 type consoleComponent struct {
 	cr          *operator.Installation
 	client      client.Client
-	managerKey  []byte
-	managerCert []byte
 }
 
 func (c *consoleComponent) Objects() []runtime.Object {

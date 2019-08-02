@@ -187,10 +187,11 @@ func validateCertPair(client client.Client, certPairSecretName, keyName, certNam
 	return secret, nil
 }
 
-// makeSignedCertKeyPair generates and returns a key pair for a self signed cert.
+// makeSignedCertKeyPair generates and returns a key pair for a self signed cert. The first hostname provided is used
+// as the common name for the certificate. If hostnames are not provided, localhost is used.
 // This code came from:
 // https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
-func makeSignedCertKeyPair() (key, cert []byte, err error) {
+func makeSignedCertKeyPair(hostnames ...string) (key, cert []byte, err error) {
 	temporaryCertDir, err := ioutil.TempDir("", "serving-cert-")
 	if err != nil {
 		return nil, nil, err
@@ -207,8 +208,13 @@ func makeSignedCertKeyPair() (key, cert []byte, err error) {
 		return nil, nil, err
 	}
 
-	// nothing can trust this, so we don't really care about hostnames
-	servingCert, err := ca.MakeServerCert(sets.NewString("localhost"), 30)
+	// localhost is the default hostname for the generated certificate if none are provided.
+	hostnamesSet := sets.NewString("localhost")
+	if len(hostnames) > 0 {
+		hostnamesSet = sets.NewString(hostnames...)
+	}
+	// TODO: allow cert expiry configuration
+	servingCert, err := ca.MakeServerCert(hostnamesSet, 30)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -227,7 +233,7 @@ func makeSignedCertKeyPair() (key, cert []byte, err error) {
 // If k,c are populated then this indicates the secret already exists in the tigera-operator
 // namespace so no new key/cert is created and no Secret is returned,
 // but the passed in k,c values are returned as key,cert.
-func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName string) (key, cert []byte, s *v1.Secret) {
+func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName string, hostnames ...string) (key, cert []byte, s *v1.Secret) {
 	if len(kk) != 0 && len(cc) != 0 {
 		// If the secret already exists in the tigera-operator NS then nothing to do,
 		// so no need to return it to be created.

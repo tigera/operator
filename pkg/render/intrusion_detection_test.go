@@ -33,7 +33,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Version:   "test",
 				Registry:  "testregistry.com/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",

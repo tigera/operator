@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"reflect"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
@@ -51,6 +52,13 @@ import (
 var log = logf.Log.WithName("installation_controller")
 var defaultInstanceKey = client.ObjectKey{Name: "default"}
 var openshiftNetworkConfig = "cluster"
+
+const (
+	// If this annotation is set on an object, the operator will ignore it, allowing user modifications.
+	// This is for development and testing purposes only. Do not use this annotation
+	// for production, as this will cause problems with upgrade.
+	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
+)
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -206,7 +214,7 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.V(1).Info("Reconciling network installation")
+	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
 
 	ctx := context.Background()
 
@@ -222,12 +230,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
-	}
-
-	err = checkOperatorVersion(instance.Spec.MinimumOperatorVersion)
-	if err != nil {
-		reqLogger.Info("Invalid version", "err", err.Error(), "version", instance.Spec.Version, "opVersion", instance.Spec.MinimumOperatorVersion)
 		return reconcile.Result{}, err
 	}
 
@@ -297,13 +299,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 func (r *ReconcileInstallation) createOrUpdateComponent(ctx context.Context, instance *operator.Installation, component render.Component) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
-	cmpLog := log.WithValues("component", component)
-	cmpLog.Info("Checking if component is ready")
+	cmpLog := log.WithValues("component", reflect.TypeOf(component))
+	cmpLog.V(2).Info("Checking if component is ready")
 	if !component.Ready() {
 		cmpLog.Info("Component is not ready, skipping")
 		return nil
 	}
-	cmpLog.Info("Reconciling")
+	cmpLog.V(2).Info("Reconciling")
 
 	// Iterate through each object that comprises the component and attempt to create it,
 	// or update it if needed.
@@ -321,33 +323,48 @@ func (r *ReconcileInstallation) createOrUpdateComponent(ctx context.Context, ins
 			return err
 		}
 
+		// Check to see if the object exists or not.
 		err = r.client.Get(ctx, key, old)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				// Anything other than "Not found" we should retry.
 				return err
 			}
-			// Otherwise, if it was not found, we should create it.
-			logCtx.V(2).Info("Object does not exist", "error", err)
-		} else {
-			logCtx.V(1).Info("Resource already exists, update it")
-			err = r.client.Update(ctx, mergeState(obj, old))
+
+			// Otherwise, if it was not found, we should create it and move on.
+			logCtx.V(2).Info("Object does not exist, creating it", "error", err)
+			err = r.client.Create(ctx, obj)
 			if err != nil {
-				logCtx.WithValues("key", key).Info("Failed to update object.")
 				return err
 			}
 			continue
 		}
 
-		logCtx.Info("Creating new object.")
-		err = r.client.Create(ctx, obj)
+		// The object exists. Update it, unless the user has marked it as "ignored".
+		if ignoreObject(old) {
+			logCtx.Info("Ignoring annotated object")
+			continue
+		}
+		logCtx.V(1).Info("Resource already exists, update it")
+		err = r.client.Update(ctx, mergeState(obj, old))
 		if err != nil {
-			// Hit an error creating desired state object - we need to requeue.
+			logCtx.WithValues("key", key).Info("Failed to update object.")
 			return err
 		}
+		continue
 	}
 	cmpLog.Info("Done reconciling")
 	return nil
+}
+
+// ignoreObject returns true if the object has been marked as ignored by the user,
+// and returns false otherwise.
+func ignoreObject(obj runtime.Object) bool {
+	a := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetAnnotations()
+	if val, ok := a[unsupportedIgnoreAnnotation]; ok && val == "true" {
+		return true
+	}
+	return false
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
@@ -380,6 +397,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	}
 }
 
+// contextLoggerForResource provides a logger instance with context set for the provided object.
 func contextLoggerForResource(obj runtime.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()

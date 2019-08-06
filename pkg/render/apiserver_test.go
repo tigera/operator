@@ -35,7 +35,6 @@ var _ = Describe("API server rendering tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Version:   "test",
 				Registry:  "testregistry.com/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
@@ -84,8 +83,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
-		// Image is set in defaults.
-		Expect(d.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal("testregistry.com/cnx-apiserver:v2.4.0"))
 
 		expectedArgs := []string{
 			"--secure-port=5443",
@@ -113,7 +111,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(*(d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)).To(BeTrue())
 
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal("testregistry.com/tigera/cnx-queryserver:test"))
+		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal("testregistry.com/cnx-queryserver:v2.4.0"))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
 
@@ -143,9 +141,8 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		instance.Spec.Components.APIServer = operator.APIServerSpec{
-			Image: "test/apiserver",
-		}
+		// TODO
+		instance.Spec.Components.APIServer = operator.APIServerSpec{}
 
 		component := render.APIServer(instance)
 		resources := component.Objects()

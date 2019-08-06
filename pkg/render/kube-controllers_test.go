@@ -73,7 +73,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Version:   "test",
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
@@ -82,7 +81,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 				Components: operator.ComponentsSpec{
 					KubeControllers: operator.KubeControllersSpec{
-						Image:             "customRegistry/customImage:customVersion",
 						ExtraEnv:          envVars,
 						ExtraVolumes:      []v1.Volume{volume},
 						ExtraVolumeMounts: []v1.VolumeMount{volumeMount},
@@ -110,7 +108,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ds := resources[3].(*apps.Deployment)
 
 		// Image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("customRegistry/customImage:customVersion"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v3.8.1"))
 
 		// Verify env
 		expectedEnv := []v1.EnvVar{{Name: "DATASTORE_TYPE", Value: "kubernetes"}}
@@ -150,6 +148,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)
 
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(BeEmpty())
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v2.4.2"))
 	})
 })

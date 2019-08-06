@@ -23,46 +23,12 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
-const (
-	defaultCNIImageName        = "calico/cni"
-	defaultCalicoNodeImageName = "calico/node"
-	defaultTigeraNodeImageName = "tigera/cnx-node"
-
-	defaultCalicoKubeControllersImageName = "calico/kube-controllers"
-	defaultTigeraKubeControllersImageName = "tigera/kube-controllers"
-
-	defaultAPIServerImageName = "tigera/cnx-apiserver"
-	defaultTigeraRegistry     = "quay.io/"
-
-	defaultComplianceControllerImage  = "tigera/compliance-controller"
-	defaultComplianceReporterImage    = "tigera/compliance-reporter"
-	defaultComplianceServerImage      = "tigera/compliance-server"
-	defaultComplianceSnapshotterImage = "tigera/compliance-snapshotter"
-	defaultComplianceBenchmarkerImage = "tigera/compliance-benchmarker"
-
-	defaultIntrusionDetectionControllerImageName   = "tigera/intrusion-detection-controller"
-	defaultIntrusionDetectionJobInstallerImageName = "tigera/intrusion-detection-job-installer"
-
-	defaultConsoleManagerImageName = "tigera/cnx-manager"
-	defaultConsoleProxyImageName   = "tigera/cnx-manager-proxy"
-	defaultConsoleEsProxyImageName = "tigera/es-proxy"
-)
-
 // fillDefaults fills in the default values for an instance.
 func fillDefaults(instance *operator.Installation, openshift bool) {
-	if len(instance.Spec.Version) == 0 {
-		instance.Spec.Version = "latest"
-	}
 	if len(instance.Spec.Datastore.Type) == 0 {
 		instance.Spec.Datastore.Type = operator.Kubernetes
 	}
-	if len(instance.Spec.Registry) == 0 {
-		instance.Spec.Registry = "docker.io/"
-		if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-			instance.Spec.Registry = defaultTigeraRegistry
-		}
-	}
-	if !strings.HasSuffix(instance.Spec.Registry, "/") {
+	if len(instance.Spec.Registry) != 0 && !strings.HasSuffix(instance.Spec.Registry, "/") {
 		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
 	}
 	if len(instance.Spec.Variant) == 0 {
@@ -92,65 +58,9 @@ func fillDefaults(instance *operator.Installation, openshift bool) {
 		instance.Spec.Components.Node.MaxUnavailable = &mu
 	}
 
-	if len(instance.Spec.Components.Node.Image) == 0 {
-		instance.Spec.Components.Node.Image = getImageName(instance, defaultCalicoNodeImageName, defaultTigeraNodeImageName)
-	}
-	if len(instance.Spec.Components.CNI.Image) == 0 {
-		// CNI uses calico/CNI image for both Calico and TigeraSecureEnterprise.
-		instance.Spec.Components.CNI.Image = getImageName(instance, defaultCNIImageName, defaultCNIImageName)
-	}
-	if len(instance.Spec.Components.KubeControllers.Image) == 0 {
-		instance.Spec.Components.KubeControllers.Image = getImageName(instance, defaultCalicoKubeControllersImageName, defaultTigeraKubeControllersImageName)
-	}
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		if len(instance.Spec.Components.APIServer.Image) == 0 {
-			instance.Spec.Components.APIServer.Image = getImageName(instance, "", defaultAPIServerImageName)
-		}
-		if len(instance.Spec.Components.Compliance.Controller.Image) == 0 {
-			instance.Spec.Components.Compliance.Controller.Image = getImageName(instance, "",
-				defaultComplianceControllerImage)
-		}
-		if len(instance.Spec.Components.Compliance.Reporter.Image) == 0 {
-			instance.Spec.Components.Compliance.Reporter.Image = getImageName(instance, "",
-				defaultComplianceReporterImage)
-		}
-		if len(instance.Spec.Components.Compliance.Server.Image) == 0 {
-			instance.Spec.Components.Compliance.Server.Image = getImageName(instance, "",
-				defaultComplianceServerImage)
-		}
-		if len(instance.Spec.Components.Compliance.Snapshotter.Image) == 0 {
-			instance.Spec.Components.Compliance.Snapshotter.Image = getImageName(instance, "",
-				defaultComplianceSnapshotterImage)
-		}
-		if len(instance.Spec.Components.Compliance.Benchmarker.Image) == 0 {
-			instance.Spec.Components.Compliance.Benchmarker.Image = getImageName(instance, "",
-				defaultComplianceBenchmarkerImage)
-		}
-		if len(instance.Spec.Components.IntrusionDetection.Controller.Image) == 0 {
-			instance.Spec.Components.IntrusionDetection.Controller.Image = getImageName(instance, "", defaultIntrusionDetectionControllerImageName)
-		}
-		if len(instance.Spec.Components.IntrusionDetection.Installer.Image) == 0 {
-			instance.Spec.Components.IntrusionDetection.Installer.Image = getImageName(instance, "", defaultIntrusionDetectionJobInstallerImageName)
-		}
-		if len(instance.Spec.Components.Console.Manager.Image) == 0 {
-			instance.Spec.Components.Console.Manager.Image = getImageName(instance, "", defaultConsoleManagerImageName)
-		}
-		if len(instance.Spec.Components.Console.Proxy.Image) == 0 {
-			instance.Spec.Components.Console.Proxy.Image = getImageName(instance, "", defaultConsoleProxyImageName)
-		}
-		if len(instance.Spec.Components.Console.EsProxy.Image) == 0 {
-			instance.Spec.Components.Console.EsProxy.Image = getImageName(instance, "", defaultConsoleEsProxyImageName)
-		}
 		if len(instance.Spec.Components.Console.Auth.Type) == 0 {
 			instance.Spec.Components.Console.Auth.Type = operator.AuthTypeBasic
 		}
 	}
-}
-
-func getImageName(cr *operator.Installation, defaultCalicoImage, defaultTigeraImage string) string {
-	imageName := defaultCalicoImage
-	if cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		imageName = defaultTigeraImage
-	}
-	return fmt.Sprintf("%s%s:%s", cr.Spec.Registry, imageName, cr.Spec.Version)
 }

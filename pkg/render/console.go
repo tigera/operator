@@ -250,7 +250,7 @@ func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 	}
 	return corev1.Container{
 		Name:          "cnx-manager",
-		Image:         c.cr.Spec.Components.Console.Manager.Image,
+		Image:         constructImage(ConsoleManagerImageName, c.cr),
 		Env:           c.consoleManagerEnvVars(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
@@ -284,7 +284,7 @@ func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
-		Image: c.cr.Spec.Components.Console.Proxy.Image,
+		Image: constructImage(ConsoleProxyImageName, c.cr),
 		Env:   c.consoleOAuth2EnvVars(),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
@@ -339,7 +339,7 @@ func (c *consoleComponent) consoleEsProxyContainer() corev1.Container {
 	}
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
-		Image:         c.cr.Spec.Components.Console.EsProxy.Image,
+		Image:         constructImage(ConsoleEsProxyImageName, c.cr),
 		Env:           c.consoleEsProxyEnv(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleEsProxyProbe(),

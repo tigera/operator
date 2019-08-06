@@ -140,12 +140,13 @@ var complianceVolumeMounts = []corev1.VolumeMount{
 	},
 }
 
+// complianceLivenssProbe is the liveness probe to use for compliance components.
+// They all use the same liveness configuration, so we just define it once here.
 var complianceLivenessProbe = &corev1.Probe{
 	Handler: corev1.Handler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: "/liveness",
 			Port: intstr.FromInt(9099),
-			Host: "localhost",
 		},
 	},
 }
@@ -318,7 +319,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-controller",
-							Image:         c.cr.Spec.Components.Compliance.Controller.Image,
+							Image:         constructImage(ComplianceControllerImage, c.cr),
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -423,7 +424,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Containers: []corev1.Container{
 					{
 						Name:          "reporter",
-						Image:         c.cr.Spec.Components.Compliance.Reporter.Image,
+						Image:         constructImage(ComplianceReporterImage, c.cr),
 						Env:           envVars,
 						VolumeMounts:  complianceVolumeMounts,
 						LivenessProbe: complianceLivenessProbe,
@@ -560,11 +561,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
-							Name:          "compliance-server",
-							Image:         c.cr.Spec.Components.Compliance.Server.Image,
-							Env:           envVars,
-							VolumeMounts:  complianceVolumeMounts,
-							LivenessProbe: complianceLivenessProbe,
+							Name:         "compliance-server",
+							Image:        constructImage(ComplianceServerImage, c.cr),
+							Env:          envVars,
+							VolumeMounts: complianceVolumeMounts,
 						},
 					},
 					Volumes: complianceVolumes,
@@ -587,7 +587,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"extensions", "authentication.k8s.io", ""},
+				APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
 				Resources: []string{"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
 					"endpoints", "services"},
 				Verbs: []string{"get", "list"},
@@ -681,7 +681,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-snapshotter",
-							Image:         c.cr.Spec.Components.Compliance.Snapshotter.Image,
+							Image:         constructImage(ComplianceSnapshotterImage, c.cr),
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -834,7 +834,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-benchmarker",
-							Image:         c.cr.Spec.Components.Compliance.Benchmarker.Image,
+							Image:         constructImage(ComplianceBenchmarkerImage, c.cr),
 							Env:           envVars,
 							VolumeMounts:  volMounts,
 							LivenessProbe: complianceLivenessProbe,

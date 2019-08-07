@@ -245,7 +245,7 @@ func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName st
 	log.Info("Creating self-signed certificate", "secret", secretName)
 	// Create cert
 	var err error
-	key, cert, err = makeSignedCertKeyPair()
+	key, cert, err = makeSignedCertKeyPair(hostnames...)
 	if err != nil {
 		log.Error(err, "Unable to create signed cert pair")
 		return nil, nil, nil

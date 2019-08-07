@@ -37,7 +37,7 @@ const (
 	apiserverSecretKeyName      = "apiserver.key"
 	apiserverSecretCertName     = "apiserver.crt"
 	apiServiceName              = "tigera-api"
-	apiServiceHostname          = apiServiceName + ". " + apiserverNamespace + ".svc"
+	apiServiceHostname          = apiServiceName + "." + apiserverNamespace + ".svc"
 )
 
 func APIServer(cr *operator.Installation, client client.Client) Component {

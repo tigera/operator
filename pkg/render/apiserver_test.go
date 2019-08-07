@@ -15,6 +15,9 @@
 package render_test
 
 import (
+	"crypto/x509"
+	"encoding/pem"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
@@ -24,6 +27,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
 
 var _ = Describe("API server rendering tests", func() {
@@ -84,6 +88,18 @@ var _ = Describe("API server rendering tests", func() {
 		}
 
 		ExpectResource(resources[10], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+
+		operatorCert, ok := resources[8].(*corev1.Secret)
+		Expect(ok).To(BeTrue(), "Expected v1.Secret")
+		verifyCert(operatorCert)
+
+		tigeraCert, ok := resources[9].(*corev1.Secret)
+		Expect(ok).To(BeTrue(), "Expected v1.Secret")
+		verifyCert(tigeraCert)
+
+		apiService, ok := resources[11].(*v1beta1.APIService)
+		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
+		verifyAPIService(apiService)
 
 		d := resources[10].(*v1.Deployment)
 
@@ -188,3 +204,29 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 	})
 })
+
+func verifyAPIService(service *v1beta1.APIService) {
+	Expect(service.Name).To(Equal("v3.projectcalico.org"))
+	Expect(service.Spec.Group).To(Equal("projectcalico.org"))
+	Expect(service.Spec.Version).To(Equal("v3"))
+	Expect(service.Spec.GroupPriorityMinimum).To(BeEquivalentTo(200))
+	Expect(service.Spec.VersionPriority).To(BeEquivalentTo(200))
+	Expect(service.Spec.InsecureSkipTLSVerify).To(BeFalse())
+
+	ca := service.Spec.CABundle
+	verifyCertSANs(ca)
+}
+
+func verifyCert(secret *corev1.Secret) {
+	Expect(secret.Data).To(HaveKey("apiserver.crt"))
+	Expect(secret.Data).To(HaveKey("apiserver.key"))
+
+	verifyCertSANs(secret.Data["apiserver.crt"])
+}
+
+func verifyCertSANs(certBytes []byte) {
+	pemBlock, _ := pem.Decode(certBytes)
+	cert, err := x509.ParseCertificate(pemBlock.Bytes)
+	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
+	Expect(cert.DNSNames).To(ConsistOf([]string{"tigera-api.tigera-system.svc"}), "Expect cert SAN's to match extension API server service DNS name")
+}

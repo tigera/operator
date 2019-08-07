@@ -24,6 +24,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller"
+	"github.com/tigera/operator/pkg/openshift"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -79,8 +80,17 @@ func Main() {
 		os.Exit(1)
 	}
 
+	// Determine if we're running on openshift. Pass this information to
+	// the controllers below.
+	openshift, err := openshift.IsOpenshift(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+	log.WithValues("openshift", openshift).Info("Checking type of cluster")
+
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr); err != nil {
+	if err := controller.AddToManager(mgr, openshift); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

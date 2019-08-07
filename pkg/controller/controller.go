@@ -19,12 +19,13 @@ import (
 )
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs []func(manager.Manager) error
+// Each func takes the manager as well as a boolean indicating if we're running on openshift.
+var AddToManagerFuncs []func(manager.Manager, bool) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager) error {
+func AddToManager(m manager.Manager, openshift bool) error {
 	for _, f := range AddToManagerFuncs {
-		if err := f(m); err != nil {
+		if err := f(m, openshift); err != nil {
 			return err
 		}
 	}

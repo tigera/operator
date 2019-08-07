@@ -58,7 +58,7 @@ rules:
   resources:
   - '*'
   - consoles
-  - elasticsearchconfigurations
+  - monitoringconfigurations
   verbs:
   - '*'
 - apiGroups:

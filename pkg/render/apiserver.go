@@ -30,14 +30,14 @@ import (
 )
 
 const (
-	apiServerPort               = 5443
-	queryServerPort             = 8080
-	apiserverNamespace          = "tigera-system"
-	apiserverTLSSecretName      = "tigera-apiserver-certs"
-	apiserverSecretKeyName      = "apiserver.key"
-	apiserverSecretCertName     = "apiserver.crt"
-	apiServiceName              = "tigera-api"
-	apiServiceHostname          = apiServiceName + "." + apiserverNamespace + ".svc"
+	apiServerPort           = 5443
+	queryServerPort         = 8080
+	apiserverNamespace      = "tigera-system"
+	apiserverTLSSecretName  = "tigera-apiserver-certs"
+	apiserverSecretKeyName  = "apiserver.key"
+	apiserverSecretCertName = "apiserver.crt"
+	apiServiceName          = "tigera-api"
+	apiServiceHostname      = apiServiceName + "." + apiserverNamespace + ".svc"
 )
 
 func APIServer(cr *operator.Installation, client client.Client) Component {
@@ -446,7 +446,7 @@ func (c *apiserverComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: constructImage(APIServerImageName, c.cr),
+		Image: constructImage(APIServerImageName, c.cr.Spec.Registry),
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -476,7 +476,7 @@ func (c *apiserverComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiserverComponent) queryServerContainer() corev1.Container {
-	image := constructImage(QueryServerImageName, c.cr)
+	image := constructImage(QueryServerImageName, c.cr.Spec.Registry)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

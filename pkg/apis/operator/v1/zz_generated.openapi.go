@@ -13,22 +13,22 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerSpec":                    schema_pkg_apis_operator_v1_APIServerSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Auth":                             schema_pkg_apis_operator_v1_Auth(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.CNISpec":                          schema_pkg_apis_operator_v1_CNISpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ComponentsSpec":                   schema_pkg_apis_operator_v1_ComponentsSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Console":                          schema_pkg_apis_operator_v1_Console(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleSpec":                      schema_pkg_apis_operator_v1_ConsoleSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleStatus":                    schema_pkg_apis_operator_v1_ConsoleStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.DatastoreConfig":                  schema_pkg_apis_operator_v1_DatastoreConfig(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfiguration":       schema_pkg_apis_operator_v1_ElasticsearchConfiguration(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfigurationSpec":   schema_pkg_apis_operator_v1_ElasticsearchConfigurationSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfigurationStatus": schema_pkg_apis_operator_v1_ElasticsearchConfigurationStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Installation":                     schema_pkg_apis_operator_v1_Installation(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationSpec":                 schema_pkg_apis_operator_v1_InstallationSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationStatus":               schema_pkg_apis_operator_v1_InstallationStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec":              schema_pkg_apis_operator_v1_KubeControllersSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec":                         schema_pkg_apis_operator_v1_NodeSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerSpec":                 schema_pkg_apis_operator_v1_APIServerSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Auth":                          schema_pkg_apis_operator_v1_Auth(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.CNISpec":                       schema_pkg_apis_operator_v1_CNISpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ComponentsSpec":                schema_pkg_apis_operator_v1_ComponentsSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Console":                       schema_pkg_apis_operator_v1_Console(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleSpec":                   schema_pkg_apis_operator_v1_ConsoleSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleStatus":                 schema_pkg_apis_operator_v1_ConsoleStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.DatastoreConfig":               schema_pkg_apis_operator_v1_DatastoreConfig(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfiguration":       schema_pkg_apis_operator_v1_MonitoringConfiguration(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec":   schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus": schema_pkg_apis_operator_v1_MonitoringConfigurationStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Installation":                  schema_pkg_apis_operator_v1_Installation(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationSpec":              schema_pkg_apis_operator_v1_InstallationSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationStatus":            schema_pkg_apis_operator_v1_InstallationStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec":           schema_pkg_apis_operator_v1_KubeControllersSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec":                      schema_pkg_apis_operator_v1_NodeSpec(ref),
 	}
 }
 
@@ -322,11 +322,11 @@ func schema_pkg_apis_operator_v1_DatastoreConfig(ref common.ReferenceCallback) c
 	}
 }
 
-func schema_pkg_apis_operator_v1_ElasticsearchConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_operator_v1_MonitoringConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ElasticsearchConfiguration is the Schema for the elasticsearchconfigurations API",
+				Description: "MonitoringConfiguration is the Schema for the monitoringconfiguration API",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -349,27 +349,27 @@ func schema_pkg_apis_operator_v1_ElasticsearchConfiguration(ref common.Reference
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfigurationSpec"),
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfigurationStatus"),
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfigurationSpec", "github.com/tigera/operator/pkg/apis/operator/v1.ElasticsearchConfigurationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec", "github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
-func schema_pkg_apis_operator_v1_ElasticsearchConfigurationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ElasticsearchConfigurationSpec defines the desired state of ElasticsearchConfiguration",
+				Description: "MonitoringConfigurationSpec defines the desired state of MonitoringConfiguration",
 				Properties:  map[string]spec.Schema{},
 			},
 		},
@@ -377,11 +377,11 @@ func schema_pkg_apis_operator_v1_ElasticsearchConfigurationSpec(ref common.Refer
 	}
 }
 
-func schema_pkg_apis_operator_v1_ElasticsearchConfigurationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_operator_v1_MonitoringConfigurationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ElasticsearchConfigurationStatus defines the observed state of ElasticsearchConfiguration",
+				Description: "MonitoringConfigurationStatus defines the observed state of MonitoringConfiguration",
 				Properties:  map[string]spec.Schema{},
 			},
 		},

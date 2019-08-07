@@ -27,29 +27,34 @@ import (
 )
 
 var _ = Describe("Tigera Secure Console rendering tests", func() {
-	var instance *operator.Installation
+	var instance *operator.Console
+	var monitoring *operator.MonitoringConfiguration
 	var client client.Client
+	var registry string
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				Variant: operator.TigeraSecureEnterprise,
-				IPPools: []operator.IPPool{
-					{CIDR: "192.168.1.0/16"},
+		instance = &operator.Console{
+			Spec: operator.ConsoleSpec{
+				Auth: &operator.Auth{
+					Type: operator.AuthTypeBasic,
 				},
-				Registry:  "testregistry.com/",
-				CNINetDir: "/test/cni/net/dir",
-				CNIBinDir: "/test/cni/bin/dir",
+			},
+		}
+		monitoring = &operator.MonitoringConfiguration{
+			Spec: operator.MonitoringConfigurationSpec{
+				Elasticsearch: &operator.ElasticConfig{
+					Endpoint: "https://elastic.search:1234",
+				},
 			},
 		}
 		client = fake.NewFakeClient()
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Console(instance, client)
+		component := render.Console(instance, monitoring, false, registry, client)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(9))
+		Expect(len(resources)).To(Equal(10))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -59,13 +64,14 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "cnx-manager", ns: "calico-monitoring", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-console", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "cnx-manager", ns: "tigera-console", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "cnx-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "cnx-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
-			{name: "cnx-manager-tls", ns: "calico-monitoring", group: "", version: "v1", kind: "Secret"},
-			{name: "cnx-manager", ns: "calico-monitoring", group: "", version: "v1", kind: "Deployment"},
-			{name: "cnx-manager", ns: "calico-monitoring", group: "", version: "v1", kind: "Service"},
+			{name: "manager-tls", ns: "tigera-console", group: "", version: "v1", kind: "Secret"},
+			{name: "cnx-manager", ns: "tigera-console", group: "", version: "v1", kind: "Deployment"},
+			{name: "cnx-manager", ns: "tigera-console", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 		}
@@ -89,7 +95,7 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 			client = fake.NewFakeClient(badSecret)
 		})
 		It("should not render any resources", func() {
-			component := render.Console(instance, client)
+			component := render.Console(instance, monitoring, false, registry, client)
 			resources := component.Objects()
 			Expect(len(resources)).To(Equal(0))
 		})

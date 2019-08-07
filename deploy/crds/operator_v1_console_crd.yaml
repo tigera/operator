@@ -9,7 +9,7 @@ spec:
     listKind: ConsoleList
     plural: consoles
     singular: console
-  scope: Namespaced
+  scope: Cluster
   subresources:
     status: {}
   validation:

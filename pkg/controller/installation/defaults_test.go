@@ -71,9 +71,6 @@ var _ = Describe("Defaulting logic tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "1.2.3.0/24"},
 				},
-				Datastore: operator.DatastoreConfig{
-					Type: operator.Kubernetes,
-				},
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
 						MaxUnavailable: &maxUnavailable,
@@ -192,13 +189,6 @@ var _ = Describe("Defaulting logic tests", func() {
 								v1.ResourceCPU:    resource.MustParse("325m"),
 								v1.ResourceMemory: resource.MustParse("435Mi"),
 							},
-						},
-					},
-					Console: operator.ConsoleSpec{
-						Auth: operator.Auth{
-							Type:      operator.AuthTypeOAuth,
-							Authority: "https://api.tigera.io",
-							ClientID:  "oauth2-client-id",
 						},
 					},
 				},

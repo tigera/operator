@@ -19,7 +19,9 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
@@ -262,4 +264,17 @@ func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName st
 		},
 		Data: data,
 	}
+}
+
+// ParseEndpoint parses an endpoint of the form scheme://host:port and returns the components.
+func ParseEndpoint(endpoint string) (string, string, string, error) {
+	url, err := url.Parse(endpoint)
+	if err != nil {
+		return "", "", "", err
+	}
+	splits := strings.Split(url.Host, ":")
+	if len(splits) != 2 {
+		return "", "", "", fmt.Errorf("Invalid host: %s", url.Host)
+	}
+	return url.Scheme, splits[0], splits[1], nil
 }

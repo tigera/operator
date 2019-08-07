@@ -26,10 +26,6 @@ import (
 // InstallationSpec defines the desired state of Installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
-	// Datastore is datastore configuration.
-	// +optional
-	Datastore DatastoreConfig `json:"datastore,omitempty"`
-
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
 	// Default: Calico
 	// +optional
@@ -83,10 +79,6 @@ type ComponentsSpec struct {
 	// APIServer is optional configuration for the API server component.
 	// +optional
 	APIServer APIServerSpec `json:"apiServer,omitempty"`
-
-	// Console is optional configuration for the Tigera Secure management console.
-	// +optional
-	Console ConsoleSpec `json:"console,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
@@ -138,42 +130,6 @@ type APIServerSpec struct {
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// ConsoleSpec defines optional configuration for the Tigera Secure management console.
-// Valid only for the variant 'TigeraSecureEnterprise'.
-// +k8s:openapi-gen=true
-type ConsoleSpec struct {
-	// Auth is optional authentication configuration for the Tigera Secure management console.
-	// +optional
-	Auth Auth `json:"auth,omitempty"`
-}
-
-// Auth defines authentication configuration.
-// +k8s:openapi-gen=true
-type Auth struct {
-	// Type configures the type of authentication used by the manager.
-	// Default: "Basic"
-	// +optional
-	Type AuthType `json:"type,omitempty"`
-
-	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
-	// Default: ""https://accounts.google.com"
-	// +optional
-	Authority string `json:"authority,omitempty"`
-
-	// ClientId configures the OAuth2/OIDC client ID to use for OAuth2 or OIDC login.
-	// +optional
-	ClientID string `json:"clientID,omitempty"`
-}
-
-type AuthType string
-
-const (
-	AuthTypeToken = "Token"
-	AuthTypeBasic = "Basic"
-	AuthTypeOIDC  = "OIDC"
-	AuthTypeOAuth = "OAuth"
-)
-
 // NodeSpec defines optional configuration for the node component.
 // +k8s:openapi-gen=true
 type NodeSpec struct {
@@ -220,22 +176,6 @@ type CNISpec struct {
 	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 }
 
-// DatastoreConfig specifies the product's datastore configuration.
-// +k8s:openapi-gen=true
-type DatastoreConfig struct {
-	// Type is the type of datastore to be used. Currently, only Kubernetes API datastore is supported.
-	// Default: kubernetes
-	// +optional
-	Type DatastoreType `json:"type,omitempty"`
-}
-
-// DatastoreType is a valid datastore type.
-type DatastoreType string
-
-var (
-	Kubernetes DatastoreType = "kubernetes"
-)
-
 type ProductVariant string
 
 var (
@@ -250,9 +190,8 @@ type IPPool struct {
 // InstallationStatus defines the observed state of Installation
 // +k8s:openapi-gen=true
 type InstallationStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	// Variant is the installed product - one of Calico or TigeraSecureEnterprise
+	Variant ProductVariant `json:"variant,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

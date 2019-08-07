@@ -319,7 +319,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-controller",
-							Image:         constructImage(ComplianceControllerImage, c.cr),
+							Image:         constructImage(ComplianceControllerImage, c.cr.Spec.Registry),
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -424,7 +424,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Containers: []corev1.Container{
 					{
 						Name:          "reporter",
-						Image:         constructImage(ComplianceReporterImage, c.cr),
+						Image:         constructImage(ComplianceReporterImage, c.cr.Spec.Registry),
 						Env:           envVars,
 						VolumeMounts:  complianceVolumeMounts,
 						LivenessProbe: complianceLivenessProbe,
@@ -562,7 +562,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:         "compliance-server",
-							Image:        constructImage(ComplianceServerImage, c.cr),
+							Image:        constructImage(ComplianceServerImage, c.cr.Spec.Registry),
 							Env:          envVars,
 							VolumeMounts: complianceVolumeMounts,
 						},
@@ -681,7 +681,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-snapshotter",
-							Image:         constructImage(ComplianceSnapshotterImage, c.cr),
+							Image:         constructImage(ComplianceSnapshotterImage, c.cr.Spec.Registry),
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -834,7 +834,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-benchmarker",
-							Image:         constructImage(ComplianceBenchmarkerImage, c.cr),
+							Image:         constructImage(ComplianceBenchmarkerImage, c.cr.Spec.Registry),
 							Env:           envVars,
 							VolumeMounts:  volMounts,
 							LivenessProbe: complianceLivenessProbe,

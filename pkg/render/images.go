@@ -2,8 +2,6 @@ package render
 
 import (
 	"fmt"
-
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 // Default registries for Calico and Tigera.
@@ -48,10 +46,10 @@ const (
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.
-func constructImage(imageName string, cr *operator.Installation) string {
+func constructImage(imageName string, registry string) string {
 	// If a user supplied a registry, use that for all images.
-	if cr.Spec.Registry != "" {
-		return fmt.Sprintf("%s%s", cr.Spec.Registry, imageName)
+	if registry != "" {
+		return fmt.Sprintf("%s%s", registry, imageName)
 	}
 
 	// Otherwise, default the registry based on component.

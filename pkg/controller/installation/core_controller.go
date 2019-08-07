@@ -16,19 +16,16 @@ package installation
 
 import (
 	"context"
-	"reflect"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
-	"github.com/go-logr/logr"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/openshift"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
 
 	apps "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -37,9 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -53,25 +48,14 @@ var log = logf.Log.WithName("installation_controller")
 var defaultInstanceKey = client.ObjectKey{Name: "default"}
 var openshiftNetworkConfig = "cluster"
 
-const (
-	// If this annotation is set on an object, the operator will ignore it, allowing user modifications.
-	// This is for development and testing purposes only. Do not use this annotation
-	// for production, as this will cause problems with upgrade.
-	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
-)
-
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+func Add(mgr manager.Manager, openshift bool) error {
+	return add(mgr, newReconciler(mgr, openshift))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) *ReconcileInstallation {
-	openshift, err := openshift.IsOpenshift(mgr.GetConfig())
-	if err != nil {
-		panic(err)
-	}
+func newReconciler(mgr manager.Manager, openshift bool) *ReconcileInstallation {
 	log.WithValues("openshift", openshift).Info("Checking type of cluster")
 	return &ReconcileInstallation{
 		client:    mgr.GetClient(),
@@ -209,6 +193,20 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 	return nil
 }
 
+// GetInstallation returns the default installation instance with defaults populated.
+func GetInstallation(ctx context.Context, client client.Client, openshift bool) (*operator.Installation, error) {
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operator.Installation{}
+	err := client.Get(ctx, defaultInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate the instance with defaults for any fields not provided by the user.
+	fillDefaults(instance, openshift)
+	return instance, nil
+}
+
 // Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
 // and what is in the Installation.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -218,23 +216,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	ctx := context.Background()
 
-	// Fetch the Installation instance. We only support a single instance named "default".
-	instance := &operator.Installation{}
-	err := r.client.Get(ctx, defaultInstanceKey, instance)
+	// Query for the installation object.
+	instance, err := GetInstallation(ctx, r.client, r.openshift)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.Info("Network installation config not found")
+			reqLogger.Info("Installation config not found")
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
-	// Populate the instance with defaults for any fields not provided by the user.
-	fillDefaults(instance, r.openshift)
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	openshiftConfig := &configv1.Network{}
@@ -259,11 +252,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// Create a component handler to manage the rendered components.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico := render.Calico(instance, r.client, r.openshift)
 	for _, component := range calico.Render() {
-		if err := r.createOrUpdateComponent(ctx, instance, component); err != nil {
+		if err := handler.CreateOrUpdate(ctx, component); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
@@ -284,141 +280,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Render any TigeraSecure resources, if configured to do so.
 	tigeraSecure := render.TigeraSecure(instance, r.client, r.openshift)
 	for _, component := range tigeraSecure.Render() {
-		if err := r.createOrUpdateComponent(ctx, instance, component); err != nil {
+		if err := handler.CreateOrUpdate(ctx, component); err != nil {
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Update the status.
+	instance.Status.Variant = instance.Spec.Variant
+	if err = r.client.Status().Update(ctx, instance); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
-}
-
-// createOrUpdateComponent checks if the given component is ready, and creates or updates it in the cluster
-// if it is.
-func (r *ReconcileInstallation) createOrUpdateComponent(ctx context.Context, instance *operator.Installation, component render.Component) error {
-	// Before creating the component, make sure that it is ready. This provides a hook to do
-	// dependency checking for the component.
-	cmpLog := log.WithValues("component", reflect.TypeOf(component))
-	cmpLog.V(2).Info("Checking if component is ready")
-	if !component.Ready() {
-		cmpLog.Info("Component is not ready, skipping")
-		return nil
-	}
-	cmpLog.V(2).Info("Reconciling")
-
-	// Iterate through each object that comprises the component and attempt to create it,
-	// or update it if needed.
-	for _, obj := range component.Objects() {
-		// Set Installation instance as the owner and controller.
-		if err := controllerutil.SetControllerReference(instance, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), r.scheme); err != nil {
-			return err
-		}
-
-		logCtx := contextLoggerForResource(obj)
-		var old runtime.Object = obj.DeepCopyObject()
-		var key client.ObjectKey
-		key, err := client.ObjectKeyFromObject(obj)
-		if err != nil {
-			return err
-		}
-
-		// Check to see if the object exists or not.
-		err = r.client.Get(ctx, key, old)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				// Anything other than "Not found" we should retry.
-				return err
-			}
-
-			// Otherwise, if it was not found, we should create it and move on.
-			logCtx.V(2).Info("Object does not exist, creating it", "error", err)
-			err = r.client.Create(ctx, obj)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-
-		// The object exists. Update it, unless the user has marked it as "ignored".
-		if ignoreObject(old) {
-			logCtx.Info("Ignoring annotated object")
-			continue
-		}
-		logCtx.V(1).Info("Resource already exists, update it")
-		err = r.client.Update(ctx, mergeState(obj, old))
-		if err != nil {
-			logCtx.WithValues("key", key).Info("Failed to update object.")
-			return err
-		}
-		continue
-	}
-	cmpLog.Info("Done reconciling")
-	return nil
-}
-
-// ignoreObject returns true if the object has been marked as ignored by the user,
-// and returns false otherwise.
-func ignoreObject(obj runtime.Object) bool {
-	a := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetAnnotations()
-	if val, ok := a[unsupportedIgnoreAnnotation]; ok && val == "true" {
-		return true
-	}
-	return false
-}
-
-// mergeState returns the object to pass to Update given the current and desired object states.
-func mergeState(desired, current runtime.Object) runtime.Object {
-	switch desired.(type) {
-	case *v1.Service:
-		// Services are a special case since some fields (namely ClusterIP) are defaulted
-		// and we need to maintain them on updates.
-		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
-		cs := current.(*v1.Service)
-		ds := desired.(*v1.Service)
-		ds.Spec.ClusterIP = cs.Spec.ClusterIP
-		return ds
-	case *batchv1.Job:
-		// Jobs have controller-uid values added to spec.selector and spec.template.metadata.labels.
-		// spec.selector and podtemplatespec are immutable so just copy real values over to desired state.
-		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
-		cj := current.(*batchv1.Job)
-		dj := desired.(*batchv1.Job)
-		dj.Spec.Selector = cj.Spec.Selector
-		dj.Spec.Template = cj.Spec.Template
-		return dj
-	default:
-		// Default to just using the desired state, with an updated RV.
-		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
-		return desired
-	}
-}
-
-// contextLoggerForResource provides a logger instance with context set for the provided object.
-func contextLoggerForResource(obj runtime.Object) logr.Logger {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
-}
-
-// hasOwnerReference checks if the given object was created by us (as opposed to another controller).
-func hasOwnerReference(obj runtime.Object, instance metav1.Object, scheme *runtime.Scheme) bool {
-	ro := instance.(runtime.Object)
-	gvk, err := apiutil.GVKForObject(ro, scheme)
-	if err != nil {
-		return false
-	}
-
-	// Compare each of the object's owner references against the object's kind and our instance's name.
-	refs := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetOwnerReferences()
-	for _, r := range refs {
-		if r.Kind == gvk.Kind && r.Name == instance.GetName() {
-			return true
-		}
-	}
-	return false
 }

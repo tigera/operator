@@ -25,9 +25,6 @@ import (
 
 // fillDefaults fills in the default values for an instance.
 func fillDefaults(instance *operator.Installation, openshift bool) {
-	if len(instance.Spec.Datastore.Type) == 0 {
-		instance.Spec.Datastore.Type = operator.Kubernetes
-	}
 	if len(instance.Spec.Registry) != 0 && !strings.HasSuffix(instance.Spec.Registry, "/") {
 		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
 	}
@@ -56,11 +53,5 @@ func fillDefaults(instance *operator.Installation, openshift bool) {
 	if instance.Spec.Components.Node.MaxUnavailable == nil {
 		mu := intstr.FromInt(1)
 		instance.Spec.Components.Node.MaxUnavailable = &mu
-	}
-
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		if len(instance.Spec.Components.Console.Auth.Type) == 0 {
-			instance.Spec.Components.Console.Auth.Type = operator.AuthTypeBasic
-		}
 	}
 }

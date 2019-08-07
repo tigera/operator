@@ -93,9 +93,6 @@ var _ = Describe("Node rendering tests", func() {
 				},
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				Datastore: operator.DatastoreConfig{
-					Type: operator.Kubernetes,
-				},
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
 						MaxUnavailable:    &maxUnavailable,
@@ -118,9 +115,6 @@ var _ = Describe("Node rendering tests", func() {
 			Spec: operator.InstallationSpec{
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
-				},
-				Datastore: operator.DatastoreConfig{
-					Type: operator.Kubernetes,
 				},
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",

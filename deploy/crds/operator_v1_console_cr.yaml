@@ -1,0 +1,7 @@
+apiVersion: operator.tigera.io/v1
+kind: Console
+metadata:
+  name: example-console
+spec:
+  # Add fields here
+  size: 3

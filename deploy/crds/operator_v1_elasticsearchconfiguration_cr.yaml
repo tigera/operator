@@ -1,0 +1,7 @@
+apiVersion: operator.tigera.io/v1
+kind: ElasticsearchConfiguration
+metadata:
+  name: example-elasticsearchconfiguration
+spec:
+  # Add fields here
+  size: 3

@@ -1,6 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  creationTimestamp: null
   name: tigera-operator
 rules:
 - apiGroups:
@@ -56,29 +57,29 @@ rules:
   - operator.tigera.io
   resources:
   - '*'
+  - consoles
+  - elasticsearchconfigurations
   verbs:
   - '*'
-# When running TigeraSecureEnterprise, we need to manage APIServices.
 - apiGroups:
   - apiregistration.k8s.io
   resources:
   - apiservices
   verbs:
   - '*'
-# When running in openshift, we need to update networking config.
 - apiGroups:
   - config.openshift.io
   resources:
   - networks/status
   verbs:
-  - 'update'
+  - update
   - '*'
 - apiGroups:
   - config.openshift.io
   resources:
   - networks
   verbs:
-  - 'get'
+  - get
   - '*'
 - apiGroups:
   - scheduling.k8s.io

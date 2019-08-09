@@ -17,10 +17,12 @@ package test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -58,6 +60,30 @@ var _ = Describe("Mainline component function tests", func() {
 		err = c.Delete(context.Background(), instance)
 		Expect(err).NotTo(HaveOccurred())
 
+		// Clean up Calico data that might be left behind.
+		Eventually(func() error {
+			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+			nodes, err := cs.CoreV1().Nodes().List(metav1.ListOptions{})
+			if err != nil {
+				return err
+			}
+			if len(nodes.Items) == 0 {
+				return fmt.Errorf("No nodes found")
+			}
+			for _, n := range nodes.Items {
+				for k, _ := range n.ObjectMeta.Annotations {
+					if strings.Contains(k, "projectcalico") {
+						delete(n.ObjectMeta.Annotations, k)
+					}
+				}
+				err = c.Update(context.Background(), &n)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}, 30*time.Second).Should(BeNil())
+
 		// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
 		// directly instead of using the client cache. This should help with flaky tests.
 		Eventually(func() error {
@@ -71,7 +97,7 @@ var _ = Describe("Mainline component function tests", func() {
 			k := client.ObjectKey{Name: "calico-system"}
 			err := c.Get(context.Background(), k, u)
 			return err
-		}, 80*time.Second).ShouldNot(BeNil())
+		}, 240*time.Second).ShouldNot(BeNil())
 	})
 
 	It("Should install resources for a CRD", func() {
@@ -106,7 +132,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}
 			return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
-		}, 80*time.Second).Should(BeNil())
+		}, 240*time.Second).Should(BeNil())
 
 		Eventually(func() error {
 			err = GetResource(c, kc)
@@ -117,7 +143,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}
 			return fmt.Errorf("kube-controllers not yet ready")
-		}, 120*time.Second).Should(BeNil())
+		}, 240*time.Second).Should(BeNil())
 	})
 
 	It("Should install resources for a CRD with node overrides", func() {
@@ -197,7 +223,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}
 			return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
-		}, 80*time.Second).Should(BeNil())
+		}, 240*time.Second).Should(BeNil())
 
 		Eventually(func() error {
 			err = GetResource(c, kc)
@@ -208,7 +234,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}
 			return fmt.Errorf("kube-controllers not yet ready: %#v", kc.Status)
-		}, 120*time.Second).Should(BeNil())
+		}, 240*time.Second).Should(BeNil())
 
 		By("Verifying the daemonset has the overrides")
 		err = GetResource(c, ds)

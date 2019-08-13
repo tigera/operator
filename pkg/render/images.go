@@ -27,7 +27,7 @@ const (
 	KubeControllersImageNameTigera = "kube-controllers:v2.4.2"
 
 	// API server images.
-	APIServerImageName   = "cnx-apiserver:v2.4.0"
+	APIServerImageName   = "cnx-apiserver:v2.5.0"
 	QueryServerImageName = "cnx-queryserver:v2.4.0"
 
 	// Compliance images.

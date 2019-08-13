@@ -98,12 +98,12 @@ var _ = Describe("compliance rendering tests", func() {
 		idx++
 		ExpectResource(resources[idx], "compliance-benchmarker", ns, "apps", "v1", "DaemonSet")
 		idx++
-		ExpectResource(resources[idx], "inventory", "", "projectcalico.org", "v3", "GlobalReportType")
+		ExpectGlobalReportType(resources[idx], "inventory")
 		idx++
-		ExpectResource(resources[idx], "network-access", "", "projectcalico.org", "v3", "GlobalReportType")
+		ExpectGlobalReportType(resources[idx], "network-access")
 		idx++
-		ExpectResource(resources[idx], "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType")
+		ExpectGlobalReportType(resources[idx], "policy-audit")
 		idx++
-		ExpectResource(resources[idx], "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType")
+		ExpectGlobalReportType(resources[idx], "cis-benchmark")
 	})
 })

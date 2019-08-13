@@ -15,9 +15,11 @@
 package render_test
 
 import (
+	"encoding/json"
 	"fmt"
 
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +34,23 @@ func ExpectResource(resource runtime.Object, name, ns, group, version, kind stri
 	Expect(actualName).To(Equal(name), "Rendered resource has wrong name")
 	Expect(actualNS).To(Equal(ns), "Rendered resource has wrong namespace")
 	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), "Rendered resource does not match expected GVK")
+}
+
+func ExpectGlobalReportType(resource runtime.Object, name string) {
+	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
+	Expect(actualName).To(Equal(name), "Rendered resource has wrong name")
+	gvk := schema.GroupVersionKind{Group: "projectcalico.org", Version: "v3", Kind: "GlobalReportType"}
+	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), "Rendered resource does not match expected GVK")
+	v, ok := resource.(*v3.GlobalReportType)
+	Expect(ok).To(BeTrue(), fmt.Sprintf("resource (%v) should convert to GlobalReportType", resource))
+	Expect(v.Spec.UISummaryTemplate.Template).ToNot(BeEmpty())
+	_, err := json.Marshal(v.Spec.UISummaryTemplate.Template)
+	Expect(err).To(BeNil())
+	for _, t := range v.Spec.DownloadTemplates {
+		Expect(t.Template).ToNot(BeEmpty(), fmt.Sprintf("%s template should not be empty", t.Name))
+		_, err = json.Marshal(t.Template)
+		Expect(err).To(BeNil())
+	}
 }
 
 func ExpectEnv(env []v1.EnvVar, key, value string) {

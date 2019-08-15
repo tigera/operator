@@ -880,26 +880,65 @@ func (c *complianceComponent) complianceGlobalReportInventory() *v3.GlobalReport
 		Spec: v3.ReportTypeSpec{
 			DownloadTemplates: []v3.ReportTemplate{
 				{
-					Name:     "summary.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"startTime\"                     \"{{ dateRfc3339 .StartTime }}\" }} {{- $c := $c.AddColumn \"endTime\"                       \"{{ dateRfc3339 .EndTime }}\" }} {{- $c := $c.AddColumn \"endpointSelector\"              \"{{ if .ReportSpec.Endpoints }}{{ .ReportSpec.Endpoints.Selector }}{{ end }}\" }} {{- $c := $c.AddColumn \"namespaceNames\"                \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ join \";\" .ReportSpec.Endpoints.Namespaces.Names }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"namespaceSelector\"             \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ .ReportSpec.Endpoints.Namespaces.Selector }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"serviceAccountNames\"           \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ join \";\" .ReportSpec.Endpoints.ServiceAccounts.Names }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"serviceAccountSelectors\"       \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ .ReportSpec.Endpoints.ServiceAccounts.Selector }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"endpointsNumInScope\"           \"{{ .EndpointsSummary.NumTotal }}\" }} {{- $c := $c.AddColumn \"endpointsNumIngressProtected\"  \"{{ .EndpointsSummary.NumIngressProtected }}\" }} {{- $c := $c.AddColumn \"endpointsNumEgressProtected\"   \"{{ .EndpointsSummary.NumEgressProtected }}\" }} {{- $c := $c.AddColumn \"namespacesNumInScope\"          \"{{ .NamespacesSummary.NumTotal }}\" }} {{- $c := $c.AddColumn \"namespacesNumIngressProtected\" \"{{ .NamespacesSummary.NumIngressProtected }}\" }} {{- $c := $c.AddColumn \"namespacesNumEgressProtected\"  \"{{ .NamespacesSummary.NumEgressProtected }}\" }} {{- $c := $c.AddColumn \"serviceAccountsNumInScope\"     \"{{ .EndpointsSummary.NumServiceAccounts }}\" }}",
+					Name: "summary.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "startTime"                     "{{ dateRfc3339 .StartTime }}" }}
+      {{- $c := $c.AddColumn "endTime"                       "{{ dateRfc3339 .EndTime }}" }}
+      {{- $c := $c.AddColumn "endpointSelector"              "{{ if .ReportSpec.Endpoints }}{{ .ReportSpec.Endpoints.Selector }}{{ end }}" }}
+      {{- $c := $c.AddColumn "namespaceNames"                "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ join \";\" .ReportSpec.Endpoints.Namespaces.Names }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "namespaceSelector"             "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ .ReportSpec.Endpoints.Namespaces.Selector }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "serviceAccountNames"           "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ join \";\" .ReportSpec.Endpoints.ServiceAccounts.Names }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "serviceAccountSelectors"       "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ .ReportSpec.Endpoints.ServiceAccounts.Selector }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "endpointsNumInScope"           "{{ .EndpointsSummary.NumTotal }}" }}
+      {{- $c := $c.AddColumn "endpointsNumIngressProtected"  "{{ .EndpointsSummary.NumIngressProtected }}" }}
+      {{- $c := $c.AddColumn "endpointsNumEgressProtected"   "{{ .EndpointsSummary.NumEgressProtected }}" }}
+      {{- $c := $c.AddColumn "namespacesNumInScope"          "{{ .NamespacesSummary.NumTotal }}" }}
+      {{- $c := $c.AddColumn "namespacesNumIngressProtected" "{{ .NamespacesSummary.NumIngressProtected }}" }}
+      {{- $c := $c.AddColumn "namespacesNumEgressProtected"  "{{ .NamespacesSummary.NumEgressProtected }}" }}
+      {{- $c := $c.AddColumn "serviceAccountsNumInScope"     "{{ .EndpointsSummary.NumServiceAccounts }}" }}
+      {{- $c.Render . }}
+`,
 				},
 				{
-					Name:     "endpoints.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"endpoint\"         \"{{ .Endpoint }}\" }} {{- $c := $c.AddColumn \"ingressProtected\" \"{{ .IngressProtected }}\" }} {{- $c := $c.AddColumn \"egressProtected\"  \"{{ .EgressProtected }}\" }} {{- $c := $c.AddColumn \"envoyEnabled\"     \"{{ .EnvoyEnabled }}\" }} {{- $c := $c.AddColumn \"appliedPolicies\"  \"{{ join \";\" .AppliedPolicies }}\" }} {{- $c := $c.AddColumn \"services\"         \"{{ join \";\" .Services }}\" }} {{- $c.Render .Endpoints }} ",
+					Name: "endpoints.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "endpoint"         "{{ .Endpoint }}" }}
+      {{- $c := $c.AddColumn "ingressProtected" "{{ .IngressProtected }}" }}
+      {{- $c := $c.AddColumn "egressProtected"  "{{ .EgressProtected }}" }}
+      {{- $c := $c.AddColumn "envoyEnabled"     "{{ .EnvoyEnabled }}" }}
+      {{- $c := $c.AddColumn "appliedPolicies"  "{{ join \";\" .AppliedPolicies }}" }}
+      {{- $c := $c.AddColumn "services"         "{{ join \";\" .Services }}" }}
+      {{- $c.Render .Endpoints }}
+`,
 				},
 				{
-					Name:     "namespaces.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"namespace\"        \"{{ .Namespace }}\" }} {{- $c := $c.AddColumn \"ingressProtected\" \"{{ .IngressProtected }}\" }} {{- $c := $c.AddColumn \"egressProtected\"  \"{{ .EgressProtected }}\" }} {{- $c := $c.AddColumn \"envoyEnabled\"     \"{{ .EnvoyEnabled }}\" }} {{- $c.Render .Namespaces }} ",
+					Name: "namespaces.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "namespace"        "{{ .Namespace }}" }}
+      {{- $c := $c.AddColumn "ingressProtected" "{{ .IngressProtected }}" }}
+      {{- $c := $c.AddColumn "egressProtected"  "{{ .EgressProtected }}" }}
+      {{- $c := $c.AddColumn "envoyEnabled"     "{{ .EnvoyEnabled }}" }}
+      {{- $c.Render .Namespaces }}
+`,
 				},
 				{
-					Name:     "services.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"service\"          \"{{ .Service }}\" }} {{- $c := $c.AddColumn \"ingressProtected\" \"{{ .IngressProtected }}\" }} {{- $c := $c.AddColumn \"envoyEnabled\"     \"{{ .EnvoyEnabled }}\" }} {{- $c.Render .Services }}",
+					Name: "services.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "service"          "{{ .Service }}" }}
+      {{- $c := $c.AddColumn "ingressProtected" "{{ .IngressProtected }}" }}
+      {{- $c := $c.AddColumn "envoyEnabled"     "{{ .EnvoyEnabled }}" }}
+      {{- $c.Render .Services }}
+`,
 				},
 			},
 			IncludeEndpointData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name:     "ui-temporary.json",
-				Template: "'{\"heading\":\"Inscope vs Protected\",\"type\":\"panel\",\"widgets\":[{\"data\":[{\"label\":\"Protected ingress\",\"value\":{{ .EndpointsSummary.NumIngressProtected }}}],\"heading\":\"Endpoints\",\"summary\":{\"label\":\"Total\",\"total\":{{ .EndpointsSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Protected ingress\",\"value\":{{ .NamespacesSummary.NumIngressProtected }}}],\"heading\":\"Namespaces\",\"summary\":{\"label\":\"Total\",\"total\":{{ .NamespacesSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Protected egress\",\"value\":{{ .EndpointsSummary.NumEgressProtected }}}],\"heading\":\"Endpoints\",\"summary\":{\"label\":\"Total\",\"total\":{{ .EndpointsSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Protected egress\",\"value\":{{ .NamespacesSummary.NumEgressProtected }}}],\"heading\":\"Namespaces\",\"summary\":{\"label\":\"Total\",\"total\":{{ .NamespacesSummary.NumTotal }}},\"type\":\"radialbarchart\"}]}'",
+				Template: `{"heading":"Inscope vs Protected","type":"panel","widgets":[{"data":[{"label":"Protected ingress","value":{{ .EndpointsSummary.NumIngressProtected }}}],"heading":"Endpoints","summary":{"label":"Total","total":{{.EndpointsSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected ingress","value":{{ .NamespacesSummary.NumIngressProtected }}}],"heading":"Namespaces","summary":{"label":"Total","total":{{.NamespacesSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected egress","value":{{ .EndpointsSummary.NumEgressProtected }}}],"heading":"Endpoints","summary":{"label":"Total","total":{{.EndpointsSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected egress","value":{{ .NamespacesSummary.NumEgressProtected }}}],"heading":"Namespaces","summary":{"label":"Total","total":{{.NamespacesSummary.NumTotal }}},"type":"radialbarchart"}]}`,
 			},
 		},
 	}
@@ -917,18 +956,54 @@ func (c *complianceComponent) complianceGlobalReportNetworkAccess() *v3.GlobalRe
 		Spec: v3.ReportTypeSpec{
 			DownloadTemplates: []v3.ReportTemplate{
 				{
-					Name:     "summary.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"startTime\"                             \"{{ dateRfc3339 .StartTime }}\" }} {{- $c := $c.AddColumn \"endTime\"                               \"{{ dateRfc3339 .EndTime }}\" }} {{- $c := $c.AddColumn \"endpointSelector\"                      \"{{ if .ReportSpec.Endpoints }}{{ .ReportSpec.Endpoints.Selector }}{{ end }}\" }} {{- $c := $c.AddColumn \"namespaceNames\"                        \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ join \";\" .ReportSpec.Endpoints.Namespaces.Names }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"namespaceSelector\"                     \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ .ReportSpec.Endpoints.Namespaces.Selector }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"serviceAccountNames\"                   \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ join \";\" .ReportSpec.Endpoints.ServiceAccounts.Names }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"serviceAccountSelectors\"               \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ .ReportSpec.Endpoints.ServiceAccounts.Selector }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"endpointsNumIngressProtected\"          \"{{ .EndpointsSummary.NumIngressProtected }}\" }} {{- $c := $c.AddColumn \"endpointsNumEgressProtected\"           \"{{ .EndpointsSummary.NumEgressProtected }}\" }} {{- $c := $c.AddColumn \"endpointsNumIngressUnprotected\"        \"{{ sub .EndpointsSummary.NumTotal .EndpointsSummary.NumIngressProtected }}\" }} {{- $c := $c.AddColumn \"endpointsNumEgressUnprotected\"         \"{{ sub .EndpointsSummary.NumTotal .EndpointsSummary.NumEgressProtected  }}\" }} {{- $c := $c.AddColumn \"endpointsNumIngressFromInternet\"       \"{{ .EndpointsSummary.NumIngressFromInternet }}\" }} {{- $c := $c.AddColumn \"endpointsNumEgressToInternet\"          \"{{ .EndpointsSummary.NumEgressToInternet }}\" }} {{- $c := $c.AddColumn \"endpointsNumIngressFromOtherNamespace\" \"{{ .EndpointsSummary.NumIngressFromOtherNamespace }}\" }} {{- $c := $c.AddColumn \"endpointsNumEgressToOtherNamespace\"    \"{{ .EndpointsSummary.NumEgressToOtherNamespace }}\" }} {{- $c := $c.AddColumn \"endpointsNumEnvoyEnabled\"              \"{{ .EndpointsSummary.NumEnvoyEnabled }}\" }}",
+					Name: "summary.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "startTime"                             "{{ dateRfc3339 .StartTime }}" }}
+      {{- $c := $c.AddColumn "endTime"                               "{{ dateRfc3339 .EndTime }}" }}
+      {{- $c := $c.AddColumn "endpointSelector"                      "{{ if .ReportSpec.Endpoints }}{{ .ReportSpec.Endpoints.Selector }}{{ end }}" }}
+      {{- $c := $c.AddColumn "namespaceNames"                        "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ join \";\" .ReportSpec.Endpoints.Namespaces.Names }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "namespaceSelector"                     "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ .ReportSpec.Endpoints.Namespaces.Selector }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "serviceAccountNames"                   "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ join \";\" .ReportSpec.Endpoints.ServiceAccounts.Names }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "serviceAccountSelectors"               "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ .ReportSpec.Endpoints.ServiceAccounts.Selector }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "endpointsNumIngressProtected"          "{{ .EndpointsSummary.NumIngressProtected }}" }}
+      {{- $c := $c.AddColumn "endpointsNumEgressProtected"           "{{ .EndpointsSummary.NumEgressProtected }}" }}
+      {{- $c := $c.AddColumn "endpointsNumIngressUnprotected"        "{{ sub .EndpointsSummary.NumTotal .EndpointsSummary.NumIngressProtected }}" }}
+      {{- $c := $c.AddColumn "endpointsNumEgressUnprotected"         "{{ sub .EndpointsSummary.NumTotal .EndpointsSummary.NumEgressProtected  }}" }}
+      {{- $c := $c.AddColumn "endpointsNumIngressFromInternet"       "{{ .EndpointsSummary.NumIngressFromInternet }}" }}
+      {{- $c := $c.AddColumn "endpointsNumEgressToInternet"          "{{ .EndpointsSummary.NumEgressToInternet }}" }}
+      {{- $c := $c.AddColumn "endpointsNumIngressFromOtherNamespace" "{{ .EndpointsSummary.NumIngressFromOtherNamespace }}" }}
+      {{- $c := $c.AddColumn "endpointsNumEgressToOtherNamespace"    "{{ .EndpointsSummary.NumEgressToOtherNamespace }}" }}
+      {{- $c := $c.AddColumn "endpointsNumEnvoyEnabled"              "{{ .EndpointsSummary.NumEnvoyEnabled }}" }}
+      {{- $c.Render . }}
+`,
 				},
 				{
-					Name:     "endpoints.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"endpoint\"                                  \"{{ .Endpoint }}\" }} {{- $c := $c.AddColumn \"ingressProtected\"                          \"{{ .IngressProtected }}\" }} {{- $c := $c.AddColumn \"egressProtected\"                           \"{{ .EgressProtected }}\" }} {{- $c := $c.AddColumn \"ingressFromInternet\"                       \"{{ .IngressFromInternet }}\" }} {{- $c := $c.AddColumn \"egressToInternet\"                          \"{{ .EgressToInternet }}\" }} {{- $c := $c.AddColumn \"ingressFromOtherNamespace\"                 \"{{ .IngressFromOtherNamespace }}\" }} {{- $c := $c.AddColumn \"egressToOtherNamespace\"                    \"{{ .EgressToOtherNamespace }}\" }} {{- $c := $c.AddColumn \"envoyEnabled\"                              \"{{ .EnvoyEnabled }}\" }} {{- $c := $c.AddColumn \"appliedPolicies\"                           \"{{ join \";\" .AppliedPolicies }}\" }} {{- $c := $c.AddColumn \"trafficAggregationPrefix\"                  \"{{ flowsPrefix . }}\" }} {{- $c := $c.AddColumn \"endpointsGeneratingTrafficToThisEndpoint\"  \"{{ join \";\" (flowsIngress .) }}\" }} {{- $c := $c.AddColumn \"endpointsReceivingTrafficFromThisEndpoint\" \"{{ join \";\" (flowsEgress .) }}\" }} {{- $c.Render .Endpoints }}",
+					Name: "endpoints.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "endpoint"                                  "{{ .Endpoint }}" }}
+      {{- $c := $c.AddColumn "ingressProtected"                          "{{ .IngressProtected }}" }}
+      {{- $c := $c.AddColumn "egressProtected"                           "{{ .EgressProtected }}" }}
+      {{- $c := $c.AddColumn "ingressFromInternet"                       "{{ .IngressFromInternet }}" }}
+      {{- $c := $c.AddColumn "egressToInternet"                          "{{ .EgressToInternet }}" }}
+      {{- $c := $c.AddColumn "ingressFromOtherNamespace"                 "{{ .IngressFromOtherNamespace }}" }}
+      {{- $c := $c.AddColumn "egressToOtherNamespace"                    "{{ .EgressToOtherNamespace }}" }}
+      {{- $c := $c.AddColumn "envoyEnabled"                              "{{ .EnvoyEnabled }}" }}
+      {{- $c := $c.AddColumn "appliedPolicies"                           "{{ join \";\" .AppliedPolicies }}" }}
+      {{- $c := $c.AddColumn "trafficAggregationPrefix"                  "{{ flowsPrefix . }}" }}
+      {{- $c := $c.AddColumn "endpointsGeneratingTrafficToThisEndpoint"  "{{ join \";\" (flowsIngress .) }}" }}
+      {{- $c := $c.AddColumn "endpointsReceivingTrafficFromThisEndpoint" "{{ join \";\" (flowsEgress .) }}" }}
+      {{- $c.Render .Endpoints }}
+`,
 				},
 			},
 			IncludeEndpointData: true,
 			UISummaryTemplate: v3.ReportTemplate{
-				Name:     "ui-summary.json",
-				Template: "'{\"heading\":\"Inscope vs Protected\",\"type\":\"panel\",\"widgets\":[{\"data\":[{\"label\":\"Protected ingress\",\"value\":{{ .EndpointsSummary.NumIngressProtected }}}],\"heading\":\"Endpoints\",\"summary\":{\"label\":\"Total\",\"total\":{{ .EndpointsSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Protected ingress\",\"value\":{{ .NamespacesSummary.NumIngressProtected }}}],\"heading\":\"Namespaces\",\"summary\":{\"label\":\"Total\",\"total\":{{ .NamespacesSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Protected egress\",\"value\":{{ .EndpointsSummary.NumEgressProtected }}}],\"heading\":\"Endpoints\",\"summary\":{\"label\":\"Total\",\"total\":{{ .EndpointsSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Protected egress\",\"value\":{{ .NamespacesSummary.NumEgressProtected }}}],\"heading\":\"Namespaces\",\"summary\":{\"label\":\"Total\",\"total\":{{ .NamespacesSummary.NumTotal }}},\"type\":\"radialbarchart\"}]}'",
+				Name: "ui-summary.json",
+				Template: `
+    {"heading":"Inscope vs Protected","type":"panel","widgets":[{"data":[{"label":"Protected ingress","value":{{ .EndpointsSummary.NumIngressProtected }}}],"heading":"Endpoints","summary":{"label":"Total","total":{{.EndpointsSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected ingress","value":{{ .NamespacesSummary.NumIngressProtected }}}],"heading":"Namespaces","summary":{"label":"Total","total":{{.NamespacesSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected egress","value":{{ .EndpointsSummary.NumEgressProtected }}}],"heading":"Endpoints","summary":{"label":"Total","total":{{.EndpointsSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected egress","value":{{ .NamespacesSummary.NumEgressProtected }}}],"heading":"Namespaces","summary":{"label":"Total","total":{{.NamespacesSummary.NumTotal }}},"type":"radialbarchart"}]}
+`,
 			},
 		},
 	}
@@ -944,10 +1019,33 @@ func (c *complianceComponent) complianceGlobalReportPolicyAudit() *v3.GlobalRepo
 			},
 		},
 		Spec: v3.ReportTypeSpec{
+			AuditEventsSelection: &v3.AuditEventsSelection{
+				Resources: []v3.AuditResource{
+					{
+						Resource: "globalnetworkpolicies",
+					},
+					{
+						Resource: "networkpolicies",
+					},
+				},
+			},
 			DownloadTemplates: []v3.ReportTemplate{
 				{
-					Name:     "summary.csv",
-					Template: "{{ $c := csv }} {{- $c := $c.AddColumn \"startTime\"               \"{{ dateRfc3339 .StartTime }}\" }} {{- $c := $c.AddColumn \"endTime\"                 \"{{ dateRfc3339 .EndTime }}\" }} {{- $c := $c.AddColumn \"endpointSelector\"        \"{{ if .ReportSpec.Endpoints }}{{ .ReportSpec.Endpoints.Selector }}{{ end }}\" }} {{- $c := $c.AddColumn \"namespaceNames\"          \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ join \";\" .ReportSpec.Endpoints.Namespaces.Names }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"namespaceSelector\"       \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ .ReportSpec.Endpoints.Namespaces.Selector }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"serviceAccountNames\"     \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ join \";\" .ReportSpec.Endpoints.ServiceAccounts.Names }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"serviceAccountSelectors\" \"{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ .ReportSpec.Endpoints.ServiceAccounts.Selector }}{{ end }}{{ end }}\" }} {{- $c := $c.AddColumn \"numCreatedPolicies\"      \"{{ .AuditSummary.NumCreate }}\" }} {{- $c := $c.AddColumn \"numModifiedPolicies\"     \"{{ .AuditSummary.NumModify }}\" }} {{- $c := $c.AddColumn \"numDeletedPolicies\"      \"{{ .AuditSummary.NumDelete }}\" }} {{- $c.Render . }}",
+					Name: "summary.csv",
+					Template: `
+      {{ $c := csv }}
+      {{- $c := $c.AddColumn "startTime"               "{{ dateRfc3339 .StartTime }}" }}
+      {{- $c := $c.AddColumn "endTime"                 "{{ dateRfc3339 .EndTime }}" }}
+      {{- $c := $c.AddColumn "endpointSelector"        "{{ if .ReportSpec.Endpoints }}{{ .ReportSpec.Endpoints.Selector }}{{ end }}" }}
+      {{- $c := $c.AddColumn "namespaceNames"          "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ join \";\" .ReportSpec.Endpoints.Namespaces.Names }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "namespaceSelector"       "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.Namespaces }}{{ .ReportSpec.Endpoints.Namespaces.Selector }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "serviceAccountNames"     "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ join \";\" .ReportSpec.Endpoints.ServiceAccounts.Names }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "serviceAccountSelectors" "{{ if .ReportSpec.Endpoints }}{{ if .ReportSpec.Endpoints.ServiceAccounts }}{{ .ReportSpec.Endpoints.ServiceAccounts.Selector }}{{ end }}{{ end }}" }}
+      {{- $c := $c.AddColumn "numCreatedPolicies"      "{{ .AuditSummary.NumCreate }}" }}
+      {{- $c := $c.AddColumn "numModifiedPolicies"     "{{ .AuditSummary.NumModify }}" }}
+      {{- $c := $c.AddColumn "numDeletedPolicies"      "{{ .AuditSummary.NumDelete }}" }}
+      {{- $c.Render . }}
+`,
 				},
 				{
 					Name:     "events.json",
@@ -960,8 +1058,10 @@ func (c *complianceComponent) complianceGlobalReportPolicyAudit() *v3.GlobalRepo
 			},
 			IncludeEndpointData: true,
 			UISummaryTemplate: v3.ReportTemplate{
-				Name:     "ui-summary.json",
-				Template: "'{\"heading\":\"Network Policy Configuration Changes\",\"type\":\"panel\",\"widgets\":[{\"data\":[{\"label\":\"Created\",\"value\":{{ .AuditSummary.NumCreate }}}],\"heading\":\"Network Policies\",\"summary\":{\"label\":\"Total\",\"total\":{{ .AuditSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Modified\",\"value\":{{ .AuditSummary.NumModify }}}],\"heading\":\"Network Policies\",\"summary\":{\"label\":\"Total\",\"total\":{{ .AuditSummary.NumTotal }}},\"type\":\"radialbarchart\"},{\"data\":[{\"label\":\"Deleted\",\"value\":{{ .AuditSummary.NumDelete }}}],\"heading\":\"Network Policies\",\"summary\":{\"label\":\"Total\",\"total\":{{ .AuditSummary.NumTotal }}},\"type\":\"radialbarchart\"}]}'",
+				Name: "ui-summary.json",
+				Template: `
+    {"heading":"Network Policy Configuration Changes","type":"panel","widgets":[{"data":[{"label":"Created","value":{{.AuditSummary.NumCreate }}}],"heading":"Network Policies","summary":{"label":"Total","total":{{.AuditSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Modified","value":{{.AuditSummary.NumModify }}}],"heading":"Network Policies","summary":{"label":"Total","total":{{.AuditSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Deleted","value":{{.AuditSummary.NumDelete }}}],"heading":"Network Policies","summary":{"label":"Total","total":{{.AuditSummary.NumTotal }}},"type":"radialbarchart"}]}
+`,
 			},
 		},
 	}
@@ -979,26 +1079,34 @@ func (c *complianceComponent) complianceGlobalReportCISBenchmark() *v3.GlobalRep
 		Spec: v3.ReportTypeSpec{
 			DownloadTemplates: []v3.ReportTemplate{
 				{
-					Name:     "all-tests.csv",
-					Template: "nodeName,testIndex,status,scored\n{{ range $i, $node := .CISBenchmark -}} {{- range $j, $section := $node.Results -}} {{- range $k, $result := $section.Results -}} {{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.Status }},{{ $result.Scored }}\n{{ end }} {{- end }} {{- end }}",
+					Name: "all-tests.csv",
+					Template: `nodeName,testIndex,status,scored
+{{ range $i, $node := .CISBenchmark -}}
+{{- range $j, $section := $node.Results -}}
+{{- range $k, $result := $section.Results -}}
+{{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.Status }},{{ $result.Scored }}
+{{ end }}
+{{- end }}
+{{- end }}`,
 				},
 				{
-					Name:     "failed-tests.csv",
-					Template: "nodeName,testIndex,status,scored\n{{ range $i, $node := .CISBenchmark }} {{- range $j, $section := $node.Results }} {{- range $k, $result := $section.Results }} {{- if eq $result.Status \"FAIL\" }} {{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.Status }},{{ $result.Scored }}\n{{ end }} {{- end }} {{- end }} {{- end }}",
-				},
-				{
-					Name:     "node-summary.csv",
-					Template: "node,version,status,testsPassing,testsFailing,testsUnknown,testsTotal\n{{ range $_, $node := .CISBenchmark }} {{- $node.NodeName }},{{ $node.KubernetesVersion }},{{ $node.Summary.Status }},{{ $node.Summary.TotalPass }},{{ $node.Summary.TotalFail }},{{ $node.Summary.TotalInfo }},{{ $node.Summary.Total }}\n{{ end }}",
-				},
-				{
-					Name:     "total-summary.csv",
-					Template: "{{ $c := csv }}\n{{- $c := $c.AddColumn \"startTime\"           \"{{ dateRfc3339 .StartTime }}\" }}\n{{- $c := $c.AddColumn \"endTime\"             \"{{ dateRfc3339 .EndTime }}\" }}\n{{- $c := $c.AddColumn \"type\"             \t \"{{ .CISBenchmarkSummary.Type }}\" }}\n{{- $c := $c.AddColumn \"hiPercentThreshold\"  \"{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold  }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ end }}\" }}\n{{- $c := $c.AddColumn \"medPercentThreshold\" \"{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold  }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ end }}\" }}\n{{- $c := $c.AddColumn \"hiNodeCount\"         \"{{ .CISBenchmarkSummary.HighCount }}\" }}\n{{- $c := $c.AddColumn \"medNodeCount\"        \"{{ .CISBenchmarkSummary.MedCount }}\" }}\n{{- $c := $c.AddColumn \"lowNodeCount\"        \"{{ .CISBenchmarkSummary.LowCount }}\" }}\n{{- $c.Render . }}\n",
+					Name: "failed-tests.csv",
+					Template: `nodeName,testIndex,status,scored
+{{ range $i, $node := .CISBenchmark }}
+{{- range $j, $section := $node.Results }}
+{{- range $k, $result := $section.Results }}
+{{- if eq $result.Status "FAIL" }}
+{{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.Status }},{{ $result.Scored }}
+{{ end }}
+{{- end }}
+{{- end }}
+{{- end }}`,
 				},
 			},
 			IncludeEndpointData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name:     "ui-summary.json",
-				Template: "{{ $n := len .CISBenchmark }}\n{\n\t\"heading\": \"Kubernetes CIS Benchmark\",\n\t\"type\": \"row\",\n\t\"widgets\": [{\n\t\t\"heading\": \"Node Failure Summary\",\n\t\t\"type\": \"cis-benchmark-nodes\",\n\t\t\"summary\": {\n\t\t\t\"label\": \"Total\",\n\t\t\t\"total\": {{ $n }}\n\t\t},\n\t\t\"data\": [{\n\t\t\t\"label\": \"HIGH\",\n\t\t\t\"value\": {{ .CISBenchmarkSummary.HighCount }},\n\t\t\t\"desc\": \"Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}% or more tests passing\"\n\t\t}, {\n\t\t\t\"label\": \"MED\",\n\t\t\t\"value\": {{ .CISBenchmarkSummary.MedCount }},\n\t\t\t\"desc\": \"Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing\"\n\t\t}, {\n\t\t\t\"label\": \"LOW\",\n\t\t\t\"value\": {{ .CISBenchmarkSummary.LowCount }},\n\t\t\t\"desc\": \"Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing\"\n\t\t}]\n\t}\n{{ if .CISBenchmark }}\n\t, {\n\t\t\"heading\": \"Top Failed Tests\",\n\t\t\"type\": \"cis-benchmark-tests\",\n\t\t\"topFailedTests\": {\n\t\t\t\"tests\": [\n{{ $tests := cisTopFailedTests . }}\n{{ $nTests := len $tests }}\n{{ range $i, $test := $tests }}\n\t\t\t{\n\t\t\t\t\"index\": \"{{ $test.TestNumber }}\",\n\t\t\t\t\"description\": \"{{ $test.TestDesc }}\",\n\t\t\t\t\"failedCount\": \"{{ $test.Count }}\"\n\t\t\t} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}\n{{ end }}\n\t\t\t]} \n\t}\n{{ end }}\n\t]\n}\n",
+				Template: `{{ $n := len .CISBenchmark }}\n{\n\t"heading": "Kubernetes CIS Benchmark",\n\t"type":"row",\n\t"widgets": [{\n\t\t"heading": "Node Failure Summary",\n\t\t"type":"cis-benchmark-nodes",\n\t\t"summary": {\n\t\t\t"label": "Total",\n\t\t\t"total":{{ $n }}\n\t\t},\n\t\t"data": [{\n\t\t\t"label": "HIGH",\n\t\t\t"value":{{ .CISBenchmarkSummary.HighCount }},\n\t\t\t"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}% or more tests passing"\n\t\t}, {\n\t\t\t"label": "MED",\n\t\t\t"value": {{ .CISBenchmarkSummary.MedCount }},\n\t\t\t"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing"\n\t\t}, {\n\t\t\t"label": "LOW",\n\t\t\t"value": {{ .CISBenchmarkSummary.LowCount }},\n\t\t\t"desc": "Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing"\n\t\t}]\n\t}\n{{ if .CISBenchmark }}\n\t, {\n\t\t"heading": "Top Failed Tests",\n\t\t"type": "cis-benchmark-tests",\n\t\t"topFailedTests": {\n\t\t\t"tests": [\n{{ $tests := cisTopFailedTests . }}\n{{ $nTests := len $tests }}\n{{ range $i, $test := $tests }}\n\t\t\t{\n\t\t\t\t"index": "{{ $test.TestNumber }}",\n\t\t\t\t"description": "{{ $test.TestDesc }}",\n\t\t\t\t"failedCount": "{{ $test.Count }}"\n\t\t\t} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}\n{{ end }}\n\t\t\t]} \n\t}\n{{ end }}\n\t]\n}\n`,
 			},
 		},
 	}

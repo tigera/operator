@@ -1,0 +1,6 @@
+apiVersion: operator.tigera.io/v1
+kind: MonitoringConfiguration
+metadata:
+  name: default
+spec:
+  host: fakehost

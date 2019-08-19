@@ -6,6 +6,7 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -19,28 +20,36 @@ const (
 	managerPort           = 9443
 	managerTargetPort     = 9443
 	tigeraEsSecretName    = "tigera-es-config"
-	managerNamespace      = "calico-monitoring"
-	managerTlsSecretName  = "cnx-manager-tls"
+	managerNamespace      = "tigera-console"
+	managerTlsSecretName  = "manager-tls"
 	managerSecretKeyName  = "key"
 	managerSecretCertName = "cert"
 )
 
 var operatorNamespace = "tigera-operator"
 
-func Console(cr *operator.Installation, client client.Client) Component {
-	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
-		return nil
-	}
+func Console(cr *operator.Console, monitoring *operator.MonitoringConfiguration, openshift bool, registry string, client client.Client) Component {
 	v, ok := os.LookupEnv("OPERATOR_NAMESPACE")
 	if ok {
 		operatorNamespace = v
 	}
-	return &consoleComponent{cr: cr, client: client}
+	return &consoleComponent{
+		cr:         cr,
+		monitoring: monitoring,
+		openshift:  openshift,
+		client:     client,
+		registry:   registry,
+	}
 }
 
 type consoleComponent struct {
-	cr          *operator.Installation
+	cr          *operator.Console
+	monitoring  *operator.MonitoringConfiguration
 	client      client.Client
+	managerKey  []byte
+	managerCert []byte
+	openshift   bool
+	registry    string
 }
 
 func (c *consoleComponent) Objects() []runtime.Object {
@@ -48,7 +57,9 @@ func (c *consoleComponent) Objects() []runtime.Object {
 	if !ok {
 		return nil
 	}
+	nsc := namespaceComponent{openshift: c.openshift}
 	objs := []runtime.Object{
+		nsc.createNamespace("tigera-console"),
 		c.consoleManagerServiceAccount(),
 		c.consoleManagerClusterRole(),
 		c.consoleManagerClusterRoleBinding(),
@@ -68,6 +79,11 @@ func (c *consoleComponent) Objects() []runtime.Object {
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 	)
+
+	// If we're running on openshift, we need to add in an SCC.
+	if c.openshift {
+		objs = append(objs, c.securityContextConstraints())
+	}
 
 	return objs
 }
@@ -127,7 +143,7 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 					},
 					ServiceAccountName: "cnx-manager",
 					Tolerations:        c.consoleTolerations(),
-					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:   []corev1.LocalObjectReference{{Name: "console-pull-secret"}},
 					Containers: []corev1.Container{
 						c.consoleManagerContainer(),
 						c.consoleEsProxyContainer(),
@@ -237,7 +253,7 @@ func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 	}
 	return corev1.Container{
 		Name:          "cnx-manager",
-		Image:         constructImage(ConsoleManagerImageName, c.cr),
+		Image:         constructImage(ConsoleManagerImageName, c.registry),
 		Env:           c.consoleManagerEnvVars(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
@@ -247,20 +263,20 @@ func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 // consoleOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
 func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 	envs := []corev1.EnvVar{
-		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(c.cr.Spec.Components.Console.Auth.Type)},
+		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(c.cr.Spec.Auth.Type)},
 	}
 
-	switch c.cr.Spec.Components.Console.Auth.Type {
+	switch c.cr.Spec.Auth.Type {
 	case operator.AuthTypeOIDC:
 		oidcEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.cr.Spec.Components.Console.Auth.Authority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cr.Spec.Components.Console.Auth.ClientID},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.cr.Spec.Auth.Authority},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cr.Spec.Auth.ClientID},
 		}
 		envs = append(envs, oidcEnvs...)
 	case operator.AuthTypeOAuth:
 		oauthEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: c.cr.Spec.Components.Console.Auth.Authority},
-			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: c.cr.Spec.Components.Console.Auth.ClientID},
+			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: c.cr.Spec.Auth.Authority},
+			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: c.cr.Spec.Auth.ClientID},
 		}
 		envs = append(envs, oauthEnvs...)
 	}
@@ -271,7 +287,7 @@ func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
-		Image: constructImage(ConsoleProxyImageName, c.cr),
+		Image: constructImage(ConsoleProxyImageName, c.registry),
 		Env:   c.consoleOAuth2EnvVars(),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
@@ -282,40 +298,29 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 
 // consoleEsProxyEnv returns the env vars for the ES proxy container.
 func (c *consoleComponent) consoleEsProxyEnv() []corev1.EnvVar {
+	scheme, host, port, err := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
+	if err != nil {
+		panic(err)
+	}
 	return []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "info"},
-		{
-			Name:      "ELASTIC_HOST",
-			ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.host"),
-		},
-		{
-			Name:      "ELASTIC_PORT",
-			ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.port"),
-		},
-		{
-			Name:      "ELASTIC_ACCESS_MODE",
-			ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.access-mode"),
-		},
-		{
-			Name:      "ELASTIC_SCHEME",
-			ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.scheme"),
-		},
+		{Name: "ELASTIC_HOST", Value: host},
+		{Name: "ELASTIC_PORT", Value: port},
+		{Name: "ELASTIC_ACCESS_MODE", Value: "insecure"}, // TODO: Do we ever set this to something else?
+		{Name: "ELASTIC_SCHEME", Value: scheme},
 		// TODO: make this configurable?
-		{
-			Name: "ELASTIC_INSECURE_SKIP_VERIFY", Value: "false",
-		},
-		{
-			Name:      "ELASTIC_USERNAME",
-			ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.username", Optional),
-		},
-		{
-			Name:      "ELASTIC_PASSWORD",
-			ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.password", Optional),
-		},
-		{
-			Name:      "ELASTIC_CA",
-			ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.ca.path"),
-		},
+		{Name: "ELASTIC_INSECURE_SKIP_VERIFY", Value: "false"},
+		// {
+		// 	Name:      "ELASTIC_USERNAME",
+		// 	ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.username", Optional),
+		// },
+		// {
+		// 	Name:      "ELASTIC_PASSWORD",
+		// 	ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.password", Optional),
+		// },
+		// {
+		// 	Name:      "ELASTIC_CA",
+		// 	ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.ca.path"),
+		// },
 	}
 }
 
@@ -326,7 +331,7 @@ func (c *consoleComponent) consoleEsProxyContainer() corev1.Container {
 	}
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
-		Image:         constructImage(ConsoleEsProxyImageName, c.cr),
+		Image:         constructImage(ConsoleEsProxyImageName, c.registry),
 		Env:           c.consoleEsProxyEnv(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleEsProxyProbe(),
@@ -593,5 +598,29 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 		},
+	}
+}
+
+// TODO: Can we get rid of this and instead just bind to default ones?
+func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextConstraints {
+	privilegeEscalation := false
+	return &ocsv1.SecurityContextConstraints{
+		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
+		ObjectMeta:               metav1.ObjectMeta{Name: "tigera-console"},
+		AllowHostDirVolumePlugin: true,
+		AllowHostIPC:             false,
+		AllowHostNetwork:         false,
+		AllowHostPID:             true,
+		AllowHostPorts:           false,
+		AllowPrivilegeEscalation: &privilegeEscalation,
+		AllowPrivilegedContainer: false,
+		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
+		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
+		ReadOnlyRootFilesystem:   false,
+		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
+		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
+		Users:                    []string{"system:serviceaccount:tigera-console:cnx-manager"},
+		Groups:                   []string{"system:authenticated"},
+		Volumes:                  []ocsv1.FSType{"*"},
 	}
 }

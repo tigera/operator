@@ -380,7 +380,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        constructImage(CNIImageName, c.cr),
+		Image:        constructImage(CNIImageName, c.cr.Spec.Registry),
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -396,7 +396,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        constructImage(FlexVolumeImageName, c.cr),
+		Image:        constructImage(FlexVolumeImageName, c.cr.Spec.Registry),
 		VolumeMounts: flexVolumeMounts,
 	}
 }
@@ -427,9 +427,9 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 	isPrivileged := true
 
 	// Select which image to use.
-	image := constructImage(NodeImageNameCalico, c.cr)
+	image := constructImage(NodeImageNameCalico, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(NodeImageNameTigera, c.cr)
+		image = constructImage(NodeImageNameTigera, c.cr.Spec.Registry)
 	}
 	return v1.Container{
 		Name:            "calico-node",
@@ -476,7 +476,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 // nodeEnvVars creates the node's envvars.
 func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	nodeEnv := []v1.EnvVar{
-		{Name: "DATASTORE_TYPE", Value: string(c.cr.Spec.Datastore.Type)},
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 		{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},

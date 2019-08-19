@@ -31,8 +31,8 @@ func ExpectResource(resource runtime.Object, name, ns, group, version, kind stri
 	gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	Expect(actualName).To(Equal(name), "Rendered resource has wrong name")
-	Expect(actualNS).To(Equal(ns), "Rendered resource has wrong namespace")
+	Expect(actualName).To(Equal(name), fmt.Sprintf("Rendered %s resource in namespace %s has wrong name", kind, ns))
+	Expect(actualNS).To(Equal(ns), fmt.Sprintf("Rendered resource %s/%s has wrong namespace", kind, name))
 	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), "Rendered resource does not match expected GVK")
 }
 

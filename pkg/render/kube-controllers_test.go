@@ -76,9 +76,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Registry:  "test-reg/",
 				CNINetDir: "/test/cni/net/dir",
 				CNIBinDir: "/test/cni/bin/dir",
-				Datastore: operator.DatastoreConfig{
-					Type: "kubernetes",
-				},
 				Components: operator.ComponentsSpec{
 					KubeControllers: operator.KubeControllersSpec{
 						ExtraEnv:          envVars,

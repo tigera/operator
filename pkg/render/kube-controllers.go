@@ -163,7 +163,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	env := []v1.EnvVar{
 		{Name: "ENABLED_CONTROLLERS", Value: "node"},
-		{Name: "DATASTORE_TYPE", Value: string(c.cr.Spec.Datastore.Type)},
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 	env = setCustomEnv(env, c.cr.Spec.Components.KubeControllers.ExtraEnv)
 
@@ -177,9 +177,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	// Pick which image to use based on variant.
-	image := constructImage(KubeControllersImageNameCalico, c.cr)
+	image := constructImage(KubeControllersImageNameCalico, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(KubeControllersImageNameTigera, c.cr)
+		image = constructImage(KubeControllersImageNameTigera, c.cr.Spec.Registry)
 	}
 
 	d := apps.Deployment{

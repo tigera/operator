@@ -91,12 +91,11 @@ var _ = Describe("Rendering tests", func() {
 		// - 6 custom resource definitions (tsee)
 		// - 27 Compliance
 		// - 7 Intrusion Detection
-		// - 9 Console
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c := render.Calico(instance, client, notOpenshift)
 		t := render.TigeraSecure(instance, client, notOpenshift)
 		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal(89))
+		Expect(componentCount(components)).To(Equal(80))
 	})
 })
 

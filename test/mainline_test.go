@@ -291,7 +291,7 @@ func setupManager() (client.Client, manager.Manager) {
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 	// Setup all Controllers
-	err = controller.AddToManager(mgr)
+	err = controller.AddToManager(mgr, false)
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr
 }

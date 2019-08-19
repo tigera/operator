@@ -43,6 +43,7 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 		}
 		monitoring = &operator.MonitoringConfiguration{
 			Spec: operator.MonitoringConfigurationSpec{
+				ClusterName: "clusterTestName",
 				Elasticsearch: &operator.ElasticConfig{
 					Endpoint: "https://elastic.search:1234",
 				},
@@ -52,7 +53,7 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Console(instance, monitoring, false, registry, client)
+		component := render.Console(instance, monitoring, notOpenshift, registry, client)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(10))
 

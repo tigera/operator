@@ -75,27 +75,17 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
-		// For this scenario, we expect the basic resources plus the following 17 resources for Tigera Secure:
-		// - 1 additional namespace
-		// - 1 APIService
-		// - 2 ClusterRole
-		// - 3 ClusterRoleBindings
-		// - 1 RoleBinding
-		// - 1 ConfigMap
-		// - 1 Deployment
-		// - 1 Service
-		// - 1 ServiceAccount
-		// - 1 PriorityClass
-		// - 2 Secrets
-		// - 14 custom resource definitions (calico)
-		// - 6 custom resource definitions (tsee)
+		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
+		// - X Same as default config
+		// - 1 ns (calico-monitoring)
 		// - 27 Compliance
 		// - 7 Intrusion Detection
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c := render.Calico(instance, client, notOpenshift)
+		Expect(componentCount(c.Render())).To(Equal((25 + 1)))
 		t := render.TigeraSecure(instance, client, notOpenshift)
 		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal(80))
+		Expect(componentCount(components)).To(Equal((25 + 1 + 27 + 7)))
 	})
 })
 

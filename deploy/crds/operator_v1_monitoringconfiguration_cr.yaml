@@ -3,4 +3,5 @@ kind: MonitoringConfiguration
 metadata:
   name: default
 spec:
+  # Add fields here
   host: fakehost

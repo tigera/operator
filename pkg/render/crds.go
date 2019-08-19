@@ -33,9 +33,6 @@ type crdComponent struct {
 
 func (c *crdComponent) Objects() []runtime.Object {
 	crds := c.calicoCRDs()
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		crds = append(crds, c.tigeraSecureCRDs()...)
-	}
 	return crds
 }
 
@@ -166,12 +163,12 @@ func (c *crdComponent) calicoCRDs() []runtime.Object {
 
 	crds := []runtime.Object{}
 	for _, names := range desiredNames {
-		crds = append(crds, c.buildCRD(names))
+		crds = append(crds, buildCRD(names))
 	}
 	return crds
 }
 
-func (c *crdComponent) tigeraSecureCRDs() []runtime.Object {
+func tigeraSecureCRDs() []runtime.Object {
 	desiredNames := []desiredCRD{
 		{
 			scope: apiextensions.ClusterScoped,
@@ -225,12 +222,12 @@ func (c *crdComponent) tigeraSecureCRDs() []runtime.Object {
 
 	crds := []runtime.Object{}
 	for _, names := range desiredNames {
-		crds = append(crds, c.buildCRD(names))
+		crds = append(crds, buildCRD(names))
 	}
 	return crds
 }
 
-func (c *crdComponent) buildCRD(d desiredCRD) runtime.Object {
+func buildCRD(d desiredCRD) runtime.Object {
 	return &apiextensions.CustomResourceDefinition{
 		TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s.crd.projectcalico.org", d.names.Plural)},

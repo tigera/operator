@@ -156,41 +156,6 @@ var _ = Describe("Defaulting logic tests", func() {
 							},
 						},
 					},
-					APIServer: operator.APIServerSpec{
-						ExtraEnv: []v1.EnvVar{
-							{
-								Name:  "asenv1",
-								Value: "env1",
-							},
-						},
-						ExtraVolumes: []v1.Volume{
-							{
-								Name: "asvol1",
-								VolumeSource: v1.VolumeSource{
-									NFS: &v1.NFSVolumeSource{
-										Server: "localhost",
-										Path:   "/as",
-									},
-								},
-							},
-						},
-						ExtraVolumeMounts: []v1.VolumeMount{
-							{Name: "asvolmount", MountPath: "/asvolmount"},
-						},
-						Tolerations: []v1.Toleration{
-							{Operator: v1.TolerationOpEqual, Value: "asValue", Effect: v1.TaintEffectNoSchedule, Key: "asKey"},
-						},
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceCPU:    resource.MustParse("225m"),
-								v1.ResourceMemory: resource.MustParse("335Mi"),
-							},
-							Limits: v1.ResourceList{
-								v1.ResourceCPU:    resource.MustParse("325m"),
-								v1.ResourceMemory: resource.MustParse("435Mi"),
-							},
-						},
-					},
 				},
 			},
 		}

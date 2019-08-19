@@ -2,7 +2,7 @@ package console
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -38,13 +38,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("console-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create console-controller: %v", err)
 	}
 
 	// Watch for changes to primary resource Console
 	err = c.Watch(&source.Kind{Type: &operatorv1.Console{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		return fmt.Errorf("console-controller failed to watch primary resource: %v", err)
+	}
+
+	err = utils.AddAPIServerWatch(c)
+	if err != nil {
+		return fmt.Errorf("console-controller failed to watch APIServer resource: %v", err)
 	}
 
 	// TODO: Watch for dependent objects.
@@ -66,8 +71,7 @@ type ReconcileConsole struct {
 func GetConsole(ctx context.Context, cli client.Client, openshift bool) (*operatorv1.Console, error) {
 	// Fetch the console instance. We only support a single instance named "default".
 	instance := &operatorv1.Console{}
-	var defaultInstanceKey = client.ObjectKey{Name: "default"}
-	err := cli.Get(ctx, defaultInstanceKey, instance)
+	err := cli.Get(ctx, utils.DefaultInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +106,10 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	if !utils.IsAPIServerReady(r.client, reqLogger) {
+		return reconcile.Result{}, err
+	}
+
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
@@ -109,11 +117,6 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	if err != nil {
 		// TODO: Handle "does not exsit" vs other errors.
 		return reconcile.Result{}, err
-	}
-	if installation.Status.Variant != operatorv1.TigeraSecureEnterprise {
-		// TODO: Watch installation so we don't need to requeue.
-		reqLogger.Info("Waiting for installed variant to be Tigera Secure")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Fetch monitoring stack configuration.

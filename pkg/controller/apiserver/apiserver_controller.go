@@ -3,8 +3,11 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,7 +31,14 @@ func Add(mgr manager.Manager, openshift bool) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, openshift bool) reconcile.Reconciler {
-	return &ReconcileAPIServer{client: mgr.GetClient(), scheme: mgr.GetScheme(), openshift: openshift}
+	r := &ReconcileAPIServer{
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		openshift: openshift,
+		status:    status.New(mgr.GetClient(), "apiserver"),
+	}
+	r.status.Run()
+	return r
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -67,6 +77,7 @@ type ReconcileAPIServer struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	openshift bool
+	status    *status.StatusManager
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -86,23 +97,29 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("APIServer CR not found", "err", err)
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
+			r.status.SetDegraded("APIServer not found", err.Error())
+			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
-		// Error reading the object - requeue the request.
+		r.status.SetDegraded("Error querying APIServer", err.Error())
 		return reconcile.Result{}, err
 	}
+	r.status.Enable()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	network, err := utils.GetTSEENetworkConfig(r.client)
+	// Query for the installation object.
+	network, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
 	if err != nil {
-		reqLogger.V(5).Info("error getting TSEE network config", "err", err)
-		return reconcile.Result{}, nil
-	} else if network == nil {
-		reqLogger.V(5).Info("no TSEE network config available")
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Installation not found", err.Error())
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded("Error querying installation", err.Error())
+		return reconcile.Result{}, err
+	}
+	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
+		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	}
 
@@ -115,25 +132,38 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		render.APIServerNamespace)
 	if err != nil {
 		log.Error(err, "Checking Ready for APIServer indicates error with TLS Cert")
+		r.status.SetDegraded("Error validating TLS certificate", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
 		log.Error(err, "Checking Ready for APIServer indicates error with Pull secrets")
+		r.status.SetDegraded("Error checking pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	reqLogger.V(5).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
+	reqLogger.V(5).Info("rendering components")
 	component := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.openshift)
-	if err := handler.CreateOrUpdate(context.Background(), component); err != nil {
+	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
 
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+
+	if !r.status.IsAvailable() {
+		// Schedule a kick to check again in the near future. Hopefully by then
+		// things will be available.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Everything is available - update the CRD status.
 	instance.Status.State = operatorv1.APIServerStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

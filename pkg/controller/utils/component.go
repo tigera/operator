@@ -5,18 +5,20 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component) error
+	CreateOrUpdate(context.Context, render.Component, *status.StatusManager) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -35,7 +37,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component) error {
+func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status *status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -48,6 +50,8 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 	// Iterate through each object that comprises the component and attempt to create it,
 	// or update it if needed.
+	daemonSets := []types.NamespacedName{}
+	deployments := []types.NamespacedName{}
 	for _, obj := range component.Objects() {
 		// Set CR instance as the owner and controller.
 		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
@@ -60,6 +64,13 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		key, err := client.ObjectKeyFromObject(obj)
 		if err != nil {
 			return err
+		}
+
+		// Keep track of some objects so we can report on their status.
+		if obj.GetObjectKind().GroupVersionKind().Kind == "DaemonSet" {
+			daemonSets = append(daemonSets, key)
+		} else if obj.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
+			deployments = append(deployments, key)
 		}
 
 		// Check to see if the object exists or not.
@@ -91,6 +102,10 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			return err
 		}
 		continue
+	}
+	if status != nil {
+		status.SetDaemonsets(daemonSets)
+		status.SetDeployments(deployments)
 	}
 	cmpLog.Info("Done reconciling component")
 	return nil

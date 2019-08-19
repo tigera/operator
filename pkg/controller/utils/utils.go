@@ -48,18 +48,6 @@ func AddNetworkWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
 
-func GetTSEENetworkConfig(client client.Client) (*operatorv1.Installation, error) {
-	instance := &operatorv1.Installation{}
-	err := client.Get(context.Background(), DefaultInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-	if instance.Status.Variant != operatorv1.TigeraSecureEnterprise {
-		return nil, nil
-	}
-	return instance, nil
-}
-
 func AddAPIServerWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, &handler.EnqueueRequestForObject{})
 }

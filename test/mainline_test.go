@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -144,6 +145,15 @@ var _ = Describe("Mainline component function tests", func() {
 			}
 			return fmt.Errorf("kube-controllers not yet ready")
 		}, 240*time.Second).Should(BeNil())
+
+		By("Verifying the tigera status CRD is updated")
+		Eventually(func() error {
+			ts, err := getTigeraStatus(c, "network")
+			if err != nil {
+				return err
+			}
+			return assertAvailable(ts)
+		}, 60*time.Second).Should(BeNil())
 	})
 
 	It("Should install resources for a CRD with node overrides", func() {
@@ -236,6 +246,15 @@ var _ = Describe("Mainline component function tests", func() {
 			return fmt.Errorf("kube-controllers not yet ready: %#v", kc.Status)
 		}, 240*time.Second).Should(BeNil())
 
+		By("Verifying the tigera status CRD is updated")
+		Eventually(func() error {
+			ts, err := getTigeraStatus(c, "network")
+			if err != nil {
+				return err
+			}
+			return assertAvailable(ts)
+		}, 60*time.Second).Should(BeNil())
+
 		By("Verifying the daemonset has the overrides")
 		err = GetResource(c, ds)
 		Expect(err).To(BeNil())
@@ -276,6 +295,34 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 		ExpectResourceDestroyed(c, proxy)
 	})
 })
+
+func getTigeraStatus(client client.Client, name string) (*operator.TigeraStatus, error) {
+	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: name}, ts)
+	return ts, err
+}
+
+func assertAvailable(ts *operator.TigeraStatus) error {
+	var available, degraded, progressing bool
+	for _, condition := range ts.Status.Conditions {
+		if condition.Type == operator.ComponentAvailable {
+			available = condition.Status == operator.ConditionTrue
+		} else if condition.Type == operator.ComponentDegraded {
+			degraded = condition.Status == operator.ConditionTrue
+		} else if condition.Type == operator.ComponentProgressing {
+			progressing = condition.Status == operator.ConditionTrue
+		}
+	}
+
+	if progressing {
+		return fmt.Errorf("TigeraStatus is still progressing")
+	} else if degraded {
+		return fmt.Errorf("TigeraStatus is degraded")
+	} else if !available {
+		return fmt.Errorf("TigeraStatus is not available")
+	}
+	return nil
+}
 
 func setupManager() (client.Client, manager.Manager) {
 	// Create a Kubernetes client.

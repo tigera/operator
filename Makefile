@@ -262,7 +262,8 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator_v1_console_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_monitoringconfiguration_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_apiserver_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_installation_crd.yaml
+		./kubectl apply -f deploy/crds/operator_v1_installation_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml
 
 ## Destroy local docker-in-docker cluster
 cluster-destroy: k3d

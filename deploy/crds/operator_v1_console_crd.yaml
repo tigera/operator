@@ -28,6 +28,24 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            auth:
+              description: Auth is optional authentication configuration for the Tigera
+                Secure management console.
+              properties:
+                authority:
+                  description: 'Authority configures the OAuth2/OIDC authority/issuer
+                    when using OAuth2 or OIDC login. Default: ""https://accounts.google.com"'
+                  type: string
+                clientID:
+                  description: ClientId configures the OAuth2/OIDC client ID to use
+                    for OAuth2 or OIDC login.
+                  type: string
+                type:
+                  description: 'Type configures the type of authentication used by
+                    the manager. Default: "Basic"'
+                  type: string
+              type: object
           type: object
         status:
           type: object

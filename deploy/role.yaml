@@ -59,6 +59,7 @@ rules:
   - '*'
   - consoles
   - monitoringconfigurations
+  - apiservers
   verbs:
   - '*'
 - apiGroups:

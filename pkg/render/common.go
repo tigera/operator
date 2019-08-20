@@ -24,17 +24,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/library-go/pkg/crypto"
-
 	"github.com/go-logr/logr"
+	"github.com/openshift/library-go/pkg/crypto"
 	v1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 const (
@@ -159,6 +159,25 @@ func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSou
 	}
 }
 
+func validateMonitoringConfig(m *operatorv1.MonitoringConfiguration) error {
+	errMsg := ""
+	if m.Spec.ClusterName == "" {
+		errMsg = "ClusterName not set"
+	}
+	if m.Spec.Elasticsearch == nil {
+		errMsg = strings.Join([]string{errMsg, "Elasticsearch config not defined"}, ";")
+	} else if m.Spec.Elasticsearch.Endpoint == "" {
+		errMsg = strings.Join([]string{errMsg, "Elasticsearch Endpoint not defined"}, ";")
+	}
+
+	if errMsg == "" {
+		return nil
+	}
+	return fmt.Errorf(errMsg)
+
+}
+
+// TODO: Once this is not used in any renderers remove it from here.
 // validateCertPair checks if the given secret exists and if so
 // that it contains key and cert fields. If a secret exists then it is returned.
 // If there is an error accessing the secret (except NotFound) or the cert

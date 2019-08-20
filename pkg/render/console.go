@@ -53,13 +53,16 @@ type consoleComponent struct {
 }
 
 func (c *consoleComponent) Objects() []runtime.Object {
+	if err := validateMonitoringConfig(c.monitoring); err != nil {
+		log.Error(err, "Monitoring config is not valid")
+		return nil
+	}
 	key, cert, ok := c.readOperatorSecret()
 	if !ok {
 		return nil
 	}
-	nsc := namespaceComponent{openshift: c.openshift}
 	objs := []runtime.Object{
-		nsc.createNamespace("tigera-console"),
+		createNamespace("tigera-console", c.openshift),
 		c.consoleManagerServiceAccount(),
 		c.consoleManagerClusterRole(),
 		c.consoleManagerClusterRoleBinding(),

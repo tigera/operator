@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
@@ -45,7 +46,6 @@ import (
 )
 
 var log = logf.Log.WithName("installation_controller")
-var defaultInstanceKey = client.ObjectKey{Name: "default"}
 var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -70,7 +70,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Create a new controller
 	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create tigera-installation-controller: %v", err)
 	}
 
 	r.controller = c
@@ -78,7 +78,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for changes to primary resource Installation
 	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 	}
 
 	if r.openshift {
@@ -87,7 +87,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return err
+				return fmt.Errorf("tigera-installation-controller failed to watch Tigera network resource: %v", err)
 			}
 		}
 	}
@@ -131,7 +131,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			OwnerType:    &operator.Installation{},
 		}, pred)
 		if err != nil {
-			return err
+			return fmt.Errorf("tigera-installation-controller failed to watch %s: %v", t, err)
 		}
 	}
 
@@ -197,7 +197,7 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 func GetInstallation(ctx context.Context, client client.Client, openshift bool) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
-	err := client.Get(ctx, defaultInstanceKey, instance)
+	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -277,18 +277,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	// Update the status.
+	instance.Status.Variant = instance.Spec.Variant
+	if err = r.client.Status().Update(ctx, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Render any TigeraSecure resources, if configured to do so.
 	tigeraSecure := render.TigeraSecure(instance, r.client, r.openshift)
 	for _, component := range tigeraSecure.Render() {
 		if err := handler.CreateOrUpdate(ctx, component); err != nil {
 			return reconcile.Result{}, err
 		}
-	}
-
-	// Update the status.
-	instance.Status.Variant = instance.Spec.Variant
-	if err = r.client.Status().Update(ctx, instance); err != nil {
-		return reconcile.Result{}, err
 	}
 
 	// Created successfully - don't requeue

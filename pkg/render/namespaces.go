@@ -23,7 +23,6 @@ import (
 
 const (
 	calicoNamespace           = "calico-system"
-	tigeraSecureNamespace     = "tigera-system"
 	calicoMonitoringNamespace = "calico-monitoring"
 )
 
@@ -38,12 +37,11 @@ type namespaceComponent struct {
 
 func (c *namespaceComponent) Objects() []runtime.Object {
 	ns := []runtime.Object{
-		c.createNamespace(calicoNamespace),
+		createNamespace(calicoNamespace, c.openshift),
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		ns = append(ns, c.createNamespace(tigeraSecureNamespace))
-		ns = append(ns, c.createNamespace(calicoMonitoringNamespace))
+		ns = append(ns, createNamespace(calicoMonitoringNamespace, c.openshift))
 	}
 	return ns
 }
@@ -52,7 +50,7 @@ func (c *namespaceComponent) Ready() bool {
 	return true
 }
 
-func (c *namespaceComponent) createNamespace(name string) *v1.Namespace {
+func createNamespace(name string, openshift bool) *v1.Namespace {
 	ns := &v1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -63,7 +61,7 @@ func (c *namespaceComponent) createNamespace(name string) *v1.Namespace {
 	}
 
 	// OpenShift requires special labels and annotations.
-	if c.openshift {
+	if openshift {
 		ns.Labels["openshift.io/run-level"] = "0"
 		ns.Annotations["openshift.io/node-selector"] = ""
 	}

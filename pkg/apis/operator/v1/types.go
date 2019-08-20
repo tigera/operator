@@ -75,10 +75,6 @@ type ComponentsSpec struct {
 	// KubeControllers is optional configuration for the kube-controllers component.
 	// +optional
 	KubeControllers KubeControllersSpec `json:"kubeControllers,omitempty"`
-
-	// APIServer is optional configuration for the API server component.
-	// +optional
-	APIServer APIServerSpec `json:"apiServer,omitempty"`
 }
 
 // KubeControllersSpec defines optional configuration for the kube-controllers component.
@@ -101,31 +97,6 @@ type KubeControllersSpec struct {
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 
 	// Resources configures custom resource requirements on the kube-controllers container.
-	// +optional
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// APIServerSpec defines optional configuration for the API server component.
-// Valid only for the variant 'TigeraSecureEnterprise'.
-// +k8s:openapi-gen=true
-type APIServerSpec struct {
-	// ExtraEnv adds extra environment variables to the API server.
-	// +optional
-	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
-
-	// ExtraVolumes configures custom volumes to be used by the API server.
-	// +optional
-	ExtraVolumes []v1.Volume `json:"extraVolumes,omitempty"`
-
-	// ExtraVolumeMounts configures custom volume mounts to be used by the API server.
-	// +optional
-	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-
-	// Tolerations configures custom tolerations on the API server deployment.
-	// +optional
-	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
-
-	// Resources configures custom resource requirements on the API server container.
 	// +optional
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 }

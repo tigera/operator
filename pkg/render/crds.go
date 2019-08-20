@@ -33,6 +33,9 @@ type crdComponent struct {
 
 func (c *crdComponent) Objects() []runtime.Object {
 	crds := c.calicoCRDs()
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		crds = append(crds, tigeraSecureCRDs()...)
+	}
 	return crds
 }
 

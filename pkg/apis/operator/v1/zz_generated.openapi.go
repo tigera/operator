@@ -25,6 +25,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/tigera/operator/pkg/apis/operator/v1.Installation":                  schema_pkg_apis_operator_v1_Installation(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationSpec":              schema_pkg_apis_operator_v1_InstallationSpec(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationStatus":            schema_pkg_apis_operator_v1_InstallationStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetection":            schema_pkg_apis_operator_v1_IntrusionDetection(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionSpec":        schema_pkg_apis_operator_v1_IntrusionDetectionSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionStatus":      schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec":           schema_pkg_apis_operator_v1_KubeControllersSpec(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfiguration":       schema_pkg_apis_operator_v1_MonitoringConfiguration(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec":   schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref),
@@ -222,17 +225,11 @@ func schema_pkg_apis_operator_v1_ComponentsSpec(ref common.ReferenceCallback) co
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec"),
 						},
 					},
-					"apiServer": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIServer is optional configuration for the API server component.",
-							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.APIServerSpec"),
-						},
-					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.APIServerSpec", "github.com/tigera/operator/pkg/apis/operator/v1.CNISpec", "github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec", "github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.CNISpec", "github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec", "github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec"},
 	}
 }
 
@@ -448,6 +445,81 @@ func schema_pkg_apis_operator_v1_InstallationStatus(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_operator_v1_IntrusionDetection(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "IntrusionDetection is the Schema for the intrusiondetections API",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionSpec", "github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_IntrusionDetectionSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "IntrusionDetectionSpec defines the desired state of IntrusionDetection",
+				Properties:  map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "IntrusionDetectionStatus defines the observed state of IntrusionDetection",
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State indicates the state of the deployment by the IntrusionDetection controller",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
 func schema_pkg_apis_operator_v1_KubeControllersSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -580,12 +652,17 @@ func schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref common.Referenc
 							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.ElasticConfig"),
 						},
 					},
+					"kibana": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.KibanaConfig"),
+						},
+					},
 				},
-				Required: []string{"clusterName", "elasticsearch"},
+				Required: []string{"clusterName", "elasticsearch", "kibana"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.ElasticConfig"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.ElasticConfig", "github.com/tigera/operator/pkg/apis/operator/v1.KibanaConfig"},
 	}
 }
 

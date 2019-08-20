@@ -81,7 +81,7 @@ type ReconcileConsole struct {
 func GetConsole(ctx context.Context, cli client.Client, openshift bool) (*operatorv1.Console, error) {
 	// Fetch the console instance. We only support a single instance named "default".
 	instance := &operatorv1.Console{}
-	err := cli.Get(ctx, utils.DefaultInstanceKey, instance)
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// Fetch monitoring stack configuration.
-	esConfig, err := utils.GetMonitoringConfig(context.Background(), r.client)
+	monitoringConfig, err := utils.GetMonitoringConfig(context.Background(), r.client)
 	if err != nil {
 		// TODO: Watch this so we don't need to poll.
 		if errors.IsNotFound(err) {
@@ -149,6 +149,10 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		}
 		return reconcile.Result{}, err
 	}
+	if err := utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
+		log.Error(err, "Monitoring config is not valid")
+		return reconcile.Result{}, err
+	}
 
 	// TODO: Fetch compliance. The manager depends on compliance existing so we should check that here.
 
@@ -156,7 +160,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Console(instance, esConfig, r.openshift, installation.Spec.Registry, r.client)
+	component := render.Console(instance, monitoringConfig, r.openshift, installation.Spec.Registry, r.client)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

@@ -9,9 +9,14 @@ import (
 type MonitoringConfigurationSpec struct {
 	ClusterName   string         `json:"clusterName"`
 	Elasticsearch *ElasticConfig `json:"elasticsearch"`
+	Kibana        *KibanaConfig  `json:"kibana"`
 }
 
 type ElasticConfig struct {
+	Endpoint string `json:"endpoint"`
+}
+
+type KibanaConfig struct {
 	Endpoint string `json:"endpoint"`
 }
 

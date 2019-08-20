@@ -25,6 +25,7 @@ const (
 )
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
+var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj runtime.Object) logr.Logger {
@@ -54,7 +55,7 @@ func AddAPIServerWatch(c controller.Controller) error {
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance := &operatorv1.APIServer{}
-	err := client.Get(context.Background(), DefaultInstanceKey, instance)
+	err := client.Get(context.Background(), DefaultTSEEInstanceKey, instance)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			l.V(3).Info("APIServer resource does not exist")

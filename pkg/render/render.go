@@ -66,7 +66,6 @@ type tigeraRenderer struct {
 func (r tigeraRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, Compliance(r.installation, r.openshift))
-	components = appendNotNil(components, IntrusionDetection(r.installation))
 	return components
 }
 

@@ -40,10 +40,6 @@ spec:
             components:
               description: Components specifies the configuration of components.
               properties:
-                apiServer:
-                  description: APIServer is optional configuration for the API server
-                    component.
-                  type: object
                 cni:
                   description: CNI is optional configuration for the CNI component.
                   properties:

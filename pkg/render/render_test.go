@@ -78,14 +78,14 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config
 		// - 1 ns (calico-monitoring)
+		// - 6 TSEE crds
 		// - 27 Compliance
-		// - 7 Intrusion Detection
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c := render.Calico(instance, client, notOpenshift)
-		Expect(componentCount(c.Render())).To(Equal((25 + 1)))
+		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 6)))
 		t := render.TigeraSecure(instance, client, notOpenshift)
 		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal((25 + 1 + 27 + 7)))
+		Expect(componentCount(components)).To(Equal((25 + 1 + 6 + 27)))
 	})
 })
 

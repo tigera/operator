@@ -30,6 +30,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec":   schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus": schema_pkg_apis_operator_v1_MonitoringConfigurationStatus(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec":                      schema_pkg_apis_operator_v1_NodeSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatus":                  schema_pkg_apis_operator_v1_TigeraStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusSpec":              schema_pkg_apis_operator_v1_TigeraStatusSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusStatus":            schema_pkg_apis_operator_v1_TigeraStatusStatus(ref),
 	}
 }
 
@@ -673,5 +676,72 @@ func schema_pkg_apis_operator_v1_NodeSpec(ref common.ReferenceCallback) common.O
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume", "k8s.io/api/core/v1.VolumeMount", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_TigeraStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TigeraStatus is the Schema for the tigerastatuses API",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusSpec", "github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_TigeraStatusSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TigeraStatusSpec defines the desired state of TigeraStatus",
+				Properties:  map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_pkg_apis_operator_v1_TigeraStatusStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TigeraStatusStatus defines the observed state of TigeraStatus",
+				Properties:  map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -30,7 +31,15 @@ func Add(mgr manager.Manager, openshift bool) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, openshift bool) reconcile.Reconciler {
-	return &ReconcileConsole{client: mgr.GetClient(), scheme: mgr.GetScheme(), openshift: openshift}
+	c := &ReconcileConsole{
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		openshift: openshift,
+		status:    status.New(mgr.GetClient(), "console"),
+	}
+	c.status.Run()
+	return c
+
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -65,6 +74,7 @@ type ReconcileConsole struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	openshift bool
+	status    *status.StatusManager
 }
 
 // GetConsole returns the default console instance with defaults populated.
@@ -100,14 +110,19 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Console object not found")
+			r.status.SetDegraded("Console not found", err.Error())
+			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
+		r.status.SetDegraded("Error querying Console", err.Error())
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
+	r.status.Enable()
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		return reconcile.Result{}, err
+		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
+		return reconcile.Result{}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -115,29 +130,45 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	// - We need to get the registry information from its spec.
 	installation, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
 	if err != nil {
-		// TODO: Handle "does not exsit" vs other errors.
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Installation not found", err.Error())
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	// Fetch monitoring stack configuration.
 	esConfig, err := utils.GetMonitoringConfig(context.Background(), r.client)
 	if err != nil {
-		// TODO: Handle "does not exsit" vs other errors.
-		// TODO: Watch this resource so we don't need to poll.
-		reqLogger.Info("Waiting for monitoring configuration")
+		// TODO: Watch this so we don't need to poll.
+		if errors.IsNotFound(err) {
+			reqLogger.Info("Waiting for monitoring configuration")
+			r.status.SetDegraded("MonitoringConfiguration not found", err.Error())
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, err
 	}
 
 	// TODO: Fetch compliance. The manager depends on compliance existing so we should check that here.
-	// TODO: Fetch apiserver . The manager depends on api server running so we should check that here.
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Console(instance, esConfig, r.openshift, installation.Spec.Registry, r.client)
-	if err := handler.CreateOrUpdate(context.Background(), component); err != nil {
+	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+	if r.status.IsAvailable() {
+		instance.Status.Auth = instance.Spec.Auth
+		if err = r.client.Status().Update(context.Background(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	return reconcile.Result{}, nil

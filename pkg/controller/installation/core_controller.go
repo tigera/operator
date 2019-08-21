@@ -17,10 +17,12 @@ package installation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -57,12 +59,15 @@ func Add(mgr manager.Manager, openshift bool) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, openshift bool) *ReconcileInstallation {
 	log.WithValues("openshift", openshift).Info("Checking type of cluster")
-	return &ReconcileInstallation{
+	r := &ReconcileInstallation{
 		client:    mgr.GetClient(),
 		scheme:    mgr.GetScheme(),
 		watches:   make(map[runtime.Object]struct{}),
 		openshift: openshift,
+		status:    status.New(mgr.GetClient(), "network"),
 	}
+	r.status.Run()
+	return r
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -163,6 +168,7 @@ type ReconcileInstallation struct {
 	controller controller.Controller
 	watches    map[runtime.Object]struct{}
 	openshift  bool
+	status     *status.StatusManager
 }
 
 // AddWatch creates a watch on the given object. Only Create events are processed.
@@ -224,10 +230,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info("Installation config not found")
+			r.status.SetDegraded("Installation not found", err.Error())
+			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
+		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
+	r.status.Enable()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	openshiftConfig := &configv1.Network{}
@@ -237,6 +247,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
 			// Error reading the object - requeue the request.
+			r.status.SetDegraded("Unable to read openshift network configuration", err.Error())
 			return reconcile.Result{}, err
 		}
 
@@ -249,6 +260,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
+		r.status.SetDegraded("Error validating CRD", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -259,10 +271,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// create or update them.
 	calico := render.Calico(instance, r.client, r.openshift)
 	for _, component := range calico.Render() {
-		if err := handler.CreateOrUpdate(ctx, component); err != nil {
+		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
+
+	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
+	// we can have the CreateOrUpdate logic handle this for us.
+	r.status.SetDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
+	r.status.SetDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 
 	// We have successfully reconciled the Calico installation.
 	if r.openshift {
@@ -273,25 +291,34 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		openshiftConfig.Status.ClusterNetworkMTU = 1440
 		openshiftConfig.Status.NetworkType = "Calico"
 		if err = r.client.Update(ctx, openshiftConfig); err != nil {
+			r.status.SetDegraded("Error updating openshift network status", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Update the status.
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+	if !r.status.IsAvailable() {
+		// Schedule a kick to check again in the near future. Hopefully by then
+		// things will be available.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Everything is available - update the CRD status.
 	instance.Status.Variant = instance.Spec.Variant
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// Render any TigeraSecure resources, if configured to do so.
+	// TODO: Remove all of this into separate controllers.
 	tigeraSecure := render.TigeraSecure(instance, r.client, r.openshift)
 	for _, component := range tigeraSecure.Render() {
-		if err := handler.CreateOrUpdate(ctx, component); err != nil {
+		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Created successfully - don't requeue
-	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
 }

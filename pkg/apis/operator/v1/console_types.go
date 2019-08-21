@@ -16,9 +16,7 @@ type ConsoleSpec struct {
 // ConsoleStatus defines the observed state of Console
 // +k8s:openapi-gen=true
 type ConsoleStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	Auth *Auth `json:"auth,omitempty"`
 }
 
 // Auth defines authentication configuration.

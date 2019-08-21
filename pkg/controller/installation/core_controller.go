@@ -310,15 +310,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Render any TigeraSecure resources, if configured to do so.
-	// TODO: Remove all of this into separate controllers.
-	tigeraSecure := render.TigeraSecure(instance, r.client, r.openshift)
-	for _, component := range tigeraSecure.Render() {
-		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
+	// Created successfully - don't requeue
+	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
 }

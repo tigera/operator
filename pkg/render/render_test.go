@@ -69,9 +69,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
 		c := render.Calico(instance, client, notOpenshift)
-		t := render.TigeraSecure(instance, client, notOpenshift)
-		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal(25))
+		Expect(componentCount(c.Render())).To(Equal(25))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -79,13 +77,9 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config
 		// - 1 ns (calico-monitoring)
 		// - 6 TSEE crds
-		// - 27 Compliance
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c := render.Calico(instance, client, notOpenshift)
 		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 6)))
-		t := render.TigeraSecure(instance, client, notOpenshift)
-		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal((25 + 1 + 6 + 27)))
 	})
 })
 

@@ -33,28 +33,8 @@ type Renderer interface {
 	Render() []Component
 }
 
-func Calico(cr *operator.Installation, c client.Client, openshift bool) Renderer {
-	return calicoRenderer{cr, c, openshift}
-}
-
 func TigeraSecure(cr *operator.Installation, c client.Client, openshift bool) Renderer {
 	return tigeraRenderer{cr, c, openshift}
-}
-
-type calicoRenderer struct {
-	installation *operator.Installation
-	client       client.Client
-	openshift    bool
-}
-
-func (r calicoRenderer) Render() []Component {
-	var components []Component
-	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
-	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
-	components = appendNotNil(components, Namespaces(r.installation, r.openshift))
-	components = appendNotNil(components, Node(r.installation, r.openshift))
-	components = appendNotNil(components, KubeControllers(r.installation))
-	return components
 }
 
 type tigeraRenderer struct {

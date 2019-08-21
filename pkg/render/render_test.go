@@ -60,7 +60,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 	})
 
-	It("should render all resources for a default configuration", func() {
+	It("should render network resources for a default configuration", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
 		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
@@ -68,24 +68,27 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		c := render.Calico(instance, client, notOpenshift)
+		c := render.Network(instance, notOpenshift)
 		t := render.TigeraSecure(instance, client, notOpenshift)
-		components := append(c.Render(), t.Render()...)
+		components := append([]render.Component{c}, t.Render()...)
 		Expect(componentCount(components)).To(Equal(25))
 	})
 
-	It("should render all resources when variant is Tigera Secure", func() {
+	It("should render network resources when variant is Tigera Secure", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
-		// - X Same as default config
-		// - 1 ns (calico-monitoring)
-		// - 6 TSEE crds
+		// - 25 Same as default config
+		// - 6 additional CRDs
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		c := render.Network(instance, notOpenshift)
+		Expect(len(c.Objects())).To(Equal((25 + 6)))
+	})
+
+	// TODO: This test should go away after the full split.
+	It("should render Tigera Secure resources", func() {
 		// - 27 Compliance
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		c := render.Calico(instance, client, notOpenshift)
-		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 6)))
 		t := render.TigeraSecure(instance, client, notOpenshift)
-		components := append(c.Render(), t.Render()...)
-		Expect(componentCount(components)).To(Equal((25 + 1 + 6 + 27)))
+		Expect(componentCount(t.Render())).To(Equal((27)))
 	})
 })
 

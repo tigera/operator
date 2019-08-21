@@ -269,18 +269,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
-	calico := render.Calico(instance, r.client, r.openshift)
-	for _, component := range calico.Render() {
-		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
-			return reconcile.Result{}, err
-		}
+	network := render.Network(instance, r.openshift)
+	if err := handler.CreateOrUpdate(ctx, network, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
 	}
-
-	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
-	// we can have the CreateOrUpdate logic handle this for us.
-	r.status.SetDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-	r.status.SetDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 
 	// We have successfully reconciled the Calico installation.
 	if r.openshift {

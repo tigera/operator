@@ -155,8 +155,9 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// Check that if the apiserver certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function still returns true
+	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
+	// If it does not exist then this function returns a nil secret but no error and a self-signed
+	// certificate will be generated when rendering below.
 	tlsSecret, err := utils.ValidateCertPair(r.client,
 		render.ManagerTlsSecretName,
 		render.ManagerSecretKeyName,

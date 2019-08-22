@@ -47,6 +47,9 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 				Elasticsearch: &operator.ElasticConfig{
 					Endpoint: "https://elastic.search:1234",
 				},
+				Kibana: &operator.KibanaConfig{
+					Endpoint: "https://kibana.ui:1234",
+				},
 			},
 		}
 		client = fake.NewFakeClient()

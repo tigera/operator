@@ -37,7 +37,6 @@ var _ = Describe("API server rendering tests", func() {
 		resources := component.Objects()
 
 		// Should render the correct resources.
-		// - 6 CRDs
 		// - 1 namespace
 		// - 1 ConfigMap audit Policy
 		// - 1 Service account
@@ -49,7 +48,7 @@ var _ = Describe("API server rendering tests", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(14))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -57,12 +56,6 @@ var _ = Describe("API server rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "globalreports.crd.projectcalico.org", ns: "", group: "", version: "v1beta1", kind: "CustomResourceDefinition"},
-			{name: "globalreporttypes.crd.projectcalico.org", ns: "", group: "", version: "v1beta1", kind: "CustomResourceDefinition"},
-			{name: "globalthreatfeeds.crd.projectcalico.org", ns: "", group: "", version: "v1beta1", kind: "CustomResourceDefinition"},
-			{name: "licensekeys.crd.projectcalico.org", ns: "", group: "", version: "v1beta1", kind: "CustomResourceDefinition"},
-			{name: "remoteclusterconfigurations.crd.projectcalico.org", ns: "", group: "", version: "v1beta1", kind: "CustomResourceDefinition"},
-			{name: "tiers.crd.projectcalico.org", ns: "", group: "", version: "v1beta1", kind: "CustomResourceDefinition"},
 			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
@@ -85,28 +78,28 @@ var _ = Describe("API server rendering tests", func() {
 			i++
 		}
 
-		ns := resources[6].(*corev1.Namespace)
+		ns := resources[0].(*corev1.Namespace)
 		ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		ExpectResource(resources[17], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		ExpectResource(resources[11], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
-		operatorCert, ok := resources[15].(*corev1.Secret)
+		operatorCert, ok := resources[9].(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(operatorCert)
 
-		tigeraCert, ok := resources[16].(*corev1.Secret)
+		tigeraCert, ok := resources[10].(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(tigeraCert)
 
-		apiService, ok := resources[18].(*v1beta1.APIService)
+		apiService, ok := resources[12].(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
 		verifyAPIService(apiService)
 
-		d := resources[17].(*v1.Deployment)
+		d := resources[11].(*v1.Deployment)
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 		Expect(len(d.Labels)).To(Equal(2))
@@ -199,10 +192,10 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(20))
-		ExpectResource(resources[17], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(len(resources)).To(Equal(14))
+		ExpectResource(resources[11], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
-		d := resources[17].(*v1.Deployment)
+		d := resources[11].(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 	})

@@ -7,11 +7,16 @@ import (
 // MonitoringConfigurationSpec defines the desired state of MonitoringConfiguration
 // +k8s:openapi-gen=true
 type MonitoringConfigurationSpec struct {
-	ClusterName   string         `json:"clusterName"`
-	Elasticsearch *ElasticConfig `json:"elasticsearch"`
+	ClusterName   string         `json:"clusterName,omitempty"`
+	Elasticsearch *ElasticConfig `json:"elasticsearch,omitempty"`
+	Kibana        *KibanaConfig  `json:"kibana,omitempty"`
 }
 
 type ElasticConfig struct {
+	Endpoint string `json:"endpoint"`
+}
+
+type KibanaConfig struct {
 	Endpoint string `json:"endpoint"`
 }
 

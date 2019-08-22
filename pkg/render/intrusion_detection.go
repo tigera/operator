@@ -15,7 +15,7 @@
 package render
 
 import (
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,23 +26,36 @@ import (
 )
 
 const (
-	tigeraEsConfigMapName = "tigera-es-config"
+	tigeraEsConfigMapName       = "tigera-es-config"
+	IntrusionDetectionNamespace = "tigera-intrusion-detection"
 )
 
-func IntrusionDetection(cr *operator.Installation) Component {
-	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
-		return nil
+func IntrusionDetection(
+	registry string,
+	m *operatorv1.MonitoringConfiguration,
+	pullSecrets []*corev1.Secret,
+	openshift bool,
+) Component {
+	return &intrusionDetectionComponent{
+		registry:    registry,
+		monitoring:  m,
+		pullSecrets: pullSecrets,
+		openshift:   openshift,
 	}
-
-	return &intrusionDetectionComponent{cr: cr}
 }
 
 type intrusionDetectionComponent struct {
-	cr *operator.Installation
+	registry    string
+	monitoring  *operatorv1.MonitoringConfiguration
+	pullSecrets []*corev1.Secret
+	openshift   bool
 }
 
 func (c *intrusionDetectionComponent) Objects() []runtime.Object {
-	return []runtime.Object{
+
+	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
+	objs = append(objs, c.imagePullSecrets()...)
+	return append(objs,
 		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
@@ -50,7 +63,7 @@ func (c *intrusionDetectionComponent) Objects() []runtime.Object {
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
 		c.intrusionDetectionElasticsearchJob(),
-	}
+	)
 }
 
 func (c *intrusionDetectionComponent) Ready() bool {
@@ -58,11 +71,15 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
+	ps := []corev1.LocalObjectReference{}
+	for _, x := range c.pullSecrets {
+		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+	}
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-es-job-installer",
-			Namespace: "calico-monitoring",
+			Namespace: IntrusionDetectionNamespace,
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
@@ -76,7 +93,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				},
 				Spec: v1.PodSpec{
 					RestartPolicy:    v1.RestartPolicyOnFailure,
-					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: ps,
 					Containers:       []v1.Container{c.intrusionDetectionJobContainer()},
 				},
 			},
@@ -85,37 +102,39 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
+	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
+	kScheme, kHost, kPort, _ := ParseEndpoint(c.monitoring.Spec.Kibana.Endpoint)
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.cr.Spec.Registry),
+		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{
-				Name:      "ELASTIC_HOST",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.host"),
+				Name:  "ELASTIC_HOST",
+				Value: esHost,
 			},
 			{
-				Name:      "ELASTIC_PORT",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.port"),
+				Name:  "ELASTIC_PORT",
+				Value: esPort,
 			},
 			{
-				Name:      "ELASTIC_SCHEME",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.scheme"),
+				Name:  "ELASTIC_SCHEME",
+				Value: esScheme,
 			},
 			{
-				Name:      "KIBANA_HOST",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.kibana.host"),
+				Name:  "KIBANA_HOST",
+				Value: kHost,
 			},
 			{
-				Name:      "KIBANA_PORT",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.kibana.port"),
+				Name:  "KIBANA_PORT",
+				Value: kPort,
 			},
 			{
-				Name:      "ELASTIC_SCHEME",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.kibana.scheme"),
+				Name:  "KIBANA_SCHEME",
+				Value: kScheme,
 			},
 			{
-				Name:      "START_XPACK_TRIAL",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.startXPackTrial"),
+				Name:  "START_XPACK_TRIAL",
+				Value: "true",
 			},
 		},
 	}
@@ -126,7 +145,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *v1.Ser
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
-			Namespace: "calico-monitoring",
+			Namespace: IntrusionDetectionNamespace,
 		},
 	}
 }
@@ -170,7 +189,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rb
 			{
 				Kind:      "ServiceAccount",
 				Name:      "intrusion-detection-controller",
-				Namespace: "calico-monitoring",
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 	}
@@ -181,7 +200,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
-			Namespace: "calico-monitoring",
+			Namespace: IntrusionDetectionNamespace,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -204,7 +223,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
-			Namespace: "calico-monitoring",
+			Namespace: IntrusionDetectionNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -215,7 +234,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 			{
 				Kind:      "ServiceAccount",
 				Name:      "intrusion-detection-controller",
-				Namespace: "calico-monitoring",
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 	}
@@ -223,12 +242,16 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 
 func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
+	ps := []corev1.LocalObjectReference{}
+	for _, x := range c.pullSecrets {
+		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
-			Namespace: "calico-monitoring",
+			Namespace: IntrusionDetectionNamespace,
 			Labels: map[string]string{
 				"k8s-app": "intrusion-detection-controller",
 			},
@@ -248,7 +271,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "intrusion-detection-controller",
-					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
 						c.intrusionDetectionControllerContainer(),
 					},
@@ -272,25 +295,26 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
+	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
 	return corev1.Container{
 		Name:  "controller",
-		Image: constructImage(IntrusionDetectionControllerImageName, c.cr.Spec.Registry),
+		Image: constructImage(IntrusionDetectionControllerImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{
-				Name:      "CLUSTER_NAME",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.cluster-name"),
+				Name:  "CLUSTER_NAME",
+				Value: c.monitoring.Spec.ClusterName,
 			},
 			{
-				Name:      "ELASTIC_HOST",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.host"),
+				Name:  "ELASTIC_HOST",
+				Value: esHost,
 			},
 			{
-				Name:      "ELASTIC_PORT",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.port"),
+				Name:  "ELASTIC_PORT",
+				Value: esPort,
 			},
 			{
-				Name:      "ELASTIC_SCHEME",
-				ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.scheme"),
+				Name:  "ELASTIC_SCHEME",
+				Value: esScheme,
 			},
 		},
 		// Needed for permissions to write to the audit log
@@ -317,4 +341,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			InitialDelaySeconds: 5,
 		},
 	}
+}
+
+func (c *intrusionDetectionComponent) imagePullSecrets() []runtime.Object {
+	secrets := []runtime.Object{}
+	for _, s := range c.pullSecrets {
+		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: IntrusionDetectionNamespace}
+
+		secrets = append(secrets, s)
+	}
+	return secrets
 }

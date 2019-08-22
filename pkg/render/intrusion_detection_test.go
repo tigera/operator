@@ -23,27 +23,25 @@ import (
 )
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
-	var instance *operator.Installation
+	var monitoring *operator.MonitoringConfiguration
 	BeforeEach(func() {
-		// Initialize a default instance to use. Each test can override this to its
-		// desired configuration.
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				Variant: operator.TigeraSecureEnterprise,
-				IPPools: []operator.IPPool{
-					{CIDR: "192.168.1.0/16"},
+		monitoring = &operator.MonitoringConfiguration{
+			Spec: operator.MonitoringConfigurationSpec{
+				ClusterName: "clusterTestName",
+				Elasticsearch: &operator.ElasticConfig{
+					Endpoint: "https://elastic.search:1234",
 				},
-				Registry:  "testregistry.com/",
-				CNINetDir: "/test/cni/net/dir",
-				CNIBinDir: "/test/cni/bin/dir",
+				Kibana: &operator.KibanaConfig{
+					Endpoint: "https://kibana.stuff:1234",
+				},
 			},
 		}
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.IntrusionDetection(instance)
+		component := render.IntrusionDetection("testregistry.com/", monitoring, nil, notOpenshift)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(7))
+		Expect(len(resources)).To(Equal(8))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -53,13 +51,14 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "calico-monitoring", group: "", version: "v1", kind: "Deployment"},
-			{name: "intrusion-detection-es-job-installer", ns: "calico-monitoring", group: "batch", version: "v1", kind: "Job"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Deployment"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
 		}
 
 		i := 0

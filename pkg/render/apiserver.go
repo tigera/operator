@@ -55,10 +55,9 @@ type apiServerComponent struct {
 }
 
 func (c *apiServerComponent) Objects() []runtime.Object {
-	objs := append(
-		tigeraSecureCRDs(),
+	objs := []runtime.Object{
 		createNamespace(APIServerNamespace, c.openshift),
-	)
+	}
 	secrets := c.imagePullSecrets()
 	objs = append(objs, secrets...)
 	objs = append(objs,

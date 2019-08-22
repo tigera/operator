@@ -33,8 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 const (
@@ -157,24 +155,6 @@ func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSou
 			Optional: opt,
 		},
 	}
-}
-
-func validateMonitoringConfig(m *operatorv1.MonitoringConfiguration) error {
-	errMsg := ""
-	if m.Spec.ClusterName == "" {
-		errMsg = "ClusterName not set"
-	}
-	if m.Spec.Elasticsearch == nil {
-		errMsg = strings.Join([]string{errMsg, "Elasticsearch config not defined"}, ";")
-	} else if m.Spec.Elasticsearch.Endpoint == "" {
-		errMsg = strings.Join([]string{errMsg, "Elasticsearch Endpoint not defined"}, ";")
-	}
-
-	if errMsg == "" {
-		return nil
-	}
-	return fmt.Errorf(errMsg)
-
 }
 
 // TODO: Once this is not used in any renderers remove it from here.

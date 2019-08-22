@@ -1,4 +1,4 @@
 apiVersion: operator.tigera.io/v1
-kind: Console
+kind: IntrusionDetection
 metadata:
   name: tigera-secure

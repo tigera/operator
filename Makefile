@@ -261,6 +261,7 @@ deploy-crds: kubectl
 	@export KUBECONFIG=./kubeconfig.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_console_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_monitoringconfiguration_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator_v1_intrusiondetection_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_apiserver_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_installation_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml

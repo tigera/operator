@@ -15,9 +15,11 @@
 package render
 
 import (
+	"fmt"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -27,20 +29,37 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func Compliance(cr *operator.Installation, openshift bool) Component {
-	if cr.Spec.Variant != operator.TigeraSecureEnterprise {
-		return nil
+const (
+	ComplianceNamespace = "tigera-compliance"
+)
+
+func Compliance(
+	registry string,
+	m *operatorv1.MonitoringConfiguration,
+	pullSecrets []*corev1.Secret,
+	openshift bool,
+) Component {
+	return &complianceComponent{
+		registry:    registry,
+		monitoring:  m,
+		pullSecrets: pullSecrets,
+		openshift:   openshift,
 	}
-	return &complianceComponent{cr: cr, openshift: openshift}
 }
 
 type complianceComponent struct {
-	cr        *operator.Installation
-	openshift bool
+	registry    string
+	monitoring  *operatorv1.MonitoringConfiguration
+	pullSecrets []*corev1.Secret
+	openshift   bool
 }
 
 func (c *complianceComponent) Objects() []runtime.Object {
-	complianceObjs := []runtime.Object{
+	complianceObjs := append(
+		[]runtime.Object{createNamespace(ComplianceNamespace, c.openshift)},
+		c.imagePullSecrets()...,
+	)
+	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
 		c.complianceControllerRole(),
 		c.complianceControllerClusterRole(),
@@ -73,13 +92,31 @@ func (c *complianceComponent) Objects() []runtime.Object {
 		c.complianceGlobalReportNetworkAccess(),
 		c.complianceGlobalReportPolicyAudit(),
 		c.complianceGlobalReportCISBenchmark(),
-	}
+	)
 
 	if c.openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	}
 
 	return complianceObjs
+}
+
+func (c *complianceComponent) imagePullSecrets() []runtime.Object {
+	secrets := []runtime.Object{}
+	for _, s := range c.pullSecrets {
+		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ComplianceNamespace}
+
+		secrets = append(secrets, s)
+	}
+	return secrets
+}
+
+func (c *complianceComponent) imagePullSecretReferenceList() []corev1.LocalObjectReference {
+	ps := []corev1.LocalObjectReference{}
+	for _, x := range c.pullSecrets {
+		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+	}
+	return ps
 }
 
 func (c *complianceComponent) Ready() bool {
@@ -89,48 +126,23 @@ func (c *complianceComponent) Ready() bool {
 var complianceBoolTrue = true
 var complianceReplicas int32 = 1
 
-var complianceElasticEnvVars = []corev1.EnvVar{
-	{Name: "ELASTIC_INDEX_SUFFIX", ValueFrom: &v1.EnvVarSource{
-		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "tigera-es-config",
-			},
-			Key:      "tigera.elasticsearch.cluster-name",
-			Optional: &complianceBoolTrue},
-	}},
-	{Name: "ELASTIC_SCHEME", ValueFrom: &v1.EnvVarSource{
-		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "tigera-es-config",
-			},
-			Key:      "tigera.elasticsearch.scheme",
-			Optional: &complianceBoolTrue},
-	}},
-	{Name: "ELASTIC_HOST", ValueFrom: &v1.EnvVarSource{
-		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "tigera-es-config",
-			},
-			Key:      "tigera.elasticsearch.host",
-			Optional: &complianceBoolTrue},
-	}},
-	{Name: "ELASTIC_PORT", ValueFrom: &v1.EnvVarSource{
-		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "tigera-es-config",
-			},
-			Key:      "tigera.elasticsearch.port",
-			Optional: &complianceBoolTrue},
-	}},
-	{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-	{Name: "ELASTIC_CA", ValueFrom: &v1.EnvVarSource{
-		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "tigera-es-config",
-			},
-			Key:      "tigera.elasticsearch.ca.path",
-			Optional: &complianceBoolTrue},
-	}},
+func (c *complianceComponent) GetElasticEnvVars() []corev1.EnvVar {
+	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
+	return []corev1.EnvVar{
+		{Name: "ELASTIC_INDEX_SUFFIX", Value: c.monitoring.Spec.ClusterName},
+		{Name: "ELASTIC_SCHEME", Value: esScheme},
+		{Name: "ELASTIC_HOST", Value: esHost},
+		{Name: "ELASTIC_PORT", Value: esPort},
+		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
+		{Name: "ELASTIC_CA", ValueFrom: &v1.EnvVarSource{
+			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "tigera-es-config",
+				},
+				Key:      "tigera.elasticsearch.ca.path",
+				Optional: &complianceBoolTrue},
+		}},
+	}
 }
 
 var complianceVolumeMounts = []corev1.VolumeMount{
@@ -172,14 +184,14 @@ var complianceVolumes = []corev1.Volume{
 func (c *complianceComponent) complianceControllerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: ComplianceNamespace},
 	}
 }
 
 func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: ComplianceNamespace},
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"batch"},
@@ -222,7 +234,7 @@ func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterR
 func (c *complianceComponent) complianceControllerRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: ComplianceNamespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
@@ -232,7 +244,7 @@ func (c *complianceComponent) complianceControllerRoleBinding() *rbacv1.RoleBind
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-compliance-controller",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 			},
 		},
 	}
@@ -251,7 +263,7 @@ func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.C
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-compliance-controller",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 			},
 		},
 	}
@@ -279,13 +291,13 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				Optional: &complianceBoolTrue},
 		}},
 	}
-	envVars = append(envVars, complianceElasticEnvVars...)
+	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-controller",
-			Namespace: "calico-monitoring",
+			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
 				"k8s-app": "compliance-controller",
 			},
@@ -299,7 +311,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "compliance-controller",
-					Namespace: "calico-monitoring",
+					Namespace: ComplianceNamespace,
 					Labels: map[string]string{
 						"k8s-app": "compliance-controller",
 					},
@@ -315,11 +327,11 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.imagePullSecretReferenceList(),
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-controller",
-							Image:         constructImage(ComplianceControllerImage, c.cr.Spec.Registry),
+							Image:         constructImage(ComplianceControllerImage, c.registry),
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -335,7 +347,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 func (c *complianceComponent) complianceReporterServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: ComplianceNamespace},
 	}
 }
 
@@ -366,7 +378,7 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-compliance-reporter",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 			},
 		},
 	}
@@ -392,13 +404,13 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Optional: &complianceBoolTrue},
 		}},
 	}
-	envVars = append(envVars, complianceElasticEnvVars...)
+	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera.io.report",
-			Namespace: "calico-monitoring",
+			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
 				"k8s-app": "compliance-reporter",
 			},
@@ -406,7 +418,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "tigera.io.report",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 				Labels: map[string]string{
 					"k8s-app": "compliance-reporter",
 				},
@@ -420,11 +432,11 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						Effect: corev1.TaintEffectNoSchedule,
 					},
 				},
-				ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
+				ImagePullSecrets: c.imagePullSecretReferenceList(),
 				Containers: []corev1.Container{
 					{
 						Name:          "reporter",
-						Image:         constructImage(ComplianceReporterImage, c.cr.Spec.Registry),
+						Image:         constructImage(ComplianceReporterImage, c.registry),
 						Env:           envVars,
 						VolumeMounts:  complianceVolumeMounts,
 						LivenessProbe: complianceLivenessProbe,
@@ -439,7 +451,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 func (c *complianceComponent) complianceServerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: ComplianceNamespace},
 	}
 }
 
@@ -480,7 +492,7 @@ func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.Clust
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-compliance-server",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 			},
 		},
 	}
@@ -489,7 +501,7 @@ func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.Clust
 func (c *complianceComponent) complianceServerService() *v1.Service {
 	return &v1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: ComplianceNamespace},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
@@ -524,13 +536,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 				Optional: &complianceBoolTrue},
 		}},
 	}
-	envVars = append(envVars, complianceElasticEnvVars...)
+	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-server",
-			Namespace: "calico-monitoring",
+			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
 				"k8s-app": "compliance-server",
 			},
@@ -544,7 +556,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "compliance-server",
-					Namespace: "calico-monitoring",
+					Namespace: ComplianceNamespace,
 					Labels: map[string]string{
 						"k8s-app": "compliance-server",
 					},
@@ -558,11 +570,11 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.imagePullSecretReferenceList(),
 					Containers: []corev1.Container{
 						{
 							Name:         "compliance-server",
-							Image:        constructImage(ComplianceServerImage, c.cr.Spec.Registry),
+							Image:        constructImage(ComplianceServerImage, c.registry),
 							Env:          envVars,
 							VolumeMounts: complianceVolumeMounts,
 						},
@@ -577,7 +589,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 func (c *complianceComponent) complianceSnapshotterServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: ComplianceNamespace},
 	}
 }
 
@@ -615,7 +627,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRoleBinding() *rbacv1.
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-compliance-snapshotter",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 			},
 		},
 	}
@@ -643,13 +655,13 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				Optional: &complianceBoolTrue},
 		}},
 	}
-	envVars = append(envVars, complianceElasticEnvVars...)
+	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-snapshotter",
-			Namespace: "calico-monitoring",
+			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
 				"k8s-app": "compliance-snapshotter",
 			},
@@ -663,7 +675,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "compliance-snapshotter",
-					Namespace: "calico-monitoring",
+					Namespace: ComplianceNamespace,
 					Labels: map[string]string{
 						"k8s-app": "compliance-snapshotter",
 					},
@@ -677,11 +689,11 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.imagePullSecretReferenceList(),
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-snapshotter",
-							Image:         constructImage(ComplianceSnapshotterImage, c.cr.Spec.Registry),
+							Image:         constructImage(ComplianceSnapshotterImage, c.registry),
 							Env:           envVars,
 							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -697,7 +709,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: ComplianceNamespace},
 	}
 }
 
@@ -723,7 +735,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: "calico-monitoring"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: ComplianceNamespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
@@ -733,7 +745,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-compliance-benchmarker",
-				Namespace: "calico-monitoring",
+				Namespace: ComplianceNamespace,
 			},
 		},
 	}
@@ -759,7 +771,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				Optional: &complianceBoolTrue},
 		}},
 	}
-	envVars = append(envVars, complianceElasticEnvVars...)
+	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	volMounts := []corev1.VolumeMount{
 		{Name: "var-lib-etcd", MountPath: "/var/lib/etcd", ReadOnly: true},
@@ -798,7 +810,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",
-			Namespace: "calico-monitoring",
+			Namespace: ComplianceNamespace,
 			Labels:    map[string]string{"k8s-app": "compliance-benchmarker"},
 		},
 
@@ -807,7 +819,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "compliance-benchmarker",
-					Namespace: "calico-monitoring",
+					Namespace: ComplianceNamespace,
 					Labels: map[string]string{
 						"k8s-app": "compliance-benchmarker",
 					},
@@ -830,11 +842,11 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 							Operator: corev1.TolerationOpExists,
 						},
 					},
-					ImagePullSecrets: c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets: c.imagePullSecretReferenceList(),
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-benchmarker",
-							Image:         constructImage(ComplianceBenchmarkerImage, c.cr.Spec.Registry),
+							Image:         constructImage(ComplianceBenchmarkerImage, c.registry),
 							Env:           envVars,
 							VolumeMounts:  volMounts,
 							LivenessProbe: complianceLivenessProbe,
@@ -862,9 +874,11 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 		ReadOnlyRootFilesystem:   false,
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users:                    []string{"system:serviceaccount:calico-monitoring:tigera-compliance-benchmarker"},
-		Groups:                   []string{"system:authenticated"},
-		Volumes:                  []ocsv1.FSType{"*"},
+		Users: []string{
+			fmt.Sprintf("system:serviceaccount:%s:tigera-compliance-benchmarker", ComplianceNamespace),
+		},
+		Groups:  []string{"system:authenticated"},
+		Volumes: []ocsv1.FSType{"*"},
 	}
 }
 

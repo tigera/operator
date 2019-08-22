@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"os"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -287,7 +288,10 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  "cnx-manager-proxy",
 		Image: constructImage(ConsoleProxyImageName, c.registry),
-		Env:   c.consoleOAuth2EnvVars(),
+		Env: append(c.consoleOAuth2EnvVars(), corev1.EnvVar{
+			Name:  "CNX_COMPLIANCE_SERVER",
+			Value: fmt.Sprintf("compliance.%s.svc.cluster.local:443", ComplianceNamespace),
+		}),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},

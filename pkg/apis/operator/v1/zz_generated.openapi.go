@@ -18,6 +18,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerStatus":               schema_pkg_apis_operator_v1_APIServerStatus(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.Auth":                          schema_pkg_apis_operator_v1_Auth(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.CNISpec":                       schema_pkg_apis_operator_v1_CNISpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Compliance":                    schema_pkg_apis_operator_v1_Compliance(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceSpec":                schema_pkg_apis_operator_v1_ComplianceSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceStatus":              schema_pkg_apis_operator_v1_ComplianceStatus(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.ComponentsSpec":                schema_pkg_apis_operator_v1_ComponentsSpec(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.Console":                       schema_pkg_apis_operator_v1_Console(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleSpec":                   schema_pkg_apis_operator_v1_ConsoleSpec(ref),
@@ -198,6 +201,81 @@ func schema_pkg_apis_operator_v1_CNISpec(ref common.ReferenceCallback) common.Op
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.Volume", "k8s.io/api/core/v1.VolumeMount"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_Compliance(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Compliance is the Schema for the compliances API",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.ComplianceSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.ComplianceStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceSpec", "github.com/tigera/operator/pkg/apis/operator/v1.ComplianceStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_ComplianceSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComplianceSpec defines the desired state of Compliance",
+				Properties:  map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_pkg_apis_operator_v1_ComplianceStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComplianceStatus defines the observed state of Compliance",
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State indicates the state of the deployment by the IntrusionDetection controller",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
 	}
 }
 

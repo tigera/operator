@@ -37,10 +37,6 @@ func Calico(cr *operator.Installation, c client.Client, openshift bool) Renderer
 	return calicoRenderer{cr, c, openshift}
 }
 
-func TigeraSecure(cr *operator.Installation, c client.Client, openshift bool) Renderer {
-	return tigeraRenderer{cr, c, openshift}
-}
-
 type calicoRenderer struct {
 	installation *operator.Installation
 	client       client.Client
@@ -54,18 +50,6 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Namespaces(r.installation, r.openshift))
 	components = appendNotNil(components, Node(r.installation, r.openshift))
 	components = appendNotNil(components, KubeControllers(r.installation))
-	return components
-}
-
-type tigeraRenderer struct {
-	installation *operator.Installation
-	client       client.Client
-	openshift    bool
-}
-
-func (r tigeraRenderer) Render() []Component {
-	var components []Component
-	components = appendNotNil(components, Compliance(r.installation, r.openshift))
 	return components
 }
 

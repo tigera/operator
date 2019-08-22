@@ -275,18 +275,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 					Containers: []corev1.Container{
 						c.intrusionDetectionControllerContainer(),
 					},
-					Volumes: []v1.Volume{
-						{
-							Name: "es-config",
-							VolumeSource: v1.VolumeSource{
-								ConfigMap: &v1.ConfigMapVolumeSource{
-									LocalObjectReference: v1.LocalObjectReference{
-										Name: tigeraEsConfigMapName,
-									},
-								},
-							},
-						},
-					},
 				},
 			},
 		},

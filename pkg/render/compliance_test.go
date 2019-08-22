@@ -23,33 +23,34 @@ import (
 )
 
 var _ = Describe("compliance rendering tests", func() {
-	var instance *operator.Installation
+	var monitoring *operator.MonitoringConfiguration
+	var registry string
 	BeforeEach(func() {
-		// Initialize a default instance to use. Each test can override this to its
-		// desired configuration.
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				Variant: operator.TigeraSecureEnterprise,
-				IPPools: []operator.IPPool{
-					{CIDR: "192.168.1.0/16"},
+		registry = "testregistry.com/"
+		monitoring = &operator.MonitoringConfiguration{
+			Spec: operator.MonitoringConfigurationSpec{
+				ClusterName: "clusterTestName",
+				Elasticsearch: &operator.ElasticConfig{
+					Endpoint: "https://elastic.search:1234",
 				},
-				Registry:   "testregistry.com/",
-				CNINetDir:  "/test/cni/net/dir",
-				CNIBinDir:  "/test/cni/bin/dir",
-				Components: operator.ComponentsSpec{},
+				Kibana: &operator.KibanaConfig{
+					Endpoint: "https://kibana.stuff:1234",
+				},
 			},
 		}
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Compliance(instance, notOpenshift)
+		component := render.Compliance(registry, monitoring, nil, notOpenshift)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(27))
-		ns := "calico-monitoring"
+		Expect(len(resources)).To(Equal(28))
+		ns := "tigera-compliance"
 		rbac := "rbac.authorization.k8s.io"
 		idx := 0
 
 		// Should render the correct resources.
+		ExpectResource(resources[idx], ns, "", "", "v1", "Namespace")
+		idx++
 		ExpectResource(resources[idx], "tigera-compliance-controller", ns, "", "v1", "ServiceAccount")
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1", "Role")

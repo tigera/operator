@@ -60,7 +60,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err = utils.AddMonitoringWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("intrusiondetection-controller failed to watch MonitoringConfiguration resource: %v", err)
 	}
 
 	if err = utils.AddAPIServerWatch(c); err != nil {
@@ -100,7 +100,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("IntrusionDetection CR not found", "err", err)
+			reqLogger.V(3).Info("IntrusionDetection CR not found", "err", err)
 			r.status.SetDegraded("IntrusionDetection not found", err.Error())
 			r.status.ClearAvailable()
 			// Request object not found, could have been deleted after reconcile request.
@@ -108,7 +108,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 			// Return and don't requeue
 			return reconcile.Result{}, nil
 		}
-		reqLogger.V(5).Info("failed to get IntrusionDetection CR", "err", err)
+		reqLogger.V(3).Info("failed to get IntrusionDetection CR", "err", err)
 		r.status.SetDegraded("Error querying IntrusionDetection", err.Error())
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
@@ -132,6 +132,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// Query for Monitoring Config
 	monitoringConfig, err := utils.GetMonitoringConfig(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading monitoring config")
@@ -139,12 +140,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// Validate Monitoring Config
 	if err = utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
 		log.Error(err, "Validation of monitoring config failed")
 		r.status.SetDegraded("Error validating monitoring config", err.Error())
 		return reconcile.Result{}, err
 	}
 
+	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Pull secrets")
@@ -155,7 +158,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	reqLogger.V(5).Info("rendering components")
+	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	component := render.IntrusionDetection(network.Spec.Registry, monitoringConfig, pullSecrets, r.openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {

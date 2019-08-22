@@ -1,7 +1,4 @@
 apiVersion: operator.tigera.io/v1
 kind: IntrusionDetection
 metadata:
-  name: example-intrusiondetection
-spec:
-  # Add fields here
-  size: 3
+  name: tigera-secure

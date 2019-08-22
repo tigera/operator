@@ -47,7 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("installation_controller")
+var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller

@@ -1,4 +1,4 @@
 apiVersion: operator.tigera.io/v1
 kind: Console
 metadata:
-  name: default
+  name: tigera-secure

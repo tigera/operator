@@ -151,6 +151,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 	if err := utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
 		log.Error(err, "Monitoring config is not valid")
+		r.status.SetDegraded("MonitoringConfiguration is not valid", err.Error())
 		return reconcile.Result{}, err
 	}
 

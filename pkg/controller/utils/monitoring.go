@@ -20,7 +20,14 @@ func GetMonitoringConfig(ctx context.Context, cli client.Client) (*operatorv1.Mo
 	if err != nil {
 		return nil, err
 	}
-	return instance, nil
+	return populateMonitoringConfigDefaults(instance), nil
+}
+
+func populateMonitoringConfigDefaults(m *operatorv1.MonitoringConfiguration) *operatorv1.MonitoringConfiguration {
+	if len(m.Spec.ClusterName) == 0 {
+		m.Spec.ClusterName = "cluster"
+	}
+	return m
 }
 
 func AddMonitoringWatch(c controller.Controller) error {

@@ -155,13 +155,40 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	// Check that if the apiserver certpair secret exists that it is valid (has key and cert fields)
+	// If it does not exist then this function still returns true
+	tlsSecret, err := utils.ValidateCertPair(r.client,
+		render.ManagerTlsSecretName,
+		render.ManagerSecretKeyName,
+		render.ManagerSecretCertName,
+		render.ManagerNamespace)
+	if err != nil {
+		log.Error(err, "Invalid TLS Cert")
+		r.status.SetDegraded("Error validating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	if err != nil {
+		log.Error(err, "Error with Pull secrets")
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// TODO: Fetch compliance. The manager depends on compliance existing so we should check that here.
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Console(instance, monitoringConfig, r.openshift, installation.Spec.Registry, r.client)
+	component := render.Console(
+		instance,
+		monitoringConfig,
+		tlsSecret,
+		pullSecrets,
+		r.openshift,
+		installation.Spec.Registry,
+	)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

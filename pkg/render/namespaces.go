@@ -16,7 +16,7 @@ package render
 
 import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -26,22 +26,33 @@ const (
 	calicoMonitoringNamespace = "calico-monitoring"
 )
 
-func Namespaces(cr *operator.Installation, openshift bool) Component {
-	return &namespaceComponent{cr: cr, openshift: openshift}
+func Namespaces(cr *operator.Installation, openshift bool, pullSecrets []*corev1.Secret) Component {
+	return &namespaceComponent{
+		cr:          cr,
+		openshift:   openshift,
+		pullSecrets: pullSecrets,
+	}
 }
 
 type namespaceComponent struct {
-	cr        *operator.Installation
-	openshift bool
+	cr          *operator.Installation
+	openshift   bool
+	pullSecrets []*corev1.Secret
 }
 
 func (c *namespaceComponent) Objects() []runtime.Object {
 	ns := []runtime.Object{
 		createNamespace(calicoNamespace, c.openshift),
 	}
+	if len(c.pullSecrets) > 0 {
+		ns = append(ns, c.imagePullSecrets(calicoNamespace)...)
+	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		ns = append(ns, createNamespace(calicoMonitoringNamespace, c.openshift))
+		if len(c.pullSecrets) > 0 {
+			ns = append(ns, c.imagePullSecrets(calicoMonitoringNamespace)...)
+		}
 	}
 	return ns
 }
@@ -50,8 +61,18 @@ func (c *namespaceComponent) Ready() bool {
 	return true
 }
 
-func createNamespace(name string, openshift bool) *v1.Namespace {
-	ns := &v1.Namespace{
+func (c *namespaceComponent) imagePullSecrets(ns string) []runtime.Object {
+	secrets := []runtime.Object{}
+	for _, s := range c.pullSecrets {
+		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
+
+		secrets = append(secrets, s)
+	}
+	return secrets
+}
+
+func createNamespace(name string, openshift bool) *corev1.Namespace {
+	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,

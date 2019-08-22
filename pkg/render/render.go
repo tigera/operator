@@ -16,8 +16,8 @@ package render
 
 import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Component interface {
@@ -33,13 +33,17 @@ type Renderer interface {
 	Render() []Component
 }
 
-func Calico(cr *operator.Installation, c client.Client, openshift bool) Renderer {
-	return calicoRenderer{cr, c, openshift}
+func Calico(cr *operator.Installation, pullSecrets []*corev1.Secret, openshift bool) Renderer {
+	return calicoRenderer{
+		installation: cr,
+		pullSecrets:  pullSecrets,
+		openshift:    openshift,
+	}
 }
 
 type calicoRenderer struct {
 	installation *operator.Installation
-	client       client.Client
+	pullSecrets  []*corev1.Secret
 	openshift    bool
 }
 
@@ -47,7 +51,7 @@ func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
 	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
-	components = appendNotNil(components, Namespaces(r.installation, r.openshift))
+	components = appendNotNil(components, Namespaces(r.installation, r.openshift, r.pullSecrets))
 	components = appendNotNil(components, Node(r.installation, r.openshift))
 	components = appendNotNil(components, KubeControllers(r.installation))
 	return components

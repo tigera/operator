@@ -14,57 +14,63 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	managerPort           = 9443
 	managerTargetPort     = 9443
 	tigeraEsSecretName    = "tigera-es-config"
-	managerNamespace      = "tigera-console"
-	managerTlsSecretName  = "manager-tls"
-	managerSecretKeyName  = "key"
-	managerSecretCertName = "cert"
+	ManagerNamespace      = "tigera-console"
+	ManagerTlsSecretName  = "manager-tls"
+	ManagerSecretKeyName  = "key"
+	ManagerSecretCertName = "cert"
 )
 
 var operatorNamespace = "tigera-operator"
 
-func Console(cr *operator.Console, monitoring *operator.MonitoringConfiguration, openshift bool, registry string, client client.Client) Component {
+func Console(
+	cr *operator.Console,
+	monitoring *operator.MonitoringConfiguration,
+	tlsKeyPair *corev1.Secret,
+	pullSecrets []*corev1.Secret,
+	openshift bool,
+	registry string,
+) Component {
 	v, ok := os.LookupEnv("OPERATOR_NAMESPACE")
 	if ok {
 		operatorNamespace = v
 	}
 	return &consoleComponent{
-		cr:         cr,
-		monitoring: monitoring,
-		openshift:  openshift,
-		client:     client,
-		registry:   registry,
+		cr:          cr,
+		monitoring:  monitoring,
+		keyPair:     tlsKeyPair,
+		pullSecrets: pullSecrets,
+		openshift:   openshift,
+		registry:    registry,
 	}
 }
 
 type consoleComponent struct {
 	cr          *operator.Console
 	monitoring  *operator.MonitoringConfiguration
-	client      client.Client
-	managerKey  []byte
-	managerCert []byte
+	keyPair     *corev1.Secret
+	pullSecrets []*corev1.Secret
 	openshift   bool
 	registry    string
 }
 
 func (c *consoleComponent) Objects() []runtime.Object {
-	key, cert, ok := c.readOperatorSecret()
-	if !ok {
-		return nil
-	}
 	objs := []runtime.Object{
-		createNamespace("tigera-console", c.openshift),
+		createNamespace(ManagerNamespace, c.openshift),
+	}
+	objs = append(objs, c.imagePullSecrets()...)
+	objs = append(objs,
 		c.consoleManagerServiceAccount(),
 		c.consoleManagerClusterRole(),
 		c.consoleManagerClusterRoleBinding(),
-	}
-	key, cert, s := createTLSSecret(key, cert, "manager-tls", managerSecretKeyName, managerSecretCertName)
+	)
+	key, cert := c.keyCertData()
+	key, cert, s := createTLSSecret(key, cert, ManagerTlsSecretName, ManagerSecretKeyName, ManagerSecretCertName)
 	if key == nil || cert == nil {
 		log.Info("Key or Cert not created")
 		return nil
@@ -89,26 +95,23 @@ func (c *consoleComponent) Objects() []runtime.Object {
 }
 
 func (c *consoleComponent) Ready() bool {
-	// Check that if the manager-tls secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function still returns true
-	_, err := validateCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
-	if err != nil {
-		log.Error(err, "Checking Ready for Console indicates error with Manager TLS Cert")
-	}
-	// TODO: When we have status I think if err != nil then we should be
-	// reporting in status the the error.
-	return err == nil
+	return true
 }
 
 // consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
 func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
+	ps := []corev1.LocalObjectReference{}
+	for _, x := range c.pullSecrets {
+		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cnx-manager",
-			Namespace: managerNamespace,
+			Namespace: ManagerNamespace,
 			Labels: map[string]string{
 				"k8s-app": "cnx-manager",
 			},
@@ -126,7 +129,7 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "cnx-manager",
-					Namespace: managerNamespace,
+					Namespace: ManagerNamespace,
 					Labels: map[string]string{
 						"k8s-app": "cnx-manager",
 					},
@@ -143,7 +146,7 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 					},
 					ServiceAccountName: "cnx-manager",
 					Tolerations:        c.consoleTolerations(),
-					ImagePullSecrets:   []corev1.LocalObjectReference{{Name: "console-pull-secret"}},
+					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
 						c.consoleManagerContainer(),
 						c.consoleEsProxyContainer(),
@@ -162,10 +165,10 @@ func (c *consoleComponent) consoleManagerVolumes() []v1.Volume {
 	optional := true
 	return []v1.Volume{
 		{
-			Name: managerTlsSecretName,
+			Name: ManagerTlsSecretName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: managerTlsSecretName,
+					SecretName: ManagerTlsSecretName,
 				},
 			},
 		},
@@ -293,7 +296,7 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			Value: fmt.Sprintf("compliance.%s.svc.cluster.local:443", ComplianceNamespace),
 		}),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: managerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
+			{Name: ManagerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
 		LivenessProbe: c.consoleProxyProbe(),
 	}
@@ -365,7 +368,7 @@ func (c *consoleComponent) consoleManagerService() *v1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cnx-manager",
-			Namespace: managerNamespace,
+			Namespace: ManagerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -386,7 +389,7 @@ func (c *consoleComponent) consoleManagerService() *v1.Service {
 func (c *consoleComponent) consoleManagerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: managerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: ManagerNamespace},
 	}
 }
 
@@ -427,35 +430,21 @@ func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRol
 			{
 				Kind:      "ServiceAccount",
 				Name:      "cnx-manager",
-				Namespace: managerNamespace,
+				Namespace: ManagerNamespace,
 			},
 		},
 	}
 }
 
-func (c *consoleComponent) readOperatorSecret() (key, cert []byte, ok bool) {
-	secret, err := validateCertPair(c.client, "manager-tls", managerSecretKeyName, managerSecretCertName)
-	if err != nil {
-		log.Error(err, "Failed to validate cert pair")
-		return nil, nil, false
-	}
-
-	if secret != nil {
-		key = secret.Data[managerSecretKeyName]
-		cert = secret.Data[managerSecretCertName]
-	}
-	return key, cert, true
-}
-
 func (c *consoleComponent) consoleManagerCertificates(key, cert []byte) *v1.Secret {
 	data := make(map[string][]byte)
-	data[managerSecretKeyName] = key
-	data[managerSecretCertName] = cert
+	data[ManagerSecretKeyName] = key
+	data[ManagerSecretCertName] = cert
 	return &v1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      managerTlsSecretName,
-			Namespace: managerNamespace,
+			Name:      ManagerTlsSecretName,
+			Namespace: ManagerNamespace,
 		},
 		Data: data,
 	}
@@ -609,7 +598,7 @@ func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 	privilegeEscalation := false
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: "tigera-console"},
+		ObjectMeta:               metav1.ObjectMeta{Name: ManagerNamespace},
 		AllowHostDirVolumePlugin: true,
 		AllowHostIPC:             false,
 		AllowHostNetwork:         false,
@@ -622,8 +611,26 @@ func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 		ReadOnlyRootFilesystem:   false,
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users:                    []string{"system:serviceaccount:tigera-console:cnx-manager"},
+		Users:                    []string{fmt.Sprintf("system:serviceaccount:%s:cnx-manager", ManagerNamespace)},
 		Groups:                   []string{"system:authenticated"},
 		Volumes:                  []ocsv1.FSType{"*"},
 	}
+}
+
+func (c *consoleComponent) imagePullSecrets() []runtime.Object {
+	secrets := []runtime.Object{}
+	for _, s := range c.pullSecrets {
+		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ManagerNamespace}
+
+		secrets = append(secrets, s)
+	}
+	return secrets
+}
+
+func (c *consoleComponent) keyCertData() (key, cert []byte) {
+	if c.keyPair != nil {
+		key = c.keyPair.Data[ManagerSecretKeyName]
+		cert = c.keyPair.Data[ManagerSecretCertName]
+	}
+	return key, cert
 }

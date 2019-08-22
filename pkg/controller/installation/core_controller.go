@@ -264,12 +264,20 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// Query for pull secrets in operator namespace
+	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
+	if err != nil {
+		log.Error(err, "Error retrieving Pull secrets")
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
-	calico := render.Calico(instance, r.client, r.openshift)
+	calico := render.Calico(instance, pullSecrets, r.openshift)
 	for _, component := range calico.Render() {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())

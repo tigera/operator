@@ -24,14 +24,11 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var _ = Describe("Rendering tests", func() {
 	var instance *operator.Installation
-	var client client.Client
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	BeforeEach(func() {
@@ -47,8 +44,6 @@ var _ = Describe("Rendering tests", func() {
 				CNIBinDir: "/test/cni/bin/dir",
 			},
 		}
-
-		client = fake.NewFakeClient()
 
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(logf.ZapLoggerTo(logWriter, true))
@@ -68,7 +63,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		c := render.Calico(instance, client, notOpenshift)
+		c := render.Calico(instance, nil, notOpenshift)
 		Expect(componentCount(c.Render())).To(Equal(25))
 	})
 
@@ -78,7 +73,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 ns (calico-monitoring)
 		// - 6 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		c := render.Calico(instance, client, notOpenshift)
+		c := render.Calico(instance, nil, notOpenshift)
 		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 6)))
 	})
 })

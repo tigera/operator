@@ -20,16 +20,11 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Tigera Secure Console rendering tests", func() {
 	var instance *operator.Console
 	var monitoring *operator.MonitoringConfiguration
-	var client client.Client
 	var registry string
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -52,11 +47,10 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 				},
 			},
 		}
-		client = fake.NewFakeClient()
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Console(instance, monitoring, notOpenshift, registry, client)
+		component := render.Console(instance, monitoring, nil, nil, notOpenshift, registry)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(10))
 
@@ -85,23 +79,5 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
-	})
-
-	Context("when manager-tls in operator namespace is invalid", func() {
-		BeforeEach(func() {
-			badSecret := &v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "manager-tls",
-					Namespace: "tigera-operator",
-				},
-				Data: map[string][]byte{},
-			}
-			client = fake.NewFakeClient(badSecret)
-		})
-		It("should not render any resources", func() {
-			component := render.Console(instance, monitoring, false, registry, client)
-			resources := component.Objects()
-			Expect(len(resources)).To(Equal(0))
-		})
 	})
 })

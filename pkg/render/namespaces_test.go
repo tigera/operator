@@ -42,7 +42,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace", func() {
-		component := render.Namespaces(instance, notOpenshift)
+		component := render.Namespaces(instance, notOpenshift, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
@@ -55,7 +55,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	It("should render an additional namespace if this is Tigera Secure", func() {
 		// We expect calico-system and calico-monitoring.
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Namespaces(instance, notOpenshift)
+		component := render.Namespaces(instance, notOpenshift, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
@@ -72,7 +72,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for openshift", func() {
-		component := render.Namespaces(instance, openshift)
+		component := render.Namespaces(instance, openshift, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")

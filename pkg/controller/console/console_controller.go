@@ -61,6 +61,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("console-controller failed to watch APIServer resource: %v", err)
 	}
 
+	if err = utils.AddMonitoringWatch(c); err != nil {
+		return fmt.Errorf("console-controller failed to watch MonitoringConfiguration resource: %v", err)
+	}
+
 	// TODO: Watch for dependent objects.
 	return nil
 }
@@ -141,12 +145,8 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Fetch monitoring stack configuration.
 	monitoringConfig, err := utils.GetMonitoringConfig(context.Background(), r.client)
 	if err != nil {
-		// TODO: Watch this so we don't need to poll.
-		if errors.IsNotFound(err) {
-			reqLogger.Info("Waiting for monitoring configuration")
-			r.status.SetDegraded("MonitoringConfiguration not found", err.Error())
-			return reconcile.Result{}, err
-		}
+		log.Error(err, "Error reading monitoring config")
+		r.status.SetDegraded("Error reading monitoring config", err.Error())
 		return reconcile.Result{}, err
 	}
 	if err := utils.ValidateMonitoringConfig(monitoringConfig); err != nil {

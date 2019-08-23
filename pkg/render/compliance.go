@@ -254,6 +254,7 @@ func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.C
 func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
@@ -369,6 +370,7 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "warning"},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
 			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
@@ -501,6 +503,7 @@ func (c *complianceComponent) complianceServerService() *v1.Service {
 func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
 			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
@@ -618,6 +621,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRoleBinding() *rbacv1.
 func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
@@ -736,6 +740,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
 			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{

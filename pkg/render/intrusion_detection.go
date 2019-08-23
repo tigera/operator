@@ -54,7 +54,7 @@ type intrusionDetectionComponent struct {
 func (c *intrusionDetectionComponent) Objects() []runtime.Object {
 
 	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
-	objs = append(objs, c.imagePullSecrets()...)
+	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
 	return append(objs,
 		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
@@ -71,10 +71,6 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
-	ps := []corev1.LocalObjectReference{}
-	for _, x := range c.pullSecrets {
-		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
-	}
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -93,7 +89,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				},
 				Spec: v1.PodSpec{
 					RestartPolicy:    v1.RestartPolicyOnFailure,
-					ImagePullSecrets: ps,
+					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers:       []v1.Container{c.intrusionDetectionJobContainer()},
 				},
 			},

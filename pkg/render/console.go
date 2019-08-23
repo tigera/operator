@@ -63,7 +63,7 @@ func (c *consoleComponent) Objects() []runtime.Object {
 	objs := []runtime.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
-	objs = append(objs, c.imagePullSecrets()...)
+	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
 	objs = append(objs,
 		c.consoleManagerServiceAccount(),
 		c.consoleManagerClusterRole(),
@@ -101,11 +101,6 @@ func (c *consoleComponent) Ready() bool {
 // consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
 func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-
-	ps := []corev1.LocalObjectReference{}
-	for _, x := range c.pullSecrets {
-		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
-	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -146,7 +141,7 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 					},
 					ServiceAccountName: "cnx-manager",
 					Tolerations:        c.consoleTolerations(),
-					ImagePullSecrets:   ps,
+					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.consoleManagerContainer(),
 						c.consoleEsProxyContainer(),
@@ -615,16 +610,6 @@ func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 		Groups:                   []string{"system:authenticated"},
 		Volumes:                  []ocsv1.FSType{"*"},
 	}
-}
-
-func (c *consoleComponent) imagePullSecrets() []runtime.Object {
-	secrets := []runtime.Object{}
-	for _, s := range c.pullSecrets {
-		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ManagerNamespace}
-
-		secrets = append(secrets, s)
-	}
-	return secrets
 }
 
 func (c *consoleComponent) keyCertData() (key, cert []byte) {

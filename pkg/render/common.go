@@ -29,6 +29,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -276,4 +277,23 @@ func ParseEndpoint(endpoint string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("Invalid host: %s", url.Host)
 	}
 	return url.Scheme, splits[0], splits[1], nil
+}
+
+func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object {
+	secrets := []runtime.Object{}
+	for _, s := range pullSecrets {
+		x := s.DeepCopy()
+		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
+
+		secrets = append(secrets, x)
+	}
+	return secrets
+}
+
+func getImagePullSecretReferenceList(pullSecrets []*v1.Secret) []v1.LocalObjectReference {
+	ps := []v1.LocalObjectReference{}
+	for _, x := range pullSecrets {
+		ps = append(ps, v1.LocalObjectReference{Name: x.Name})
+	}
+	return ps
 }

@@ -57,7 +57,7 @@ type complianceComponent struct {
 func (c *complianceComponent) Objects() []runtime.Object {
 	complianceObjs := append(
 		[]runtime.Object{createNamespace(ComplianceNamespace, c.openshift)},
-		c.imagePullSecrets()...,
+		copyImagePullSecrets(c.pullSecrets, ComplianceNamespace)...,
 	)
 	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
@@ -99,24 +99,6 @@ func (c *complianceComponent) Objects() []runtime.Object {
 	}
 
 	return complianceObjs
-}
-
-func (c *complianceComponent) imagePullSecrets() []runtime.Object {
-	secrets := []runtime.Object{}
-	for _, s := range c.pullSecrets {
-		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ComplianceNamespace}
-
-		secrets = append(secrets, s)
-	}
-	return secrets
-}
-
-func (c *complianceComponent) imagePullSecretReferenceList() []corev1.LocalObjectReference {
-	ps := []corev1.LocalObjectReference{}
-	for _, x := range c.pullSecrets {
-		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
-	}
-	return ps
 }
 
 func (c *complianceComponent) Ready() bool {
@@ -327,7 +309,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: c.imagePullSecretReferenceList(),
+					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-controller",
@@ -432,7 +414,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						Effect: corev1.TaintEffectNoSchedule,
 					},
 				},
-				ImagePullSecrets: c.imagePullSecretReferenceList(),
+				ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 				Containers: []corev1.Container{
 					{
 						Name:          "reporter",
@@ -570,7 +552,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: c.imagePullSecretReferenceList(),
+					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
 							Name:         "compliance-server",
@@ -689,7 +671,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 							Effect: corev1.TaintEffectNoSchedule,
 						},
 					},
-					ImagePullSecrets: c.imagePullSecretReferenceList(),
+					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-snapshotter",
@@ -842,7 +824,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 							Operator: corev1.TolerationOpExists,
 						},
 					},
-					ImagePullSecrets: c.imagePullSecretReferenceList(),
+					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
 							Name:          "compliance-benchmarker",

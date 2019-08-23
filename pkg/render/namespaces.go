@@ -45,13 +45,13 @@ func (c *namespaceComponent) Objects() []runtime.Object {
 		createNamespace(calicoNamespace, c.openshift),
 	}
 	if len(c.pullSecrets) > 0 {
-		ns = append(ns, c.imagePullSecrets(calicoNamespace)...)
+		ns = append(ns, copyImagePullSecrets(c.pullSecrets, calicoNamespace)...)
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		ns = append(ns, createNamespace(calicoMonitoringNamespace, c.openshift))
 		if len(c.pullSecrets) > 0 {
-			ns = append(ns, c.imagePullSecrets(calicoMonitoringNamespace)...)
+			ns = append(ns, copyImagePullSecrets(c.pullSecrets, calicoMonitoringNamespace)...)
 		}
 	}
 	return ns
@@ -59,16 +59,6 @@ func (c *namespaceComponent) Objects() []runtime.Object {
 
 func (c *namespaceComponent) Ready() bool {
 	return true
-}
-
-func (c *namespaceComponent) imagePullSecrets(ns string) []runtime.Object {
-	secrets := []runtime.Object{}
-	for _, s := range c.pullSecrets {
-		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
-
-		secrets = append(secrets, s)
-	}
-	return secrets
 }
 
 func createNamespace(name string, openshift bool) *corev1.Namespace {

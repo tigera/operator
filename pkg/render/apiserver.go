@@ -58,7 +58,7 @@ func (c *apiServerComponent) Objects() []runtime.Object {
 	objs := []runtime.Object{
 		createNamespace(APIServerNamespace, c.openshift),
 	}
-	secrets := c.imagePullSecrets()
+	secrets := copyImagePullSecrets(c.pullSecrets, APIServerNamespace)
 	objs = append(objs, secrets...)
 	objs = append(objs,
 		c.auditPolicyConfigMap(),
@@ -335,16 +335,6 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	}
 }
 
-func (c *apiServerComponent) imagePullSecrets() []runtime.Object {
-	secrets := []runtime.Object{}
-	for _, s := range c.pullSecrets {
-		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: APIServerNamespace}
-
-		secrets = append(secrets, s)
-	}
-	return secrets
-}
-
 func (c *apiServerComponent) keyCertData() (key, cert []byte) {
 	if c.keyPair != nil {
 		key = c.keyPair.Data[APIServerSecretKeyName]
@@ -390,11 +380,6 @@ rules:
 func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	var replicas int32 = 1
 
-	ps := []corev1.LocalObjectReference{}
-	for _, x := range c.pullSecrets {
-		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
-	}
-
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -426,7 +411,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					},
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
-					ImagePullSecrets:   ps,
+					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
 						c.queryServerContainer(),

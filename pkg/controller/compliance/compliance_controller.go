@@ -116,7 +116,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded("APIServer not ready", "")
+		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
 	}
 

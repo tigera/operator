@@ -49,6 +49,7 @@ import (
 
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
+var operatorNamespace = "tigera-operator"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -97,25 +98,16 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	// Add watches on component dependencies.
+	// Build a list of other objects we should watch.
 	componentDeps := []runtime.Object{
-		&v1.Service{
-			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "elasticsearch-tigera-elasticsearch",
-				Namespace: "calico-monitoring",
-			},
-		},
+		// Watch for secrets in the tigera-operator namespace. We watch for all secrets, since we care
+		// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
+		// have been provided.
 		&v1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "manager-tls",
-				//TODO: Read this in from env or something
-				Namespace: "tigera-operator",
-			},
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: operatorNamespace},
 		},
 	}
-
 	for _, dep := range componentDeps {
 		err = r.AddWatch(dep)
 		if err != nil {
@@ -188,10 +180,16 @@ func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
 		logger.Info("Watch doesn't exist, creating", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace())
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return e.Meta.GetName() == objMeta.GetName() && e.Meta.GetNamespace() == objMeta.GetNamespace()
+				if objMeta.GetName() != "" && e.Meta.GetName() != objMeta.GetName() {
+					return false
+				}
+				return e.Meta.GetNamespace() == objMeta.GetNamespace()
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				return e.MetaNew.GetName() == objMeta.GetName() && e.MetaNew.GetNamespace() == objMeta.GetNamespace()
+				if objMeta.GetName() != "" && e.MetaNew.GetName() != objMeta.GetName() {
+					return false
+				}
+				return e.MetaNew.GetNamespace() == objMeta.GetNamespace()
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				return false

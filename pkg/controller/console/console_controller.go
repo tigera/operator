@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -155,6 +156,21 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	// Check that compliance is running.
+	compliance, err := compliance.GetCompliance(context.Background(), r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Compliance not found", err.Error())
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded("Error querying compliance", err.Error())
+		return reconcile.Result{}, err
+	}
+	if compliance.Status.State != operatorv1.ComplianceStatusReady {
+		r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
+		return reconcile.Result{}, nil
+	}
+
 	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
@@ -175,8 +191,6 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
-
-	// TODO: Fetch compliance. The manager depends on compliance existing so we should check that here.
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)

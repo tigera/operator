@@ -83,6 +83,15 @@ type ReconcileCompliance struct {
 	status    *status.StatusManager
 }
 
+func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
+	instance := &operatorv1.Compliance{}
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
 // Reconcile reads that state of the cluster for a Compliance object and makes changes based on the state read
 // and what is in the Compliance.Spec
 // Note:
@@ -95,21 +104,18 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 
 	// Fetch the Compliance instance
-	instance := &operatorv1.Compliance{}
-	err := r.client.Get(ctx, request.NamespacedName, instance)
+	instance, err := GetCompliance(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(3).Info("Compliance CR not found", "err", err)
-			r.status.SetDegraded("Compliance not found", err.Error())
-			r.status.ClearAvailable()
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			reqLogger.Info("Compliance config not found")
+			r.status.SetDegraded("Compliance not found", err.Error())
+			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
-		reqLogger.V(3).Info("failed to get Compliance CR", "err", err)
-		r.status.SetDegraded("Error querying Compliance", err.Error())
-		// Error reading the object - requeue the request.
+		r.status.SetDegraded("Error querying compliance", err.Error())
 		return reconcile.Result{}, err
 	}
 	r.status.Enable()

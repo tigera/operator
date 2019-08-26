@@ -126,8 +126,17 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool {
+				// Create occurs because we've created it, so we can safely ignore it.
+				return false
+			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				// Ignore updates to objects when metadata.Generation does not change.
+				if utils.IgnoreObject(e.ObjectOld) && !utils.IgnoreObject(e.ObjectNew) {
+					// Don't skip the removal of the "ignore" annotation. We want to
+					// reconcile when that happens.
+					return true
+				}
+				// Otherwise, ignore updates to objects when metadata.Generation does not change.
 				return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
 			},
 		}

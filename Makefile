@@ -187,10 +187,14 @@ endif
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): vendor $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
+	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
 
 .PHONY: image
 image: vendor build $(BUILD_IMAGE)
+image-all: $(addprefix sub-image-,$(VALIDARCHES))
+sub-image-%:
+	$(MAKE) image ARCH=$*
+
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
 	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) -f ./build/Dockerfile.$(ARCH) ./build
@@ -323,8 +327,67 @@ endif
 	$(MAKE) tag-images-all push-all push-manifests push-non-manifests IMAGETAG=$(shell git describe --tags --dirty --always --long) EXCLUDEARCH="$(EXCLUDEARCH)"
 
 ###############################################################################
-# Release: TODO
+# Release
 ###############################################################################
+## Determines if we are on a tag and if so builds a release.
+maybe-build-release:
+	./hack/maybe-build-release.sh
+
+## Tags and builds a release from start to finish.
+release: release-prereqs
+ifneq ($(VERSION), $(GIT_VERSION))
+	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
+endif
+	$(MAKE) release-build
+	$(MAKE) release-verify
+
+	@echo ""
+	@echo "Release build complete. Next, push the produced images."
+	@echo ""
+	@echo "  make VERSION=$(VERSION) release-publish"
+	@echo ""
+
+## Produces a clean build of release artifacts at the specified version.
+release-build: release-prereqs clean
+# Check that the correct code is checked out.
+ifneq ($(VERSION), $(GIT_VERSION))
+	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
+endif
+	$(MAKE) image-all
+	$(MAKE) tag-images-all RELEASE=true IMAGETAG=$(VERSION)
+	# Generate the `latest` images.
+	$(MAKE) tag-images-all RELEASE=true IMAGETAG=latest
+
+## Verifies the release artifacts produces by `make release-build` are correct.
+release-verify: release-prereqs
+	# Check the reported version is correct for each release artifact.
+	if ! docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^$(VERSION)$$'; then echo "Reported version:" `docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
+
+## Pushes a github release and release artifacts produced by `make release-build`.
+release-publish: release-prereqs
+	# Push the git tag.
+	git push origin $(VERSION)
+
+	# Push images.
+	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
+
+	@echo "Finalize the GitHub release based on the pushed tag."
+	@echo ""
+	@echo "  https://$(PACKAGE_NAME)/releases/tag/$(VERSION)"
+	@echo ""
+	@echo "If this is the latest stable release, then run the following to push 'latest' images."
+	@echo ""
+	@echo "  make VERSION=$(VERSION) release-publish-latest"
+	@echo ""
+
+# release-prereqs checks that the environment is configured properly to create a release.
+release-prereqs:
+ifndef VERSION
+	$(error VERSION is undefined - run using make release VERSION=vX.Y.Z)
+endif
+ifdef LOCAL_BUILD
+	$(error LOCAL_BUILD must not be set for a release)
+endif
 
 ###############################################################################
 # Utilities

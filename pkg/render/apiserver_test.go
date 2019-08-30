@@ -33,7 +33,9 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should render an API server with default configuration", func() {
 		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component := render.APIServer("testregistry.com/", nil, nil, openshift)
+		component, err := render.APIServer("testregistry.com/", nil, nil, openshift)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
 		resources := component.Objects()
 
 		// Should render the correct resources.
@@ -187,7 +189,8 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		component := render.APIServer("", nil, nil, openshift)
+		component, err := render.APIServer("", nil, nil, openshift)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources := component.Objects()
 
 		// Should render the correct resources.

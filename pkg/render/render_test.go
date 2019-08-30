@@ -59,12 +59,16 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
 		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
+		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
+		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
+		// - 5 typha resources (Service, SA, Role, Binding, Deployment)
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		c := render.Calico(instance, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
-		Expect(componentCount(c.Render())).To(Equal(25))
+		c, err := render.Calico(instance, nil, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		Expect(componentCount(c.Render())).To(Equal(36))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -74,8 +78,9 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 ns (calico-monitoring)
 		// - 6 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		c := render.Calico(instance, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
-		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 1 + 6)))
+		c, err := render.Calico(instance, nil, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		Expect(componentCount(c.Render())).To(Equal((36 + 1 + 1 + 6)))
 	})
 })
 

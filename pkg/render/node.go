@@ -71,7 +71,7 @@ func (c *nodeComponent) nodeServiceAccount() *v1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
-			Namespace: calicoNamespace,
+			Namespace: CalicoNamespace,
 		},
 	}
 }
@@ -93,7 +93,7 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "calico-node",
-				Namespace: calicoNamespace,
+				Namespace: CalicoNamespace,
 			},
 		},
 	}
@@ -278,7 +278,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cni-config",
-			Namespace: calicoNamespace,
+			Namespace: CalicoNamespace,
 			Labels:    map[string]string{},
 		},
 		Data: map[string]string{
@@ -295,7 +295,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
-			Namespace: calicoNamespace,
+			Namespace: CalicoNamespace,
 		},
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
@@ -359,6 +359,24 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNIBinDir}}},
 		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNINetDir}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+		{
+			Name: "typha-ca",
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: TyphaCAConfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name: "felix-certs",
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: FelixTLSSecretName,
+				},
+			},
+		},
 	}
 
 	// Override with Tigera-specific config.
@@ -492,6 +510,8 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/var/run/calico", Name: "var-run-calico"},
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
+		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
+		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
@@ -520,6 +540,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
+	optional := true
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -535,6 +556,31 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 			},
 		},
+		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: CalicoNamespace},
+		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
+		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
+		{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretCertName)},
+		{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretKeyName)},
+		// We need at least the CN or URISAN set, we depend on the validation
+		// done by the core_controller that the Secret will have one.
+		{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: TyphaTLSSecretName,
+				},
+				Key:      CommonName,
+				Optional: &optional,
+			},
+		}},
+		{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: TyphaTLSSecretName,
+				},
+				Key:      URISAN,
+				Optional: &optional,
+			},
+		}},
 	}
 
 	// set the networking backend
@@ -556,6 +602,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
@@ -614,7 +662,7 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
-			Namespace: calicoNamespace,
+			Namespace: CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
 		Spec: v1.ServiceSpec{

@@ -54,7 +54,7 @@ func (c *kubeControllersComponent) controllersServiceAccount() *v1.ServiceAccoun
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-kube-controllers",
-			Namespace: calicoNamespace,
+			Namespace: CalicoNamespace,
 			Labels:    map[string]string{},
 		},
 	}
@@ -142,7 +142,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 			{
 				Kind:      "ServiceAccount",
 				Name:      "calico-kube-controllers",
-				Namespace: calicoNamespace,
+				Namespace: CalicoNamespace,
 			},
 		},
 	}
@@ -186,7 +186,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-kube-controllers",
-			Namespace: calicoNamespace,
+			Namespace: CalicoNamespace,
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
 			},
@@ -204,7 +204,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "calico-kube-controllers",
-					Namespace: calicoNamespace,
+					Namespace: CalicoNamespace,
 					Labels: map[string]string{
 						"k8s-app": "calico-kube-controllers",
 					},

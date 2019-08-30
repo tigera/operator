@@ -50,7 +50,8 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Console(instance, monitoring, nil, nil, notOpenshift, registry)
+		component, err := render.Console(instance, monitoring, nil, nil, notOpenshift, registry)
+		Expect(err).To(BeNil(), "Expected Console to create successfully %s", err)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(10))
 

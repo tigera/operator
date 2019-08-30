@@ -187,7 +187,7 @@ endif
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): vendor $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
+	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
 
 .PHONY: image
 image: vendor build $(BUILD_IMAGE)
@@ -360,7 +360,8 @@ endif
 
 ## Verifies the release artifacts produces by `make release-build` are correct.
 release-verify: release-prereqs
-	# TODO
+	# Check the reported version is correct for each release artifact.
+	if ! docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^$(VERSION)$$'; then echo "Reported version:" `docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
 
 ## Pushes a github release and release artifacts produced by `make release-build`.
 release-publish: release-prereqs

@@ -40,10 +40,13 @@ var log = logf.Log.WithName("cmd")
 // urlOnlyKubeconfig is a slight hack; we need to get the apiserver from the
 // kubeconfig but should use the in-cluster service account
 var urlOnlyKubeconfig string
+var showVersion bool
 
 func init() {
 	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",
 		"Path to a kubeconfig, but only for the apiserver url.")
+	flag.BoolVar(&showVersion, "version", false,
+		"Show version information")
 }
 
 func printVersion() {
@@ -63,6 +66,11 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 
 	pflag.Parse()
+
+	if showVersion {
+		fmt.Printf("%s\n", version.VERSION)
+		os.Exit(0)
+	}
 
 	if urlOnlyKubeconfig != "" {
 		if err := setKubernetesServiceEnv(urlOnlyKubeconfig); err != nil {

@@ -53,6 +53,10 @@ func AddAPIServerWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, &handler.EnqueueRequestForObject{})
 }
 
+func AddComplianceWatch(c controller.Controller) error {
+	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
+}
+
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance := &operatorv1.APIServer{}
 	err := client.Get(context.Background(), DefaultTSEEInstanceKey, instance)

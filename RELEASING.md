@@ -19,4 +19,6 @@ You should have no local changes and tests should be passing.
    git tag <version>
    ```
 
-1. Push the git tag. Semaphore will build the release for you.
+1. Push the git tag.
+
+1. Log in to semaphore and trigger a build on the tagged commit. Semaphore will build, test, and publish the release.

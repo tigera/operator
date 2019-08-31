@@ -281,7 +281,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:nft-1fd1d3"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:v2.5.0"))
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{
@@ -396,7 +396,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:nft-1fd1d3"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:v2.5.0"))
 		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{

@@ -718,10 +718,10 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 	}
 }
 
-func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: ComplianceNamespace},
+func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",

@@ -17,9 +17,11 @@ package installation
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
+	"k8s.io/client-go/rest"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -32,7 +34,6 @@ import (
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,19 +54,20 @@ var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool) error {
-	return add(mgr, newReconciler(mgr, openshift))
+func Add(mgr manager.Manager, openshift bool, tsee bool) error {
+	return add(mgr, newReconciler(mgr, openshift, tsee))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, openshift bool) *ReconcileInstallation {
-	log.WithValues("openshift", openshift).Info("Checking type of cluster")
+func newReconciler(mgr manager.Manager, openshift bool, tsee bool) *ReconcileInstallation {
 	r := &ReconcileInstallation{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		watches:   make(map[runtime.Object]struct{}),
-		openshift: openshift,
-		status:    status.New(mgr.GetClient(), "network"),
+		config:       mgr.GetConfig(),
+		client:       mgr.GetClient(),
+		scheme:       mgr.GetScheme(),
+		watches:      make(map[runtime.Object]struct{}),
+		openshift:    openshift,
+		status:       status.New(mgr.GetClient(), "network"),
+		requiresTSEE: tsee,
 	}
 	r.status.Run()
 	return r
@@ -154,12 +156,14 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client     client.Client
-	scheme     *runtime.Scheme
-	controller controller.Controller
-	watches    map[runtime.Object]struct{}
-	openshift  bool
-	status     *status.StatusManager
+	config       *rest.Config
+	client       client.Client
+	scheme       *runtime.Scheme
+	controller   controller.Controller
+	watches      map[runtime.Object]struct{}
+	openshift    bool
+	status       *status.StatusManager
+	requiresTSEE bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
@@ -188,7 +192,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Query for the installation object.
 	instance, err := GetInstallation(ctx, r.client, r.openshift)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
@@ -202,6 +206,27 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	r.status.Enable()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
+
+	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
+	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
+	if !r.requiresTSEE && instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
+		// if they do not, we need to notify the user that the requested configuration is invalid.
+		b, err := utils.RequiresTigeraSecure(r.config)
+		if b {
+			log.Info("Rebooting to enable TigeraSecure controllers")
+			os.Exit(0)
+		} else if err != nil {
+			r.status.SetDegraded("Error discovering Tigera Secure availability", err.Error())
+		} else {
+			r.status.SetDegraded("Cannot deploy Tigera Secure", "Missing Tigera Secure custom resource definitions")
+		}
+
+		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
+		// this controller to fail.
+		reqLogger.Info("Scheduling a retry in 30 seconds")
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
 
 	openshiftConfig := &configv1.Network{}
 	if r.openshift {

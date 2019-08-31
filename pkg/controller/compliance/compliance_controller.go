@@ -25,7 +25,11 @@ var log = logf.Log.WithName("controller_compliance")
 
 // Add creates a new Compliance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool) error {
+func Add(mgr manager.Manager, openshift bool, tsee bool) error {
+	if !tsee {
+		// No need to start this controller.
+		return nil
+	}
 	return add(mgr, newReconciler(mgr, openshift))
 }
 

@@ -33,14 +33,14 @@ func ExpectResource(resource runtime.Object, name, ns, group, version, kind stri
 	actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
 	Expect(actualName).To(Equal(name), fmt.Sprintf("Rendered %s resource in namespace %s has wrong name", kind, ns))
 	Expect(actualNS).To(Equal(ns), fmt.Sprintf("Rendered resource %s/%s has wrong namespace", kind, name))
-	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), "Rendered resource does not match expected GVK")
+	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), fmt.Sprintf("Rendered resource %s does not match expected GVK", name))
 }
 
 func ExpectGlobalReportType(resource runtime.Object, name string) {
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	Expect(actualName).To(Equal(name), "Rendered resource has wrong name")
 	gvk := schema.GroupVersionKind{Group: "projectcalico.org", Version: "v3", Kind: "GlobalReportType"}
-	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), "Rendered resource does not match expected GVK")
+	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), fmt.Sprintf("Rendered resource %s does not match expected GVK", name))
 	v, ok := resource.(*v3.GlobalReportType)
 	Expect(ok).To(BeTrue(), fmt.Sprintf("resource (%v) should convert to GlobalReportType", resource))
 	Expect(v.Spec.UISummaryTemplate.Template).ToNot(BeEmpty())

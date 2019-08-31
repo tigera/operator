@@ -62,6 +62,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("console-controller failed to watch APIServer resource: %v", err)
 	}
 
+	err = utils.AddComplianceWatch(c)
+	if err != nil {
+		return fmt.Errorf("console-controller failed to watch compliance resource: %v", err)
+	}
+
 	if err = utils.AddMonitoringWatch(c); err != nil {
 		return fmt.Errorf("console-controller failed to watch MonitoringConfiguration resource: %v", err)
 	}

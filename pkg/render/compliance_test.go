@@ -93,7 +93,7 @@ var _ = Describe("compliance rendering tests", func() {
 		idx++
 		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole")
 		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, rbac, "v1", "RoleBinding")
+		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding")
 		idx++
 		ExpectResource(resources[idx], "compliance-benchmarker", ns, "apps", "v1", "DaemonSet")
 		idx++

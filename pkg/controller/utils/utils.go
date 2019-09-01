@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -74,6 +75,14 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 	return true
+}
+
+// CheckLicenseKey checks if a license has been installed. It's useful
+// to prevent rollout of TSEE components that might require it.
+// It will return an error if the license is not installed, and nil otherwise.
+func CheckLicenseKey(ctx context.Context, cli client.Client) error {
+	instance := &v3.LicenseKey{}
+	return cli.Get(ctx, DefaultInstanceKey, instance)
 }
 
 // validateCertPair checks if the given secret exists and if so

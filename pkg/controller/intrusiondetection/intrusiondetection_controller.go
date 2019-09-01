@@ -121,6 +121,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
+		r.status.SetDegraded("License not found", err.Error())
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+	}
+
 	// Query for the installation object.
 	network, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
 	if err != nil {

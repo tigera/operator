@@ -21,7 +21,7 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	NodeImageNameTigera            = "cnx-node:nft-1fd1d3"
+	NodeImageNameTigera            = "cnx-node:v2.5.0"
 	KubeControllersImageNameTigera = "kube-controllers:v2.4.2"
 
 	// API server images.

@@ -270,7 +270,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, notOpenshift)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
@@ -278,6 +278,7 @@ var _ = Describe("Node rendering tests", func() {
 		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
 		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
 		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		ExpectResource(resources[5], "calico-node-metrics", "calico-system", "", "v1", "Service")
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)
@@ -385,7 +386,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, openshift)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
@@ -393,6 +394,7 @@ var _ = Describe("Node rendering tests", func() {
 		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
 		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
 		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		ExpectResource(resources[5], "calico-node-metrics", "calico-system", "", "v1", "Service")
 
 		// The DaemonSet should have the correct configuration.
 		ds := resources[4].(*apps.DaemonSet)

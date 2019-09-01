@@ -15,6 +15,8 @@
 package render
 
 import (
+	"fmt"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	apps "k8s.io/api/apps/v1"
@@ -23,6 +25,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+var (
+	nodeMetricsPort int32 = 9081
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -36,13 +42,18 @@ type nodeComponent struct {
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
-	return []runtime.Object{
+	objs := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
 		c.nodeCNIConfigMap(),
 		c.nodeDaemonset(),
 	}
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Include Service for exposing node metrics.
+		objs = append(objs, c.nodeMetricsService())
+	}
+	return objs
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -498,7 +509,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -543,4 +554,29 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},
 	}
 	return lp, rp
+}
+
+// nodeMetricsServices creates a Service which exposes the calico/node metrics
+// reporting endpoint.
+func (c *nodeComponent) nodeMetricsService() *v1.Service {
+	return &v1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-node-metrics",
+			Namespace: calicoNamespace,
+			Labels:    map[string]string{"k8s-app": "calico-node"},
+		},
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": "calico-node"},
+			Type:     v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
+				v1.ServicePort{
+					Name:       "calico-metrics-port",
+					Port:       nodeMetricsPort,
+					TargetPort: intstr.FromInt(int(nodeMetricsPort)),
+					Protocol:   v1.ProtocolTCP,
+				},
+			},
+		},
+	}
 }

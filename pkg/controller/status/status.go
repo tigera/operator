@@ -40,7 +40,6 @@ type StatusManager struct {
 	daemonsets  []types.NamespacedName
 	deployments []types.NamespacedName
 	lock        sync.Mutex
-	available   bool
 	enabled     bool
 
 	// Track degraded state as set by external controllers.

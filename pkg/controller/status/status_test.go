@@ -12,26 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package status_test
+package status
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/tigera/operator/pkg/apis"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/controller/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Status reporting tests", func() {
-	var sm *status.StatusManager
+	var sm *StatusManager
 	var client client.Client
 	BeforeEach(func() {
 		// Setup Scheme for all resources
@@ -40,51 +34,74 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		client = fake.NewFakeClientWithScheme(scheme)
 
-		sm = status.New(client, "test-component")
+		sm = New(client, "test-component")
 		Expect(sm.IsAvailable()).To(BeFalse())
 		sm.Enable()
 	})
 
 	It("Should handle basic state changes", func() {
-		By("Setting a degraded state")
-		sm.SetDegraded("Degraded message", "Degraded reason")
+		// We expect no state to be "True" at boot.
 		Expect(sm.IsAvailable()).To(BeFalse())
-		expectState(client, operator.ConditionTrue, operator.ConditionFalse, operator.ConditionFalse)
+		Expect(sm.IsDegraded()).To(BeFalse())
+		Expect(sm.IsProgressing()).To(BeFalse())
+
+		By("Setting a degraded state explicitly")
+		sm.explicitDegradedMsg = "Explicit degraded message"
+		sm.explicitDegradedReason = "Explicit degraded reason"
+		sm.degraded = true
+		Expect(sm.IsAvailable()).To(BeFalse())
+		Expect(sm.IsDegraded()).To(BeTrue())
+		Expect(sm.IsProgressing()).To(BeFalse())
+
+		By("Setting a degraded state via pod status")
+		sm.explicitDegradedMsg = ""
+		sm.explicitDegradedReason = ""
+		sm.degraded = false
+		sm.failing = []string{"A failing container"}
+		sm.progressing = []string{"Some progressing status"}
+		Expect(sm.IsAvailable()).To(BeFalse())
+		Expect(sm.IsDegraded()).To(BeTrue())
+		// We don't expect progressing, even though we have set internal state saying it is,
+		// because the "degraded" takes precedence.
+		Expect(sm.IsProgressing()).To(BeFalse())
 
 		By("Setting a progressing state")
-		sm.SetProgressing("Progressing message", "Progressing reason")
+		sm.failing = []string{}
 		Expect(sm.IsAvailable()).To(BeFalse())
-		expectState(client, operator.ConditionTrue, operator.ConditionTrue, operator.ConditionFalse)
+		Expect(sm.IsDegraded()).To(BeFalse())
+		Expect(sm.IsProgressing()).To(BeTrue())
 
 		By("Setting an available state")
-		sm.SetAvailable("Available message", "Available reason")
+		sm.progressing = []string{}
 		Expect(sm.IsAvailable()).To(BeTrue())
-		expectState(client, operator.ConditionTrue, operator.ConditionFalse, operator.ConditionTrue)
+		Expect(sm.IsDegraded()).To(BeFalse())
+		Expect(sm.IsProgressing()).To(BeFalse())
 
-		By("Clearing degraded state")
-		sm.ClearDegraded()
-		Expect(sm.IsAvailable()).To(BeTrue())
-		expectState(client, operator.ConditionFalse, operator.ConditionFalse, operator.ConditionTrue)
-
-		By("Clearing available state")
-		sm.ClearAvailable()
+		By("Setting a degraded state via pod status after being available")
+		sm.explicitDegradedMsg = ""
+		sm.explicitDegradedReason = ""
+		sm.degraded = false
+		sm.failing = []string{"A failing container"}
+		sm.progressing = []string{"Some progressing status"}
 		Expect(sm.IsAvailable()).To(BeFalse())
-		expectState(client, operator.ConditionFalse, operator.ConditionFalse, operator.ConditionFalse)
+		Expect(sm.IsDegraded()).To(BeTrue())
+		Expect(sm.IsProgressing()).To(BeFalse())
 	})
+
+	It("should generate correct degraded reasons", func() {
+		Expect(sm.degradedReason()).To(Equal(""))
+		sm.failing = []string{"This pod has died"}
+		Expect(sm.degradedReason()).To(Equal("Some pods are failing"))
+		sm.explicitDegradedReason = "Controller set us degraded"
+		Expect(sm.degradedReason()).To(Equal("Controller set us degraded; Some pods are failing"))
+	})
+
+	It("should generate correct degraded messages", func() {
+		Expect(sm.degradedReason()).To(Equal(""))
+		sm.failing = []string{"This pod has died"}
+		Expect(sm.degradedMessage()).To(Equal("This pod has died"))
+		sm.explicitDegradedMsg = "Controller set us degraded"
+		Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
+	})
+
 })
-
-func expectState(client client.Client, degraded, progressing, available operator.ConditionStatus) {
-	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "test-component"}}
-	err := client.Get(context.TODO(), types.NamespacedName{Name: "test-component"}, ts)
-	Expect(err).NotTo(HaveOccurred())
-
-	for _, condition := range ts.Status.Conditions {
-		if condition.Type == operator.ComponentAvailable {
-			Expect(condition.Status).To(Equal(available))
-		} else if condition.Type == operator.ComponentDegraded {
-			Expect(condition.Status).To(Equal(degraded))
-		} else if condition.Type == operator.ComponentProgressing {
-			Expect(condition.Status).To(Equal(progressing))
-		}
-	}
-}

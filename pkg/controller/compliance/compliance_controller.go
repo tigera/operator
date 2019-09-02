@@ -116,7 +116,6 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 			// Return and don't requeue
 			reqLogger.Info("Compliance config not found")
 			r.status.SetDegraded("Compliance not found", err.Error())
-			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying compliance", err.Error())

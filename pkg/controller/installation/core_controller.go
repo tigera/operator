@@ -198,7 +198,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Return and don't requeue
 			reqLogger.Info("Installation config not found")
 			r.status.SetDegraded("Installation not found", err.Error())
-			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying installation", err.Error())
@@ -262,7 +261,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -319,8 +317,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	// Clear the degraded bit if we've reached this far.
+	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
+
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.

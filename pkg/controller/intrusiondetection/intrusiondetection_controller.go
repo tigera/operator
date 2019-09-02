@@ -106,7 +106,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("IntrusionDetection CR not found", "err", err)
 			r.status.SetDegraded("IntrusionDetection not found", err.Error())
-			r.status.ClearAvailable()
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue

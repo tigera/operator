@@ -126,7 +126,6 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Console object not found")
 			r.status.SetDegraded("Console not found", err.Error())
-			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying Console", err.Error())

@@ -102,7 +102,6 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("APIServer CR not found", "err", err)
 			r.status.SetDegraded("APIServer not found", err.Error())
-			r.status.ClearAvailable()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.V(5).Info("failed to get APIServer CR", "err", err)

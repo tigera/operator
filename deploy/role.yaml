@@ -4,19 +4,26 @@ metadata:
   creationTimestamp: null
   name: tigera-operator
 rules:
+#############################################################################################
+# The first section of this ClusterRole defines the permissions required by the operator
+# when installing Calico.
+#############################################################################################
+# Operator needs CRUD on these objects in order to reconcile them within the cluster.
 - apiGroups:
   - ""
   resources:
   - namespaces
-  - pods
   - services
-  - endpoints
-  - events
   - configmaps
   - secrets
   - serviceaccounts
   verbs:
-  - '*'
+  - create
+  - update
+  - get
+  - list
+  - watch
+# Operator needs CRUD on these objects in order to reconcile them within the cluster.
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -24,20 +31,83 @@ rules:
   - clusterrolebindings
   - rolebindings
   verbs:
-  - '*'
+  - create
+  - update
+  - get
+  - list
+  - watch
+# Operator needs CRUD on these objects in order to reconcile them within the cluster.
 - apiGroups:
   - apps
   resources:
   - deployments
   - daemonsets
   verbs:
-  - '*'
+  - create
+  - update
+  - get
+  - list
+  - watch
+# Operator needs to be able to manage specific custom resource definitions.
 - apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
+  resourceNames:
+  - bgppeers.crd.projectcalico.org
+  verbs:
+  - create
+  - update
+  - get
+  - list
+  - watch
+# When running on openshift, the operator needs to get and update network config.
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - networks
+  verbs:
+  - get
+  - watch
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - networks/status
+  verbs:
+  - update
+# We define priority classes for Calico components.
+- apiGroups:
+  - scheduling.k8s.io
+  resources:
+  - priorityclasses
   verbs:
   - '*'
+# Operator needs to manage the CRDs it is monitoring.
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - consoles
+  - monitoringconfigurations
+  - apiservers
+  - tigerastatuses
+  - intrusiondetections
+  - compliances
+  verbs:
+  - update
+  - get
+  - watch
+#############################################################################################
+# The following section of this ClusterRole defines the permissions required by the operator
+# when running on openshift.
+#############################################################################################
+# When running on openshift, the operator needs to set SCCs.
+- apiGroups:
+  - security.openshift.io
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - '*'
+# Operator needs to set up a service monitor for metrics collection.
 - apiGroups:
   - monitoring.coreos.com
   resources:
@@ -45,6 +115,7 @@ rules:
   verbs:
   - get
   - create
+# Not sure what this is used for.
 - apiGroups:
   - apps
   resourceNames:
@@ -53,47 +124,18 @@ rules:
   - deployments/finalizers
   verbs:
   - update
-- apiGroups:
-  - operator.tigera.io
-  resources:
-  - '*'
-  - consoles
-  - monitoringconfigurations
-  - apiservers
-  - tigerastatuses
-  - intrusiondetections
-  - compliances
-  verbs:
-  - '*'
+#############################################################################################
+# The following section of this ClusterRole defines the permissions required by the operator
+# when running Tigera Secure.
+#############################################################################################
+# Operator needs to create an API service for Tigera Secure
 - apiGroups:
   - apiregistration.k8s.io
   resources:
   - apiservices
   verbs:
-  - '*'
-- apiGroups:
-  - config.openshift.io
-  resources:
-  - networks/status
-  verbs:
+  - create
   - update
-  - '*'
-- apiGroups:
-  - config.openshift.io
-  resources:
-  - networks
-  verbs:
   - get
-  - '*'
-- apiGroups:
-  - security.openshift.io
-  resources:
-  - securitycontextconstraints
-  verbs:
-  - '*'
-- apiGroups:
-  - scheduling.k8s.io
-  resources:
-  - priorityclasses
-  verbs:
-  - '*'
+  - list
+  - watch

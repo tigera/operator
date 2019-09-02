@@ -33,7 +33,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,7 +48,6 @@ import (
 
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
-var operatorNamespace = "tigera-operator"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -93,27 +91,17 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return fmt.Errorf("tigera-installation-controller failed to watch Tigera network resource: %v", err)
+				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %v", err)
 			}
 		}
 	}
 
-	// Build a list of other objects we should watch.
-	componentDeps := []runtime.Object{
-		// Watch for secrets in the tigera-operator namespace. We watch for all secrets, since we care
-		// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
-		// have been provided.
-		&v1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
-			ObjectMeta: metav1.ObjectMeta{Namespace: operatorNamespace},
-		},
-	}
-	for _, dep := range componentDeps {
-		err = r.AddWatch(dep)
-		if err != nil {
-			objMeta := dep.(metav1.ObjectMetaAccessor).GetObjectMeta()
-			log.Info("Adding watch on dependency failed", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace(), "error", err.Error())
-		}
+	// Watch for secrets in the operator namespace. We watch for all secrets, since we care
+	// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
+	// may have been provided by the user with arbitrary names.
+	err = utils.AddSecretsWatch(c, "", render.OperatorNamespace())
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %v", err)
 	}
 
 	for _, t := range secondaryResources() {
@@ -170,40 +158,6 @@ type ReconcileInstallation struct {
 	watches    map[runtime.Object]struct{}
 	openshift  bool
 	status     *status.StatusManager
-}
-
-// AddWatch creates a watch on the given object. Only Create events are processed.
-func (r *ReconcileInstallation) AddWatch(obj runtime.Object) error {
-	logger := log.WithName("add_watch")
-	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	if _, exists := r.watches[obj]; !exists {
-		logger.Info("Watch doesn't exist, creating", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace())
-		pred := predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				if objMeta.GetName() != "" && e.Meta.GetName() != objMeta.GetName() {
-					return false
-				}
-				return e.Meta.GetNamespace() == objMeta.GetNamespace()
-			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				if objMeta.GetName() != "" && e.MetaNew.GetName() != objMeta.GetName() {
-					return false
-				}
-				return e.MetaNew.GetNamespace() == objMeta.GetNamespace()
-			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
-				return false
-			},
-		}
-		err := r.controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
-		if err == nil {
-			r.watches[obj] = struct{}{}
-		}
-		return err
-	}
-
-	logger.Info("Watch exists, skipping", "name", objMeta.GetName(), "namespace", objMeta.GetNamespace())
-	return nil
 }
 
 // GetInstallation returns the default installation instance with defaults populated.

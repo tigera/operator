@@ -6,14 +6,18 @@ import (
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -55,6 +59,42 @@ func AddAPIServerWatch(c controller.Controller) error {
 
 func AddComplianceWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
+}
+
+func AddSecretsWatch(c controller.Controller, name, namespace string) error {
+	s := &v1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return addNamespacedWatch(c, s)
+}
+
+// addWatch creates a watch on the given object. If a name and namespace are provided, then it will
+// use predicates to only return matching objects. If they are not, then all events of the provided kind
+// will be generated.
+func addNamespacedWatch(c controller.Controller, obj runtime.Object) error {
+	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	if objMeta.GetNamespace() == "" {
+		return fmt.Errorf("No namespace provided for namespaced watch")
+	}
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			if objMeta.GetName() != "" && e.Meta.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Meta.GetNamespace() == objMeta.GetNamespace()
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if objMeta.GetName() != "" && e.MetaNew.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.MetaNew.GetNamespace() == objMeta.GetNamespace()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return false
+		},
+	}
+	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
@@ -110,7 +150,7 @@ func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*c
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.Spec.ImagePullSecrets {
 		s := &corev1.Secret{}
-		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: "tigera-operator"}, s)
+		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: render.OperatorNamespace()}, s)
 		if err != nil {
 			return nil, err
 		}

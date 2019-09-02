@@ -2,7 +2,6 @@ package render
 
 import (
 	"fmt"
-	"os"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -26,8 +25,6 @@ const (
 	ManagerSecretCertName = "cert"
 )
 
-var operatorNamespace = "tigera-operator"
-
 func Console(
 	cr *operator.Console,
 	monitoring *operator.MonitoringConfiguration,
@@ -36,10 +33,6 @@ func Console(
 	openshift bool,
 	registry string,
 ) Component {
-	v, ok := os.LookupEnv("OPERATOR_NAMESPACE")
-	if ok {
-		operatorNamespace = v
-	}
 	return &consoleComponent{
 		cr:          cr,
 		monitoring:  monitoring,

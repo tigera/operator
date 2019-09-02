@@ -36,7 +36,7 @@ var _ = Describe("Status reporting tests", func() {
 
 		sm = New(client, "test-component")
 		Expect(sm.IsAvailable()).To(BeFalse())
-		sm.Enable()
+		sm.OnCRFound()
 	})
 
 	It("Should handle basic state changes", func() {

@@ -125,14 +125,14 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Console object not found")
-			r.status.SetDegraded("Console not found", err.Error())
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying Console", err.Error())
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
-	r.status.Enable()
+	r.status.OnCRFound()
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")

@@ -197,13 +197,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info("Installation config not found")
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	r.status.Enable()
+	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.

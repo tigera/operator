@@ -97,13 +97,28 @@ func (m *StatusManager) Run() {
 	}()
 }
 
-// Enable indicates to the status manager that it should start reporting status. Until Enable is called,
+// OnCRFound indicates to the status manager that it should start reporting status. Until called,
 // the status manager will be be in a "dormant" state, and will not write status to the API.
 // Call this function from a controller once it has first received an instance of its CRD.
-func (m *StatusManager) Enable() {
+func (m *StatusManager) OnCRFound() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.enabled = true
+}
+
+// OnCRNotFound indicates that the CR managed by the parent controller has not been found. The
+// status manager will clear its state.
+func (m *StatusManager) OnCRNotFound() {
+	m.ClearDegraded()
+	m.clearAvailable()
+	m.clearProgressing()
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.enabled = false
+	m.progressing = []string{}
+	m.failing = []string{}
+	m.daemonsets = []types.NamespacedName{}
+	m.deployments = []types.NamespacedName{}
 }
 
 // SetDaemonsets tells the status manager to monitor the health of the given daemonsets.

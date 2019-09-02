@@ -115,13 +115,13 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info("Compliance config not found")
-			r.status.SetDegraded("Compliance not found", err.Error())
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying compliance", err.Error())
 		return reconcile.Result{}, err
 	}
-	r.status.Enable()
+	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {

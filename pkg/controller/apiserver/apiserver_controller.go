@@ -101,14 +101,14 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("APIServer CR not found", "err", err)
-			r.status.SetDegraded("APIServer not found", err.Error())
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
 		r.status.SetDegraded("Error querying APIServer", err.Error())
 		return reconcile.Result{}, err
 	}
-	r.status.Enable()
+	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.

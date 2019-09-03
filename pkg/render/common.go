@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -166,7 +167,7 @@ func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSou
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
 func validateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*v1.Secret, error) {
 	secret := &v1.Secret{}
-	secretNamespacedName := types.NamespacedName{Name: certPairSecretName, Namespace: operatorNamespace}
+	secretNamespacedName := types.NamespacedName{Name: certPairSecretName, Namespace: OperatorNamespace()}
 	err := client.Get(context.Background(), secretNamespacedName, secret)
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable
@@ -260,7 +261,7 @@ func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName st
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
-			Namespace: operatorNamespace,
+			Namespace: OperatorNamespace(),
 		},
 		Data: data,
 	}
@@ -296,4 +297,12 @@ func getImagePullSecretReferenceList(pullSecrets []*v1.Secret) []v1.LocalObjectR
 		ps = append(ps, v1.LocalObjectReference{Name: x.Name})
 	}
 	return ps
+}
+
+func OperatorNamespace() string {
+	v, ok := os.LookupEnv("OPERATOR_NAMESPACE")
+	if ok {
+		return v
+	}
+	return "tigera-operator"
 }

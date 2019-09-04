@@ -260,6 +260,7 @@ cluster-create: k3d
 	timeout 10 sh -c "while ! ./k3d get-kubeconfig --name='operator-test-cluster'; do echo 'Waiting for cluster'; sleep 1; done"
 	cp ~/.config/k3d/operator-test-cluster/kubeconfig.yaml .
 	$(MAKE) deploy-crds
+	$(MAKE) create-tigera-operator-namespace
 
 deploy-crds: kubectl
 	@export KUBECONFIG=./kubeconfig.yaml && \
@@ -270,6 +271,9 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator_v1_apiserver_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_installation_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml
+
+create-tigera-operator-namespace: kubectl
+	KUBECONFIG=./kubeconfig.yaml kubectl create ns tigera-operator
 
 ## Destroy local docker-in-docker cluster
 cluster-destroy: k3d

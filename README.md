@@ -1,6 +1,9 @@
 # Operator
 <img src="http://docs.projectcalico.org/images/felix.png" width="100" height="100">
 
+[![Build Status](https://semaphoreci.com/api/v1/projects/735b014f-f9ff-4974-9c80-c703157de421/2839810/badge.svg)](https://semaphoreci.com/calico/operator)
+[![Docker image](https://img.shields.io/badge/docker-quay.io%2Ftigera%2Foperator-blue)](https://quay.io/repository/tigera/operator)
+
 This repository contains a Kubernetes operator which manages the lifecycle of a Calico installation.
 
 Calico is a Tigera open source project, and is primarily maintained by the Tigera team. However any members of the community – individuals or organizations – are welcome to get involved and contribute to the project.

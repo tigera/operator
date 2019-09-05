@@ -59,6 +59,11 @@ type InstallationSpec struct {
 	// Components specifies the configuration of components.
 	// +optional
 	Components ComponentsSpec `json:"components,omitempty"`
+
+	// EKS specifies that this cluster is running on EKS and thus should make modifications
+	// to be compatible with EKS. It is a poorly-designed boolean flag that should probably
+	// be merged with '.openshift' or something.
+	EKS bool `json:"eks,omitempty"`
 }
 
 // ComponentsSpec defines the desired state of components.

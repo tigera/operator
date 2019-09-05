@@ -46,13 +46,17 @@ func (c *nodeComponent) Objects() []runtime.Object {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
-		c.nodeCNIConfigMap(),
 		c.nodeDaemonset(),
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
 		objs = append(objs, c.nodeMetricsService())
 	}
+
+	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
+		objs = append(objs, cniConfig)
+	}
+
 	return objs
 }
 
@@ -237,7 +241,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 }
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
+// Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
+	if c.cr.Spec.EKS {
+		// EKS is policy-only using AWS CNI, so no CNI config is needed since our CNI plugin is not used.
+		return nil
+	}
+
 	var config = `{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -301,7 +311,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                []v1.Container{c.cniContainer(), c.flexVolumeContainer()},
+					InitContainers:                []v1.Container{c.flexVolumeContainer()},
 					Containers:                    []v1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
 				},
@@ -313,6 +323,11 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 			},
 		},
 	}
+
+	if cniContainer := c.cniContainer(); cniContainer != nil {
+		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, *cniContainer)
+	}
+
 	setCriticalPod(&(ds.Spec.Template))
 	return &ds
 }
@@ -377,7 +392,11 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 }
 
 // cniContainer creates the node's init container that installs CNI.
-func (c *nodeComponent) cniContainer() v1.Container {
+func (c *nodeComponent) cniContainer() *v1.Container {
+	if c.cr.Spec.EKS {
+		return nil
+	}
+
 	// Determine environment to pass to the CNI init container.
 	cniEnv := c.cniEnvvars()
 	cniVolumeMounts := []v1.VolumeMount{
@@ -389,7 +408,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 	cniEnv = setCustomEnv(cniEnv, c.cr.Spec.Components.CNI.ExtraEnv)
 	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, c.cr.Spec.Components.CNI.ExtraVolumeMounts)
 
-	return v1.Container{
+	return &v1.Container{
 		Name:         "install-cni",
 		Image:        constructImage(CNIImageName, c.cr.Spec.Registry),
 		Command:      []string{"/install-cni.sh"},
@@ -414,6 +433,10 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
+	if c.cr.Spec.EKS {
+		return []v1.EnvVar{}
+	}
+
 	return []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
@@ -486,13 +509,19 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 
 // nodeEnvVars creates the node's envvars.
 func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
+	// set the clusterType
+	clusterType := "k8s,operator"
+	if c.cr.Spec.EKS {
+		clusterType = clusterType + ",ecs"
+	} else {
+		clusterType = clusterType + ",bgp"
+	}
+
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-		{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-		{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "IP", Value: "autodetect"},
-		{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.IPPools[0].CIDR},
 		{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_IPINIPMTU", Value: "1440"},
@@ -506,6 +535,15 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			},
 		},
 	}
+
+	// set the networking backend
+	if c.cr.Spec.EKS {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+	} else {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.IPPools[0].CIDR})
+	}
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -524,6 +562,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// Use iptables in nftables mode.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
 	}
+	if c.cr.Spec.EKS {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+	}
 
 	nodeEnv = setCustomEnv(nodeEnv, c.cr.Spec.Components.Node.ExtraEnv)
 	return nodeEnv
@@ -534,6 +576,9 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
+	if c.cr.Spec.EKS {
+		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
+	}
 	if c.openshift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		// Additionally, since the node readiness probe doesn't yet support

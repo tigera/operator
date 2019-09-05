@@ -148,7 +148,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(5).Info("rendering components")
-	component := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.openshift)
+	component := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.openshift, network.Spec.EKS)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

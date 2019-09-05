@@ -60,15 +60,16 @@ type InstallationSpec struct {
 	// +optional
 	Components ComponentsSpec `json:"components,omitempty"`
 
-	// Platform specifies which platform this cluster is running on. Operator will
+	// KubernetesProvider specifies which platform this cluster is running on. Operator will
 	// do it's best to autodetect and set this. But can be overridden here.
-	Platform Platform `json:"platform,omitempty"`
+	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 }
 
-type Platform string
+type Provider string
 
 var (
-	PlatformEKS Platform = "eks"
+	ProviderEKS       Provider = "EKS"
+	ProviderOpenshift Provider = "Openshift"
 )
 
 // ComponentsSpec defines the desired state of components.

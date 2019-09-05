@@ -1,12 +1,10 @@
 package render
 
+const (
+	CNICalico = "calico"
+	CNINone   = "none"
+)
+
 type NetworkConfig struct {
 	CNI string
 }
-
-type Platform string
-
-var (
-	PlatformOpenshift Platform = "openshift"
-	PlatformEKS       Platform = "eks"
-)

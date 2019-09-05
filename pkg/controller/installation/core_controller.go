@@ -201,28 +201,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.Enable()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	// gather render settings
-	var (
-		platform render.Platform
-		netConf  render.NetworkConfig = render.NetworkConfig{
-			CNI: "calico",
-		}
-	)
-
 	openshiftConfig := &configv1.Network{}
 	if r.openshift {
-		// if we detected openshift but user set Platform to something else, throw an error
-		if instance.Spec.Platform != "" && instance.Spec.Platform != "openshift" {
-			err = fmt.Errorf("Can't specify platform '%s' on openshift. Please leave blank or set to openshift", instance.Spec.Platform)
-			r.status.SetDegraded("invalid platform specified", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		platform = render.PlatformOpenshift
-		netConf = render.NetworkConfig{
-			CNI: "calico",
-		}
-
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.V(1).Info("Querying for openshift network config")
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
@@ -237,11 +217,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		for _, net := range openshiftConfig.Spec.ClusterNetwork {
 			instance.Spec.IPPools = append(instance.Spec.IPPools, operator.IPPool{CIDR: net.CIDR})
 		}
-	} else if instance.Spec.Platform == "eks" {
-		platform = render.PlatformEKS
-		netConf = render.NetworkConfig{
-			CNI: "none",
-		}
+	}
+
+	// convert specified and detected settings into render configuration.
+	platform, netConf, err := GenerateRenderConfig(r.openshift, instance)
+	if err != nil {
+		r.status.SetDegraded("Invalid settings", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Validate the configuration.
@@ -307,4 +289,34 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+// GenerateRenderConfig converts user input and detected settings into render config.
+func GenerateRenderConfig(openshift bool, install *operator.Installation) (
+	provider operator.Provider,
+	netConf render.NetworkConfig,
+	err error) {
+
+	if openshift {
+		// if we detected openshift but user set Platform to something else, throw an error
+		if install.Spec.KubernetesProvider != "" {
+			err = fmt.Errorf("Can't specify provider '%s' with Openshift", install.Spec.KubernetesProvider)
+			return
+		}
+
+		return operator.ProviderOpenshift,
+			render.NetworkConfig{
+				CNI: render.CNICalico,
+			}, nil
+	}
+
+	if install.Spec.KubernetesProvider == "eks" {
+		return operator.ProviderEKS, render.NetworkConfig{
+			CNI: render.CNINone,
+		}, nil
+	}
+
+	return "", render.NetworkConfig{
+		CNI: render.CNICalico,
+	}, nil
 }

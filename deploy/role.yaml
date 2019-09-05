@@ -97,3 +97,9 @@ rules:
   - priorityclasses
   verbs:
   - '*'
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - licensekeys
+  verbs:
+  - get

@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"fmt"
+	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/compliance"
@@ -133,6 +134,11 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, nil
+	}
+
+	if err = utils.CheckLicenseKey(context.Background(), r.client); err != nil {
+		r.status.SetDegraded("License not found", err.Error())
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.

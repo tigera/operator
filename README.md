@@ -65,9 +65,38 @@ Then, run the operator against the local cluster:
 
 	KUBECONFIG=./kubeconfig.yaml WATCH_NAMESPACE="" go run ./cmd/manager
 
-Finally, tear down the cluster:
+To launch Calico, install the default custom resource:
+
+	kubectl create -f ./deploy/crds/operator_v1_installation_cr.yaml
+
+To tear down the cluster:
 
 	make cluster-destroy
+
+### Using Tigera Secure
+
+To install Tigera Secure instead of Calico, you need to install an image pull secret,
+as well as modify the Installation CR.
+
+Create the pull secret in the tigera-operator namespace:
+
+```
+kubectl create secret -n tigera-operator generic tigera-pull-secret \
+    --from-file=.dockerconfigjson=<PATH/TO/PULL/SECRET> \
+    --type=kubernetes.io/dockerconfigjson
+```
+
+Then, modify the installation CR (e.g., with `kubectl edit installations`) to include the following:
+
+```
+spec:
+  variant: TigeraSecureEnterprise
+  imagePullSecrets:
+  - tigera-pull-secret
+```
+
+You can then install additional Tigera Secure components by creating their CRs from within
+the `./deploy/crds/` directory.
 
 ### Running unit tests
 

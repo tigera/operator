@@ -25,8 +25,3 @@ func IsOpenshift(cfg *rest.Config) (bool, error) {
 	}
 	return false, nil
 }
-
-// todo: fill in
-func IsEKS(cfg *rest.Config) (bool, error) {
-	return false, nil
-}

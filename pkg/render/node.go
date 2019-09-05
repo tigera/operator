@@ -32,13 +32,14 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, openshift bool) Component {
-	return &nodeComponent{cr: cr, openshift: openshift}
+func Node(cr *operator.Installation, platform Platform) Component {
+	return &nodeComponent{cr: cr, platform: platform}
 }
 
 type nodeComponent struct {
 	cr        *operator.Installation
-	openshift bool
+	platform  Platform
+	netConfig NetworkConfig
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
@@ -243,8 +244,8 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
-	if c.cr.Spec.EKS {
-		// EKS is policy-only using AWS CNI, so no CNI config is needed since our CNI plugin is not used.
+	if c.netConfig.CNI == "none" {
+		// If calico cni is not being used, then no cni configmap is needed.
 		return nil
 	}
 
@@ -373,7 +374,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	// In OpenShift 4.x, the location for flexvolume plugins has changed.
 	// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
-	if c.openshift {
+	if c.platform == PlatformOpenshift {
 		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 	}
 
@@ -393,7 +394,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 // cniContainer creates the node's init container that installs CNI.
 func (c *nodeComponent) cniContainer() *v1.Container {
-	if c.cr.Spec.EKS {
+	if c.netConfig.CNI == "none" {
 		return nil
 	}
 
@@ -433,7 +434,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
-	if c.cr.Spec.EKS {
+	if c.netConfig.CNI == "none" {
 		return []v1.EnvVar{}
 	}
 
@@ -511,9 +512,10 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	// set the clusterType
 	clusterType := "k8s,operator"
-	if c.cr.Spec.EKS {
-		clusterType = clusterType + ",ecs"
-	} else {
+	if c.platform == PlatformEKS {
+		clusterType = clusterType + ",eks"
+	}
+	if c.netConfig.CNI == "calico" {
 		clusterType = clusterType + ",bgp"
 	}
 
@@ -537,7 +539,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// set the networking backend
-	if c.cr.Spec.EKS {
+	if c.netConfig.CNI == "none" {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 	} else {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
@@ -555,14 +557,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
-	if c.openshift {
+	if c.platform == PlatformOpenshift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 
 		// Use iptables in nftables mode.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
 	}
-	if c.cr.Spec.EKS {
+	if c.netConfig.CNI == "none" {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 	}
@@ -576,10 +578,13 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
-	if c.cr.Spec.EKS {
+
+	// if not using calico networking, don't check bird status.
+	if c.netConfig.CNI != "calico" {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
-	if c.openshift {
+
+	if c.platform == PlatformOpenshift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		// Additionally, since the node readiness probe doesn't yet support
 		// custom ports, we need to disable felix readiness for now.

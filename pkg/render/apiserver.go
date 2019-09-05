@@ -38,13 +38,12 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift, eks bool) Component {
+func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) Component {
 	return &apiServerComponent{
 		registry:    registry,
 		keyPair:     tlsKeyPair,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
-		eks:         eks,
 	}
 }
 
@@ -53,7 +52,6 @@ type apiServerComponent struct {
 	keyPair     *corev1.Secret
 	pullSecrets []*corev1.Secret
 	openshift   bool
-	eks         bool
 }
 
 func (c *apiServerComponent) Objects() []runtime.Object {

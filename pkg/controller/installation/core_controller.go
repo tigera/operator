@@ -201,8 +201,28 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.Enable()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	// gather render settings
+	var (
+		platform render.Platform
+		netConf  render.NetworkConfig = render.NetworkConfig{
+			CNI: "calico",
+		}
+	)
+
 	openshiftConfig := &configv1.Network{}
 	if r.openshift {
+		// if we detected openshift but user set Platform to something else, throw an error
+		if instance.Spec.Platform != "" && instance.Spec.Platform != "openshift" {
+			err = fmt.Errorf("Can't specify platform '%s' on openshift. Please leave blank or set to openshift", instance.Spec.Platform)
+			r.status.SetDegraded("invalid platform specified", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		platform = render.PlatformOpenshift
+		netConf = render.NetworkConfig{
+			CNI: "calico",
+		}
+
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.V(1).Info("Querying for openshift network config")
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
@@ -216,6 +236,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance.Spec.IPPools = []operator.IPPool{}
 		for _, net := range openshiftConfig.Spec.ClusterNetwork {
 			instance.Spec.IPPools = append(instance.Spec.IPPools, operator.IPPool{CIDR: net.CIDR})
+		}
+	} else if instance.Spec.Platform == "eks" {
+		platform = render.PlatformEKS
+		netConf = render.NetworkConfig{
+			CNI: "none",
 		}
 	}
 
@@ -238,7 +263,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
-	calico := render.Calico(instance, pullSecrets, r.openshift)
+	calico := render.Calico(instance, pullSecrets, platform, netConf)
 	for _, component := range calico.Render() {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())

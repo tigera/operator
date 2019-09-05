@@ -33,26 +33,28 @@ type Renderer interface {
 	Render() []Component
 }
 
-func Calico(cr *operator.Installation, pullSecrets []*corev1.Secret, openshift bool) Renderer {
+func Calico(cr *operator.Installation, pullSecrets []*corev1.Secret, platform Platform, networkConfig NetworkConfig) Renderer {
 	return calicoRenderer{
-		installation: cr,
-		pullSecrets:  pullSecrets,
-		openshift:    openshift,
+		installation:  cr,
+		pullSecrets:   pullSecrets,
+		platform:      platform,
+		networkConfig: networkConfig,
 	}
 }
 
 type calicoRenderer struct {
-	installation *operator.Installation
-	pullSecrets  []*corev1.Secret
-	openshift    bool
+	installation  *operator.Installation
+	pullSecrets   []*corev1.Secret
+	platform      Platform
+	networkConfig NetworkConfig
 }
 
 func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
 	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
-	components = appendNotNil(components, Namespaces(r.installation, r.openshift, r.pullSecrets))
-	components = appendNotNil(components, Node(r.installation, r.openshift))
+	components = appendNotNil(components, Namespaces(r.installation, r.platform == PlatformOpenshift, r.pullSecrets))
+	components = appendNotNil(components, Node(r.installation, r.platform))
 	components = appendNotNil(components, KubeControllers(r.installation))
 	return components
 }

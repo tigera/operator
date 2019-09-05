@@ -60,11 +60,16 @@ type InstallationSpec struct {
 	// +optional
 	Components ComponentsSpec `json:"components,omitempty"`
 
-	// EKS specifies that this cluster is running on EKS and thus should make modifications
-	// to be compatible with EKS. It is a poorly-designed boolean flag that should probably
-	// be merged with '.openshift' or something.
-	EKS bool `json:"eks,omitempty"`
+	// Platform specifies which platform this cluster is running on. Operator will
+	// do it's best to autodetect and set this. But can be overridden here.
+	Platform Platform `json:"platform,omitempty"`
 }
+
+type Platform string
+
+var (
+	PlatformEKS Platform = "eks"
+)
 
 // ComponentsSpec defines the desired state of components.
 // +k8s:openapi-gen=true

@@ -70,11 +70,12 @@ var _ = Describe("Rendering tests", func() {
 	It("should render all resources when variant is Tigera Secure", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config
+		// - 1 Service to expose calico/node metrics.
 		// - 1 ns (calico-monitoring)
 		// - 6 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c := render.Calico(instance, nil, notOpenshift)
-		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 6)))
+		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 1 + 6)))
 	})
 })
 

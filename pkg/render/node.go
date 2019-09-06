@@ -325,8 +325,8 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 		},
 	}
 
-	if cniContainer := c.cniContainer(); cniContainer != nil {
-		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, *cniContainer)
+	if c.netConfig.CNI != CNINone {
+		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
 	setCriticalPod(&(ds.Spec.Template))
@@ -374,7 +374,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	// In OpenShift 4.x, the location for flexvolume plugins has changed.
 	// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
-	if c.provider == operator.ProviderOpenshift {
+	if c.provider == operator.ProviderOpenShift {
 		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 	}
 
@@ -393,11 +393,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 }
 
 // cniContainer creates the node's init container that installs CNI.
-func (c *nodeComponent) cniContainer() *v1.Container {
-	if c.netConfig.CNI == CNINone {
-		return nil
-	}
-
+func (c *nodeComponent) cniContainer() v1.Container {
 	// Determine environment to pass to the CNI init container.
 	cniEnv := c.cniEnvvars()
 	cniVolumeMounts := []v1.VolumeMount{
@@ -409,7 +405,7 @@ func (c *nodeComponent) cniContainer() *v1.Container {
 	cniEnv = setCustomEnv(cniEnv, c.cr.Spec.Components.CNI.ExtraEnv)
 	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, c.cr.Spec.Components.CNI.ExtraVolumeMounts)
 
-	return &v1.Container{
+	return v1.Container{
 		Name:         "install-cni",
 		Image:        constructImage(CNIImageName, c.cr.Spec.Registry),
 		Command:      []string{"/install-cni.sh"},
@@ -514,7 +510,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	clusterType := "k8s,operator"
 
 	switch c.provider {
-	case operator.ProviderOpenshift:
+	case operator.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"
 	case operator.ProviderEKS:
 		clusterType = clusterType + ",eks"
@@ -563,7 +559,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
-	if c.provider == operator.ProviderOpenshift {
+	if c.provider == operator.ProviderOpenShift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 
@@ -589,7 +585,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 
-	if c.provider == operator.ProviderOpenshift {
+	if c.provider == operator.ProviderOpenShift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		// Additionally, since the node readiness probe doesn't yet support
 		// custom ports, we need to disable felix readiness for now.

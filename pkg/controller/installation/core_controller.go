@@ -293,30 +293,31 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 // GenerateRenderConfig converts user input and detected settings into render config.
 func GenerateRenderConfig(openshift bool, install *operator.Installation) (
-	provider operator.Provider,
-	netConf render.NetworkConfig,
-	err error) {
+	operator.Provider, render.NetworkConfig, error) {
 
 	if openshift {
-		// if we detected openshift but user set Platform to something else, throw an error
-		if install.Spec.KubernetesProvider != "" {
-			err = fmt.Errorf("Can't specify provider '%s' with Openshift", install.Spec.KubernetesProvider)
-			return
+		// if we detected openshift but user set Provider to something else, throw an error
+		if install.Spec.KubernetesProvider != "" && install.Spec.KubernetesProvider != operator.ProviderOpenShift {
+			return operator.ProviderNone, render.NetworkConfig{},
+				fmt.Errorf("Can't specify provider '%s' with Openshift", install.Spec.KubernetesProvider)
 		}
 
-		return operator.ProviderOpenshift,
+		return operator.ProviderOpenShift,
 			render.NetworkConfig{
 				CNI: render.CNICalico,
 			}, nil
 	}
 
 	if install.Spec.KubernetesProvider == operator.ProviderEKS {
-		return operator.ProviderEKS, render.NetworkConfig{
-			CNI: render.CNINone,
-		}, nil
+		return operator.ProviderEKS,
+			render.NetworkConfig{
+				CNI: render.CNINone,
+			}, nil
 	}
 
-	return "", render.NetworkConfig{
-		CNI: render.CNICalico,
-	}, nil
+	// default to Calico CNI
+	return operator.ProviderNone,
+		render.NetworkConfig{
+			CNI: render.CNICalico,
+		}, nil
 }

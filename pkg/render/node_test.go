@@ -331,7 +331,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when running on openshift", func() {
-		component := render.Node(defaultInstance, operator.ProviderOpenshift, render.NetworkConfig{CNI: render.CNICalico})
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -398,7 +398,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, operator.ProviderOpenshift, render.NetworkConfig{CNI: render.CNICalico})
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 

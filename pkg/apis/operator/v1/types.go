@@ -70,7 +70,7 @@ type Provider string
 var (
 	ProviderNone      Provider = ""
 	ProviderEKS       Provider = "EKS"
-	ProviderOpenshift Provider = "Openshift"
+	ProviderOpenShift Provider = "OpenShift"
 )
 
 // ComponentsSpec defines the desired state of components.

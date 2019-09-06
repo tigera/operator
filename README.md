@@ -63,7 +63,7 @@ You can create a local k3d cluster with the Makefile:
 
 Then, run the operator against the local cluster:
 
-	KUBECONFIG=./kubeconfig.yaml WATCH_NAMESPACE="" go run ./cmd/manager
+	KUBECONFIG=./kubeconfig.yaml go run ./cmd/manager
 
 To launch Calico, install the default custom resource:
 

@@ -59,7 +59,19 @@ type InstallationSpec struct {
 	// Components specifies the configuration of components.
 	// +optional
 	Components ComponentsSpec `json:"components,omitempty"`
+
+	// KubernetesProvider specifies which platform this cluster is running on. Operator will
+	// do it's best to autodetect and set this. But can be overridden here.
+	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 }
+
+type Provider string
+
+var (
+	ProviderNone      Provider = ""
+	ProviderEKS       Provider = "EKS"
+	ProviderOpenShift Provider = "OpenShift"
+)
 
 // ComponentsSpec defines the desired state of components.
 // +k8s:openapi-gen=true

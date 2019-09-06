@@ -32,13 +32,14 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, openshift bool) Component {
-	return &nodeComponent{cr: cr, openshift: openshift}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc}
 }
 
 type nodeComponent struct {
 	cr        *operator.Installation
-	openshift bool
+	provider  operator.Provider
+	netConfig NetworkConfig
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
@@ -46,13 +47,17 @@ func (c *nodeComponent) Objects() []runtime.Object {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
-		c.nodeCNIConfigMap(),
 		c.nodeDaemonset(),
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
 		objs = append(objs, c.nodeMetricsService())
 	}
+
+	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
+		objs = append(objs, cniConfig)
+	}
+
 	return objs
 }
 
@@ -237,7 +242,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 }
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
+// Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
+	if c.netConfig.CNI == CNINone {
+		// If calico cni is not being used, then no cni configmap is needed.
+		return nil
+	}
+
 	var config = `{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -301,7 +312,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                []v1.Container{c.cniContainer(), c.flexVolumeContainer()},
+					InitContainers:                []v1.Container{c.flexVolumeContainer()},
 					Containers:                    []v1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
 				},
@@ -313,6 +324,11 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 			},
 		},
 	}
+
+	if c.netConfig.CNI != CNINone {
+		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
+	}
+
 	setCriticalPod(&(ds.Spec.Template))
 	return &ds
 }
@@ -358,7 +374,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	// In OpenShift 4.x, the location for flexvolume plugins has changed.
 	// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
-	if c.openshift {
+	if c.provider == operator.ProviderOpenShift {
 		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 	}
 
@@ -414,6 +430,10 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
+	if c.netConfig.CNI == CNINone {
+		return []v1.EnvVar{}
+	}
+
 	return []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
@@ -486,16 +506,26 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 
 // nodeEnvVars creates the node's envvars.
 func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
+	// set the clusterType
+	clusterType := "k8s,operator"
+
+	switch c.provider {
+	case operator.ProviderOpenShift:
+		clusterType = clusterType + ",openshift"
+	case operator.ProviderEKS:
+		clusterType = clusterType + ",eks"
+	}
+
+	if c.netConfig.CNI == CNICalico {
+		clusterType = clusterType + ",bgp"
+	}
+
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-		{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-		{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "IP", Value: "autodetect"},
-		{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.IPPools[0].CIDR},
-		{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-		{Name: "FELIX_IPINIPMTU", Value: "1440"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -506,6 +536,18 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			},
 		},
 	}
+
+	// set the networking backend
+	if c.netConfig.CNI == CNINone {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+	} else {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.IPPools[0].CIDR})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: "1440"})
+	}
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -517,12 +559,15 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
-	if c.openshift {
+	if c.provider == operator.ProviderOpenShift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 
 		// Use iptables in nftables mode.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
+	}
+	if c.provider == operator.ProviderEKS {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 	}
 
 	nodeEnv = setCustomEnv(nodeEnv, c.cr.Spec.Components.Node.ExtraEnv)
@@ -534,7 +579,13 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
-	if c.openshift {
+
+	// if not using calico networking, don't check bird status.
+	if c.netConfig.CNI != CNICalico {
+		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
+	}
+
+	if c.provider == operator.ProviderOpenShift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		// Additionally, since the node readiness probe doesn't yet support
 		// custom ports, we need to disable felix readiness for now.

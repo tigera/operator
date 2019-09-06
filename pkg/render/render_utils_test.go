@@ -36,6 +36,27 @@ func ExpectResource(resource runtime.Object, name, ns, group, version, kind stri
 	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), fmt.Sprintf("Rendered resource %s does not match expected GVK", name))
 }
 
+func GetResource(resources []runtime.Object, name, ns, group, version, kind string) runtime.Object {
+	for _, resource := range resources {
+		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
+		if name == resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() &&
+			ns == resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace() &&
+			gvk == resource.GetObjectKind().GroupVersionKind() {
+			return resource
+		}
+	}
+	return nil
+}
+
+func GetContainer(containers []v1.Container, name string) *v1.Container {
+	for _, container := range containers {
+		if container.Name == name {
+			return &container
+		}
+	}
+	return nil
+}
+
 func ExpectGlobalReportType(resource runtime.Object, name string) {
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	Expect(actualName).To(Equal(name), "Rendered resource has wrong name")

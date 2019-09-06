@@ -219,6 +219,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	// convert specified and detected settings into render configuration.
+	platform, netConf, err := GenerateRenderConfig(r.openshift, instance)
+	if err != nil {
+		r.status.SetDegraded("Invalid settings", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
 		r.status.SetDegraded("Error validating CRD", err.Error())
@@ -238,7 +245,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
-	calico := render.Calico(instance, pullSecrets, r.openshift)
+	calico := render.Calico(instance, pullSecrets, platform, netConf)
 	for _, component := range calico.Render() {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
@@ -282,4 +289,35 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+// GenerateRenderConfig converts user input and detected settings into render config.
+func GenerateRenderConfig(openshift bool, install *operator.Installation) (
+	operator.Provider, render.NetworkConfig, error) {
+
+	if openshift {
+		// if we detected openshift but user set Provider to something else, throw an error
+		if install.Spec.KubernetesProvider != "" && install.Spec.KubernetesProvider != operator.ProviderOpenShift {
+			return operator.ProviderNone, render.NetworkConfig{},
+				fmt.Errorf("Can't specify provider '%s' with Openshift", install.Spec.KubernetesProvider)
+		}
+
+		return operator.ProviderOpenShift,
+			render.NetworkConfig{
+				CNI: render.CNICalico,
+			}, nil
+	}
+
+	if install.Spec.KubernetesProvider == operator.ProviderEKS {
+		return operator.ProviderEKS,
+			render.NetworkConfig{
+				CNI: render.CNINone,
+			}, nil
+	}
+
+	// default to Calico CNI
+	return operator.ProviderNone,
+		render.NetworkConfig{
+			CNI: render.CNICalico,
+		}, nil
 }

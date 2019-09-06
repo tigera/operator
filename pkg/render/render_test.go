@@ -63,7 +63,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		c := render.Calico(instance, nil, notOpenshift)
+		c := render.Calico(instance, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		Expect(componentCount(c.Render())).To(Equal(25))
 	})
 
@@ -74,7 +74,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 ns (calico-monitoring)
 		// - 6 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		c := render.Calico(instance, nil, notOpenshift)
+		c := render.Calico(instance, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		Expect(componentCount(c.Render())).To(Equal((25 + 1 + 1 + 6)))
 	})
 })

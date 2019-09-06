@@ -57,26 +57,6 @@ func GetContainer(containers []v1.Container, name string) *v1.Container {
 	return nil
 }
 
-func ExpectResourceExists(resources []runtime.Object, name, ns, group, version, kind string) {
-	for _, resource := range resources {
-		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
-		actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-		actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-		if actualName != name {
-			continue
-		}
-		if actualNS != ns {
-			continue
-		}
-		if resource.GetObjectKind().GroupVersionKind() != gvk {
-			continue
-		}
-		return
-	}
-
-	Expect(false).To(BeTrue(), "could not find %s/%s(%s.%s.%s): %v", name, ns, group, version, kind, resources)
-}
-
 func ExpectGlobalReportType(resource runtime.Object, name string) {
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	Expect(actualName).To(Equal(name), "Rendered resource has wrong name")

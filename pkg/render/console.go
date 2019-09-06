@@ -248,6 +248,10 @@ func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 		Env:           c.consoleManagerEnvVars(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
+		SecurityContext: &corev1.SecurityContext {
+			RunAsNonRoot: true,
+			AllowPrivilegeEscalation: false,
+		},
 	}
 }
 
@@ -287,6 +291,10 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			{Name: ManagerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
 		LivenessProbe: c.consoleProxyProbe(),
+		SecurityContext: &corev1.SecurityContext {
+			RunAsNonRoot: true,
+			AllowPrivilegeEscalation: false,
+		},
 	}
 }
 

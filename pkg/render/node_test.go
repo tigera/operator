@@ -123,38 +123,45 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Node(defaultInstance, notOpenshift)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
-		ds := resources[4].(*apps.DaemonSet)
+		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
 		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
-		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+		cniContainer := GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+		ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/test/cni/net/dir")
 	})
 
 	It("should render all resources for a custom configuration", func() {
-		component := render.Node(instance, notOpenshift)
+		component := render.Node(instance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
-		ds := resources[4].(*apps.DaemonSet)
+		ds := dsResource.(*apps.DaemonSet)
 
 		// Node image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
@@ -163,17 +170,18 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 		// CNI container uses image override.
-		Expect(ds.Spec.Template.Spec.InitContainers[0].Image).To(Equal("docker.io/calico/cni:v3.8.1"))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal("docker.io/calico/cni:v3.8.1"))
 
 		// Verify the Flex volume container image.
-		Expect(ds.Spec.Template.Spec.InitContainers[1].Image).To(Equal("docker.io/calico/pod2daemon-flexvol:v3.8.1"))
+
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal("docker.io/calico/pod2daemon-flexvol:v3.8.1"))
 
 		// Verify env
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
@@ -211,7 +219,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CNI_CONF_NAME", Value: "testing"},
 			{Name: "cni-env", Value: "cni-value"},
 		}
-		Expect(ds.Spec.Template.Spec.InitContainers[0].Env).To(ConsistOf(expectedCNIEnv))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify volumes.
 		var fileOrCreate = v1.HostPathFileOrCreate
@@ -249,7 +257,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Custom volumes
 			{MountPath: "/tmp/calico/testing/cni", Name: "extravolCNI"},
 		}
-		Expect(ds.Spec.Template.Spec.InitContainers[0].VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify resources.
 		Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(nodeResources))
@@ -268,29 +276,32 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, notOpenshift)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-		ExpectResource(resources[5], "calico-node-metrics", "calico-system", "", "v1", "Service")
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service")).ToNot(BeNil())
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
-		ds := resources[4].(*apps.DaemonSet)
+		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:v2.5.0"))
-		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
@@ -320,21 +331,24 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when running on openshift", func() {
-		component := render.Node(defaultInstance, openshift)
+		component := render.Node(defaultInstance, operator.ProviderOpenshift, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
-		ds := resources[4].(*apps.DaemonSet)
+		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
-		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+
+		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		// Verify volumes. In particular, we want to make sure the flexvol-driver-host volume uses the right
 		// host path for flexvolume drivers.
@@ -357,7 +371,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
@@ -384,29 +398,34 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, openshift)
+		component := render.Node(defaultInstance, operator.ProviderOpenshift, render.NetworkConfig{CNI: render.CNICalico})
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-node", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "cni-config", "calico-system", "", "v1", "ConfigMap")
-		ExpectResource(resources[4], "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-		ExpectResource(resources[5], "calico-node-metrics", "calico-system", "", "v1", "Service")
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service")).ToNot(BeNil())
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
-		ds := resources[4].(*apps.DaemonSet)
+		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:v2.5.0"))
-		ExpectEnv(ds.Spec.Template.Spec.InitContainers[0].Env, "CNI_NET_DIR", "/test/cni/net/dir")
+
+		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/test/cni/net/dir")
 
 		expectedNodeEnv := []v1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,bgp,operator"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},

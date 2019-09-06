@@ -68,6 +68,7 @@ type InstallationSpec struct {
 type Provider string
 
 var (
+	ProviderNone      Provider = ""
 	ProviderEKS       Provider = "EKS"
 	ProviderOpenshift Provider = "Openshift"
 )

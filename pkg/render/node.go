@@ -32,8 +32,8 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider) Component {
-	return &nodeComponent{cr: cr, provider: p}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc}
 }
 
 type nodeComponent struct {

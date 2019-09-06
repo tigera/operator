@@ -54,7 +54,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
 	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
 	components = appendNotNil(components, Namespaces(r.installation, r.provider == operator.ProviderOpenshift, r.pullSecrets))
-	components = appendNotNil(components, Node(r.installation, r.provider))
+	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig))
 	components = appendNotNil(components, KubeControllers(r.installation))
 	return components
 }

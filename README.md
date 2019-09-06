@@ -1,41 +1,109 @@
-# Operator
-<img src="http://docs.projectcalico.org/images/felix.png" width="100" height="100">
+# Tigera Operator
 
 [![Build Status](https://semaphoreci.com/api/v1/projects/735b014f-f9ff-4974-9c80-c703157de421/2839810/badge.svg)](https://semaphoreci.com/calico/operator)
 [![Docker image](https://img.shields.io/badge/docker-quay.io%2Ftigera%2Foperator-blue)](https://quay.io/repository/tigera/operator)
 
-This repository contains a Kubernetes operator which manages the lifecycle of a Calico installation.
+This repository contains a Kubernetes operator which manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift. Its goal is
+to make installation, upgrades, and ongoing lifecycle management of Calico and Tigera Secure as simple and reliable as possible.
 
-Calico is a Tigera open source project, and is primarily maintained by the Tigera team. However any members of the community – individuals or organizations – are welcome to get involved and contribute to the project.
+This operator is built using the [operator-sdk](https://github.com/operator-framework/operator-sdk), so you should be familiar with how that works before getting started.
 
-## Get Started Using Calico
+## Get Started Developing
 
-For users who want to learn more about the project or get started with Calico, see the documentation on [docs.projectcalico.org](https://docs.projectcalico.org).
+### Code structure
 
-## Get Started Developing Calico
+There are a few important areas to be aware of:
 
-### Testing locally
+- Operator API definitions exist in `pkg/apis/operator/v1`
+- Rendering code for generating Kubernetes resources is in `pkg/render`
+- Control/reconcile loops for each component can be found in `pkg/controller/<component>`
+- Status reporting is in `pkg/controller/status`
 
-You can create a local docker-in-docker cluster with the Makefile:
+Tests:
+
+- Tests for file `X.go` can be found in `X_test.go`.
+- FV tests which run against a local cluster can be found in `test/*.go`.
+
+### Design principles
+
+When developing in the operator, there are a few design principles to be aware of.
+
+- API changes should be rare occurences, and the API should contain as little as possible. Use auto-detection
+  or automation wherever possible to reduce the API surface.
+- Each "component" should receive its own CRD, namespace, controller, and status manager. e.g., compliance, networking, apiserver.
+- Controllers interact with each other through the Kubernetes API. For example, by updating status on relevant objects.
+
+### Adding a new CRD
+
+New APIs are added using the `operator-sdk` tool.
+
+```
+operator-sdk add api --api-version=operator.tigera.io/v1 --kind=<Kind>
+```
+
+When modifying or adding CRDs, you will need to run `make gen-files` to update the auto-generated files. The tool
+might change the scope of existing resources to "Namespaced", so make sure to set them back to their desired state.
+
+### Adding a new controller
+
+New controllers are also added using the `operator-sdk` tool.
+
+```
+operator-sdk add controller --api-version=operator.tigera.io/v1 --kind=<Kind>
+```
+
+You will need to modify the auto-generated controller's `Add` function to accept additional arguments
+in order to match the AddToManagerFuncs defined in [pkg/controller/controller.go](./pkg/controller/controller.go).
+
+### Running it locally
+
+You can create a local k3d cluster with the Makefile:
 
 	make cluster-create
 
-Set your shell to use the local cluster:
+Then, run the operator against the local cluster:
 
-	export KUBECONFIG="$(./k3d get-kubeconfig --name='operator-test-cluster')"
+	KUBECONFIG=./kubeconfig.yaml WATCH_NAMESPACE="" go run ./cmd/manager
 
-Apply the necessary CRDs (if it fails, run this command twice):
+To launch Calico, install the default custom resource:
 
-	kubectl apply -f deploy/crds
+	kubectl create -f ./deploy/crds/operator_v1_installation_cr.yaml
 
-Then, build the local code:
-
-	make build
-
-And then, run it against your local cluster:
-
-	WATCH_NAMESPACE="" ./build/_output/bin/operator-amd64
-
-Finally, tear down the cluster:
+To tear down the cluster:
 
 	make cluster-destroy
+
+### Using Tigera Secure
+
+To install Tigera Secure instead of Calico, you need to install an image pull secret,
+as well as modify the Installation CR.
+
+Create the pull secret in the tigera-operator namespace:
+
+```
+kubectl create secret -n tigera-operator generic tigera-pull-secret \
+    --from-file=.dockerconfigjson=<PATH/TO/PULL/SECRET> \
+    --type=kubernetes.io/dockerconfigjson
+```
+
+Then, modify the installation CR (e.g., with `kubectl edit installations`) to include the following:
+
+```
+spec:
+  variant: TigeraSecureEnterprise
+  imagePullSecrets:
+  - tigera-pull-secret
+```
+
+You can then install additional Tigera Secure components by creating their CRs from within
+the `./deploy/crds/` directory.
+
+### Running unit tests
+
+To run all the unit tests, run:
+
+	make test
+
+To run a specific test or set of tests, use the `GINKGO_FOCUS` argument.
+
+	make test GINKGO_FOCUS="component function tests"

@@ -310,7 +310,7 @@ func GenerateRenderConfig(openshift bool, install *operator.Installation) (
 			}, nil
 	}
 
-	if install.Spec.KubernetesProvider == "eks" {
+	if install.Spec.KubernetesProvider == operator.ProviderEKS {
 		return operator.ProviderEKS, render.NetworkConfig{
 			CNI: render.CNINone,
 		}, nil

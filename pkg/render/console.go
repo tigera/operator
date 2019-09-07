@@ -25,6 +25,11 @@ const (
 	ManagerSecretCertName = "cert"
 )
 
+var (
+	runAsNonRoot = true
+	allowPriviledgeEscalation = false
+)
+
 func Console(
 	cr *operator.Console,
 	monitoring *operator.MonitoringConfiguration,
@@ -242,12 +247,17 @@ func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
 	}
+
 	return corev1.Container{
 		Name:          "cnx-manager",
 		Image:         constructImage(ConsoleManagerImageName, c.registry),
 		Env:           c.consoleManagerEnvVars(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
+		SecurityContext: &corev1.SecurityContext {
+			RunAsNonRoot: &runAsNonRoot,
+			AllowPrivilegeEscalation: &allowPriviledgeEscalation,
+		},
 	}
 }
 
@@ -287,6 +297,10 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			{Name: ManagerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
 		LivenessProbe: c.consoleProxyProbe(),
+		SecurityContext: &corev1.SecurityContext {
+			RunAsNonRoot: &runAsNonRoot,
+			AllowPrivilegeEscalation: &allowPriviledgeEscalation,
+		},
 	}
 }
 

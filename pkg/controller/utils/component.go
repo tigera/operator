@@ -4,9 +4,11 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
+
+	"github.com/go-logr/logr"
+	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -113,12 +115,12 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 // mergeState returns the object to pass to Update given the current and desired object states.
 func mergeState(desired, current runtime.Object) runtime.Object {
+	oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
+	desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
 	switch desired.(type) {
 	case *v1.Service:
 		// Services are a special case since some fields (namely ClusterIP) are defaulted
 		// and we need to maintain them on updates.
-		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
 		cs := current.(*v1.Service)
 		ds := desired.(*v1.Service)
 		ds.Spec.ClusterIP = cs.Spec.ClusterIP
@@ -126,17 +128,23 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	case *batchv1.Job:
 		// Jobs have controller-uid values added to spec.selector and spec.template.metadata.labels.
 		// spec.selector and podtemplatespec are immutable so just copy real values over to desired state.
-		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
 		cj := current.(*batchv1.Job)
 		dj := desired.(*batchv1.Job)
 		dj.Spec.Selector = cj.Spec.Selector
 		dj.Spec.Template = cj.Spec.Template
 		return dj
+	case *apps.Deployment:
+		cd := current.(*apps.Deployment)
+		dd := desired.(*apps.Deployment)
+		// Only take the replica count if our desired count is nil so that
+		// any Deployments where we specify a replica count we will retain
+		// control over the count.
+		if dd.Spec.Replicas == nil {
+			dd.Spec.Replicas = cd.Spec.Replicas
+		}
+		return dd
 	default:
 		// Default to just using the desired state, with an updated RV.
-		oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-		desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
 		return desired
 	}
 }

@@ -40,26 +40,29 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(cr *operator.Installation, p operator.Provider) Component {
-	return &typhaComponent{cr: cr, provider: p}
+	as := TyphaAutoscaler(cr)
+	return &typhaComponent{cr: cr, provider: p, autoscaler: as}
 }
 
 type typhaComponent struct {
-	cr       *operator.Installation
-	provider operator.Provider
+	cr         *operator.Installation
+	provider   operator.Provider
+	autoscaler Component
 }
 
 func (c *typhaComponent) Objects() []runtime.Object {
-	return []runtime.Object{
+	objs := []runtime.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
 		c.typhaDeployment(),
 		c.typhaService(),
 	}
+	return append(objs, c.autoscaler.Objects()...)
 }
 
 func (c *typhaComponent) Ready() bool {
-	return true
+	return c.autoscaler.Ready()
 }
 
 // typhaServiceAccount creates the typha's service account.
@@ -244,7 +247,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	var revisionHistoryLimit int32 = 2
 
 	d := apps.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaDeploymentName,
 			Namespace: CalicoNamespace,
@@ -290,19 +293,9 @@ func (c *typhaComponent) nodeSelector() map[string]string {
 // tolerations creates the typha's tolerations.
 func (c *typhaComponent) tolerations() []v1.Toleration {
 	tolerations := []v1.Toleration{
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
 		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		tolerations = append(tolerations,
-			v1.Toleration{
-				Operator: v1.TolerationOpExists,
-				Effect:   v1.TaintEffectNoSchedule,
-			},
-			v1.Toleration{
-				Operator: v1.TolerationOpExists,
-				Effect:   v1.TaintEffectNoExecute,
-			},
-		)
 	}
 
 	return tolerations

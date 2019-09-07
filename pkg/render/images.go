@@ -10,6 +10,7 @@ import (
 const (
 	CalicoRegistry = "docker.io/calico/"
 	TigeraRegistry = "quay.io/tigera/"
+	K8sGcrRegistry = "gcr.io/google-containers/"
 )
 
 // This section contains images used when installing open-source Calico.
@@ -19,6 +20,7 @@ const (
 	TyphaImageNameCalico           = "typha:" + components.VersionCalicoTypha
 	KubeControllersImageNameCalico = "kube-controllers:" + components.VersionCalicoKubeControllers
 	FlexVolumeImageName            = "pod2daemon-flexvol:" + components.VersionFlexVolume
+	HorizontalAutoScalerImageName  = "cluster-proportional-autoscaler-amd64:" + components.VersionCPHAutoscaler
 )
 
 // This section contains images used when installing Tigera Secure.
@@ -66,6 +68,8 @@ func constructImage(imageName string, registry string) string {
 		FlexVolumeImageName:
 
 		reg = CalicoRegistry
+	case HorizontalAutoScalerImageName:
+		reg = K8sGcrRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

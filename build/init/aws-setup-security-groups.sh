@@ -53,15 +53,19 @@ masters=$(get_group_id $vpc "*-master-sg")
 workers=$(get_group_id $vpc "*-worker-sg")
 
 # Add rules to master SG that allow incoming from master and worker for BGP and IPIP
-# The 4 below is IPIP protocol and -1 for the port is for all ports.
+# The below is IPIP, BGP, and, Typha comms. The -1 for the port is for all ports.
 open_port "${masters}" "${masters}" tcp 179
 open_port "${masters}" "${masters}" 4 -1
+open_port "${masters}" "${masters}" tcp 5473
 open_port "${workers}" "${masters}" tcp 179
 open_port "${workers}" "${masters}" 4 -1
+open_port "${workers}" "${masters}" tcp 5473
 
 # Add rules to worker SG that allow incoming from master and worker for BGP and IPIP
-# The 4 below is IPIP protocol and -1 for the port is for all ports.
+# The below is IPIP, BGP, and, Typha comms. The -1 for the port is for all ports.
 open_port "${masters}" "${workers}" tcp 179
 open_port "${masters}" "${workers}" 4 -1
+open_port "${masters}" "${workers}" tcp 5473
 open_port "${workers}" "${workers}" tcp 179
 open_port "${workers}" "${workers}" 4 -1
+open_port "${workers}" "${workers}" tcp 5473

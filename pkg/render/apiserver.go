@@ -38,18 +38,42 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) Component {
+func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
+	tlsSecrets := []*corev1.Secret{}
+	if tlsKeyPair == nil {
+		var err error
+		tlsKeyPair, err = createOperatorTLSSecret(nil,
+			APIServerTLSSecretName,
+			APIServerSecretKeyName,
+			APIServerSecretCertName,
+			nil,
+			apiServiceHostname,
+		)
+		if err != nil {
+			return nil, err
+		}
+		// We only need to add the tlsKeyPair if we created it, otherwise
+		// it already exists.
+		tlsSecrets = []*corev1.Secret{tlsKeyPair}
+	}
+	copy := tlsKeyPair.DeepCopy()
+	copy.ObjectMeta = metav1.ObjectMeta{
+		Name:      APIServerTLSSecretName,
+		Namespace: APIServerNamespace,
+	}
+	tlsSecrets = append(tlsSecrets, copy)
+
 	return &apiServerComponent{
 		registry:    registry,
-		keyPair:     tlsKeyPair,
+		tlsSecrets:  tlsSecrets,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
-	}
+	}, nil
 }
 
 type apiServerComponent struct {
 	registry    string
-	keyPair     *corev1.Secret
+	tlsSecrets  []*corev1.Secret
 	pullSecrets []*corev1.Secret
 	openshift   bool
 }
@@ -71,19 +95,10 @@ func (c *apiServerComponent) Objects() []runtime.Object {
 		c.authReaderRoleBinding(),
 	)
 
-	key, cert := c.keyCertData()
-	key, cert, secret := createTLSSecret(key, cert, APIServerTLSSecretName, APIServerSecretKeyName, APIServerSecretCertName, apiServiceHostname)
-	if key == nil || cert == nil {
-		log.Info("APIServer key or cert not created")
-		return nil
-	}
-	if secret != nil {
-		objs = append(objs, secret)
-	}
+	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
-		c.apiServerCertificate(key, cert),
 		c.apiServer(),
-		c.apiServiceRegistration(cert),
+		c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]),
 		c.apiServerService(),
 	)
 	return objs
@@ -113,21 +128,6 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *v1beta1.APISer
 		},
 	}
 	return s
-}
-
-func (c *apiServerComponent) apiServerCertificate(key, cert []byte) *corev1.Secret {
-	data := make(map[string][]byte)
-	data[APIServerSecretKeyName] = key
-	data[APIServerSecretCertName] = cert
-
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      APIServerTLSSecretName,
-			Namespace: APIServerNamespace,
-		},
-		Data: data,
-	}
 }
 
 // tieredPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
@@ -340,14 +340,6 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	}
 }
 
-func (c *apiServerComponent) keyCertData() (key, cert []byte) {
-	if c.keyPair != nil {
-		key = c.keyPair.Data[APIServerSecretKeyName]
-		cert = c.keyPair.Data[APIServerSecretCertName]
-	}
-	return key, cert
-}
-
 func (c *apiServerComponent) auditPolicyConfigMap() *corev1.ConfigMap {
 	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
 kind: Policy
@@ -540,4 +532,13 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
 	}
 	return tolerations
+}
+
+func (c *apiServerComponent) getTLSObjects() []runtime.Object {
+	objs := []runtime.Object{}
+	for _, s := range c.tlsSecrets {
+		objs = append(objs, s)
+	}
+
+	return objs
 }

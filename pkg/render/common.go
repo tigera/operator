@@ -17,6 +17,7 @@ package render
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -190,25 +191,31 @@ func validateCertPair(client client.Client, certPairSecretName, keyName, certNam
 	return secret, nil
 }
 
-// makeSignedCertKeyPair generates and returns a key pair for a self signed cert. The first hostname provided is used
-// as the common name for the certificate. If hostnames are not provided, localhost is used.
-// This code came from:
-// https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
-func makeSignedCertKeyPair(hostnames ...string) (key, cert []byte, err error) {
+func makeCA() (*crypto.CA, error) {
 	temporaryCertDir, err := ioutil.TempDir("", "serving-cert-")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	signerName := fmt.Sprintf("%s-signer@%d", "tigera-operator", time.Now().Unix())
-	ca, err := crypto.MakeSelfSignedCA(
+	return crypto.MakeSelfSignedCA(
 		filepath.Join(temporaryCertDir, "serving-signer.crt"),
 		filepath.Join(temporaryCertDir, "serving-signer.key"),
 		filepath.Join(temporaryCertDir, "serving-signer.serial"),
 		signerName,
 		0,
 	)
-	if err != nil {
-		return nil, nil, err
+}
+
+// makeSignedCertKeyPair generates and returns a key pair for a self signed cert. The first hostname provided is used
+// as the common name for the certificate. If hostnames are not provided, localhost is used.
+// This code came from:
+// https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
+func makeSignedTLSPair(ca *crypto.CA, fns []crypto.CertificateExtensionFunc, hostnames ...string) (tls *crypto.TLSCertificateConfig, err error) {
+	if ca == nil {
+		ca, err = makeCA()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// localhost is the default hostname for the generated certificate if none are provided.
@@ -216,55 +223,77 @@ func makeSignedCertKeyPair(hostnames ...string) (key, cert []byte, err error) {
 	if len(hostnames) > 0 {
 		hostnamesSet = sets.NewString(hostnames...)
 	}
-	// TODO: allow cert expiry configuration
-	servingCert, err := ca.MakeServerCert(hostnamesSet, 30)
-	if err != nil {
-		return nil, nil, err
-	}
-	crtContent := &bytes.Buffer{}
-	keyContent := &bytes.Buffer{}
-	if err := servingCert.WriteCertConfig(crtContent, keyContent); err != nil {
-		return nil, nil, err
-	}
-
-	return keyContent.Bytes(), crtContent.Bytes(), nil
+	// Set cert expiration to 100 years
+	return ca.MakeServerCert(hostnamesSet, 100*365, fns...)
 }
 
-// createTLSSecret if the key (kk) or cert (cc) passed in are empty
-// then a new cert/key pair is created, they are returned as key/cert and a
-// secret is returned populated with the key/cert.
-// If k,c are populated then this indicates the secret already exists in the tigera-operator
-// namespace so no new key/cert is created and no Secret is returned,
-// but the passed in k,c values are returned as key,cert.
-// hostnames are used in the cert generation, with the first hostname used as the CN. If none are provided,
-// then localhost is used.
-func createTLSSecret(kk, cc []byte, secretName, secretKeyName, secretCertName string, hostnames ...string) (key, cert []byte, s *v1.Secret) {
-	if len(kk) != 0 && len(cc) != 0 {
-		// If the secret already exists in the tigera-operator NS then nothing to do,
-		// so no need to return it to be created.
-		return kk, cc, nil
+//type CertificateExtensionFunc func(*x509.Certificate) error
+func setClientAuth(x *x509.Certificate) error {
+	if x.ExtKeyUsage == nil {
+		x.ExtKeyUsage = []x509.ExtKeyUsage{}
 	}
+	x.ExtKeyUsage = append(x.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+	return nil
+}
+func setServerAuth(x *x509.Certificate) error {
+	if x.ExtKeyUsage == nil {
+		x.ExtKeyUsage = []x509.ExtKeyUsage{}
+	}
+	x.ExtKeyUsage = append(x.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+	return nil
+}
 
-	log.Info("Creating self-signed certificate", "secret", secretName)
+// createOperatorTLSSecret Creates a new TLS secret with the information passed
+//   ca: The ca to use for creating the Cert/Key pair. If nil then a
+//       self-signed CA will be created
+//   secretName: The name of the secret.
+//   secretKeyName: The name of the data field that will contain the key.
+//   secretCertName: The name of the data field that will contain the cert.
+//   hostnames: The first will be used as the CN, and the rest as SANs. If
+//     no hostnames are provided then "localhost" will be used.
+func createOperatorTLSSecret(
+	ca *crypto.CA,
+	secretName string,
+	secretKeyName string,
+	secretCertName string,
+	cef []crypto.CertificateExtensionFunc,
+	hostnames ...string,
+) (*v1.Secret, error) {
+	log.Info("Creating certificate secret", "secret", secretName)
 	// Create cert
-	var err error
-	key, cert, err = makeSignedCertKeyPair(hostnames...)
+	cert, err := makeSignedTLSPair(ca, cef, hostnames...)
 	if err != nil {
 		log.Error(err, "Unable to create signed cert pair")
-		return nil, nil, nil
+		return nil, fmt.Errorf("Unable to create signed cert pair: %s", err)
+	}
+
+	return getOperatorSecretFromTLSConfig(cert, secretName, secretKeyName, secretCertName)
+}
+
+func getOperatorSecretFromTLSConfig(
+	tls *crypto.TLSCertificateConfig,
+	secretName string,
+	secretKeyName string,
+	secretCertName string,
+) (*v1.Secret, error) {
+
+	crtContent := &bytes.Buffer{}
+	keyContent := &bytes.Buffer{}
+	if err := tls.WriteCertConfig(crtContent, keyContent); err != nil {
+		return nil, err
 	}
 
 	data := make(map[string][]byte)
-	data[secretKeyName] = key
-	data[secretCertName] = cert
-	return key, cert, &v1.Secret{
+	data[secretKeyName] = keyContent.Bytes()
+	data[secretCertName] = crtContent.Bytes()
+	return &v1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: OperatorNamespace(),
 		},
 		Data: data,
-	}
+	}, nil
 }
 
 // ParseEndpoint parses an endpoint of the form scheme://host:port and returns the components.

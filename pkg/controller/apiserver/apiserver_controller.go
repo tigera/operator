@@ -129,7 +129,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		render.APIServerTLSSecretName,
 		render.APIServerSecretKeyName,
 		render.APIServerSecretCertName,
-		render.APIServerNamespace)
+	)
 	if err != nil {
 		log.Error(err, "Invalid TLS Cert")
 		r.status.SetDegraded("Error validating TLS certificate", err.Error())
@@ -147,8 +147,14 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
-	reqLogger.V(5).Info("rendering components")
-	component := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.openshift)
+	reqLogger.V(3).Info("rendering components")
+	component, err := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.openshift)
+	if err != nil {
+		log.Error(err, "Error rendering APIServer")
+		r.status.SetDegraded("Error rendering APIServer", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

@@ -14,6 +14,7 @@ const (
 const (
 	NodeImageNameCalico            = "node:v3.8.1"
 	CNIImageName                   = "cni:v3.8.1"
+	TyphaImageNameCalico           = "typha:v3.8.1"
 	KubeControllersImageNameCalico = "kube-controllers:v3.8.1"
 	FlexVolumeImageName            = "pod2daemon-flexvol:v3.8.1"
 )
@@ -22,6 +23,7 @@ const (
 const (
 	// Overrides for Calico.
 	NodeImageNameTigera            = "cnx-node:v2.5.0"
+	TyphaImageNameTigera           = "typha:v2.4.2"
 	KubeControllersImageNameTigera = "kube-controllers:v2.4.2"
 
 	// API server images.
@@ -55,7 +57,12 @@ func constructImage(imageName string, registry string) string {
 	// Otherwise, default the registry based on component.
 	reg := TigeraRegistry
 	switch imageName {
-	case NodeImageNameCalico, CNIImageName, KubeControllersImageNameCalico, FlexVolumeImageName:
+	case NodeImageNameCalico,
+		CNIImageName,
+		TyphaImageNameCalico,
+		KubeControllersImageNameCalico,
+		FlexVolumeImageName:
+
 		reg = CalicoRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)

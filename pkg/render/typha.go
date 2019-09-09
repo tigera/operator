@@ -1,0 +1,484 @@
+// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package render
+
+import (
+	"fmt"
+
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+
+	apps "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+const (
+	TyphaServiceName              = "calico-typha"
+	TyphaPortName                 = "calico-typha"
+	TyphaK8sAppName               = "calico-typha"
+	TyphaServiceAccountName       = "calico-typha"
+	TyphaDeploymentName           = "calico-typha"
+	AppLabelName                  = "k8s-app"
+	TyphaPort               int32 = 5473
+)
+
+// Typha creates the typha daemonset and other resources for the daemonset to operate normally.
+func Typha(cr *operator.Installation, p operator.Provider) Component {
+	return &typhaComponent{cr: cr, provider: p}
+}
+
+type typhaComponent struct {
+	cr       *operator.Installation
+	provider operator.Provider
+}
+
+func (c *typhaComponent) Objects() []runtime.Object {
+	return []runtime.Object{
+		c.typhaServiceAccount(),
+		c.typhaRole(),
+		c.typhaRoleBinding(),
+		c.typhaDeployment(),
+		c.typhaService(),
+	}
+}
+
+func (c *typhaComponent) Ready() bool {
+	return true
+}
+
+// typhaServiceAccount creates the typha's service account.
+func (c *typhaComponent) typhaServiceAccount() *v1.ServiceAccount {
+	return &v1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TyphaServiceAccountName,
+			Namespace: CalicoNamespace,
+		},
+	}
+}
+
+// typhaRoleBinding creates a clusterrolebinding giving the typha service account the required permissions to operate.
+func (c *typhaComponent) typhaRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "calico-typha",
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "calico-typha",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      TyphaServiceAccountName,
+				Namespace: CalicoNamespace,
+			},
+		},
+	}
+}
+
+// typhaRole creates the clusterrole containing policy rules that allow the typha daemonset to operate normally.
+func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "calico-typha",
+			Labels: map[string]string{},
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				// The CNI plugin needs to get pods, nodes, namespaces.
+				APIGroups: []string{""},
+				Resources: []string{"pods", "nodes", "namespaces"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// Used to discover Typha endpoints and service IPs for advertisement.
+				APIGroups: []string{""},
+				Resources: []string{"endpoints", "services"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// Some information is stored on the node status.
+				APIGroups: []string{""},
+				Resources: []string{"nodes/status"},
+				Verbs:     []string{"patch", "update"},
+			},
+			{
+				// For enforcing network policies.
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"watch", "list"},
+			},
+			{
+				// Metadata from these are used in conjunction with network policy.
+				APIGroups: []string{""},
+				Resources: []string{"pods", "namespaces", "serviceaccounts"},
+				Verbs:     []string{"watch", "list"},
+			},
+			{
+				// Calico patches the allocated IP onto the pod.
+				APIGroups: []string{""},
+				Resources: []string{"pods/status"},
+				Verbs:     []string{"patch"},
+			},
+			{
+				// For monitoring Calico-specific configuration.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"bgpconfigurations",
+					"bgppeers",
+					"blockaffinities",
+					"clusterinformations",
+					"felixconfigurations",
+					"globalnetworkpolicies",
+					"globalnetworksets",
+					"hostendpoints",
+					"ipamblocks",
+					"ippools",
+					"networkpolicies",
+					"networksets",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// For migration code in calico/node startup only. Remove when the migration
+				// code is removed from node.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"globalbgpconfigs",
+					"globalfelixconfigs",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// Calico creates some configuration on startup.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"clusterinformations",
+					"felixconfigurations",
+					"ippools",
+				},
+				Verbs: []string{"create", "update"},
+			},
+			{
+				// Calico monitors nodes for some networking configuration.
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// Most IPAM resources need full CRUD permissions so we can allocate and
+				// release IP addresses for pods.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"blockaffinities",
+					"ipamblocks",
+					"ipamhandles",
+				},
+				Verbs: []string{"get", "list", "create", "update", "delete"},
+			},
+			{
+				// But, we only need to be able to query for IPAM config.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ipamconfigs"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// confd (and in some cases, felix) watches block affinities for route aggregation.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"blockaffinities"},
+				Verbs:     []string{"watch"},
+			},
+		},
+	}
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraRules := []rbacv1.PolicyRule{
+			{
+				// Tigera Secure needs to be able to read licenses, tiers, and config.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"licensekeys",
+					"remoteclusterconfigurations",
+					"tiers",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// Tigera Secure creates some tiers on startup.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"create"},
+			},
+		}
+		role.Rules = append(role.Rules, extraRules...)
+	}
+	return role
+}
+
+// typhaDeployment creates the typha deployment.
+func (c *typhaComponent) typhaDeployment() *apps.Deployment {
+	var terminationGracePeriod int64 = 0
+	var revisionHistoryLimit int32 = 2
+
+	d := apps.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TyphaDeploymentName,
+			Namespace: CalicoNamespace,
+			Labels: map[string]string{
+				AppLabelName: TyphaK8sAppName,
+			},
+		},
+		Spec: apps.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{AppLabelName: TyphaK8sAppName},
+			},
+			RevisionHistoryLimit: &revisionHistoryLimit,
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						AppLabelName: TyphaK8sAppName,
+					},
+					Annotations: map[string]string{
+						"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
+					},
+				},
+				Spec: v1.PodSpec{
+					NodeSelector:                  c.nodeSelector(),
+					Tolerations:                   c.tolerations(),
+					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
+					ServiceAccountName:            TyphaServiceAccountName,
+					TerminationGracePeriodSeconds: &terminationGracePeriod,
+					HostNetwork:                   true,
+					Containers:                    []v1.Container{c.typhaContainer()},
+					Volumes:                       c.volumes(),
+				},
+			},
+		},
+	}
+	setCriticalPod(&(d.Spec.Template))
+	return &d
+}
+
+func (c *typhaComponent) nodeSelector() map[string]string {
+	return map[string]string{"beta.kubernetes.io/os": "linux"}
+}
+
+// tolerations creates the typha's tolerations.
+func (c *typhaComponent) tolerations() []v1.Toleration {
+	tolerations := []v1.Toleration{
+		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
+	}
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		tolerations = append(tolerations,
+			v1.Toleration{
+				Operator: v1.TolerationOpExists,
+				Effect:   v1.TaintEffectNoSchedule,
+			},
+			v1.Toleration{
+				Operator: v1.TolerationOpExists,
+				Effect:   v1.TaintEffectNoExecute,
+			},
+		)
+	}
+
+	return tolerations
+}
+
+// volumes creates the typha's volumes.
+func (c *typhaComponent) volumes() []v1.Volume {
+	volumes := []v1.Volume{
+		{
+			Name: "typha-ca",
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: TyphaCAConfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name: "typha-certs",
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: TyphaTLSSecretName,
+				},
+			},
+		},
+	}
+
+	return volumes
+}
+
+// typhaVolumeMounts creates the typha's volume mounts.
+func (c *typhaComponent) typhaVolumeMounts() []v1.VolumeMount {
+	volumeMounts := []v1.VolumeMount{
+		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
+		{MountPath: "/typha-certs", Name: "typha-certs", ReadOnly: true},
+	}
+
+	return volumeMounts
+}
+
+func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
+	return []v1.ContainerPort{
+		v1.ContainerPort{
+			ContainerPort: TyphaPort,
+			Name:          TyphaPortName,
+			Protocol:      corev1.ProtocolTCP,
+		},
+	}
+}
+
+// typhaContainer creates the main typha container.
+func (c *typhaComponent) typhaContainer() v1.Container {
+	lp, rp := c.livenessReadinessProbes()
+
+	// Select which image to use.
+	image := constructImage(TyphaImageNameCalico, c.cr.Spec.Registry)
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		image = constructImage(TyphaImageNameTigera, c.cr.Spec.Registry)
+	}
+	return v1.Container{
+		Name:           "calico-typha",
+		Image:          image,
+		Resources:      c.typhaResources(),
+		Env:            c.typhaEnvVars(),
+		VolumeMounts:   c.typhaVolumeMounts(),
+		Ports:          c.typhaPorts(),
+		LivenessProbe:  lp,
+		ReadinessProbe: rp,
+		//SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
+	}
+}
+
+// typhaResources creates the typha's resource requirements.
+func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
+	return v1.ResourceRequirements{}
+}
+
+// typhaEnvVars creates the typha's envvars.
+func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
+	optional := true
+	typhaEnv := []v1.EnvVar{
+		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
+		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
+		{Name: "TYPHA_LOGSEVERITYSYS", Value: "none"},
+		{Name: "TYPHA_CONNECTIONREBALANCINGMODE", Value: "kubernetes"},
+		{Name: "TYPHA_DATASTORETYPE", Value: "kubernetes"},
+		{Name: "TYPHA_HEALTHENABLED", Value: "true"},
+		{Name: "TYPHA_K8SNAMESPACE", Value: CalicoNamespace},
+		{Name: "TYPHA_CAFILE", Value: "/typha-ca/caBundle"},
+		{Name: "TYPHA_SERVERCERTFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretCertName)},
+		{Name: "TYPHA_SERVERKEYFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretKeyName)},
+		// We need at least the CN or URISAN set, we depend on the validation
+		// done by the core_controller that the Secret will have one.
+		{Name: "TYPHA_CLIENTCN", ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: FelixTLSSecretName,
+				},
+				Key:      CommonName,
+				Optional: &optional,
+			},
+		}},
+		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: FelixTLSSecretName,
+				},
+				Key:      URISAN,
+				Optional: &optional,
+			},
+		}},
+	}
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		extraTyphaEnv := []v1.EnvVar{
+		// When we add AWS integration then we need Security group stuff here
+		}
+		typhaEnv = append(typhaEnv, extraTyphaEnv...)
+	}
+	if c.provider == operator.ProviderEKS {
+		typhaEnv = append(typhaEnv,
+			v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
+			v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+		)
+	}
+
+	return typhaEnv
+}
+
+// livenessReadinessProbes creates the typha's liveness and readiness probes.
+func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
+	// Determine liveness and readiness configuration for typha.
+	port := intstr.FromInt(9098)
+	lp := &v1.Probe{
+		Handler: v1.Handler{
+			HTTPGet: &v1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/liveness",
+				Port: port,
+			},
+		},
+	}
+	rp := &v1.Probe{
+		Handler: v1.Handler{
+			HTTPGet: &v1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/readiness",
+				Port: port,
+			},
+		},
+	}
+	return lp, rp
+}
+
+func (c *typhaComponent) typhaService() *v1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TyphaServiceName,
+			Namespace: CalicoNamespace,
+			Labels: map[string]string{
+				AppLabelName: TyphaK8sAppName,
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Port:       TyphaPort,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromString(TyphaPortName),
+					Name:       TyphaPortName,
+				},
+			},
+			Selector: map[string]string{
+				AppLabelName: TyphaK8sAppName,
+			},
+		},
+	}
+}

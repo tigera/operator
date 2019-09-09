@@ -186,10 +186,10 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
 	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.ManagerTlsSecretName,
+		render.ManagerTLSSecretName,
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
-		render.ManagerNamespace)
+	)
 	if err != nil {
 		log.Error(err, "Invalid TLS Cert")
 		r.status.SetDegraded("Error validating TLS certificate", err.Error())
@@ -207,7 +207,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Console(
+	component, err := render.Console(
 		instance,
 		monitoringConfig,
 		tlsSecret,
@@ -215,6 +215,12 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.openshift,
 		installation.Spec.Registry,
 	)
+	if err != nil {
+		log.Error(err, "Error rendering Console")
+		r.status.SetDegraded("Error rendering Console", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

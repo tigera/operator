@@ -36,7 +36,8 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller"
 	apps "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -48,6 +49,15 @@ var _ = Describe("Mainline component function tests", func() {
 	var mgr manager.Manager
 	BeforeEach(func() {
 		c, mgr = setupManager()
+		ns := &corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},
+			Spec:       corev1.NamespaceSpec{},
+		}
+		err := c.Create(context.Background(), ns)
+		if err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 
 	AfterEach(func() {
@@ -159,34 +169,34 @@ var _ = Describe("Mainline component function tests", func() {
 	It("Should install resources for a CRD with node overrides", func() {
 		By("Creating a CRD with overrides")
 
-		toleration := v1.Toleration{
+		toleration := corev1.Toleration{
 			Key:      "somekey",
-			Operator: v1.TolerationOpEqual,
+			Operator: corev1.TolerationOpEqual,
 			Value:    "somevalue",
-			Effect:   v1.TaintEffectNoSchedule,
+			Effect:   corev1.TaintEffectNoSchedule,
 		}
-		volume := v1.Volume{
+		volume := corev1.Volume{
 			Name: "extravol",
-			VolumeSource: v1.VolumeSource{
-				EmptyDir: &v1.EmptyDirVolumeSource{},
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		}
-		volumeMount := v1.VolumeMount{
+		volumeMount := corev1.VolumeMount{
 			Name:      "extravol",
 			MountPath: "/test/calico/kubecontrollers",
 		}
-		envVar := v1.EnvVar{
+		envVar := corev1.EnvVar{
 			Name:  "env1",
 			Value: "env1-value",
 		}
-		resourceRequirements := v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("1000m"),
-				v1.ResourceMemory: resource.MustParse("1000Mi"),
+		resourceRequirements := corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1m"),
+				corev1.ResourceMemory: resource.MustParse("1Mi"),
 			},
-			Limits: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("1500m"),
-				v1.ResourceMemory: resource.MustParse("2500Mi"),
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1500m"),
+				corev1.ResourceMemory: resource.MustParse("2500Mi"),
 			},
 		}
 
@@ -198,10 +208,10 @@ var _ = Describe("Mainline component function tests", func() {
 				Components: operator.ComponentsSpec{
 					Node: operator.NodeSpec{
 						MaxUnavailable:    &maxUnavailable,
-						ExtraEnv:          []v1.EnvVar{envVar},
-						ExtraVolumes:      []v1.Volume{volume},
-						ExtraVolumeMounts: []v1.VolumeMount{volumeMount},
-						Tolerations:       []v1.Toleration{toleration},
+						ExtraEnv:          []corev1.EnvVar{envVar},
+						ExtraVolumes:      []corev1.Volume{volume},
+						ExtraVolumeMounts: []corev1.VolumeMount{volumeMount},
+						Tolerations:       []corev1.Toleration{toleration},
 						Resources:         resourceRequirements,
 					},
 				},
@@ -270,6 +280,15 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	var mgr manager.Manager
 	BeforeEach(func() {
 		c, mgr = setupManager()
+	})
+	AfterEach(func() {
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
+			Spec:       operator.InstallationSpec{},
+		}
+		err := c.Delete(context.Background(), instance)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Should ignore a CRD resource not named 'default'", func() {

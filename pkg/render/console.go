@@ -20,7 +20,7 @@ const (
 	managerTargetPort     = 9443
 	tigeraEsSecretName    = "tigera-es-config"
 	ManagerNamespace      = "tigera-console"
-	ManagerTlsSecretName  = "manager-tls"
+	ManagerTLSSecretName  = "manager-tls"
 	ManagerSecretKeyName  = "key"
 	ManagerSecretCertName = "cert"
 )
@@ -32,21 +32,38 @@ func Console(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	registry string,
-) Component {
+) (Component, error) {
+	tlsSecrets := []*corev1.Secret{}
+	if tlsKeyPair == nil {
+		var err error
+		tlsKeyPair, err = createOperatorTLSSecret(nil,
+			ManagerTLSSecretName,
+			ManagerSecretKeyName,
+			ManagerSecretCertName,
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tlsSecrets = []*corev1.Secret{tlsKeyPair}
+	}
+	copy := tlsKeyPair.DeepCopy()
+	copy.ObjectMeta.Namespace = ManagerNamespace
+	tlsSecrets = append(tlsSecrets, copy)
 	return &consoleComponent{
 		cr:          cr,
 		monitoring:  monitoring,
-		keyPair:     tlsKeyPair,
+		tlsSecrets:  tlsSecrets,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
 		registry:    registry,
-	}
+	}, nil
 }
 
 type consoleComponent struct {
 	cr          *operator.Console
 	monitoring  *operator.MonitoringConfiguration
-	keyPair     *corev1.Secret
+	tlsSecrets  []*corev1.Secret
 	pullSecrets []*corev1.Secret
 	openshift   bool
 	registry    string
@@ -62,17 +79,8 @@ func (c *consoleComponent) Objects() []runtime.Object {
 		c.consoleManagerClusterRole(),
 		c.consoleManagerClusterRoleBinding(),
 	)
-	key, cert := c.keyCertData()
-	key, cert, s := createTLSSecret(key, cert, ManagerTlsSecretName, ManagerSecretKeyName, ManagerSecretCertName)
-	if key == nil || cert == nil {
-		log.Info("Key or Cert not created")
-		return nil
-	}
-	if s != nil {
-		objs = append(objs, s)
-	}
+	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
-		c.consoleManagerCertificates(key, cert),
 		c.consoleManagerDeployment(),
 		c.consoleManagerService(),
 		c.tigeraUserClusterRole(),
@@ -153,10 +161,10 @@ func (c *consoleComponent) consoleManagerVolumes() []v1.Volume {
 	optional := true
 	return []v1.Volume{
 		{
-			Name: ManagerTlsSecretName,
+			Name: ManagerTLSSecretName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: ManagerTlsSecretName,
+					SecretName: ManagerTLSSecretName,
 				},
 			},
 		},
@@ -284,7 +292,7 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			Value: fmt.Sprintf("compliance.%s.svc.cluster.local:443", ComplianceNamespace),
 		}),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: ManagerTlsSecretName, MountPath: "/etc/cnx-manager-web-tls"},
+			{Name: ManagerTLSSecretName, MountPath: "/etc/cnx-manager-web-tls"},
 		},
 		LivenessProbe: c.consoleProxyProbe(),
 	}
@@ -421,20 +429,6 @@ func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRol
 				Namespace: ManagerNamespace,
 			},
 		},
-	}
-}
-
-func (c *consoleComponent) consoleManagerCertificates(key, cert []byte) *v1.Secret {
-	data := make(map[string][]byte)
-	data[ManagerSecretKeyName] = key
-	data[ManagerSecretCertName] = cert
-	return &v1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ManagerTlsSecretName,
-			Namespace: ManagerNamespace,
-		},
-		Data: data,
 	}
 }
 
@@ -605,10 +599,11 @@ func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 	}
 }
 
-func (c *consoleComponent) keyCertData() (key, cert []byte) {
-	if c.keyPair != nil {
-		key = c.keyPair.Data[ManagerSecretKeyName]
-		cert = c.keyPair.Data[ManagerSecretCertName]
+func (c *consoleComponent) getTLSObjects() []runtime.Object {
+	objs := []runtime.Object{}
+	for _, s := range c.tlsSecrets {
+		objs = append(objs, s)
 	}
-	return key, cert
+
+	return objs
 }

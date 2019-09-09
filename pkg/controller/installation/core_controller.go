@@ -17,6 +17,7 @@ package installation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
@@ -29,10 +30,11 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 
 	apps "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -140,9 +142,9 @@ func secondaryResources() []runtime.Object {
 		&apps.DaemonSet{},
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
-		&v1.ServiceAccount{},
+		&corev1.ServiceAccount{},
 		&v1beta1.APIService{},
-		&v1.Service{},
+		&corev1.Service{},
 	}
 }
 
@@ -240,12 +242,32 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	caConfigMap, typhaSecrets, err := r.GetTyphaFelixTLSConfig()
+	if err != nil {
+		log.Error(err, "Error with Typha/Felix secrets")
+		r.status.SetDegraded("Error with Typha/Felix secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
-	calico := render.Calico(instance, pullSecrets, platform, netConf)
+	calico, err := render.Calico(
+		instance,
+		pullSecrets,
+		caConfigMap,
+		typhaSecrets,
+		platform,
+		netConf,
+	)
+	if err != nil {
+		log.Error(err, "Error with rendering Calico")
+		r.status.SetDegraded("Error with rendering Calico resources", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	for _, component := range calico.Render() {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
@@ -320,4 +342,103 @@ func GenerateRenderConfig(openshift bool, install *operator.Installation) (
 		render.NetworkConfig{
 			CNI: render.CNICalico,
 		}, nil
+}
+
+// GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for
+// Typha and Felix configuration. It returns the validated resources or error
+// if there was one.
+func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*corev1.ConfigMap, []*corev1.Secret, error) {
+	// accumulate all the error messages so all problems with the certs
+	// and CA are reported.
+	errMsgs := []string{}
+	ca, err := r.validateTyphaCAConfigMap()
+	if err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
+	}
+
+	secrets := []*corev1.Secret{}
+	felix, err := utils.ValidateCertPair(
+		r.client,
+		render.FelixTLSSecretName,
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+	)
+	if err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix is invalid: %s", err))
+	} else if felix != nil {
+		secrets = append(secrets, felix)
+		if felix.Data != nil {
+			// We need the CommonName, URISAN, or both to be set
+			_, okCN := felix.Data[render.CommonName]
+			_, okUS := felix.Data[render.URISAN]
+			if !(okCN || okUS) {
+				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san: %v", felix))
+			}
+		}
+	}
+
+	typha, err := utils.ValidateCertPair(
+		r.client,
+		render.TyphaTLSSecretName,
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+	)
+	if err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha is invalid: %s", err))
+	} else if typha != nil {
+		secrets = append(secrets, typha)
+		if typha.Data != nil {
+			// We need the CommonName, URISAN, or both to be set
+			_, okCN := typha.Data[render.CommonName]
+			_, okUS := typha.Data[render.URISAN]
+			if !(okCN || okUS) {
+				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha does not contain common-name or uri-san: %v", typha))
+			}
+		}
+	}
+
+	// CA, typha, and felix are all not set
+	allNil := (ca == nil && typha == nil && felix == nil)
+	// CA, typha, and felix are all are set
+	allSet := (ca != nil && typha != nil && felix != nil)
+	// All CA, typha, and felix must be set or not set.
+	if !(allNil || allSet) {
+		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Felix CA and Secrets should all be set or none set: ca(%v) typha(%v) felix(%v)", ca, typha, felix))
+		errMsgs = append(errMsgs, "If not providing custom CA and certs, feel free to remove them from the operator namespace, they will be recreated")
+	}
+
+	// TODO: We could make sure both TLS Secrets were signed by the CA
+
+	if len(errMsgs) != 0 {
+		return nil, nil, fmt.Errorf(strings.Join(errMsgs, ";"))
+	}
+	return ca, secrets, nil
+}
+
+// validateTyphaCAConfigMap reads the Typha CA config map from the Operator
+// namespace and validates that it has a CA Bundle. It returns the validated
+// ConfigMap or an error.
+func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.TyphaCAConfigMapName,
+		Namespace: render.OperatorNamespace(),
+	}
+	err := r.client.Get(context.Background(), cmNamespacedName, cm)
+	if err != nil {
+		// If the reason for the error is not found then that is acceptable
+		// so return valid in that case.
+		statErr, ok := err.(*apierrors.StatusError)
+		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
+			return nil, nil
+		} else {
+			return nil, fmt.Errorf("Failed to read configmap %q from datastore: %s", render.TyphaCAConfigMapName, err)
+		}
+	}
+
+	if val, ok := cm.Data[render.TyphaCABundleName]; !ok || len(val) == 0 {
+		return nil, fmt.Errorf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName)
+	}
+
+	return cm, nil
 }

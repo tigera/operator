@@ -130,9 +130,12 @@ func CheckLicenseKey(ctx context.Context, cli client.Client) error {
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
-func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName, ns string) (*corev1.Secret, error) {
+func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
-	secretNamespacedName := types.NamespacedName{Name: certPairSecretName, Namespace: ns}
+	secretNamespacedName := types.NamespacedName{
+		Name:      certPairSecretName,
+		Namespace: render.OperatorNamespace(),
+	}
 	err := client.Get(context.Background(), secretNamespacedName, secret)
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable

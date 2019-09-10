@@ -2,6 +2,8 @@ package render
 
 import (
 	"fmt"
+
+	"github.com/tigera/operator/pkg/components"
 )
 
 // Default registries for Calico and Tigera.
@@ -12,39 +14,39 @@ const (
 
 // This section contains images used when installing open-source Calico.
 const (
-	NodeImageNameCalico            = "node:v3.8.1"
-	CNIImageName                   = "cni:v3.8.1"
-	TyphaImageNameCalico           = "typha:v3.8.1"
-	KubeControllersImageNameCalico = "kube-controllers:v3.8.1"
-	FlexVolumeImageName            = "pod2daemon-flexvol:v3.8.1"
+	NodeImageNameCalico            = "node:" + components.VersionCalicoNode
+	CNIImageName                   = "cni:" + components.VersionCalicoCNI
+	TyphaImageNameCalico           = "typha:" + components.VersionCalicoTypha
+	KubeControllersImageNameCalico = "kube-controllers:" + components.VersionCalicoKubeControllers
+	FlexVolumeImageName            = "pod2daemon-flexvol:" + components.VersionFlexVolume
 )
 
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	NodeImageNameTigera            = "cnx-node:v2.5.0"
-	TyphaImageNameTigera           = "typha:v2.4.2"
-	KubeControllersImageNameTigera = "kube-controllers:v2.4.2"
+	NodeImageNameTigera            = "cnx-node:" + components.VersionTigeraNode
+	TyphaImageNameTigera           = "typha:" + components.VersionTigeraTypha
+	KubeControllersImageNameTigera = "kube-controllers:" + components.VersionTigeraKubeControllers
 
 	// API server images.
-	APIServerImageName   = "cnx-apiserver:v2.5.0"
-	QueryServerImageName = "cnx-queryserver:v2.4.0"
+	APIServerImageName   = "cnx-apiserver:" + components.VersionAPIServer
+	QueryServerImageName = "cnx-queryserver:" + components.VersionQueryServer
 
 	// Compliance images.
-	ComplianceControllerImage  = "compliance-controller:v2.4.2"
-	ComplianceReporterImage    = "compliance-reporter:v2.4.2"
-	ComplianceServerImage      = "compliance-server:v2.4.2"
-	ComplianceSnapshotterImage = "compliance-snapshotter:v2.4.2"
-	ComplianceBenchmarkerImage = "compliance-benchmarker:v2.5.0"
+	ComplianceControllerImage  = "compliance-controller:" + components.VersionComplianceController
+	ComplianceReporterImage    = "compliance-reporter:" + components.VersionComplianceReporter
+	ComplianceServerImage      = "compliance-server:" + components.VersionComplianceServer
+	ComplianceSnapshotterImage = "compliance-snapshotter:" + components.VersionComplianceSnapshotter
+	ComplianceBenchmarkerImage = "compliance-benchmarker:" + components.VersionComplianceBenchmarker
 
 	// Intrusion detection images.
-	IntrusionDetectionControllerImageName   = "intrusion-detection-controller:v2.4.2"
-	IntrusionDetectionJobInstallerImageName = "intrusion-detection-job-installer:v2.4.2"
+	IntrusionDetectionControllerImageName   = "intrusion-detection-controller:" + components.VersionIntrusionDetectionController
+	IntrusionDetectionJobInstallerImageName = "intrusion-detection-job-installer:" + components.VersionIntrusionDetectionJobInstaller
 
 	// Console images.
-	ConsoleManagerImageName = "cnx-manager:v2.4.2"
-	ConsoleProxyImageName   = "cnx-manager-proxy:v2.4.2"
-	ConsoleEsProxyImageName = "es-proxy:v2.4.0"
+	ConsoleManagerImageName = "cnx-manager:" + components.VersionConsoleManager
+	ConsoleProxyImageName   = "cnx-manager-proxy:" + components.VersionConsoleProxy
+	ConsoleEsProxyImageName = "es-proxy:" + components.VersionConsoleEsProxy
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.

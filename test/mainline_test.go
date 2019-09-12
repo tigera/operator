@@ -357,7 +357,9 @@ func setupManager() (client.Client, manager.Manager) {
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 	// Setup all Controllers
-	err = controller.AddToManager(mgr, false)
+	openshift := false
+	runTSEEControllers := true
+	err = controller.AddToManager(mgr, openshift, runTSEEControllers)
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr
 }

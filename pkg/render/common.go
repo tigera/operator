@@ -19,10 +19,8 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -192,18 +190,19 @@ func validateCertPair(client client.Client, certPairSecretName, keyName, certNam
 }
 
 func makeCA() (*crypto.CA, error) {
-	temporaryCertDir, err := ioutil.TempDir("", "serving-cert-")
-	if err != nil {
-		return nil, err
-	}
 	signerName := fmt.Sprintf("%s-signer@%d", "tigera-operator", time.Now().Unix())
-	return crypto.MakeSelfSignedCA(
-		filepath.Join(temporaryCertDir, "serving-signer.crt"),
-		filepath.Join(temporaryCertDir, "serving-signer.key"),
-		filepath.Join(temporaryCertDir, "serving-signer.serial"),
+
+	caConfig, err := crypto.MakeSelfSignedCAConfigForDuration(
 		signerName,
-		0,
+		100*365*24*time.Hour, //100years*365days*24hours
 	)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create CA: %s", err)
+	}
+	return &crypto.CA{
+		SerialGenerator: &crypto.RandomSerialGenerator{},
+		Config:          caConfig,
+	}, nil
 }
 
 // makeSignedCertKeyPair generates and returns a key pair for a self signed cert. The first hostname provided is used
@@ -224,7 +223,10 @@ func makeSignedTLSPair(ca *crypto.CA, fns []crypto.CertificateExtensionFunc, hos
 		hostnamesSet = sets.NewString(hostnames...)
 	}
 	// Set cert expiration to 100 years
-	return ca.MakeServerCert(hostnamesSet, 100*365, fns...)
+	return ca.MakeServerCertForDuration(
+		hostnamesSet,
+		100*365*24*time.Hour, // 100years*365days*24hours
+		fns...)
 }
 
 //type CertificateExtensionFunc func(*x509.Certificate) error

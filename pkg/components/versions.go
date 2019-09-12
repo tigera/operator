@@ -32,7 +32,7 @@ const (
 	VersionIntrusionDetectionJobInstaller = "v2.4.2"
 
 	// Console images.
-	VersionConsoleManager = "v2.4.2"
-	VersionConsoleProxy   = "v2.4.2"
+	VersionConsoleManager = "sha256:89457981eb9513433d95d665f42c38e6b85d2a76ce5382fc96e12bb9fc69f15b"
+	VersionConsoleProxy   = "sha256:e6b4ff92b62661a295eac22ecbbfca593f053c4727c76731f9af59e16b6dc6cb"
 	VersionConsoleEsProxy = "v2.4.0"
 )

@@ -10,6 +10,7 @@ import (
 const (
 	CalicoRegistry = "docker.io/calico/"
 	TigeraRegistry = "quay.io/tigera/"
+	TigeraInternalRegistry = "gcr.io/unique-caldron-775/cnx/tigera"
 )
 
 // This section contains images used when installing open-source Calico.
@@ -44,8 +45,8 @@ const (
 	IntrusionDetectionJobInstallerImageName = "intrusion-detection-job-installer:" + components.VersionIntrusionDetectionJobInstaller
 
 	// Console images.
-	ConsoleManagerImageName = "cnx-manager:" + components.VersionConsoleManager
-	ConsoleProxyImageName   = "cnx-manager-proxy:" + components.VersionConsoleProxy
+	ConsoleManagerImageName = "cnx-manager@" + components.VersionConsoleManager
+	ConsoleProxyImageName   = "cnx-manager-proxy@" + components.VersionConsoleProxy
 	ConsoleEsProxyImageName = "es-proxy:" + components.VersionConsoleEsProxy
 )
 
@@ -66,6 +67,12 @@ func constructImage(imageName string, registry string) string {
 		FlexVolumeImageName:
 
 		reg = CalicoRegistry
+	case ConsoleManagerImageName,
+		ConsoleProxyImageName:
+		// This is temporary way to fetch gcr images during development.
+		// TODO - remove in final operator release versions.
+		reg = TigeraInternalRegistry
 	}
+
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

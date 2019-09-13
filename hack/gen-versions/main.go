@@ -9,10 +9,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const (
-	versionsGoPath = "pkg/components/versions.go"
-	defaultVersion = "master"
-)
+const versionsGoPath = "pkg/components/versions.go"
 
 func main() {
 	eeVersionsPath := flag.String("ee-versions", "", "path to os versions file")
@@ -58,8 +55,7 @@ func (c Components) get(component string) string {
 	if comp, ok := c[component]; ok {
 		return comp.Version
 	}
-	fmt.Printf("couldn't find value for '%s'. using: %s\n", component, defaultVersion)
-	return defaultVersion
+	panic(fmt.Sprintf("couldn't find value for '%s'", component))
 }
 
 func loadVersions(versionsPath string) (Components, error) {

@@ -400,6 +400,15 @@ endif
 gen-files:
 	operator-sdk generate k8s
 
+gen-versions:
+ifndef OS_VERSIONS
+	$(error OS_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)
+endif
+ifndef EE_VERSIONS
+	$(error EE_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)
+endif
+	go run ./hack/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS)
+
 .PHONY: help
 ## Display this help text
 help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383502660

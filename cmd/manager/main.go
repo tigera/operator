@@ -21,6 +21,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/daemon"
 	"github.com/tigera/operator/version"
 
@@ -68,7 +69,28 @@ func main() {
 	pflag.Parse()
 
 	if showVersion {
-		fmt.Printf("%s\n", version.VERSION)
+		fmt.Println("Operator:", version.VERSION)
+		fmt.Println("CalicoNode:", components.VersionCalicoNode)
+		fmt.Println("CalicoCNI:", components.VersionCalicoCNI)
+		fmt.Println("CalicoTypha:", components.VersionCalicoTypha)
+		fmt.Println("CalicoKubeControllers:", components.VersionCalicoKubeControllers)
+		fmt.Println("FlexVolume:", components.VersionFlexVolume)
+		fmt.Println("TigeraNode:", components.VersionTigeraNode)
+		fmt.Println("TigeraTypha:", components.VersionTigeraTypha)
+		fmt.Println("TigeraKubeControllers:", components.VersionTigeraKubeControllers)
+		fmt.Println("APIServer:", components.VersionAPIServer)
+		fmt.Println("QueryServer:", components.VersionQueryServer)
+		fmt.Println("ComplianceController:", components.VersionComplianceController)
+		fmt.Println("ComplianceReporter:", components.VersionComplianceReporter)
+		fmt.Println("ComplianceServer:", components.VersionComplianceServer)
+		fmt.Println("ComplianceSnapshotter:", components.VersionComplianceSnapshotter)
+		fmt.Println("ComplianceBenchmarker:", components.VersionComplianceBenchmarker)
+		fmt.Println("IntrusionDetectionController:", components.VersionIntrusionDetectionController)
+		fmt.Println("IntrusionDetectionJobInstaller:", components.VersionIntrusionDetectionJobInstaller)
+		fmt.Println("ConsoleManager:", components.VersionConsoleManager)
+		fmt.Println("ConsoleProxy:", components.VersionConsoleProxy)
+		fmt.Println("ConsoleEsProxy:", components.VersionConsoleEsProxy)
+
 		os.Exit(0)
 	}
 

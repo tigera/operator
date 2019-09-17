@@ -249,7 +249,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		return nil
 	}
 
-	var config = `{
+	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
   "plugins": [
@@ -257,6 +257,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "type": "calico",
       "datastore_type": "kubernetes",
       "mtu": 1440,
+      "nodename_file_optional": %v,
       "ipam": {
           "type": "calico-ipam"
       },
@@ -273,7 +274,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"portMappings": true}
     }
   ]
-}`
+}`, c.netConfig.NodenameFileOptional)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

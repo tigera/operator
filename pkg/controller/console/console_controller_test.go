@@ -29,7 +29,7 @@ var _ = Describe("Console controller tests", func() {
 		}
 		err := c.Create(context.Background(), instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetConsole(context.Background(), c, false)
+		instance, err = GetConsole(context.Background(), c, operatorv1.ProviderNone)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

@@ -54,18 +54,18 @@ var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool, tsee bool) error {
-	return add(mgr, newReconciler(mgr, openshift, tsee))
+func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
+	return add(mgr, newReconciler(mgr, provider, tsee))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, openshift bool, tsee bool) *ReconcileInstallation {
+func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *ReconcileInstallation {
 	r := &ReconcileInstallation{
 		config:       mgr.GetConfig(),
 		client:       mgr.GetClient(),
 		scheme:       mgr.GetScheme(),
 		watches:      make(map[runtime.Object]struct{}),
-		openshift:    openshift,
+		provider:     provider,
 		status:       status.New(mgr.GetClient(), "network"),
 		requiresTSEE: tsee,
 	}
@@ -89,7 +89,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 	}
 
-	if r.openshift {
+	if r.provider == operator.ProviderOpenShift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
@@ -161,13 +161,13 @@ type ReconcileInstallation struct {
 	scheme       *runtime.Scheme
 	controller   controller.Controller
 	watches      map[runtime.Object]struct{}
-	openshift    bool
+	provider     operator.Provider
 	status       *status.StatusManager
 	requiresTSEE bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
-func GetInstallation(ctx context.Context, client client.Client, openshift bool) (*operator.Installation, error) {
+func GetInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
@@ -176,7 +176,7 @@ func GetInstallation(ctx context.Context, client client.Client, openshift bool) 
 	}
 
 	// Populate the instance with defaults for any fields not provided by the user.
-	fillDefaults(instance, openshift)
+	fillDefaults(instance, provider)
 	return instance, nil
 }
 
@@ -190,7 +190,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	ctx := context.Background()
 
 	// Query for the installation object.
-	instance, err := GetInstallation(ctx, r.client, r.openshift)
+	instance, err := GetInstallation(ctx, r.client, r.provider)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -227,8 +227,15 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// convert specified and detected settings into render configuration.
+	provider, netConf, err := GenerateRenderConfig(r.provider, instance)
+	if err != nil {
+		r.status.SetDegraded("Invalid settings", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	openshiftConfig := &configv1.Network{}
-	if r.openshift {
+	if provider == operator.ProviderOpenShift {
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.V(1).Info("Querying for openshift network config")
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
@@ -243,13 +250,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		for _, net := range openshiftConfig.Spec.ClusterNetwork {
 			instance.Spec.IPPools = append(instance.Spec.IPPools, operator.IPPool{CIDR: net.CIDR})
 		}
-	}
-
-	// convert specified and detected settings into render configuration.
-	platform, netConf, err := GenerateRenderConfig(r.openshift, instance)
-	if err != nil {
-		r.status.SetDegraded("Invalid settings", err.Error())
-		return reconcile.Result{}, err
 	}
 
 	// Validate the configuration.
@@ -282,7 +282,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		pullSecrets,
 		caConfigMap,
 		typhaSecrets,
-		platform,
+		provider,
 		netConf,
 	)
 	if err != nil {
@@ -304,7 +304,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.SetDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 
 	// We have successfully reconciled the Calico installation.
-	if r.openshift {
+	if provider == operator.ProviderOpenShift {
 		// If configured to run in openshift, update the config status with the current state.
 		reqLogger.V(1).Info("Updating openshift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
@@ -338,19 +338,29 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 }
 
 // GenerateRenderConfig converts user input and detected settings into render config.
-func GenerateRenderConfig(openshift bool, install *operator.Installation) (
+func GenerateRenderConfig(provider operator.Provider, install *operator.Installation) (
 	operator.Provider, render.NetworkConfig, error) {
 
-	if openshift {
-		// if we detected openshift but user set Provider to something else, throw an error
-		if install.Spec.KubernetesProvider != "" && install.Spec.KubernetesProvider != operator.ProviderOpenShift {
-			return operator.ProviderNone, render.NetworkConfig{},
-				fmt.Errorf("Can't specify provider '%s' with Openshift", install.Spec.KubernetesProvider)
-		}
+	// if we detected one provider but user set Provider to something else, throw an error
+	if provider != operator.ProviderNone &&
+		install.Spec.KubernetesProvider != "" &&
+		install.Spec.KubernetesProvider != provider {
+		return operator.ProviderNone, render.NetworkConfig{},
+			fmt.Errorf("Can't specify provider '%s' with %s", install.Spec.KubernetesProvider, provider)
+	}
 
-		return operator.ProviderOpenShift,
+	if provider == operator.ProviderOpenShift {
+		return provider,
 			render.NetworkConfig{
 				CNI: render.CNICalico,
+			}, nil
+	}
+
+	if provider == operator.ProviderDockerEE {
+		return provider,
+			render.NetworkConfig{
+				CNI:                  render.CNICalico,
+				NodenameFileOptional: true,
 			}, nil
 	}
 

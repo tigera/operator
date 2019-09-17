@@ -197,14 +197,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			reqLogger.Info("Installation config not found")
-			r.status.SetDegraded("Installation not found", err.Error())
-			r.status.ClearAvailable()
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	r.status.Enable()
+	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
@@ -262,7 +261,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -319,8 +317,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	// Clear the degraded bit if we've reached this far.
+	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
+
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.

@@ -105,11 +105,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("IntrusionDetection CR not found", "err", err)
-			r.status.SetDegraded("IntrusionDetection not found", err.Error())
-			r.status.ClearAvailable()
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			r.status.OnCRFound()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.V(3).Info("failed to get IntrusionDetection CR", "err", err)
@@ -117,7 +116,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-	r.status.Enable()
+	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {

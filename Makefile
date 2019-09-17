@@ -262,8 +262,9 @@ cluster-create: k3d
 	$(MAKE) deploy-crds
 	$(MAKE) create-tigera-operator-namespace
 
+KUBECONFIG?=./kubeconfig.yaml
 deploy-crds: kubectl
-	@export KUBECONFIG=./kubeconfig.yaml && \
+	@export KUBECONFIG=$(KUBECONFIG) && \
 		./kubectl apply -f deploy/crds/operator_v1_console_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_monitoringconfiguration_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_intrusiondetection_crd.yaml && \
@@ -273,7 +274,7 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=./kubeconfig.yaml kubectl create ns tigera-operator
+	KUBECONFIG=$(KUBECONFIG) kubectl create ns tigera-operator
 
 ## Destroy local docker-in-docker cluster
 cluster-destroy: k3d

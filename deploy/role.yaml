@@ -18,11 +18,18 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - "policy"
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - '*'
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterroles
   - clusterrolebindings
   - rolebindings
+  - roles
   verbs:
   - '*'
 - apiGroups:

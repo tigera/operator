@@ -91,6 +91,7 @@ func writeVersions(osVersions, eeVersions Components) error {
 		`	VersionCalicoTypha           = "` + osVersions.get("typha") + `"`,
 		`	VersionCalicoKubeControllers = "` + osVersions.get("calico/kube-controllers") + `"`,
 		`	VersionFlexVolume            = "` + osVersions.get("flexvol") + `"`,
+		`	VersionCPHAutoscaler         = "` + eeVersions.get("cpHorizontalAutoscaler") + `"`,
 		")",
 		"",
 		"// This section contains images used when installing Tigera Secure.",

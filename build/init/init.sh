@@ -5,25 +5,6 @@ if [ "$OPENSHIFT" != "true" ]; then
   exit 0
 fi
 
-## We need to use the apiserver address the kubelet uses since the
-# apiserver service IP won't be available yet.
-# Use the mounted in kubeconfig for the kubelet to get the apiserver.
-export KUBECONFIG=$KUBELET_KUBECONFIG
-apiserver_url=$(kubectl config view -o jsonpath='{.clusters[0].cluster.server}')
-if [ $? -ne 0 ]; then
-  echo "Failed to get apiserver from mounted kubeconfig"
-  echo "$apiserver_url"
-  echo "Kubelet kubeconfig:"
-  cat $kubelet_kcfg
-  exit 1
-fi
-unset KUBECONFIG
-export KUBERNETES_SERVICE_HOST=$(echo $apiserver_url | sed -e 's|^.*://\(.*\):.*$|\1|')
-echo "Using kubernetes host $KUBERNETES_SERVICE_HOST"
-export KUBERNETES_SERVICE_PORT=$(echo $apiserver_url | sed -e "s|^.*${KUBERNETES_SERVICE_HOST}\(:[0-9]*\)\{0,1\}.*$|\1|" | tr -d ':')
-echo "Using kubernetes host $KUBERNETES_SERVICE_PORT"
-
-
 ## Collect the AWS credentials from the secret in the kube-system and
 # then export them for use the in security group setup
 

@@ -262,7 +262,11 @@ func (m *StatusManager) syncState() bool {
 		m.progressing = nil
 		m.failing = nil
 	}
-	return false
+
+	// If we don't know about any resources, and we don't have any explicit degraded state set, then
+	// we're not yet ready to report status. However, if we've been given an explicit degraded state, then
+	// we should report it.
+	return m.explicitDegradedReason != ""
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined

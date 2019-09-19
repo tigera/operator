@@ -115,8 +115,14 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 // mergeState returns the object to pass to Update given the current and desired object states.
 func mergeState(desired, current runtime.Object) runtime.Object {
-	oldRV := current.(metav1.ObjectMetaAccessor).GetObjectMeta().GetResourceVersion()
-	desired.(metav1.ObjectMetaAccessor).GetObjectMeta().SetResourceVersion(oldRV)
+	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
+
+	// Merge common metadata fields.
+	desiredMeta.SetResourceVersion(currentMeta.GetResourceVersion())
+	desiredMeta.SetUID(currentMeta.GetUID())
+	desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
+
 	switch desired.(type) {
 	case *v1.Service:
 		// Services are a special case since some fields (namely ClusterIP) are defaulted

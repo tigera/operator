@@ -313,17 +313,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			},
 			InitialDelaySeconds: 5,
 		},
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/healthz",
-						"readiness",
-					},
-				},
-			},
-			InitialDelaySeconds: 5,
-		},
 	}
 }
 

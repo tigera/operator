@@ -109,7 +109,7 @@ func main() {
 	// implementing the logr.Logger interface. This logger will
 	// be propagated through the whole operator, generating
 	// uniform and structured logs.
-	logf.SetLogger(zap.Logger())
+	logf.SetLogger(zap.LoggerTo(os.Stdout))
 
 	printVersion()
 

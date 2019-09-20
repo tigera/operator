@@ -6,5 +6,6 @@ const (
 )
 
 type NetworkConfig struct {
-	CNI string
+	CNI                  string
+	NodenameFileOptional bool
 }

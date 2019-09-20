@@ -25,21 +25,21 @@ var log = logf.Log.WithName("controller_intrusiondetection")
 
 // Add creates a new IntrusionDetection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool, tsee bool) error {
+func Add(mgr manager.Manager, p operatorv1.Provider, tsee bool) error {
 	if !tsee {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, openshift))
+	return add(mgr, newReconciler(mgr, p))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, openshift bool) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, p operatorv1.Provider) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		openshift: openshift,
-		status:    status.New(mgr.GetClient(), "intrusion-detection"),
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		provider: p,
+		status:   status.New(mgr.GetClient(), "intrusion-detection"),
 	}
 	r.status.Run()
 	return r
@@ -82,10 +82,10 @@ var _ reconcile.Reconciler = &ReconcileIntrusionDetection{}
 type ReconcileIntrusionDetection struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client    client.Client
-	scheme    *runtime.Scheme
-	openshift bool
-	status    *status.StatusManager
+	client   client.Client
+	scheme   *runtime.Scheme
+	provider operatorv1.Provider
+	status   *status.StatusManager
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -130,7 +130,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
+	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -168,7 +168,12 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
-	component := render.IntrusionDetection(network.Spec.Registry, monitoringConfig, pullSecrets, r.openshift)
+	component := render.IntrusionDetection(
+		network.Spec.Registry,
+		monitoringConfig,
+		pullSecrets,
+		r.provider == operatorv1.ProviderOpenShift,
+	)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

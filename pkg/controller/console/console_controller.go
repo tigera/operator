@@ -27,21 +27,21 @@ var log = logf.Log.WithName("controller_console")
 
 // Add creates a new Console Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool, tsee bool) error {
+func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 	if !tsee {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, openshift))
+	return add(mgr, newReconciler(mgr, provider))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, openshift bool) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
 	c := &ReconcileConsole{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		openshift: openshift,
-		status:    status.New(mgr.GetClient(), "console"),
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		provider: provider,
+		status:   status.New(mgr.GetClient(), "console"),
 	}
 	c.status.Run()
 	return c
@@ -86,14 +86,14 @@ var _ reconcile.Reconciler = &ReconcileConsole{}
 type ReconcileConsole struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client    client.Client
-	scheme    *runtime.Scheme
-	openshift bool
-	status    *status.StatusManager
+	client   client.Client
+	scheme   *runtime.Scheme
+	provider operatorv1.Provider
+	status   *status.StatusManager
 }
 
 // GetConsole returns the default console instance with defaults populated.
-func GetConsole(ctx context.Context, cli client.Client, openshift bool) (*operatorv1.Console, error) {
+func GetConsole(ctx context.Context, cli client.Client, provider operatorv1.Provider) (*operatorv1.Console, error) {
 	// Fetch the console instance. We only support a single instance named "default".
 	instance := &operatorv1.Console{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
@@ -121,7 +121,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	reqLogger.Info("Reconciling Console")
 
 	// Fetch the Console instance
-	instance, err := GetConsole(context.Background(), r.client, r.openshift)
+	instance, err := GetConsole(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Console object not found")
@@ -147,7 +147,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	installation, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
+	installation, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -215,7 +215,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		monitoringConfig,
 		tlsSecret,
 		pullSecrets,
-		r.openshift,
+		r.provider == operatorv1.ProviderOpenShift,
 		installation.Spec.Registry,
 	)
 	if err != nil {

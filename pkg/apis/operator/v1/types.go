@@ -71,6 +71,7 @@ var (
 	ProviderNone      Provider = ""
 	ProviderEKS       Provider = "EKS"
 	ProviderOpenShift Provider = "OpenShift"
+	ProviderDockerEE  Provider = "DockerEnterprise"
 )
 
 // ComponentsSpec defines the desired state of components.

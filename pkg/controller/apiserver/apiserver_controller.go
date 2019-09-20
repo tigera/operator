@@ -25,21 +25,21 @@ var log = logf.Log.WithName("controller_apiserver")
 
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool, tsee bool) error {
+func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 	if !tsee {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, openshift))
+	return add(mgr, newReconciler(mgr, provider))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, openshift bool) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
 	r := &ReconcileAPIServer{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		openshift: openshift,
-		status:    status.New(mgr.GetClient(), "apiserver"),
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		provider: provider,
+		status:   status.New(mgr.GetClient(), "apiserver"),
 	}
 	r.status.Run()
 	return r
@@ -78,10 +78,10 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client    client.Client
-	scheme    *runtime.Scheme
-	openshift bool
-	status    *status.StatusManager
+	client   client.Client
+	scheme   *runtime.Scheme
+	provider operatorv1.Provider
+	status   *status.StatusManager
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -112,7 +112,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
+	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -151,7 +151,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.openshift)
+	component, err := render.APIServer(network.Spec.Registry, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

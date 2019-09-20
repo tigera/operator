@@ -24,7 +24,7 @@ import (
 )
 
 // fillDefaults fills in the default values for an instance.
-func fillDefaults(instance *operator.Installation, openshift bool) {
+func fillDefaults(instance *operator.Installation, provider operator.Provider) {
 	if len(instance.Spec.Registry) != 0 && !strings.HasSuffix(instance.Spec.Registry, "/") {
 		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
 	}
@@ -32,14 +32,14 @@ func fillDefaults(instance *operator.Installation, openshift bool) {
 		instance.Spec.Variant = operator.Calico
 	}
 	if len(instance.Spec.CNINetDir) == 0 {
-		if openshift {
+		if provider == operator.ProviderOpenShift {
 			instance.Spec.CNINetDir = "/etc/kubernetes/cni/net.d"
 		} else {
 			instance.Spec.CNINetDir = "/etc/cni/net.d"
 		}
 	}
 	if len(instance.Spec.CNIBinDir) == 0 {
-		if openshift {
+		if provider == operator.ProviderOpenShift {
 			instance.Spec.CNIBinDir = "/var/lib/cni/bin"
 		} else {
 			instance.Spec.CNIBinDir = "/opt/cni/bin"

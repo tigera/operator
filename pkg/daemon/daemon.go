@@ -24,7 +24,6 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/openshift"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -75,14 +74,13 @@ func Main() {
 		os.Exit(1)
 	}
 
-	// Determine if we're running on openshift. Pass this information to
-	// the controllers below.
-	openshift, err := openshift.IsOpenshift(mgr.GetConfig())
+	// Attempt to auto discover the provider
+	provider, err := utils.AutoDiscoverProvider(mgr.GetConfig())
 	if err != nil {
-		log.Error(err, "Failed to discover OpenShift API groups")
+		log.Error(err, "Auto discovery of Provider failed")
 		os.Exit(1)
 	}
-	log.WithValues("openshift", openshift).Info("Checking type of cluster")
+	log.WithValues("provider", provider).Info("Checking type of cluster")
 
 	// Determine if we need to start the TSEE specific controllers.
 	startTSEE, err := utils.RequiresTigeraSecure(mgr.GetConfig())
@@ -93,7 +91,7 @@ func Main() {
 	log.WithValues("required", startTSEE).Info("Checking if TSEE controllers are required")
 
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr, openshift, startTSEE); err != nil {
+	if err := controller.AddToManager(mgr, provider, startTSEE); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

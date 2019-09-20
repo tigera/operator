@@ -25,21 +25,21 @@ var log = logf.Log.WithName("controller_compliance")
 
 // Add creates a new Compliance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, openshift bool, tsee bool) error {
+func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 	if !tsee {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, openshift))
+	return add(mgr, newReconciler(mgr, provider))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, openshift bool) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
 	r := &ReconcileCompliance{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		openshift: openshift,
-		status:    status.New(mgr.GetClient(), "compliance"),
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		provider: provider,
+		status:   status.New(mgr.GetClient(), "compliance"),
 	}
 	r.status.Run()
 	return r
@@ -81,10 +81,10 @@ var _ reconcile.Reconciler = &ReconcileCompliance{}
 type ReconcileCompliance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client    client.Client
-	scheme    *runtime.Scheme
-	openshift bool
-	status    *status.StatusManager
+	client   client.Client
+	scheme   *runtime.Scheme
+	provider operatorv1.Provider
+	status   *status.StatusManager
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -135,7 +135,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client, r.openshift)
+	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -169,9 +169,10 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	reqLogger.V(3).Info("rendering components")
+	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Compliance(
-		network.Spec.Registry, monitoringConfig, pullSecrets, r.openshift)
+		network.Spec.Registry, monitoringConfig, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

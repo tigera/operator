@@ -557,6 +557,12 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 			},
 		},
+		{
+			Name: "NAMESPACE",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+			},
+		},
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
 		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},

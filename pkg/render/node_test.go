@@ -198,6 +198,12 @@ var _ = Describe("Node rendering tests", func() {
 					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
 			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
@@ -363,6 +369,12 @@ var _ = Describe("Node rendering tests", func() {
 					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
 			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
@@ -477,6 +489,12 @@ var _ = Describe("Node rendering tests", func() {
 					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
 			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
@@ -553,6 +571,12 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "NODENAME",
 				ValueFrom: &v1.EnvVarSource{
 					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 				},
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},

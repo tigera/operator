@@ -77,11 +77,11 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
 		// - 1 ns (calico-monitoring)
-		// - 6 TSEE crds
+		// - 7 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c, err := render.Calico(instance, nil, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal((44 + 1 + 1 + 6)))
+		Expect(componentCount(c.Render())).To(Equal((44 + 1 + 1 + 7)))
 	})
 })
 

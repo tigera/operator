@@ -91,6 +91,8 @@ func (c *apiServerComponent) Objects() []runtime.Object {
 		c.apiServiceAccountClusterRoleBinding(),
 		c.tieredPolicyPassthruClusterRole(),
 		c.tieredPolicyPassthruClusterRolebinding(),
+		c.authClusterRole(),
+		c.authClusterRoleBinding(),
 		c.delegateAuthClusterRoleBinding(),
 		c.authReaderRoleBinding(),
 	)
@@ -280,6 +282,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 					"felixconfigurations",
 					"ippools",
 					"remoteclusterconfigurations",
+					"managedclusters",
 				},
 				Verbs: []string{"*"},
 			},
@@ -305,6 +308,52 @@ func (c *apiServerComponent) apiServiceAccountClusterRoleBinding() *rbacv1.Clust
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "tigera-crds",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+}
+
+func (c *apiServerComponent) authClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-extension-apiserver-auth-access",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{
+					"",
+				},
+				Resources: []string{
+					"configmaps",
+				},
+				Verbs: []string{
+					"list",
+					"watch",
+				},
+				ResourceNames: []string{
+					"extension-apiserver-authentication",
+				},
+			},
+		},
+	}
+}
+func (c *apiServerComponent) authClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-extension-apiserver-auth-access",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-apiserver",
+				Namespace: APIServerNamespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "tigera-extension-apiserver-auth-access",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

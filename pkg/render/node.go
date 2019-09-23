@@ -50,8 +50,13 @@ func (c *nodeComponent) Objects() []runtime.Object {
 		c.nodeDaemonset(),
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
+		objs = append(objs,
+			// Include Service for exposing node metrics.
+			c.nodeMetricsService(),
+			// Role and RoleBinding for secrets in our own namespace.
+			c.nodeNamespaceRole(),
+			c.nodeNamespaceRoleBinding(),
+		)
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
@@ -239,6 +244,50 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		role.Rules = append(role.Rules, extraRules...)
 	}
 	return role
+}
+
+// nodeNamespaceRoleBinding creates a rolebinding giving the node service account additional RBAC for resources in its own namespace.
+func (c *nodeComponent) nodeNamespaceRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-node",
+			Namespace: CalicoNamespace,
+			Labels:    map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup:  "rbac.authorization.k8s.io",
+			Kind:      "Role",
+			Name:      "calico-node",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-node",
+				Namespace: CalicoNamespace,
+			},
+		},
+	}
+}
+
+// nodeNamespaceRole creates the role with additional RBAC for resources in the node's own namespace.
+func (c *nodeComponent) nodeNamespaceRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-node",
+			Namespace: CalicoNamespace,
+			Labels:    map[string]string{},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Used for secrets holding BGP passwords.
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+		},
+	}
 }
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.

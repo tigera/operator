@@ -34,6 +34,6 @@ const (
 
 	// Console images.
 	VersionConsoleManager = "v2.4.2"
-	VersionConsoleProxy   = "v2.6.0-rc1"
+	VersionConsoleProxy   = "v1.0.0-rc1"
 	VersionConsoleEsProxy = "v2.4.0"
 )

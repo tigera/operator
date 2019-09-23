@@ -284,7 +284,7 @@ func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 // consoleProxyContainer returns the container for the console proxy container.
 func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	return corev1.Container{
-		Name:  "cnx-manager-proxy",
+		Name:  "tigera-voltron",
 		Image: constructImage(ConsoleProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{Name: "VOLTRON_PORT",

@@ -1,7 +1,6 @@
 # Copyright (c) 2019 Tigera, Inc. All rights reserved.
 
 # This Makefile requires the following dependencies on the host system:
-# - dep
 # - go
 #
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
@@ -81,19 +80,35 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.22
+GO_BUILD_VER?=v0.23
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
+
+EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
+GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
 
 ifdef SSH_AUTH_SOCK
   EXTRA_DOCKER_ARGS += -v $(SSH_AUTH_SOCK):/ssh-agent --env SSH_AUTH_SOCK=/ssh-agent
 endif
 
-CONTAINERIZED=docker run --rm \
+ifneq ($(GOPATH),)
+	# If the environment is using multiple comma-separated directories for gopath, use the first one, as that
+	# is the default one used by go modules.
+	GOMOD_CACHE = $(shell echo $(GOPATH) | cut -d':' -f1)/pkg/mod
+else
+	# If gopath is empty, default to $(HOME)/go.
+	GOMOD_CACHE = $(HOME)/go/pkg/mod
+endif
+
+EXTRA_DOCKER_ARGS += -v $(GOMOD_CACHE):/go/pkg/mod:rw
+
+CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
+	docker run --rm \
 		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
 		-v $(CURDIR)/.go-pkg-cache:/go-cache/:rw \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-e GOPATH=/go \
 		-e GOCACHE=/go-cache \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-w /go/src/$(PACKAGE_NAME) \
@@ -185,12 +200,14 @@ ifeq ($(LOCAL_BUILD),true)
 endif
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): vendor $(SRC_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) go build -v -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) && \
+	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go'
 
 .PHONY: image
-image: vendor build $(BUILD_IMAGE)
+image: build $(BUILD_IMAGE)
 image-all: $(addprefix sub-image-,$(VALIDARCHES))
 sub-image-%:
 	$(MAKE) image ARCH=$*
@@ -225,14 +242,10 @@ images-all: $(addprefix sub-image-,$(VALIDARCHES))
 sub-image-%:
 	$(MAKE) images ARCH=$*
 
-vendor:
-	mkdir -p .go-pkg-cache
-	$(CONTAINERIZED) dep ensure
-
 clean:
 	rm -rf build/_output
-	rm -rf vendor/
 	rm -rf build/init/bin
+	rm -rf .go-pkg-cache
 	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
 
 ###############################################################################
@@ -244,9 +257,10 @@ GINKGO_FOCUS?=.*
 
 ## Run the full set of tests
 ut: cluster-create run-uts cluster-destroy
-run-uts: vendor
+run-uts:
 	-mkdir -p .go-pkg-cache report
-	$(CONTAINERIZED) ginkgo -r --skipPackage vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)
+	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) && \
+	ginkgo -r --skipPackage -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
 ## Create a local docker-in-docker cluster.
 cluster-create: k3d
@@ -296,15 +310,15 @@ kubectl:
 ###############################################################################
 .PHONY: static-checks
 ## Perform static checks on the code.
-static-checks: vendor
-	$(CONTAINERIZED) gometalinter --deadline=300s --disable-all --enable=vet --enable=errcheck --enable=goimports --vendor pkg/...
+static-checks:
+	$(CONTAINERIZED) golangci-lint run --deadline 5m
 
 .PHONY: fix
 ## Fix static checks
 fix:
 	goimports -w $(SRC_FILES)
 
-foss-checks: vendor
+foss-checks:
 	@echo Running $@...
 	docker run --rm \
 		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \

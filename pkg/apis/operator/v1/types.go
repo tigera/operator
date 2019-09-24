@@ -70,6 +70,7 @@ type Provider string
 var (
 	ProviderNone      Provider = ""
 	ProviderEKS       Provider = "EKS"
+	ProviderGKE       Provider = "GKE"
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )

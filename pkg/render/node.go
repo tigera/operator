@@ -347,18 +347,39 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 	return tolerations
 }
 
+// cniDirectories returns the binary and network config directories for the configured platform.
+func (c *nodeComponent) cniDirectories() (string, string) {
+	var cniBinDir, cniNetDir string
+	switch c.provider {
+	case operator.ProviderOpenShift:
+		cniNetDir = "/etc/kubernetes/cni/net.d"
+		cniBinDir = "/home/kubernetes/bin"
+	case operator.ProviderGKE:
+		cniBinDir = "/var/lib/cni/bin"
+		cniNetDir = "/etc/cni/net.d"
+	default:
+		// Default locations to match vanilla Kubernetes.
+		cniBinDir = "/opt/cni/bin"
+		cniNetDir = "/etc/cni/net.d"
+	}
+	return cniNetDir, cniBinDir
+}
+
 // nodeVolumes creates the node's volumes.
 func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
+
+	// Determine directories to use for CNI artifacts based on the provider.
+	cniNetDir, cniBinDir := c.cniDirectories()
 
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNIBinDir}}},
-		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNINetDir}}},
+		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}},
+		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
 			Name: "typha-ca",
@@ -397,7 +418,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
 		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 	} else if c.provider == operator.ProviderGKE {
-		flexVolumePluginsPath = "/home/kubernetes/flexvolume"
+		flexVolumePluginsPath = "/home/kubernetes/flexvolume/"
 	}
 
 	// Create and append flexvolume
@@ -456,10 +477,13 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		return []v1.EnvVar{}
 	}
 
+	// Determine directories to use for CNI artifacts based on the provider.
+	cniNetDir, _ := c.cniDirectories()
+
 	return []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
-		{Name: "CNI_NET_DIR", Value: c.cr.Spec.CNINetDir},
+		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{
 			Name: "CNI_NETWORK_CONFIG",
 			ValueFrom: &v1.EnvVarSource{

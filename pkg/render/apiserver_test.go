@@ -43,6 +43,7 @@ var _ = Describe("API server rendering tests", func() {
 		// - 1 ConfigMap audit Policy
 		// - 1 Service account
 		// - 2 ServiceAccount ClusterRole and binding
+		// - 2 ClusterRole and binding for auth configmap
 		// - 2 tiered policy passthru ClusterRole and binding
 		// - 1 delegate auth binding
 		// - 1 auth reader binding
@@ -50,7 +51,7 @@ var _ = Describe("API server rendering tests", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(len(resources)).To(Equal(14))
+		Expect(len(resources)).To(Equal(16))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -65,6 +66,8 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
@@ -87,21 +90,21 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		ExpectResource(resources[11], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
-		operatorCert, ok := resources[9].(*corev1.Secret)
+		operatorCert, ok := resources[11].(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(operatorCert)
 
-		tigeraCert, ok := resources[10].(*corev1.Secret)
+		tigeraCert, ok := resources[12].(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(tigeraCert)
 
-		apiService, ok := resources[12].(*v1beta1.APIService)
+		apiService, ok := resources[14].(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
 		verifyAPIService(apiService)
 
-		d := resources[11].(*v1.Deployment)
+		d := resources[13].(*v1.Deployment)
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 		Expect(len(d.Labels)).To(Equal(2))
@@ -195,10 +198,10 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(14))
-		ExpectResource(resources[11], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(len(resources)).To(Equal(16))
+		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
-		d := resources[11].(*v1.Deployment)
+		d := resources[13].(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 	})

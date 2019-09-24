@@ -216,6 +216,14 @@ func tigeraSecureCRDs() []runtime.Object {
 		{
 			scope: apiextensions.ClusterScoped,
 			names: apiextensions.CustomResourceDefinitionNames{
+				Plural:   "managedclusters",
+				Singular: "managedcluster",
+				Kind:     "ManagedCluster",
+			},
+		},
+		{
+			scope: apiextensions.ClusterScoped,
+			names: apiextensions.CustomResourceDefinitionNames{
 				Plural:   "tiers",
 				Singular: "tier",
 				Kind:     "Tier",

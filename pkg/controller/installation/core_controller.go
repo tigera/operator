@@ -349,33 +349,16 @@ func GenerateRenderConfig(provider operator.Provider, install *operator.Installa
 			fmt.Errorf("Can't specify provider '%s' with %s", install.Spec.KubernetesProvider, provider)
 	}
 
-	if provider == operator.ProviderOpenShift {
-		return provider,
-			render.NetworkConfig{
-				CNI: render.CNICalico,
-			}, nil
+	switch provider {
+	case operator.ProviderOpenShift:
+		return provider, render.NetworkConfig{CNI: render.CNICalico}, nil
+	case operator.ProviderDockerEE:
+		return provider, render.NetworkConfig{CNI: render.CNICalico, NodenameFileOptional: true}, nil
+	case operator.ProviderEKS, operator.ProviderGKE:
+		return provider, render.NetworkConfig{CNI: render.CNINone}, nil
+	default:
+		return operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil
 	}
-
-	if provider == operator.ProviderDockerEE {
-		return provider,
-			render.NetworkConfig{
-				CNI:                  render.CNICalico,
-				NodenameFileOptional: true,
-			}, nil
-	}
-
-	if install.Spec.KubernetesProvider == operator.ProviderEKS {
-		return operator.ProviderEKS,
-			render.NetworkConfig{
-				CNI: render.CNINone,
-			}, nil
-	}
-
-	// default to Calico CNI
-	return operator.ProviderNone,
-		render.NetworkConfig{
-			CNI: render.CNICalico,
-		}, nil
 }
 
 // GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for

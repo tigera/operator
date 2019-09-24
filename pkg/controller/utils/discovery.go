@@ -41,40 +41,48 @@ func AutoDiscoverProvider(cfg *rest.Config) (operatorv1.Provider, error) {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to get client for auto provider discovery: %v", err)
 	}
 
-	// Determine if we're running on openshift.
-	openshift, err := isOpenshift(clientset)
-	if err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to discover OpenShift API groups: %v", err)
-	} else if openshift {
-		return operatorv1.ProviderOpenShift, nil
+	// First, try to determine the platform based on the present API groups.
+	if platform, err := autodetectFromGroup(clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("Failed to check provider based on API groups: %s", err)
+	} else if platform != operatorv1.ProviderNone {
+		// We detected a platform. Use it.
+		return platform, nil
 	}
-	// Determine if we're running on Docker Enterprise.
-	dockeree, err := isDockerEE(clientset)
-	if err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if Docker EE is the provider: %v", err)
+
+	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
+	if dockeree, err := isDockerEE(clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if Docker EE is the provider: %s", err)
 	} else if dockeree {
 		return operatorv1.ProviderDockerEE, nil
+	}
+
+	// Couldn't detect any specific platform.
+	return operatorv1.ProviderNone, nil
+}
+
+// autodetectFromGroup auto detects the platform based on the API groups that are present.
+func autodetectFromGroup(c *kubernetes.Clientset) (operatorv1.Provider, error) {
+	groups, err := c.Discovery().ServerGroups()
+	if err != nil {
+		return operatorv1.ProviderNone, err
+	}
+	for _, g := range groups.Groups {
+		if g.Name == "config.openshift.io" {
+			// Running on OpenShift.
+			return operatorv1.ProviderOpenShift, nil
+		}
+
+		if g.Name == "networking.gke.io" {
+			// Running on GKE.
+			return operatorv1.ProviderGKE, nil
+		}
 	}
 	return operatorv1.ProviderNone, nil
 }
 
-// isOpenshift returns true if running on an openshift cluster, and false otherwise.
-func isOpenshift(c *kubernetes.Clientset) (bool, error) {
-	// Use the discovery client to determine if the openshift APIs exist.
-	// If they do, it means we're on openshift.
-	groups, err := c.Discovery().ServerGroups()
-	if err != nil {
-		return false, err
-	}
-	for _, g := range groups.Groups {
-		if g.Name == "config.openshift.io" {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // isDockerEE returns true if running on a Docker Enterprise cluster, and false otherwise.
+// Docker EE doesn't have any provider-specific API groups, so we need to use a different approach than
+// we use for other platforms in autodetectFromGroup.
 func isDockerEE(c *kubernetes.Clientset) (bool, error) {
 	masterNodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/master"})
 	if err != nil {

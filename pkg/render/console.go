@@ -290,7 +290,7 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			{Name: "VOLTRON_PORT",
 				Value: "9443"},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT",
-				Value: fmt.Sprintf("compliance.%s.svc.cluster.local:443", ComplianceNamespace)},
+				Value: fmt.Sprintf("compliance.%s.svc:443", ComplianceNamespace)},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},

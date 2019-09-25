@@ -424,7 +424,7 @@ ifndef EE_VERSIONS
 endif
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS)
 
-$(BINDIR)/gen-versions: vendor
+$(BINDIR)/gen-versions:
 	mkdir -p bin
 	$(CONTAINERIZED) go build -o $(BINDIR)/gen-versions ./hack/gen-versions
 

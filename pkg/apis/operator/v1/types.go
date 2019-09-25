@@ -46,16 +46,6 @@ type InstallationSpec struct {
 	// +optional
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
-	// CNINetDir configures the path on the host where CNI network configuration files will be installed.
-	// Default: /etc/cni/net.d
-	// +optional
-	CNINetDir string `json:"cniNetDir,omitempty"`
-
-	// CNIBinDir configures the path on the host where CNI binaries will be installed.
-	// Default: /opt/cni/bin
-	// +optional
-	CNIBinDir string `json:"cniBinDir,omitempty"`
-
 	// Components specifies the configuration of components.
 	// +optional
 	Components ComponentsSpec `json:"components,omitempty"`
@@ -70,6 +60,7 @@ type Provider string
 var (
 	ProviderNone      Provider = ""
 	ProviderEKS       Provider = "EKS"
+	ProviderGKE       Provider = "GKE"
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )

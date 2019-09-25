@@ -411,15 +411,14 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraTyphaEnv := []v1.EnvVar{
-		// When we add AWS integration then we need Security group stuff here
+			// When we add AWS integration then we need Security group stuff here
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}
 	if c.provider == operator.ProviderEKS {
-		typhaEnv = append(typhaEnv,
-			v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
-			v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
-		)
+		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
+	} else if c.provider == operator.ProviderGKE {
+		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
 	}
 
 	return typhaEnv

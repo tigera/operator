@@ -347,18 +347,39 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 	return tolerations
 }
 
+// cniDirectories returns the binary and network config directories for the configured platform.
+func (c *nodeComponent) cniDirectories() (string, string) {
+	var cniBinDir, cniNetDir string
+	switch c.provider {
+	case operator.ProviderOpenShift:
+		cniNetDir = "/etc/kubernetes/cni/net.d"
+		cniBinDir = "/home/kubernetes/bin"
+	case operator.ProviderGKE:
+		cniBinDir = "/var/lib/cni/bin"
+		cniNetDir = "/etc/cni/net.d"
+	default:
+		// Default locations to match vanilla Kubernetes.
+		cniBinDir = "/opt/cni/bin"
+		cniNetDir = "/etc/cni/net.d"
+	}
+	return cniNetDir, cniBinDir
+}
+
 // nodeVolumes creates the node's volumes.
 func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
+
+	// Determine directories to use for CNI artifacts based on the provider.
+	cniNetDir, cniBinDir := c.cniDirectories()
 
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNIBinDir}}},
-		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CNINetDir}}},
+		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}},
+		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
 			Name: "typha-ca",
@@ -390,11 +411,14 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		volumes = append(volumes, calicoLogVol)
 	}
 
+	// Set the flex volume plugin location based on platform.
 	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-	// In OpenShift 4.x, the location for flexvolume plugins has changed.
-	// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
 	if c.provider == operator.ProviderOpenShift {
+		// In OpenShift 4.x, the location for flexvolume plugins has changed.
+		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
 		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
+	} else if c.provider == operator.ProviderGKE {
+		flexVolumePluginsPath = "/home/kubernetes/flexvolume/"
 	}
 
 	// Create and append flexvolume
@@ -453,10 +477,13 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		return []v1.EnvVar{}
 	}
 
+	// Determine directories to use for CNI artifacts based on the provider.
+	cniNetDir, _ := c.cniDirectories()
+
 	return []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
-		{Name: "CNI_NET_DIR", Value: c.cr.Spec.CNINetDir},
+		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{
 			Name: "CNI_NETWORK_CONFIG",
 			ValueFrom: &v1.EnvVarSource{
@@ -527,7 +554,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 
 // nodeEnvVars creates the node's envvars.
 func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
-	// set the clusterType
+	// Set the clusterType.
 	clusterType := "k8s,operator"
 
 	switch c.provider {
@@ -535,6 +562,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",openshift"
 	case operator.ProviderEKS:
 		clusterType = clusterType + ",eks"
+	case operator.ProviderGKE:
+		clusterType = clusterType + ",gke"
 	}
 
 	if c.netConfig.CNI == CNICalico {
@@ -614,15 +643,22 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
-	if c.provider == operator.ProviderOpenShift {
+
+	// Configure provider specific environment variables here.
+	switch c.provider {
+	case operator.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
-
 		// Use iptables in nftables mode.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
-	}
-	if c.provider == operator.ProviderEKS {
+	case operator.ProviderEKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
+	case operator.ProviderGKE:
+		// The GKE CNI plugin uses its own interface prefix.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
+		// The GKE CNI plugin has its own iptables rules. Defer to them after ours.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
 	}
 
 	nodeEnv = setCustomEnv(nodeEnv, c.cr.Spec.Components.Node.ExtraEnv)

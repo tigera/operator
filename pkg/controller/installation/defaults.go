@@ -31,20 +31,6 @@ func fillDefaults(instance *operator.Installation, provider operator.Provider) {
 	if len(instance.Spec.Variant) == 0 {
 		instance.Spec.Variant = operator.Calico
 	}
-	if len(instance.Spec.CNINetDir) == 0 {
-		if provider == operator.ProviderOpenShift {
-			instance.Spec.CNINetDir = "/etc/kubernetes/cni/net.d"
-		} else {
-			instance.Spec.CNINetDir = "/etc/cni/net.d"
-		}
-	}
-	if len(instance.Spec.CNIBinDir) == 0 {
-		if provider == operator.ProviderOpenShift {
-			instance.Spec.CNIBinDir = "/var/lib/cni/bin"
-		} else {
-			instance.Spec.CNIBinDir = "/opt/cni/bin"
-		}
-	}
 	if len(instance.Spec.IPPools) == 0 {
 		instance.Spec.IPPools = []operator.IPPool{
 			{CIDR: "192.168.0.0/16"},

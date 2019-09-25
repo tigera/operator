@@ -31,8 +31,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance, operator.ProviderNone)
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
-		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
@@ -45,8 +43,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance, operator.ProviderNone)
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.CNINetDir).To(Equal("/etc/cni/net.d"))
-		Expect(instance.Spec.CNIBinDir).To(Equal("/opt/cni/bin"))
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
 		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
@@ -66,8 +62,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						Name: "pullSecret2",
 					},
 				},
-				CNIBinDir: "/test/bin",
-				CNINetDir: "/test/net",
 				IPPools: []operator.IPPool{
 					{CIDR: "1.2.3.0/24"},
 				},

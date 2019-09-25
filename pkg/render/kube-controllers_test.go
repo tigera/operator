@@ -73,9 +73,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Registry:  "test-reg/",
-				CNINetDir: "/test/cni/net/dir",
-				CNIBinDir: "/test/cni/bin/dir",
+				Registry: "test-reg/",
 				Components: operator.ComponentsSpec{
 					KubeControllers: operator.KubeControllersSpec{
 						ExtraEnv:          envVars,

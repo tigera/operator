@@ -746,7 +746,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				LocalObjectReference: v1.LocalObjectReference{
 					Name: "elastic-compliance-user",
 				},
-				Key:      "snapshotter.username",
+				Key:      "benchmarker.username",
 				Optional: &complianceBoolTrue},
 		}},
 		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
@@ -754,7 +754,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				LocalObjectReference: v1.LocalObjectReference{
 					Name: "elastic-compliance-user",
 				},
-				Key:      "snapshotter.password",
+				Key:      "benchmarker.password",
 				Optional: &complianceBoolTrue},
 		}},
 	}

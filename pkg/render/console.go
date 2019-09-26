@@ -538,6 +538,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 					"globalnetworkpolicies",
 					"tier.globalnetworkpolicies",
 					"globalnetworksets",
+					"managedclusters",
 				},
 				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 			},
@@ -568,10 +569,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			// Manage globalreport configuration, view report generation status, and list reports in the Tigera Secure console.
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"globalreports",
-					"managedclusters",
-				},
+				Resources: []string{"globalreports"},
 				Verbs:     []string{"*"},
 			},
 			{

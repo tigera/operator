@@ -3,14 +3,13 @@ package utils
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"strings"
 )
 
 // GetMonitoringConfig returns the default installation instance with defaults populated.

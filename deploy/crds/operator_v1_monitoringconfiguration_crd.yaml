@@ -9,7 +9,7 @@ spec:
     listKind: MonitoringConfigurationList
     plural: monitoringconfigurations
     singular: monitoringconfiguration
-  scope: Cluster
+  scope: Namespaced
   subresources:
     status: {}
   validation:
@@ -35,8 +35,14 @@ spec:
               properties:
                 endpoint:
                   type: string
+                httpCertificate:
+                  type: object
+                namespace:
+                  type: string
               required:
               - endpoint
+              - namespace
+              - httpCertificate
               type: object
             kibana:
               properties:

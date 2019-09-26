@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -166,6 +165,7 @@ func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*c
 		if err != nil {
 			return nil, err
 		}
+		s.UID = ""
 		secrets = append(secrets, s)
 	}
 

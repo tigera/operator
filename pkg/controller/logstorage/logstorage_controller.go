@@ -3,6 +3,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -11,6 +12,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -63,6 +65,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
+	if err = c.Watch(&source.Kind{Type: &eckv1alpha1.Elasticsearch{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -99,6 +105,20 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.Info("Reconciling LogStorage")
 
 	ctx := context.Background()
+	var isESReq, esExists, isOurs bool
+	var err error
+	// This is to stop a loop where we detects the Elasticsearch updates from the ECK operator and the ECK operator detects
+	// the changes from this cluster (the update to the Elasticsearch resource here changes it, as the ECK cluster seems
+	// to modify the Elasticsearch resource after this controller creates it)
+	if isESReq, isOurs, esExists, err = r.isElasticsearchUpdate(ctx, request); err != nil {
+		r.status.SetDegraded("Error retrieving elasticsearch data", err.Error())
+		return reconcile.Result{}, err
+	} else if isESReq && !isOurs {
+		reqLogger.Info("not our es")
+		// If this is an Elasticsearch update to the cluster we didn't create ignore it as there's nothing to update
+		// from this information regarding the LogStorage resource
+		return reconcile.Result{}, nil
+	}
 
 	// Fetch the LogStorage instance
 	ls, err := GetLogStorage(ctx, r.client)
@@ -133,27 +153,48 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	if ls.StorageClass() != nil {
-		err := r.client.Get(ctx, client.ObjectKey{Name: ls.StorageClass().Name}, &storagev1.StorageClass{})
+	if !isESReq || (isESReq && !esExists) {
+		if ls.StorageClass() != nil {
+			err := r.client.Get(ctx, client.ObjectKey{Name: ls.StorageClass().Name}, &storagev1.StorageClass{})
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Couldn't find storage class %s", ls.StorageClass().Name), err.Error())
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+		}
+
+		hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
+		component, err := render.Elasticsearch(
+			ls,
+			r.provider == operatorv1.ProviderOpenShift,
+			network.Spec.Registry,
+		)
 		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Couldn't find storage class %s", ls.StorageClass().Name), err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			r.status.SetDegraded("Error rendering LogStorage", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 
-	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
-	component, err := render.Elasticsearch(
-		ls,
-		r.provider == operatorv1.ProviderOpenShift,
-		network.Spec.Registry,
-	)
-	if err != nil {
-		r.status.SetDegraded("Error rendering LogStorage", err.Error())
+	if isOp, err := r.isElasticsearchOperational(ctx); err != nil {
+		r.status.SetDegraded("Error figuring out if elasticsearch is operational", err.Error())
 		return reconcile.Result{}, err
+	} else if !isOp {
+		reqLogger.Info("waiting for es...")
+		r.status.SetDegraded("waiting for elasticsearch cluster to be operational", "")
+		ls.Status.State = operatorv1.LogStorageWaitingForElasticsearch
+		if err := r.client.Status().Update(ctx, ls); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+	if err := r.createComponentUsers(ctx, ls); err != nil {
+		r.status.SetDegraded("Error creating elasticsearch access components", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -165,11 +206,56 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Everything is available - update the CRD status.
 	ls.Status.State = operatorv1.LogStorageStatusReady
-	if err = r.client.Status().Update(ctx, ls); err != nil {
+	if err := r.client.Status().Update(ctx, ls); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileLogStorage) isElasticsearchUpdate(ctx context.Context, request reconcile.Request) (bool, bool, bool, error) {
+	isES := false
+	isOurs := false
+	exists := true
+
+	if request.Name == render.ElasticsearchName && request.Namespace == render.ElasticsearchNamespace {
+		isES = true
+		isOurs = true
+	}
+
+	es := &eckv1alpha1.Elasticsearch{}
+	if err := r.client.Get(ctx, request.NamespacedName, es); err != nil {
+		if !errors.IsNotFound(err) {
+			return false, false, false, err
+		}
+		exists = false
+	}
+
+	return isES, isOurs, exists, nil
+}
+
+func (r *ReconcileLogStorage) isElasticsearchOperational(ctx context.Context) (bool, error) {
+	es := &eckv1alpha1.Elasticsearch{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, es); err != nil {
+		return false, err
+	} else if es.Status.Phase == "Operational" {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (r *ReconcileLogStorage) createComponentUsers(ctx context.Context, ls *operatorv1.LogStorage) error {
+	component, err := utils.ElastisearchUsers(ctx, r.client)
+	if err != nil {
+		return err
+	}
+
+	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
+	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -1,6 +1,7 @@
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -13,7 +14,9 @@ type MonitoringConfigurationSpec struct {
 }
 
 type ElasticConfig struct {
-	Endpoint string `json:"endpoint"`
+	Endpoint        string                 `json:"endpoint"`
+	Namespace       string                 `json:"namespace"`
+	HTTPCertificate corev1.SecretReference `json:"httpCertificate"`
 }
 
 type KibanaConfig struct {

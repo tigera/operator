@@ -290,7 +290,9 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			{Name: "VOLTRON_PORT",
 				Value: "9443"},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT",
-				Value: fmt.Sprintf("compliance.%s.svc:443", ComplianceNamespace)},
+				Value: fmt.Sprintf("compliance.%s.svc.cluster.local:443", ComplianceNamespace)},
+			{Name: "VOLTRON_LOG_LEVEL",
+				Value: "info"},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
@@ -536,7 +538,6 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 					"globalnetworkpolicies",
 					"tier.globalnetworkpolicies",
 					"globalnetworksets",
-					"managedclusters",
 				},
 				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 			},
@@ -567,7 +568,10 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			// Manage globalreport configuration, view report generation status, and list reports in the Tigera Secure console.
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalreports"},
+				Resources: []string{
+					"globalreports",
+					"managedclusters",
+				},
 				Verbs:     []string{"*"},
 			},
 			{

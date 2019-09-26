@@ -26,7 +26,7 @@ const (
 	VersionComplianceReporter    = "v2.4.2"
 	VersionComplianceServer      = "v2.4.2"
 	VersionComplianceSnapshotter = "v2.4.2"
-	VersionComplianceBenchmarker = "v2.5.0"
+	VersionComplianceBenchmarker = "v2.5.1"
 
 	// Intrusion detection images.
 	VersionIntrusionDetectionController   = "v2.4.2"

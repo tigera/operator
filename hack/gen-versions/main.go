@@ -118,7 +118,7 @@ func writeVersions(osVersions, eeVersions Components) error {
 		"",
 		"	// Console images.",
 		`	VersionConsoleManager = "` + eeVersions.get("cnx-manager") + `"`,
-		`	VersionConsoleProxy   = "` + eeVersions.get("cnx-manager-proxy") + `"`,
+		`	VersionConsoleProxy   = "` + eeVersions.get("voltron") + `"`,
 		`	VersionConsoleEsProxy = "` + eeVersions.get("es-proxy") + `"`,
 		")",
 	}

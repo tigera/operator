@@ -47,7 +47,7 @@ const (
 
 	// Console images.
 	ConsoleManagerImageName = "cnx-manager:" + components.VersionConsoleManager
-	ConsoleProxyImageName   = "cnx-manager-proxy:" + components.VersionConsoleProxy
+	ConsoleProxyImageName   = "voltron:" + components.VersionConsoleProxy
 	ConsoleEsProxyImageName = "es-proxy:" + components.VersionConsoleEsProxy
 )
 

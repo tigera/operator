@@ -102,7 +102,6 @@ func (c *consoleComponent) Ready() bool {
 // consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
 func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,7 +217,7 @@ func (c *consoleComponent) consoleProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path:   "/",
+				Path:   "/voltron/api/health",
 				Port:   intstr.FromInt(managerPort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
@@ -285,14 +284,19 @@ func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 // consoleProxyContainer returns the container for the console proxy container.
 func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	return corev1.Container{
-		Name:  "cnx-manager-proxy",
+		Name:  "tigera-voltron",
 		Image: constructImage(ConsoleProxyImageName, c.registry),
-		Env: append(c.consoleOAuth2EnvVars(), corev1.EnvVar{
-			Name:  "CNX_COMPLIANCE_SERVER",
-			Value: fmt.Sprintf("compliance.%s.svc.cluster.local:443", ComplianceNamespace),
-		}),
+		Env: []corev1.EnvVar{
+			{Name: "VOLTRON_PORT",
+				Value: "9443"},
+			{Name: "VOLTRON_COMPLIANCE_ENDPOINT",
+				Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
+			{Name: "VOLTRON_LOG_LEVEL",
+				Value: "info"},
+		},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: ManagerTLSSecretName, MountPath: "/etc/cnx-manager-web-tls"},
+			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
+			{Name: ManagerTLSSecretName, MountPath: "/certs/tunnel"},
 		},
 		LivenessProbe: c.consoleProxyProbe(),
 	}
@@ -407,6 +411,12 @@ func (c *consoleComponent) consoleManagerClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch"},
+			},
+
 		},
 	}
 }
@@ -459,6 +469,7 @@ func (c *consoleComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 					"tier.globalnetworkpolicies",
 					"namespaces",
 					"globalnetworksets",
+					"managedclusters",
 				},
 				Verbs: []string{"watch", "list"},
 			},
@@ -527,6 +538,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 					"globalnetworkpolicies",
 					"tier.globalnetworkpolicies",
 					"globalnetworksets",
+					"managedclusters",
 				},
 				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 			},

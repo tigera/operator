@@ -332,7 +332,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean images test
+ci: clean images test $(BINDIR)/gen-versions
 
 ## Deploys images to registry
 cd:
@@ -425,8 +425,10 @@ endif
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS)
 
 $(BINDIR)/gen-versions:
-	mkdir -p bin
-	$(CONTAINERIZED) go build -o $(BINDIR)/gen-versions ./hack/gen-versions
+	mkdir -p $(BINDIR)
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) && \
+	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
 .PHONY: help
 ## Display this help text

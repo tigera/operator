@@ -35,12 +35,13 @@ var log = logf.Log.WithName("status_manager")
 // degraded if it is running successfully but a configuration change has resulted in a configuration that cannot
 // be actioned.
 type StatusManager struct {
-	client      client.Client
-	component   string
-	daemonsets  []types.NamespacedName
-	deployments []types.NamespacedName
-	lock        sync.Mutex
-	enabled     bool
+	client       client.Client
+	component    string
+	daemonsets   []types.NamespacedName
+	deployments  []types.NamespacedName
+	statefulsets []types.NamespacedName
+	lock         sync.Mutex
+	enabled      bool
 
 	// Track degraded state as set by external controllers.
 	degraded               bool
@@ -54,10 +55,11 @@ type StatusManager struct {
 
 func New(client client.Client, component string) *StatusManager {
 	return &StatusManager{
-		client:      client,
-		component:   component,
-		daemonsets:  []types.NamespacedName{},
-		deployments: []types.NamespacedName{},
+		client:       client,
+		component:    component,
+		daemonsets:   []types.NamespacedName{},
+		deployments:  []types.NamespacedName{},
+		statefulsets: []types.NamespacedName{},
 	}
 }
 
@@ -119,6 +121,7 @@ func (m *StatusManager) OnCRNotFound() {
 	m.failing = []string{}
 	m.daemonsets = []types.NamespacedName{}
 	m.deployments = []types.NamespacedName{}
+	m.statefulsets = []types.NamespacedName{}
 }
 
 // SetDaemonsets tells the status manager to monitor the health of the given daemonsets.
@@ -133,6 +136,13 @@ func (m *StatusManager) SetDeployments(deps []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.deployments = deps
+}
+
+// SetStatefulSets tells the status manager to monitor the health of the given statefulsets.
+func (m *StatusManager) SetStatefulSets(ss []types.NamespacedName) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.statefulsets = ss
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
@@ -204,6 +214,7 @@ func (m *StatusManager) syncState() bool {
 	failing := []string{}
 	numDaemonSets := len(m.daemonsets)
 	numDeployments := len(m.deployments)
+	numStatefulSets := len(m.statefulsets)
 	if len(m.daemonsets) > 0 {
 		// For each daemonset, check its rollout status.
 		for _, dsnn := range m.daemonsets {
@@ -252,7 +263,28 @@ func (m *StatusManager) syncState() bool {
 		}
 	}
 
-	if numDeployments+numDaemonSets > 0 {
+	if len(m.statefulsets) > 0 {
+		for _, depnn := range m.statefulsets {
+			ss := &appsv1.StatefulSet{}
+			err := m.client.Get(context.TODO(), depnn, ss)
+			if err != nil {
+				log.WithValues("error", err).Info("Error querying statefulset")
+				continue
+			}
+			if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
+				progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas))
+			} else if ss.Status.ObservedGeneration < ss.Generation {
+				progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
+			}
+
+			// Check if any pods within the deployment are failing.
+			if f := m.podsFailing(ss.Spec.Selector, ss.Namespace); f != "" {
+				failing = append(failing, f)
+			}
+		}
+	}
+
+	if numDeployments+numDaemonSets+numStatefulSets > 0 {
 		// We have been told about the resources we need to watch - set state before unlocking.
 		m.progressing = progressing
 		m.failing = failing
@@ -273,15 +305,11 @@ func (m *StatusManager) syncState() bool {
 // to be in CrashLoopBackOff state.
 func (m *StatusManager) podsFailing(selector *metav1.LabelSelector, namespace string) string {
 	l := corev1.PodList{}
-	s, err := metav1.LabelSelectorAsSelector(selector)
+	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
 		panic(err)
 	}
-	opts := client.ListOptions{
-		LabelSelector: s,
-		Namespace:     namespace,
-	}
-	m.client.List(context.TODO(), &opts, &l)
+	m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
 	for _, p := range l.Items {
 		if p.Status.Phase == corev1.PodFailed {
 			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name)

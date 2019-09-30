@@ -54,6 +54,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	// or update it if needed.
 	daemonSets := []types.NamespacedName{}
 	deployments := []types.NamespacedName{}
+	statefulsets := []types.NamespacedName{}
 	for _, obj := range component.Objects() {
 		// Set CR instance as the owner and controller.
 		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
@@ -73,6 +74,8 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			daemonSets = append(daemonSets, key)
 		} else if obj.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
 			deployments = append(deployments, key)
+		} else if obj.GetObjectKind().GroupVersionKind().Kind == "StatefulSet" {
+			statefulsets = append(statefulsets, key)
 		}
 
 		// Check to see if the object exists or not.
@@ -108,6 +111,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	if status != nil {
 		status.SetDaemonsets(daemonSets)
 		status.SetDeployments(deployments)
+		status.SetStatefulSets(statefulsets)
 	}
 	cmpLog.Info("Done reconciling component")
 	return nil

@@ -21,6 +21,9 @@ const (
 	VersionAPIServer   = "v2.5.0"
 	VersionQueryServer = "v2.4.0"
 
+	// Logging
+	VersionFluentd = "v2.5.1"
+
 	// Compliance images.
 	VersionComplianceController  = "v2.4.2"
 	VersionComplianceReporter    = "v2.4.2"

@@ -723,7 +723,7 @@ func schema_pkg_apis_operator_v1_LogStorageSpec(ref common.ReferenceCallback) co
 					"certificate": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Certificate defines what secret contains the ssl certificate to use for the elasticsearch cluster. If nothing is specified a self signed one is created. This certificate is used for inter-cluster communication and for k8 resources that need access to the cluster",
-							Ref:         ref("github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1.SecretRef"),
+							Ref:         ref("k8s.io/api/core/v1.SecretReference"),
 						},
 					},
 					"nodes": {
@@ -742,7 +742,7 @@ func schema_pkg_apis_operator_v1_LogStorageSpec(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1.SecretRef", "github.com/tigera/operator/pkg/apis/operator/v1.Indices", "github.com/tigera/operator/pkg/apis/operator/v1.Nodes"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.Indices", "github.com/tigera/operator/pkg/apis/operator/v1.Nodes", "k8s.io/api/core/v1.SecretReference"},
 	}
 }
 

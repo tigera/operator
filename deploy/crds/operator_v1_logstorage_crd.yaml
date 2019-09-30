@@ -34,9 +34,6 @@ spec:
                 to use for the elasticsearch cluster. If nothing is specified a self
                 signed one is created. This certificate is used for inter-cluster
                 communication and for k8 resources that need access to the cluster
-              properties:
-                secretName:
-                  type: string
               type: object
             indices:
               description: Index defines the configuration for the indices in the

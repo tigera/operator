@@ -1,7 +1,6 @@
 package v1
 
 import (
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,7 +24,7 @@ type LogStorageSpec struct {
 	// Certificate defines what secret contains the ssl certificate to use for the elasticsearch cluster. If nothing is
 	// specified a self signed one is created. This certificate is used for inter-cluster communication and for k8 resources
 	// that need access to the cluster
-	Certificate *cmneckalpha1.SecretRef `json:"certificate,omitempty"`
+	Certificate *corev1.SecretReference `json:"certificate,omitempty"`
 	// Node defines the configuration for the elasticsearch cluster nodes. The nodes created will all be of type master,
 	// data, and ingest, and the number of nodes, where their data is stored, and what the resource requirements are
 	// configured here

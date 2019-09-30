@@ -5,7 +5,6 @@
 package v1
 
 import (
-	v1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
@@ -744,7 +743,7 @@ func (in *LogStorageSpec) DeepCopyInto(out *LogStorageSpec) {
 	*out = *in
 	if in.Certificate != nil {
 		in, out := &in.Certificate, &out.Certificate
-		*out = new(v1alpha1.SecretRef)
+		*out = new(corev1.SecretReference)
 		**out = **in
 	}
 	if in.Nodes != nil {

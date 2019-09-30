@@ -94,7 +94,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsear
 	tls := cmneckalpha1.TLSOptions{}
 	if es.logStorage.Spec.Certificate != nil {
 		tls.Certificate = cmneckalpha1.SecretRef{
-			SecretName: es.logStorage.Spec.Certificate.SecretName,
+			SecretName: es.logStorage.Spec.Certificate.Name,
 		}
 	} else {
 		tls.SelfSignedCertificate = &cmneckalpha1.SelfSignedCertificate{

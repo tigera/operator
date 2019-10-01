@@ -153,6 +153,16 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 			dd.Spec.Replicas = cd.Spec.Replicas
 		}
 		return dd
+	case *v1.ServiceAccount:
+		// ServiceAccounts generate a new token if we don't include the existing one.
+		csa := current.(*v1.ServiceAccount)
+		dsa := desired.(*v1.ServiceAccount)
+		if len(csa.Secrets) != 0 && len(dsa.Secrets) == 0 {
+			// Only copy the secrets if they exist, and we haven't specified them explicitly
+			// on the new object.
+			dsa.Secrets = csa.Secrets
+		}
+		return dsa
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

@@ -10,6 +10,8 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	batch "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +42,7 @@ type StatusManager struct {
 	daemonsets   []types.NamespacedName
 	deployments  []types.NamespacedName
 	statefulsets []types.NamespacedName
+	cronjobs     []types.NamespacedName
 	lock         sync.Mutex
 	enabled      bool
 
@@ -60,6 +63,7 @@ func New(client client.Client, component string) *StatusManager {
 		daemonsets:   []types.NamespacedName{},
 		deployments:  []types.NamespacedName{},
 		statefulsets: []types.NamespacedName{},
+		cronjobs:     []types.NamespacedName{},
 	}
 }
 
@@ -122,6 +126,7 @@ func (m *StatusManager) OnCRNotFound() {
 	m.daemonsets = []types.NamespacedName{}
 	m.deployments = []types.NamespacedName{}
 	m.statefulsets = []types.NamespacedName{}
+	m.cronjobs = []types.NamespacedName{}
 }
 
 // SetDaemonsets tells the status manager to monitor the health of the given daemonsets.
@@ -143,6 +148,13 @@ func (m *StatusManager) SetStatefulSets(ss []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.statefulsets = ss
+}
+
+// SetCronJobs tells the status manager to monitor the health of the given cronjobs.
+func (m *StatusManager) SetCronJobs(cj []types.NamespacedName) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.cronjobs = cj
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
@@ -215,6 +227,7 @@ func (m *StatusManager) syncState() bool {
 	numDaemonSets := len(m.daemonsets)
 	numDeployments := len(m.deployments)
 	numStatefulSets := len(m.statefulsets)
+	// numCronJobs := len(m.statefulsets)
 	if len(m.daemonsets) > 0 {
 		// For each daemonset, check its rollout status.
 		for _, dsnn := range m.daemonsets {
@@ -281,6 +294,43 @@ func (m *StatusManager) syncState() bool {
 			if f := m.podsFailing(ss.Spec.Selector, ss.Namespace); f != "" {
 				failing = append(failing, f)
 			}
+		}
+	}
+
+	for _, depnn := range m.cronjobs {
+		cj := &batch.CronJob{}
+		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
+			// TODO: feels like we gave up a little too quickly here...
+			log.WithValues("error", err).Info("Error querying cronjobs")
+			continue
+		}
+
+		// CronJob status only indicates whether it launched the jobs - Not whether those jobs completed successfully.
+		// As such, we query the past few jobs and make sure they did eventually complete.
+		var (
+			numSuccess = 0
+			numFailed  = 0
+		)
+		for _, jref := range cj.Status.Active {
+			j := &batchv1.Job{}
+			if err := m.client.Get(context.TODO(), types.NamespacedName{jref.Namespace, jref.Name}, j); err != nil {
+				log.WithValues("error", err).Info("couldn't query cronjob job")
+				continue
+			}
+
+			if j.Status.Failed > 0 {
+				numFailed += 1
+			}
+			if j.Status.Succeeded > 0 {
+				numSuccess += 1
+			}
+		}
+
+		// A cronjob can be considered unsuccessful if it hasn't succeeded recently and has tried at least once.
+		if numSuccess == 0 && numFailed != 0 {
+			// if a cronjob isn't successful, we don't want to set the entire status as NotReady.
+			// therefore, just mark it as degraded
+			m.SetDegraded("CronJob hasn't launched any successful jobs", "cronjob/"+cj.Name)
 		}
 	}
 

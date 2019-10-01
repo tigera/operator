@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"time"
 )
 
 var log = logf.Log.WithName("controller_logstorage")
@@ -163,6 +162,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	if err != nil {
+		log.Error(err, "Error with Pull secrets")
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
@@ -271,6 +277,16 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(updatedESUserSecrets, esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error creating / update resource", err)
+		return reconcile.Result{}, err
+	}
+
+	// TODO: remove?
+	// r.status.SetCronJobs([]types.NamespacedName{{Name: "elastic-curator", Namespace: "tigera-elasticsearch"}})
+	curatorHandler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
+	curatorComponent := render.ElasticCurator(*ls, pullSecrets, network.Spec.Registry)
+
+	if err := curatorHandler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
 

@@ -28,6 +28,11 @@ type LogStorageSpec struct {
 	Nodes *Nodes `json:"nodes,omitempty"`
 	// Index defines the configuration for the indices in the elasticsearch cluster
 	Indices *Indices `json:"indices,omitempty"`
+
+	FlowRetention             int
+	AuditRetention            int
+	SnapshotRetention         int
+	ComplianceReportRetention int
 }
 
 type Nodes struct {

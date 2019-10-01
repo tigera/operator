@@ -59,6 +59,7 @@ const (
 	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
 	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch
 	ECKKibanaImageName        = "kibana:" + components.VersionECKKibana
+	EsCuratorImageName        = "es-curator:" + components.VersionEsCurator
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.

@@ -44,4 +44,5 @@ const (
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
+	VersionEsCurator        = "v2.4.0"
 )

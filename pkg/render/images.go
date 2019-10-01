@@ -8,9 +8,11 @@ import (
 
 // Default registries for Calico and Tigera.
 const (
-	CalicoRegistry = "docker.io/calico/"
-	TigeraRegistry = "quay.io/tigera/"
-	K8sGcrRegistry = "gcr.io/google-containers/"
+	CalicoRegistry           = "docker.io/calico/"
+	TigeraRegistry           = "quay.io/tigera/"
+	K8sGcrRegistry           = "gcr.io/google-containers/"
+	ECKOperatorRegistry      = "docker.elastic.co/eck/"
+	ECKElasticsearchRegistry = "docker.elastic.co/elasticsearch/"
 )
 
 // This section contains images used when installing open-source Calico.
@@ -49,6 +51,9 @@ const (
 	ConsoleManagerImageName = "cnx-manager:" + components.VersionConsoleManager
 	ConsoleProxyImageName   = "voltron:" + components.VersionConsoleProxy
 	ConsoleEsProxyImageName = "es-proxy:" + components.VersionConsoleEsProxy
+
+	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
+	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.
@@ -70,6 +75,10 @@ func constructImage(imageName string, registry string) string {
 		reg = CalicoRegistry
 	case HorizontalAutoScalerImageName:
 		reg = K8sGcrRegistry
+	case ECKElasticsearchImageName:
+		reg = ECKElasticsearchRegistry
+	case ECKOperatorImageName:
+		reg = ECKOperatorRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

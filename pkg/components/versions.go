@@ -36,4 +36,7 @@ const (
 	VersionConsoleManager = "v2.4.2"
 	VersionConsoleProxy   = "v1.0.0.rc1"
 	VersionConsoleEsProxy = "v2.4.0"
+
+	VersionECKOperator      = "0.9.0"
+	VersionECKElasticsearch = "7.3.0"
 )

@@ -4,13 +4,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	LogControllerStatusReady = "Ready"
+)
 
 // LogCollectorSpec defines the desired state of LogCollector
+// Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
 type LogCollectorSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 }
@@ -18,9 +19,11 @@ type LogCollectorSpec struct {
 // LogCollectorStatus defines the observed state of LogCollector
 // +k8s:openapi-gen=true
 type LogCollectorStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+
+	// State indicates the state of the daemonset by the LogCollector controller
+	State string `json:"state,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

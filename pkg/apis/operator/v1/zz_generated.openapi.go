@@ -723,7 +723,7 @@ func schema_pkg_apis_operator_v1_LogCollectorSpec(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LogCollectorSpec defines the desired state of LogCollector",
+				Description: "LogCollectorSpec defines the desired state of LogCollector Valid only for the variant 'TigeraSecureEnterprise'.",
 				Properties:  map[string]spec.Schema{},
 			},
 		},
@@ -736,7 +736,15 @@ func schema_pkg_apis_operator_v1_LogCollectorStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollectorStatus defines the observed state of LogCollector",
-				Properties:  map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State indicates the state of the daemonset by the LogCollector controller",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
 			},
 		},
 		Dependencies: []string{},

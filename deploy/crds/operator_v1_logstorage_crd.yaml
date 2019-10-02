@@ -29,12 +29,6 @@ spec:
           type: object
         spec:
           properties:
-            certificate:
-              description: Certificate defines what secret contains the ssl certificate
-                to use for the elasticsearch cluster. If nothing is specified a self
-                signed one is created. This certificate is used for inter-cluster
-                communication and for k8 resources that need access to the cluster
-              type: object
             indices:
               description: Index defines the configuration for the indices in the
                 elasticsearch cluster
@@ -61,10 +55,6 @@ spec:
                 resourceRequirements:
                   description: ResourceRequirements represents the resource limits
                     and requirements for the elasticsearch cluster (i.e. cpu, size)
-                  type: object
-                storageClass:
-                  description: StorageClass sets the storage class that the nodes
-                    will use to store their data
                   type: object
               type: object
           type: object

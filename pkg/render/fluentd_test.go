@@ -17,17 +17,18 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/elasticsearch"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var instance *operatorv1.LogCollector
-	var monitoring *operatorv1.MonitoringConfiguration
 	var s3Creds *render.S3Credential
 	var filters *render.FluentdFilters
 	var installation *operatorv1.Installation
@@ -35,17 +36,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		instance = &operatorv1.LogCollector{}
-		monitoring = &operatorv1.MonitoringConfiguration{
-			Spec: operatorv1.MonitoringConfigurationSpec{
-				ClusterName: "clusterTestName",
-				Elasticsearch: &operatorv1.ElasticConfig{
-					Endpoint: "https://elastic.search:1234",
-				},
-				Kibana: &operatorv1.KibanaConfig{
-					Endpoint: "https://kibana.ui:1234",
-				},
-			},
-		}
 		installation = &operatorv1.Installation{
 			Spec: operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
@@ -53,10 +43,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		s3Creds = nil
 		filters = nil
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserLogCollector})
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Fluentd(instance, s3Creds, filters, monitoring, nil, installation)
+		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -89,7 +80,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			BucketName: "thebucket",
 			BucketPath: "bucketpath",
 		}
-		component := render.Fluentd(instance, s3Creds, filters, monitoring, nil, installation)
+		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
@@ -153,7 +144,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Endpoint:   "tcp://1.2.3.4:80",
 			PacketSize: &ps,
 		}
-		component := render.Fluentd(instance, s3Creds, filters, monitoring, nil, installation)
+		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -221,7 +212,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		filters = &render.FluentdFilters{
 			Flow: "flow-filter",
 		}
-		component := render.Fluentd(instance, s3Creds, filters, monitoring, nil, installation)
+		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 

@@ -7,6 +7,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 
+	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -70,11 +71,12 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		}
 
 		// Keep track of some objects so we can report on their status.
-		if obj.GetObjectKind().GroupVersionKind().Kind == "DaemonSet" {
-			daemonSets = append(daemonSets, key)
-		} else if obj.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
+		switch obj.(type) {
+		case *apps.Deployment:
 			deployments = append(deployments, key)
-		} else if obj.GetObjectKind().GroupVersionKind().Kind == "StatefulSet" {
+		case *apps.DaemonSet:
+			daemonSets = append(daemonSets, key)
+		case *apps.StatefulSet:
 			statefulsets = append(statefulsets, key)
 		}
 
@@ -161,6 +163,15 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 			// Only copy the secrets if they exist, and we haven't specified them explicitly
 			// on the new object.
 			dsa.Secrets = csa.Secrets
+		}
+		return dsa
+	case *eckv1alpha1.Elasticsearch:
+		// Only update if the spec has changed
+		csa := current.(*eckv1alpha1.Elasticsearch)
+		dsa := desired.(*eckv1alpha1.Elasticsearch)
+
+		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
+			return csa
 		}
 		return dsa
 	default:

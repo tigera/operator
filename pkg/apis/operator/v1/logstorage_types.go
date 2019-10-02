@@ -21,10 +21,6 @@ type LogStorageStatus struct {
 // LogStorageSpec defines the desired state of LogStorage
 // +k8s:openapi-gen=true
 type LogStorageSpec struct {
-	// Certificate defines what secret contains the ssl certificate to use for the elasticsearch cluster. If nothing is
-	// specified a self signed one is created. This certificate is used for inter-cluster communication and for k8 resources
-	// that need access to the cluster
-	Certificate *corev1.SecretReference `json:"certificate,omitempty"`
 	// Node defines the configuration for the elasticsearch cluster nodes. The nodes created will all be of type master,
 	// data, and ingest, and the number of nodes, where their data is stored, and what the resource requirements are
 	// configured here
@@ -36,8 +32,6 @@ type LogStorageSpec struct {
 type Nodes struct {
 	// Count defines the number of nodes that the elasticsearch cluster will have
 	Count int64 `json:"count,omitempty"`
-	// StorageClass sets the storage class that the nodes will use to store their data
-	StorageClass *corev1.ObjectReference `json:"storageClass,omitempty"`
 	// ResourceRequirements represents the resource limits and requirements for the elasticsearch cluster (i.e. cpu, size)
 	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements,omitempty"`
 }
@@ -58,14 +52,6 @@ type LogStorage struct {
 
 	Spec   LogStorageSpec   `json:"spec,omitempty"`
 	Status LogStorageStatus `json:"status,omitempty"`
-}
-
-func (ls LogStorage) StorageClass() *corev1.ObjectReference {
-	if ls.Spec.Nodes != nil && ls.Spec.Nodes.StorageClass != nil {
-		return ls.Spec.Nodes.StorageClass
-	}
-
-	return nil
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

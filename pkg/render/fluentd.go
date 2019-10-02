@@ -13,16 +13,18 @@ import (
 )
 
 const (
-	LogCollectorNamespace      = "tigera-fluentd"
-	FluentdFilterConfigMapName = "fluentd-filters"
-	FluentdFilterFlowName      = "flow"
-	FluentdFilterDNSName       = "dns"
-	S3FluentdSecretName        = "log-collector-s3-credentials"
-	S3KeyIdName                = "key-id"
-	S3KeySecretName            = "key-secret"
-	filterHashAnnotation       = "hash.operator.tigera.io/fluentd-filters"
-	s3CredentialHashAnnotation = "hash.operator.tigera.io/s3-credentials"
-	fluentdDefaultFlush        = "5s"
+	LogCollectorNamespace         = "tigera-fluentd"
+	FluentdFilterConfigMapName    = "fluentd-filters"
+	FluentdFilterFlowName         = "flow"
+	FluentdFilterDNSName          = "dns"
+	S3FluentdSecretName           = "log-collector-s3-credentials"
+	S3KeyIdName                   = "key-id"
+	S3KeySecretName               = "key-secret"
+	filterHashAnnotation          = "hash.operator.tigera.io/fluentd-filters"
+	s3CredentialHashAnnotation    = "hash.operator.tigera.io/s3-credentials"
+	fluentdDefaultFlush           = "5s"
+	ElasticsearchUserLogCollector = "tigera-fluentd"
+	ElasticsearchHTTPEndpoint     = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
 
 type FluentdFilters struct {
@@ -37,17 +39,20 @@ type S3Credential struct {
 
 func Fluentd(
 	lc *operatorv1.LogCollector,
+	esSecrets []*corev1.Secret,
+	cluster string,
 	s3C *S3Credential,
 	f *FluentdFilters,
-	monitoring *operatorv1.MonitoringConfiguration,
+
 	pullSecrets []*corev1.Secret,
 	installation *operatorv1.Installation,
 ) Component {
 	return &fluentdComponent{
 		lc:           lc,
+		esSecrets:    esSecrets,
+		cluster:      cluster,
 		s3Credential: s3C,
 		filters:      f,
-		monitoring:   monitoring,
 		pullSecrets:  pullSecrets,
 		installation: installation,
 	}
@@ -55,9 +60,10 @@ func Fluentd(
 
 type fluentdComponent struct {
 	lc           *operatorv1.LogCollector
+	esSecrets    []*corev1.Secret
+	cluster      string
 	s3Credential *S3Credential
 	filters      *FluentdFilters
-	monitoring   *operatorv1.MonitoringConfiguration
 	pullSecrets  []*corev1.Secret
 	installation *operatorv1.Installation
 }
@@ -75,6 +81,7 @@ func (c *fluentdComponent) Objects() []runtime.Object {
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
+	objs = append(objs, copySecrets(LogCollectorNamespace, c.esSecrets...)...)
 	objs = append(objs, c.daemonset())
 
 	return objs
@@ -148,14 +155,14 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 					},
 					Annotations: annots,
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector:                  map[string]string{},
 					Tolerations:                   c.tolerations(),
 					ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					Containers:                    []corev1.Container{c.container()},
 					Volumes:                       c.volumes(),
-				},
+				}),
 			},
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -185,7 +192,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	envs := c.envvars()
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: "/var/log/calico", Name: "var-log-calico"},
-		//{MountPath: "/etc/fluend/elastic", Name: "elastic-ca-cert-volume"},
+		{MountPath: "/etc/fluentd/elastic", Name: "elastic-ca-cert-volume"},
 	}
 	if c.filters != nil {
 		if c.filters.Flow != "" {
@@ -208,7 +215,7 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	isPrivileged := true
 
-	return corev1.Container{
+	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
 		Image:           constructImage(FluentdImageName, c.installation.Spec.Registry),
 		Env:             envs,
@@ -216,23 +223,17 @@ func (c *fluentdComponent) container() corev1.Container {
 		VolumeMounts:    volumeMounts,
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
-	}
+	}, c.cluster, ElasticsearchUserLogCollector)
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
-	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
 	envs := []corev1.EnvVar{
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: "5"},
 		{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: "5"},
-		{Name: "ELASTIC_INDEX_SUFFIX", Value: c.monitoring.Spec.ClusterName},
 		{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 		{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
-		{Name: "ELASTIC_SCHEME", Value: esScheme},
-		{Name: "ELASTIC_HOST", Value: esHost},
-		{Name: "ELASTIC_PORT", Value: esPort},
-		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-		{Name: "FLUENTD_ES_SECURE", Value: "false"},
+		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 	}
 
 	if c.lc.Spec.S3 != nil {

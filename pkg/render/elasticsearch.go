@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -9,7 +8,6 @@ import (
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,31 +19,48 @@ const (
 	ECKWebhookSecretName      = "webhook-server-secret"
 	ElasticsearchStorageClass = "tigera-elasticsearch"
 	ElasticsearchNamespace    = "tigera-elasticsearch"
-	ElasticsearchClusterHTTP  = "tigera-secure-es-http"
+	ElasticsearchClusterHTTP  = "tigera-secure-es-http.tigera-elasticsearch.svc"
 	ElasticsearchName         = "tigera-secure"
 )
 
-func Elasticsearch(logStorage *operatorv1.LogStorage, openShift bool, registry string) (Component, error) {
+func Elasticsearch(logStorage *operatorv1.LogStorage, certSecret *corev1.Secret, openShift bool, registry string) (Component, error) {
+	var certSecrets []runtime.Object
+	if certSecret == nil {
+		var err error
+		certSecret, err = createOperatorTLSSecret(nil,
+			TigeraElasticsearchCertSecret,
+			"tls.key",
+			"tls.crt",
+			nil, ElasticsearchClusterHTTP,
+		)
+		if err != nil {
+			return nil, err
+		}
+		certSecrets = []runtime.Object{certSecret}
+	}
+
+	certSecrets = append(certSecrets, copySecrets(ElasticsearchNamespace, certSecret)...)
 	return &elasticsearchComponent{
-		logStorage: logStorage,
-		openShift:  openShift,
-		registry:   registry,
+		logStorage:  logStorage,
+		certSecrets: certSecrets,
+		openShift:   openShift,
+		registry:    registry,
 	}, nil
 }
 
 type elasticsearchComponent struct {
-	logStorage *operatorv1.LogStorage
-	openShift  bool
-	registry   string
+	logStorage  *operatorv1.LogStorage
+	certSecrets []runtime.Object
+	openShift   bool
+	registry    string
 }
 
 func (es *elasticsearchComponent) Objects() []runtime.Object {
 	var objs []runtime.Object
 	objs = append(objs, es.eckOperator()...)
 	objs = append(objs, createNamespace(ElasticsearchNamespace, es.openShift))
-	if es.logStorage.StorageClass() == nil {
-		objs = append(objs, esDefaultStorageClass())
-	}
+
+	objs = append(objs, es.certSecrets...)
 
 	objs = append(objs, es.elasticsearchCluster())
 
@@ -56,22 +71,9 @@ func (es *elasticsearchComponent) Ready() bool {
 	return true
 }
 
-func esDefaultStorageClass() *storagev1.StorageClass {
-	return &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ElasticsearchStorageClass,
-		},
-		Provisioner: "kubernetes.io/host-path",
-	}
-}
-
 // generate the PVC required for the Elasticsearch nodes
 func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	storageClassName := ElasticsearchStorageClass
-	if es.logStorage.StorageClass() != nil {
-		storageClassName = es.logStorage.StorageClass().Name
-	}
-
 	pvcTemplate := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elasticsearch-data", // ECK requires this name
@@ -99,19 +101,6 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
 
-	tls := cmneckalpha1.TLSOptions{}
-	if es.logStorage.Spec.Certificate != nil {
-		tls.Certificate = cmneckalpha1.SecretRef{
-			SecretName: es.logStorage.Spec.Certificate.Name,
-		}
-	} else {
-		tls.SelfSignedCertificate = &cmneckalpha1.SelfSignedCertificate{
-			SubjectAlternativeNames: []cmneckalpha1.SubjectAlternativeName{{
-				DNS: fmt.Sprintf("%s.%s.svc.cluster.local", ElasticsearchClusterHTTP, ElasticsearchNamespace),
-			}},
-		}
-	}
-
 	return &eckv1alpha1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -125,7 +114,11 @@ func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsear
 			Version: components.VersionECKElasticsearch,
 			Image:   constructImage(ECKElasticsearchImageName, es.registry),
 			HTTP: cmneckalpha1.HTTPConfig{
-				TLS: tls,
+				TLS: cmneckalpha1.TLSOptions{
+					Certificate: cmneckalpha1.SecretRef{
+						SecretName: TigeraElasticsearchCertSecret,
+					},
+				},
 			},
 			Nodes: []eckv1alpha1.NodeSpec{
 				{

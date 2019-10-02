@@ -22,7 +22,7 @@ const (
 	VersionQueryServer = "v2.4.0"
 
 	// Logging
-	VersionFluentd = "v2.5.1"
+	VersionFluentd = "es7-v2.5.1-dev-1"
 
 	// Compliance images.
 	VersionComplianceController  = "v2.4.2"

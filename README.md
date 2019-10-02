@@ -92,7 +92,7 @@ Then, modify the installation CR (e.g., with `kubectl edit installations`) to in
 spec:
   variant: TigeraSecureEnterprise
   imagePullSecrets:
-  - tigera-pull-secret
+  - name: tigera-pull-secret
 ```
 
 You can then install additional Tigera Secure components by creating their CRs from within

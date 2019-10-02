@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -100,8 +100,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	ctx := context.Background()
 
-	r.status.SetStatefulSets([]types.NamespacedName{{Name: "elastic-operator", Namespace: "tigera-elasticsearch"}})
-
 	// Fetch the LogStorage instance
 	ls, err := GetLogStorage(ctx, r.client)
 	if err != nil {
@@ -117,6 +115,24 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(2).Info("Loaded config", "config", ls)
 	r.status.OnCRFound()
 
+	// Fetch the Installation instance. We need this for a few reasons.
+	// - We need to make sure it has successfully completed installation.
+	// - We need to get the registry information from its spec.
+	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Installation not found", err.Error())
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded("Error querying installation", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
+		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
+		return reconcile.Result{}, nil
+	}
+
 	if ls.StorageClass() != nil {
 		err := r.client.Get(ctx, client.ObjectKey{Name: ls.StorageClass().Name}, &storagev1.StorageClass{})
 		if err != nil {
@@ -126,7 +142,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
-	component, err := render.Elasticsearch(*ls, r.provider == operatorv1.ProviderOpenShift)
+	component, err := render.Elasticsearch(
+		ls,
+		r.provider == operatorv1.ProviderOpenShift,
+		network.Spec.Registry,
+	)
 	if err != nil {
 		r.status.SetDegraded("Error rendering LogStorage", err.Error())
 		return reconcile.Result{}, err

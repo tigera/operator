@@ -74,8 +74,11 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			daemonSets = append(daemonSets, key)
 		} else if obj.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
 			deployments = append(deployments, key)
-		} else if obj.GetObjectKind().GroupVersionKind().Kind == "StatefulSet" {
-			statefulsets = append(statefulsets, key)
+		} else {
+			switch obj.(type) {
+			case *apps.StatefulSet:
+				statefulsets = append(statefulsets, key)
+			}
 		}
 
 		// Check to see if the object exists or not.

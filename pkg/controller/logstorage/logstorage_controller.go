@@ -50,7 +50,7 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("logstorage-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -104,6 +104,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
+	// This is added because we don't always render the operator statefulset
+	r.status.SetStatefulSets([]types.NamespacedName{{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}})
+
 	ctx := context.Background()
 	var isESReq, esExists, isOurs bool
 	var err error
@@ -111,10 +114,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	// the changes from this cluster (the update to the Elasticsearch resource here changes it, as the ECK cluster seems
 	// to modify the Elasticsearch resource after this controller creates it)
 	if isESReq, isOurs, esExists, err = r.isElasticsearchUpdate(ctx, request); err != nil {
+		reqLogger.Error(err, "Error retrieving elasticsearch data")
 		r.status.SetDegraded("Error retrieving elasticsearch data", err.Error())
 		return reconcile.Result{}, err
 	} else if isESReq && !isOurs {
-		reqLogger.Info("not our es")
+		reqLogger.V(2).Info("not our es")
 		// If this is an Elasticsearch update to the cluster we didn't create ignore it as there's nothing to update
 		// from this information regarding the LogStorage resource
 		return reconcile.Result{}, nil
@@ -169,21 +173,24 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			network.Spec.Registry,
 		)
 		if err != nil {
+			reqLogger.Error(err, "Error rendering LogStorage")
 			r.status.SetDegraded("Error rendering LogStorage", err.Error())
 			return reconcile.Result{}, err
 		}
 
 		if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
+			reqLogger.Error(err, "Error creating / update resource")
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
 
 	if isOp, err := r.isElasticsearchOperational(ctx); err != nil {
+		reqLogger.Error(err, "Error figuring out if elasticsearch is operational")
 		r.status.SetDegraded("Error figuring out if elasticsearch is operational", err.Error())
 		return reconcile.Result{}, err
 	} else if !isOp {
-		reqLogger.Info("waiting for es...")
+		reqLogger.Info("waiting for elasticsearch to be operational")
 		r.status.SetDegraded("waiting for elasticsearch cluster to be operational", "")
 		ls.Status.State = operatorv1.LogStorageWaitingForElasticsearch
 		if err := r.client.Status().Update(ctx, ls); err != nil {
@@ -194,7 +201,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if err := r.createComponentUsers(ctx, ls); err != nil {
+
 		r.status.SetDegraded("Error creating elasticsearch access components", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	ls.Status.State = operatorv1.LogStorageStatusReady
+	if err := r.client.Status().Update(ctx, ls); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -204,11 +217,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
-	ls.Status.State = operatorv1.LogStorageStatusReady
-	if err := r.client.Status().Update(ctx, ls); err != nil {
-		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil

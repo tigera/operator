@@ -3,6 +3,8 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/controller/elasticsearchaccess"
+	"github.com/tigera/operator/pkg/elasticsearch"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -22,6 +24,17 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logcollector")
+
+func init() {
+	elasticsearchaccess.AddComponent("tigera-log-collector", elasticsearch.Role{
+		Name:    "tigera-log-collector",
+		Cluster: []string{"all"},
+		Indices: []elasticsearch.RoleIndex{{
+			Names:      []string{"*"},
+			Privileges: []string{"create_index", "write"},
+		}},
+	})
+}
 
 // Add creates a new LogCollector Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -64,8 +77,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
-	if err = utils.AddMonitoringWatch(c); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch MonitoringConfiguration resource: %v", err)
+	if err = utils.AddLogStorageWatch(c); err != nil {
+		return fmt.Errorf("log-collector-controller failed to watch LogStorage resource: %v", err)
 	}
 
 	return nil
@@ -145,16 +158,22 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Fetch monitoring stack configuration.
-	monitoringConfig, err := utils.GetMonitoringConfig(context.Background(), r.client)
+	logStorage, err := utils.GetLogStorage(context.Background(), r.client)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for LogStorage to be set", "")
+			return reconcile.Result{Requeue: true}, nil
+		}
+
 		log.Error(err, "Error reading monitoring config")
-		r.status.SetDegraded("Error reading monitoring config", err.Error())
+		r.status.SetDegraded("Error reading logstorage config", err.Error())
 		return reconcile.Result{}, err
 	}
-	if err := utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
-		log.Error(err, "Monitoring config is not valid")
-		r.status.SetDegraded("MonitoringConfiguration is not valid", err.Error())
-		return reconcile.Result{}, err
+
+	if logStorage.Status.State != operatorv1.LogStorageStatusReady {
+		reqLogger.Error(err, "Elasticsearch cluster not ready, deferring until it is state: ", logStorage.Status.State)
+		r.status.SetDegraded("Elasticsearch cluster not ready", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
@@ -163,14 +182,20 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	esAccess, err := utils.ElasticsearchAccess(context.Background(), "tigera-log-collector-elasticsearch-access", render.LogCollectorNamespace,
+		logStorage.Spec.Certificate, r.client)
+	if err != nil {
+		r.status.SetDegraded("Couldn't generate the resources required for elasticsearch access", err.Error())
+		return reconcile.Result{}, err
+	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Fluentd(
 		instance,
-		monitoringConfig,
+		esAccess,
+		"cluster",
 		pullSecrets,
 		installation.Spec.KubernetesProvider,
 		installation.Spec.Registry,

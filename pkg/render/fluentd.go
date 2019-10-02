@@ -11,31 +11,35 @@ import (
 )
 
 const (
-	LogCollectorNamespace = "tigera-log-collector"
+	LogCollectorNamespace     = "tigera-log-collector"
+	ElasticsearchHTTPEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
 
 func Fluentd(
 	lc *operatorv1.LogCollector,
-	monitoring *operatorv1.MonitoringConfiguration,
+	elasticsearchAccess Component,
+	cluster string,
 	pullSecrets []*corev1.Secret,
 	provider operatorv1.Provider,
 	registry string,
 ) Component {
 	return &fluentdComponent{
-		lc:          lc,
-		monitoring:  monitoring,
-		pullSecrets: pullSecrets,
-		provider:    provider,
-		registry:    registry,
+		lc:                  lc,
+		elasticsearchAccess: elasticsearchAccess,
+		pullSecrets:         pullSecrets,
+		cluster:             cluster,
+		provider:            provider,
+		registry:            registry,
 	}
 }
 
 type fluentdComponent struct {
-	lc          *operatorv1.LogCollector
-	monitoring  *operatorv1.MonitoringConfiguration
-	pullSecrets []*corev1.Secret
-	provider    operatorv1.Provider
-	registry    string
+	lc                  *operatorv1.LogCollector
+	elasticsearchAccess Component
+	pullSecrets         []*corev1.Secret
+	cluster             string
+	provider            operatorv1.Provider
+	registry            string
 }
 
 func (c *fluentdComponent) Objects() []runtime.Object {
@@ -43,7 +47,7 @@ func (c *fluentdComponent) Objects() []runtime.Object {
 	objs = append(objs, createNamespace(LogCollectorNamespace, c.provider == operatorv1.ProviderOpenShift))
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, LogCollectorNamespace)...)
 	objs = append(objs, c.daemonset())
-
+	objs = append(objs, c.elasticsearchAccess.Objects()...)
 	return objs
 }
 
@@ -70,14 +74,14 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 						"k8s-app": "fluentd",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector:                  map[string]string{},
 					Tolerations:                   c.tolerations(),
 					ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					Containers:                    []corev1.Container{c.container()},
 					Volumes:                       c.volumes(),
-				},
+				}),
 			},
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -109,33 +113,28 @@ func (c *fluentdComponent) container() corev1.Container {
 	envs := c.envvars()
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: "/var/log/calico", Name: "var-log-calico"},
-		//{MountPath: "/etc/fluend/elastic", Name: "elastic-ca-cert-volume"},
+		{MountPath: "/etc/fluentd/elastic", Name: "elastic-ca-cert-volume"},
 	}
 
-	return corev1.Container{
+	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:           "fluentd",
-		Image:          constructImage(FluentdImageName, c.registry),
+		Image:          "gcr.io/tigera-dev/cnx/tigera/fluentd:matts-work",
 		Env:            envs,
 		VolumeMounts:   volumeMounts,
 		LivenessProbe:  c.liveness(),
 		ReadinessProbe: c.readiness(),
-	}
+	}, c.cluster, "tigera-log-collector-elasticsearch-access")
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
-	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
 	envs := []corev1.EnvVar{
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: "5"},
 		{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: "5"},
-		{Name: "ELASTIC_INDEX_SUFFIX", Value: c.monitoring.Spec.ClusterName},
+		{Name: "ELASTIC_INDEX_SUFFIX", Value: c.cluster},
 		{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 		{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
-		{Name: "ELASTIC_SCHEME", Value: esScheme},
-		{Name: "ELASTIC_HOST", Value: esHost},
-		{Name: "ELASTIC_PORT", Value: esPort},
-		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-		{Name: "FLUENTD_ES_SECURE", Value: "false"},
+		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 	}
 
 	return envs

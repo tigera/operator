@@ -9,10 +9,10 @@ import (
 
 // Elasticsearch is a Component that contains the k8s resources required for another component to have elasticsearch access.
 type elasticsearchUsers struct {
-	users map[string]*elasticsearch.ElasticsearchUser
+	users map[string]*elasticsearch.User
 }
 
-func ElasticsearchUsers(users map[string]*elasticsearch.ElasticsearchUser) Component {
+func ElasticsearchUsers(users map[string]*elasticsearch.User) Component {
 	return &elasticsearchUsers{
 		users: users,
 	}

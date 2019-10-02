@@ -27,6 +27,7 @@ const (
 
 func Console(
 	cr *operator.Console,
+	elasticsearchAccess Component,
 	monitoring *operator.MonitoringConfiguration,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -51,22 +52,24 @@ func Console(
 	copy.ObjectMeta.Namespace = ManagerNamespace
 	tlsSecrets = append(tlsSecrets, copy)
 	return &consoleComponent{
-		cr:          cr,
-		monitoring:  monitoring,
-		tlsSecrets:  tlsSecrets,
-		pullSecrets: pullSecrets,
-		openshift:   openshift,
-		registry:    registry,
+		cr:                  cr,
+		elasticsearchAccess: elasticsearchAccess,
+		monitoring:          monitoring,
+		tlsSecrets:          tlsSecrets,
+		pullSecrets:         pullSecrets,
+		openshift:           openshift,
+		registry:            registry,
 	}, nil
 }
 
 type consoleComponent struct {
-	cr          *operator.Console
-	monitoring  *operator.MonitoringConfiguration
-	tlsSecrets  []*corev1.Secret
-	pullSecrets []*corev1.Secret
-	openshift   bool
-	registry    string
+	cr                  *operator.Console
+	elasticsearchAccess Component
+	monitoring          *operator.MonitoringConfiguration
+	tlsSecrets          []*corev1.Secret
+	pullSecrets         []*corev1.Secret
+	openshift           bool
+	registry            string
 }
 
 func (c *consoleComponent) Objects() []runtime.Object {
@@ -91,6 +94,8 @@ func (c *consoleComponent) Objects() []runtime.Object {
 	if c.openshift {
 		objs = append(objs, c.securityContextConstraints())
 	}
+
+	objs = append(objs, c.elasticsearchAccess.Objects()...)
 
 	return objs
 }
@@ -416,7 +421,6 @@ func (c *consoleComponent) consoleManagerClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch"},
 			},
-
 		},
 	}
 }

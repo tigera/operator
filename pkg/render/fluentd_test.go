@@ -44,7 +44,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Fluentd(instance, monitoring, nil, operatorv1.ProviderNone, registry)
+		component := render.Fluentd(instance, nil, "", nil, operatorv1.ProviderNone, registry)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 

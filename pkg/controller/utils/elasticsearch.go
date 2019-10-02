@@ -20,7 +20,7 @@ const (
 )
 
 func ElastisearchUsers(ctx context.Context, cli client.Client) (render.Component, error) {
-	users := map[string]*elasticsearch.ElasticsearchUser{}
+	users := map[string]*elasticsearch.User{}
 	for _, esComponent := range elasticsearchaccess.GetComponents() {
 		if err := cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchNamespace}, &corev1.Namespace{}); err != nil {
 			return nil, err
@@ -79,7 +79,7 @@ func ElasticsearchAccess(ctx context.Context, componentUserSecret string, namesp
 }
 
 // UpsertElasticsearchComponentUser creates or updates an elasticsearch user
-func UpsertElasticsearchComponentUser(esURL string, componentName string, roles []string, cli client.Client) (*elasticsearch.ElasticsearchUser, error) {
+func UpsertElasticsearchComponentUser(esURL string, componentName string, roles []elasticsearch.Role, cli client.Client) (*elasticsearch.User, error) {
 	secret := &corev1.Secret{}
 	err := cli.Get(context.TODO(), types.NamespacedName{
 		Name:      ElasticsearchUserSecret,
@@ -99,24 +99,29 @@ func UpsertElasticsearchComponentUser(esURL string, componentName string, roles 
 		return nil, fmt.Errorf("couldn't find the default elasticsearch password")
 	}
 
-	var componentUser *elasticsearch.ElasticsearchUser
+	var componentUser *elasticsearch.User
 
 	password, err := RandomPassword(18)
 	if err != nil {
 		return nil, err
 	}
+	if err := esCli.CreateRoles(roles...); err != nil {
+		return nil, err
+	}
+
+	rNames := roleNames(roles...)
 
 	if exists, err := esCli.UserExists(componentName); err != nil {
 		return nil, err
 	} else if exists {
 		// Since we can't get the password for an existing user we need to updated it with one we know
-		if esUser, err := esCli.CreateUser(componentName, password, roles); err != nil {
+		if esUser, err := esCli.CreateUser(componentName, password, rNames); err != nil {
 			return nil, err
 		} else {
 			componentUser = esUser
 		}
 	} else {
-		if esUser, err := esCli.UpdateUser(componentName, password, roles); err != nil {
+		if esUser, err := esCli.UpdateUser(componentName, password, rNames); err != nil {
 			return nil, err
 		} else {
 			componentUser = esUser
@@ -124,4 +129,14 @@ func UpsertElasticsearchComponentUser(esURL string, componentName string, roles 
 	}
 
 	return componentUser, nil
+}
+
+func roleNames(roles ...elasticsearch.Role) []string {
+	var names []string
+
+	for _, role := range roles {
+		names = append(names, role.Name)
+	}
+
+	return names
 }

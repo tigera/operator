@@ -1,16 +1,19 @@
 package elasticsearchaccess
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/tigera/operator/pkg/elasticsearch"
+)
 
 type ElasticsearchComponentAccess struct {
 	name  string
-	roles []string
+	roles []elasticsearch.Role
 }
 
 func (eca ElasticsearchComponentAccess) Name() string {
 	return eca.name
 }
-func (eca ElasticsearchComponentAccess) Roles() []string {
+func (eca ElasticsearchComponentAccess) Roles() []elasticsearch.Role {
 	return eca.roles
 }
 func (eca ElasticsearchComponentAccess) SecretName() string {
@@ -19,7 +22,7 @@ func (eca ElasticsearchComponentAccess) SecretName() string {
 
 var elasticsearchComponentAccess = map[string]ElasticsearchComponentAccess{}
 
-func AddComponent(componentName string, roles []string) {
+func AddComponent(componentName string, roles ...elasticsearch.Role) {
 	elasticsearchComponentAccess[componentName] = ElasticsearchComponentAccess{
 		name:  componentName,
 		roles: roles,

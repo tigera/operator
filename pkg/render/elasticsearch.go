@@ -20,6 +20,7 @@ const (
 	ElasticsearchStorageClass = "tigera-elasticsearch"
 	ElasticsearchNamespace    = "tigera-elasticsearch"
 	ElasticsearchClusterHTTP  = "tigera-secure-es-http.tigera-elasticsearch.svc"
+	KibanaHTTP                = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
 	ElasticsearchName         = "tigera-secure"
 )
 

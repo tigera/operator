@@ -15,7 +15,6 @@
 package render
 
 import (
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,27 +25,31 @@ import (
 )
 
 const (
-	tigeraEsConfigMapName       = "tigera-es-config"
 	IntrusionDetectionNamespace = "tigera-intrusion-detection"
+
+	ElasticsearchUserIntrusionDetection = "tigera-ee-intrusion-detection"
 )
 
 func IntrusionDetection(
+	esSecrets []*corev1.Secret,
 	registry string,
-	m *operatorv1.MonitoringConfiguration,
+	clusterName string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 ) Component {
 	return &intrusionDetectionComponent{
+		esSecrets:   esSecrets,
 		registry:    registry,
-		monitoring:  m,
+		clusterName: clusterName,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
 	}
 }
 
 type intrusionDetectionComponent struct {
+	esSecrets   []*corev1.Secret
 	registry    string
-	monitoring  *operatorv1.MonitoringConfiguration
+	clusterName string
 	pullSecrets []*corev1.Secret
 	openshift   bool
 }
@@ -55,6 +58,8 @@ func (c *intrusionDetectionComponent) Objects() []runtime.Object {
 
 	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
+	objs = append(objs, copySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)
+
 	return append(objs,
 		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
@@ -87,35 +92,24 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"job-name": "intrusion-detection-es-job-installer"},
 				},
-				Spec: v1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{
 					RestartPolicy:    v1.RestartPolicyOnFailure,
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
-					Containers:       []v1.Container{c.intrusionDetectionJobContainer()},
-				},
+					Containers: []v1.Container{
+						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.clusterName, ElasticsearchUserIntrusionDetection),
+					},
+				}),
 			},
 		},
 	}
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
-	kScheme, kHost, kPort, _ := ParseEndpoint(c.monitoring.Spec.Kibana.Endpoint)
+	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTP)
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
 		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
 		Env: []corev1.EnvVar{
-			{
-				Name:  "ELASTIC_HOST",
-				Value: esHost,
-			},
-			{
-				Name:  "ELASTIC_PORT",
-				Value: esPort,
-			},
-			{
-				Name:  "ELASTIC_SCHEME",
-				Value: esScheme,
-			},
 			{
 				Name:  "KIBANA_HOST",
 				Value: kHost,
@@ -265,13 +259,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 						"k8s-app": "intrusion-detection-controller",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					ServiceAccountName: "intrusion-detection-controller",
 					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
-						c.intrusionDetectionControllerContainer(),
+						ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.clusterName, ElasticsearchUserIntrusionDetection),
 					},
-				},
+				}),
 			},
 		},
 	}
@@ -279,26 +273,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
-	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
 	return corev1.Container{
 		Name:  "controller",
 		Image: constructImage(IntrusionDetectionControllerImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",
-				Value: c.monitoring.Spec.ClusterName,
-			},
-			{
-				Name:  "ELASTIC_HOST",
-				Value: esHost,
-			},
-			{
-				Name:  "ELASTIC_PORT",
-				Value: esPort,
-			},
-			{
-				Name:  "ELASTIC_SCHEME",
-				Value: esScheme,
+				Value: c.clusterName,
 			},
 		},
 		// Needed for permissions to write to the audit log

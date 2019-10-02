@@ -65,7 +65,6 @@ rules:
   resources:
   - '*'
   - consoles
-  - monitoringconfigurations
   - apiservers
   - tigerastatuses
   - intrusiondetections

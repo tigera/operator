@@ -17,31 +17,24 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/elasticsearch"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("compliance rendering tests", func() {
-	var monitoring *operator.MonitoringConfiguration
 	var registry string
 	BeforeEach(func() {
 		registry = "testregistry.com/"
-		monitoring = &operator.MonitoringConfiguration{
-			Spec: operator.MonitoringConfigurationSpec{
-				ClusterName: "clusterTestName",
-				Elasticsearch: &operator.ElasticConfig{
-					Endpoint: "https://elastic.search:1234",
-				},
-				Kibana: &operator.KibanaConfig{
-					Endpoint: "https://kibana.stuff:1234",
-				},
-			},
-		}
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceBenchmarker})
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceController})
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceReporter})
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceSnapshotter})
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceServer})
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Compliance(registry, monitoring, nil, notOpenshift)
+		component := render.Compliance(nil, registry, "clusterTestName", nil, notOpenshift)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(28))
 		ns := "tigera-compliance"

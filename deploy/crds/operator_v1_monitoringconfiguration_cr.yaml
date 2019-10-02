@@ -1,7 +1,0 @@
-apiVersion: operator.tigera.io/v1
-kind: MonitoringConfiguration
-metadata:
-  name: tigera-secure
-spec:
-  # Add fields here
-  host: fakehost

@@ -17,15 +17,17 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/elasticsearch"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Tigera Secure Console rendering tests", func() {
 	var instance *operator.Console
-	var monitoring *operator.MonitoringConfiguration
 	var registry string
+	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -36,21 +38,10 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 				},
 			},
 		}
-		monitoring = &operator.MonitoringConfiguration{
-			Spec: operator.MonitoringConfigurationSpec{
-				ClusterName: "clusterTestName",
-				Elasticsearch: &operator.ElasticConfig{
-					Endpoint: "https://elastic.search:1234",
-				},
-				Kibana: &operator.KibanaConfig{
-					Endpoint: "https://kibana.ui:1234",
-				},
-			},
-		}
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Console(instance, monitoring, nil, nil, notOpenshift, registry)
+		component, err := render.Console(instance, nil, "clusterTestName", nil, nil, notOpenshift, registry)
 		Expect(err).To(BeNil(), "Expected Console to create successfully %s", err)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(10))

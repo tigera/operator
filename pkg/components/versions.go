@@ -25,15 +25,15 @@ const (
 	VersionFluentd = "es7-v2.5.1-dev-1"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.4.2"
-	VersionComplianceReporter    = "v2.4.2"
-	VersionComplianceServer      = "v2.4.2"
-	VersionComplianceSnapshotter = "v2.4.2"
-	VersionComplianceBenchmarker = "v2.5.1"
+	VersionComplianceController  = "es7-v2.5.1-dev-1"
+	VersionComplianceReporter    = "es7-v2.5.1-dev-1"
+	VersionComplianceServer      = "es7-v2.5.1-dev-1"
+	VersionComplianceSnapshotter = "es7-v2.5.1-dev-1"
+	VersionComplianceBenchmarker = "es7-v2.5.1-dev-1"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.4.2"
-	VersionIntrusionDetectionJobInstaller = "v2.4.2"
+	VersionIntrusionDetectionController   = "es7-v2.5.1-dev-1"
+	VersionIntrusionDetectionJobInstaller = "es7-v2.5.1-dev-1"
 
 	// Console images.
 	VersionConsoleManager = "v2.4.2"

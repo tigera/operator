@@ -18,7 +18,7 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - "policy"
+  - policy
   resources:
   - poddisruptionbudgets
   verbs:
@@ -70,6 +70,7 @@ rules:
   - tigerastatuses
   - intrusiondetections
   - compliances
+  - logcollectors
   verbs:
   - '*'
 - apiGroups:

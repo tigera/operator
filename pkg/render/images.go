@@ -36,6 +36,9 @@ const (
 	APIServerImageName   = "cnx-apiserver:" + components.VersionAPIServer
 	QueryServerImageName = "cnx-queryserver:" + components.VersionQueryServer
 
+	// Logging
+	FluentdImageName = "fluentd:" + components.VersionFluentd
+
 	// Compliance images.
 	ComplianceControllerImage  = "compliance-controller:" + components.VersionComplianceController
 	ComplianceReporterImage    = "compliance-reporter:" + components.VersionComplianceReporter

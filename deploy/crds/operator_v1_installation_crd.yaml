@@ -29,14 +29,6 @@ spec:
           type: object
         spec:
           properties:
-            cniBinDir:
-              description: 'CNIBinDir configures the path on the host where CNI binaries
-                will be installed. Default: /opt/cni/bin'
-              type: string
-            cniNetDir:
-              description: 'CNINetDir configures the path on the host where CNI network
-                configuration files will be installed. Default: /etc/cni/net.d'
-              type: string
             components:
               description: Components specifies the configuration of components.
               properties:
@@ -153,6 +145,11 @@ spec:
                 - cidr
                 type: object
               type: array
+            kubernetesProvider:
+              description: KubernetesProvider specifies which platform this cluster
+                is running on. Operator will do it's best to autodetect and set this.
+                But can be overridden here.
+              type: string
             registry:
               description: 'Registry is the default Docker registry used for component
                 Docker images. Default: docker.io/'

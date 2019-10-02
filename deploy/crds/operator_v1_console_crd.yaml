@@ -48,6 +48,22 @@ spec:
               type: object
           type: object
         status:
+          properties:
+            auth:
+              properties:
+                authority:
+                  description: 'Authority configures the OAuth2/OIDC authority/issuer
+                    when using OAuth2 or OIDC login. Default: ""https://accounts.google.com"'
+                  type: string
+                clientID:
+                  description: ClientId configures the OAuth2/OIDC client ID to use
+                    for OAuth2 or OIDC login.
+                  type: string
+                type:
+                  description: 'Type configures the type of authentication used by
+                    the manager. Default: "Basic"'
+                  type: string
+              type: object
           type: object
   version: v1
   versions:

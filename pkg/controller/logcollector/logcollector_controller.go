@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/controller/installation"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -19,6 +16,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var log = logf.Log.WithName("controller_logcollector")
@@ -68,6 +71,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch MonitoringConfiguration resource: %v", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, render.S3FluentdSecretName, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch Secret %s: %v", render.S3FluentdSecretName, err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.FluentdFilterConfigMapName, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", render.FluentdFilterConfigMapName, err)
+	}
+
 	return nil
 }
 
@@ -91,6 +102,13 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
 		return nil, err
+	}
+
+	if instance.Spec.Syslog != nil {
+		_, _, _, err := render.ParseEndpoint(instance.Spec.Syslog.Endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("Syslog config has invalid Endpoint: %s", err)
+		}
 	}
 
 	return instance, nil
@@ -163,16 +181,39 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	var s3Credential *render.S3Credential
+	if instance.Spec.S3 != nil {
+		s3Credential, err = getS3Credential(r.client)
+		if err != nil {
+			log.Error(err, "Error with S3 credential secret")
+			r.status.SetDegraded("Error with S3 credential secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		if s3Credential == nil {
+			log.Info("S3 credential secret does not exist")
+			r.status.SetDegraded("S3 credential secret does not exist", "")
+			return reconcile.Result{}, nil
+		}
+	}
+
+	filters, err := getFluentdFilters(r.client)
+	if err != nil {
+		log.Error(err, "Error retrieving Fluentd filters")
+		r.status.SetDegraded("Error retrieving Fluentd filters", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Fluentd(
 		instance,
+		s3Credential,
+		filters,
 		monitoringConfig,
 		pullSecrets,
-		installation.Spec.KubernetesProvider,
-		installation.Spec.Registry,
+		installation,
 	)
 
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
@@ -195,4 +236,56 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func getS3Credential(client client.Client) (*render.S3Credential, error) {
+	secret := &corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{
+		Name:      render.S3FluentdSecretName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read secret %q: %s", render.S3FluentdSecretName, err)
+	}
+
+	var ok bool
+	var kId []byte
+	if kId, ok = secret.Data[render.S3KeyIdName]; !ok || len(kId) == 0 {
+		return nil, fmt.Errorf(
+			"Expected secret %q to have a field named %q",
+			render.S3FluentdSecretName, render.S3KeyIdName)
+	}
+	var kSecret []byte
+	if kSecret, ok = secret.Data[render.S3KeySecretName]; !ok || len(kSecret) == 0 {
+		return nil, fmt.Errorf(
+			"Expected secret %q to have a field named %q",
+			render.S3FluentdSecretName, render.S3KeySecretName)
+	}
+
+	return &render.S3Credential{
+		KeyId:     kId,
+		KeySecret: kSecret,
+	}, nil
+}
+
+func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.FluentdFilterConfigMapName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.FluentdFilterConfigMapName, err)
+	}
+
+	return &render.FluentdFilters{
+		Flow: cm.Data[render.FluentdFilterFlowName],
+		DNS:  cm.Data[render.FluentdFilterDNSName],
+	}, nil
 }

@@ -70,6 +70,14 @@ func AddSecretsWatch(c controller.Controller, name, namespace string) error {
 	return addNamespacedWatch(c, s)
 }
 
+func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
+	cm := &v1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return addNamespacedWatch(c, cm)
+}
+
 // addWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.

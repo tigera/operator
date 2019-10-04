@@ -14,6 +14,26 @@ const (
 type LogCollectorSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+
+	S3     *S3StoreSpec     `json:"s3,omitempty"`
+	Syslog *SyslogStoreSpec `json:"syslog,omitempty"`
+}
+
+type S3StoreSpec struct {
+	// AWS Region of the S3 bucket
+	Region string `json:"region"`
+	// Name of the S3 bucket to send logs
+	BucketName string `json:"bucketName"`
+	// Path in the S3 bucket where to send logs
+	BucketPath string `json:"bucketPath"`
+}
+
+type SyslogStoreSpec struct {
+	// Endpoint where to seen syslog. exmple: tcp://1.2.3.4:601
+	Endpoint string `json:"endpoint"`
+	// PacketSize is only needed if you notice long logs being truncated.
+	// The default for the fluentd output plugin is 1024.
+	PacketSize *int32 `json:"packetsize,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of LogCollector

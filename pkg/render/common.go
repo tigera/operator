@@ -17,6 +17,7 @@ package render
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"crypto/x509"
 	"fmt"
 	"net/url"
@@ -311,6 +312,15 @@ func ParseEndpoint(endpoint string) (string, string, string, error) {
 	return url.Scheme, splits[0], splits[1], nil
 }
 
+func ParseHostPort(hostport string) (string, string, error) {
+	splits := strings.Split(hostport, ":")
+	if len(splits) != 2 {
+		return "", "", fmt.Errorf("Invalid HostPort: %s", hostport)
+	}
+	return splits[0], splits[1], nil
+
+}
+
 func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object {
 	secrets := []runtime.Object{}
 	for _, s := range pullSecrets {
@@ -328,6 +338,15 @@ func getImagePullSecretReferenceList(pullSecrets []*v1.Secret) []v1.LocalObjectR
 		ps = append(ps, v1.LocalObjectReference{Name: x.Name})
 	}
 	return ps
+}
+
+// annotationHash is to generate a hash that can be included in a Deployment
+// or DaemonSet to trigger a restart/rolling update when a ConfigMap or Secret
+// is updated.
+func annotationHash(i interface{}) string {
+	h := sha1.New()
+	h.Write([]byte(fmt.Sprintf("%q", i)))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func OperatorNamespace() string {

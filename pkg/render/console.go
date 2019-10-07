@@ -416,7 +416,6 @@ func (c *consoleComponent) consoleManagerClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch"},
 			},
-
 		},
 	}
 }

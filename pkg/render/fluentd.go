@@ -206,13 +206,16 @@ func (c *fluentdComponent) container() corev1.Container {
 		}
 	}
 
+	isPrivileged := true
+
 	return corev1.Container{
-		Name:           "fluentd",
-		Image:          constructImage(FluentdImageName, c.installation.Spec.Registry),
-		Env:            envs,
-		VolumeMounts:   volumeMounts,
-		LivenessProbe:  c.liveness(),
-		ReadinessProbe: c.readiness(),
+		Name:            "fluentd",
+		Image:           constructImage(FluentdImageName, c.installation.Spec.Registry),
+		Env:             envs,
+		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+		VolumeMounts:    volumeMounts,
+		LivenessProbe:   c.liveness(),
+		ReadinessProbe:  c.readiness(),
 	}
 }
 

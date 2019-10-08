@@ -353,9 +353,9 @@ func (c *nodeComponent) cniDirectories() (string, string) {
 	switch c.provider {
 	case operator.ProviderOpenShift:
 		cniNetDir = "/etc/kubernetes/cni/net.d"
-		cniBinDir = "/home/kubernetes/bin"
-	case operator.ProviderGKE:
 		cniBinDir = "/var/lib/cni/bin"
+	case operator.ProviderGKE:
+		cniBinDir = "/home/kubernetes/bin"
 		cniNetDir = "/etc/cni/net.d"
 	default:
 		// Default locations to match vanilla Kubernetes.

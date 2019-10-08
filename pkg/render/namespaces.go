@@ -23,7 +23,7 @@ import (
 
 const (
 	CalicoNamespace           = "calico-system"
-	CalicoMonitoringNamespace = "calico-monitoring"
+	TigeraPrometheusNamespace = "tigera-prometheus"
 )
 
 func Namespaces(cr *operator.Installation, openshift bool, pullSecrets []*corev1.Secret) Component {
@@ -49,9 +49,9 @@ func (c *namespaceComponent) Objects() []runtime.Object {
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		ns = append(ns, createNamespace(CalicoMonitoringNamespace, c.openshift))
+		ns = append(ns, createNamespace(TigeraPrometheusNamespace, c.openshift))
 		if len(c.pullSecrets) > 0 {
-			ns = append(ns, copyImagePullSecrets(c.pullSecrets, CalicoMonitoringNamespace)...)
+			ns = append(ns, copyImagePullSecrets(c.pullSecrets, TigeraPrometheusNamespace)...)
 		}
 	}
 	return ns

@@ -3,6 +3,8 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/elasticsearch"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +27,21 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logcollector")
+
+func init() {
+	log.V(2).Info("registering Elasticsearch users for creation")
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserLogCollector,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserLogCollector,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_*"},
+				Privileges: []string{"create_index", "write"},
+			}},
+		}},
+	})
+}
 
 // Add creates a new LogCollector Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -67,8 +84,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
-	if err = utils.AddMonitoringWatch(c); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch MonitoringConfiguration resource: %v", err)
+	esUser, err := esusers.GetUser(render.ElasticsearchUserLogCollector)
+	if err != nil {
+		// this error indicates a programming error, where we are trying to get an Elasticsearch user that hasn't been
+		// registered with esusers.AddUser, and if this is the case the Elasticsearch user secret will never exist.
+		return err
+	}
+
+	if err = utils.AddSecretsWatch(c, esUser.SecretName(), render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-collector-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchPublicCertSecret, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-collector-controller failed to watch the Secret resource: %v", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, render.S3FluentdSecretName, render.OperatorNamespace()); err != nil {
@@ -161,23 +189,30 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Fetch monitoring stack configuration.
-	monitoringConfig, err := utils.GetMonitoringConfig(context.Background(), r.client)
-	if err != nil {
-		log.Error(err, "Error reading monitoring config")
-		r.status.SetDegraded("Error reading monitoring config", err.Error())
-		return reconcile.Result{}, err
-	}
-	if err := utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
-		log.Error(err, "Monitoring config is not valid")
-		r.status.SetDegraded("MonitoringConfiguration is not valid", err.Error())
-		return reconcile.Result{}, err
-	}
+	reqLogger.V(2).Info("Retrieving LogStorage resource")
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	clusterName, err := utils.ClusterName(context.Background(), r.client)
+	if err != nil {
+		log.Error(err, "Failed to get the cluster name")
+		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserLogCollector}, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
+			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -209,9 +244,10 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Fluentd(
 		instance,
+		esSecrets,
+		clusterName,
 		s3Credential,
 		filters,
-		monitoringConfig,
 		pullSecrets,
 		installation,
 	)

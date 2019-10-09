@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/elastic/cloud-on-k8s v0.0.0-20190924084002-6ce4c9177aec
+	github.com/elastic/go-elasticsearch/v7 v7.3.0
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/hashicorp/go-version v1.2.0

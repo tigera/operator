@@ -3,14 +3,18 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -48,7 +52,7 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("logstorage-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -61,6 +65,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &eckv1alpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &operator.LogStorage{},
+	}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
 	}
 
 	return nil
@@ -133,43 +144,98 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	if ls.StorageClass() != nil {
-		err := r.client.Get(ctx, client.ObjectKey{Name: ls.StorageClass().Name}, &storagev1.StorageClass{})
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Couldn't find storage class %s", ls.StorageClass().Name), err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass))
+		r.status.SetDegraded(fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass), err.Error())
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	esCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}, esCertSecret); err != nil {
+		if errors.IsNotFound(err) {
+			esCertSecret = nil
+		} else {
+			reqLogger.Error(err, "Failed to read Elasticearch cert secret")
+			r.status.SetDegraded("Failed to read Elasticearch cert secret", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
+
+	reqLogger.V(2).Info("Creating Elasticsearch components")
 
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	component, err := render.Elasticsearch(
 		ls,
+		esCertSecret,
 		r.provider == operatorv1.ProviderOpenShift,
 		network.Spec.Registry,
 	)
 	if err != nil {
+		reqLogger.Error(err, "Error rendering LogStorage")
 		r.status.SetDegraded("Error rendering LogStorage", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
+		reqLogger.Error(err, "Error creating / update resource")
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	reqLogger.V(2).Info("Checking if Elasticsearch is operational")
+	if isOp, err := r.isElasticsearchOperational(ctx); err != nil {
+		reqLogger.Error(err, "Error figuring out if elasticsearch is operational")
+		r.status.SetDegraded("Error figuring out if elasticsearch is operational", err.Error())
+		return reconcile.Result{}, err
+	} else if !isOp {
+		reqLogger.Info("Waiting for Elasticsearch to be operational")
+		r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
+
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	reqLogger.V(2).Info("Elasticsearch is operational, creating elasticsearch users and secrets for components that need Elasticsearch access")
+
+	esPublicCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}, esPublicCertSecret); err != nil {
+		reqLogger.Error(err, "Failed to read Elasticsearch public cert secret")
+		r.status.SetDegraded("Failed to read Elasticsearch public cert secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	esUsers, err := elasticsearchUsers(ctx, esPublicCertSecret, r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error creating Elasticsearch credentials")
+		r.status.SetDegraded("Error creating Elasticsearch credentials", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esUsers, esPublicCertSecret), r.status); err != nil {
+		reqLogger.Error(err, "Error creating / update resource")
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
-	if !r.status.IsAvailable() {
-		// Schedule a kick to check again in the near future. Hopefully by then
-		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
-	// Everything is available - update the CRD status.
+	reqLogger.V(2).Info("Elasticsearch users and secrets created for components needing Elasticsearch access")
 	ls.Status.State = operatorv1.LogStorageStatusReady
-	if err = r.client.Status().Update(ctx, ls); err != nil {
+	if err := r.client.Status().Update(ctx, ls); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady))
+		r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady), err.Error())
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileLogStorage) isElasticsearchOperational(ctx context.Context) (bool, error) {
+	es := &eckv1alpha1.Elasticsearch{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, es); err != nil {
+		return false, err
+	} else if es.Status.Phase == "Operational" || es.Status.Phase == eckv1alpha1.ElasticsearchReadyPhase {
+		return true, nil
+	}
+
+	return false, nil
 }

@@ -332,6 +332,28 @@ func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object 
 	return secrets
 }
 
+func copySecrets(ns string, oSecrets ...*v1.Secret) []runtime.Object {
+	var secrets []runtime.Object
+	for _, s := range oSecrets {
+		x := s.DeepCopy()
+		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
+
+		secrets = append(secrets, x)
+	}
+	return secrets
+}
+
+func copyConfigMaps(ns string, oConfigMaps ...*v1.ConfigMap) []runtime.Object {
+	var configMaps []runtime.Object
+	for _, s := range oConfigMaps {
+		x := s.DeepCopy()
+		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
+
+		configMaps = append(configMaps, x)
+	}
+	return configMaps
+}
+
 func getImagePullSecretReferenceList(pullSecrets []*v1.Secret) []v1.LocalObjectReference {
 	ps := []v1.LocalObjectReference{}
 	for _, x := range pullSecrets {

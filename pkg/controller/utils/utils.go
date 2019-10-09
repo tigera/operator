@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"

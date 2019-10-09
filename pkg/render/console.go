@@ -18,16 +18,18 @@ import (
 const (
 	managerPort           = 9443
 	managerTargetPort     = 9443
-	tigeraEsSecretName    = "tigera-es-config"
 	ManagerNamespace      = "tigera-console"
 	ManagerTLSSecretName  = "manager-tls"
 	ManagerSecretKeyName  = "key"
 	ManagerSecretCertName = "cert"
+
+	ElasticsearchUserManager = "tigera-ee-manager"
 )
 
 func Console(
 	cr *operator.Console,
-	monitoring *operator.MonitoringConfiguration,
+	esSecrets []*corev1.Secret,
+	clusterName string,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -52,7 +54,8 @@ func Console(
 	tlsSecrets = append(tlsSecrets, copy)
 	return &consoleComponent{
 		cr:          cr,
-		monitoring:  monitoring,
+		esSecrets:   esSecrets,
+		clusterName: clusterName,
 		tlsSecrets:  tlsSecrets,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
@@ -62,7 +65,8 @@ func Console(
 
 type consoleComponent struct {
 	cr          *operator.Console
-	monitoring  *operator.MonitoringConfiguration
+	esSecrets   []*corev1.Secret
+	clusterName string
 	tlsSecrets  []*corev1.Secret
 	pullSecrets []*corev1.Secret
 	openshift   bool
@@ -91,6 +95,7 @@ func (c *consoleComponent) Objects() []runtime.Object {
 	if c.openshift {
 		objs = append(objs, c.securityContextConstraints())
 	}
+	objs = append(objs, copySecrets(ManagerNamespace, c.esSecrets...)...)
 
 	return objs
 }
@@ -135,7 +140,7 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 						"scheduler.alpha.kubernetes.io/critical-pod": "",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector: map[string]string{
 						"beta.kubernetes.io/os": "linux",
 					},
@@ -143,12 +148,12 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 					Tolerations:        c.consoleTolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						c.consoleManagerContainer(),
-						c.consoleEsProxyContainer(),
+						ElasticsearchContainerDecorate(c.consoleManagerContainer(), c.clusterName, ElasticsearchUserManager),
+						ElasticsearchContainerDecorate(c.consoleEsProxyContainer(), c.clusterName, ElasticsearchUserManager),
 						c.consoleProxyContainer(),
 					},
 					Volumes: c.consoleManagerVolumes(),
-				},
+				}),
 			},
 		},
 	}
@@ -157,25 +162,12 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 
 // consoleManagerVolumes returns the volumes for the Tigera Secure console component.
 func (c *consoleComponent) consoleManagerVolumes() []v1.Volume {
-	optional := true
 	return []v1.Volume{
 		{
 			Name: ManagerTLSSecretName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
 					SecretName: ManagerTLSSecretName,
-				},
-			},
-		},
-		{
-			Name: "tigera-es-proxy-tls",
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: "tigera-es-config",
-					Optional:   &optional,
-					Items: []v1.KeyToPath{
-						{Key: "tigera.elasticsearch.ca", Path: "ca.pem"},
-					},
 				},
 			},
 		},
@@ -234,7 +226,7 @@ func (c *consoleComponent) consoleManagerEnvVars() []v1.EnvVar {
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
-		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: c.monitoring.Spec.Kibana.Endpoint},
+		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: KibanaHTTP},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "false"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
@@ -246,14 +238,10 @@ func (c *consoleComponent) consoleManagerEnvVars() []v1.EnvVar {
 
 // consoleManagerContainer returns the manager container.
 func (c *consoleComponent) consoleManagerContainer() corev1.Container {
-	volumeMounts := []corev1.VolumeMount{
-		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
-	}
 	return corev1.Container{
 		Name:          "cnx-manager",
 		Image:         constructImage(ConsoleManagerImageName, c.registry),
 		Env:           c.consoleManagerEnvVars(),
-		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
 	}
 }
@@ -302,44 +290,11 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 	}
 }
 
-// consoleEsProxyEnv returns the env vars for the ES proxy container.
-func (c *consoleComponent) consoleEsProxyEnv() []corev1.EnvVar {
-	scheme, host, port, err := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
-	if err != nil {
-		panic(err)
-	}
-	return []corev1.EnvVar{
-		{Name: "ELASTIC_HOST", Value: host},
-		{Name: "ELASTIC_PORT", Value: port},
-		{Name: "ELASTIC_ACCESS_MODE", Value: "insecure"}, // TODO: Do we ever set this to something else?
-		{Name: "ELASTIC_SCHEME", Value: scheme},
-		// TODO: make this configurable?
-		{Name: "ELASTIC_INSECURE_SKIP_VERIFY", Value: "false"},
-		// {
-		// 	Name:      "ELASTIC_USERNAME",
-		// 	ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.username", Optional),
-		// },
-		// {
-		// 	Name:      "ELASTIC_PASSWORD",
-		// 	ValueFrom: envVarSourceFromSecret(tigeraEsSecretName, "tigera.elasticsearch.password", Optional),
-		// },
-		// {
-		// 	Name:      "ELASTIC_CA",
-		// 	ValueFrom: envVarSourceFromConfigmap(tigeraEsConfigMapName, "tigera.elasticsearch.ca.path"),
-		// },
-	}
-}
-
 // consoleEsProxyContainer returns the ES proxy container
 func (c *consoleComponent) consoleEsProxyContainer() corev1.Container {
-	volumeMounts := []corev1.VolumeMount{
-		{Name: "tigera-es-proxy-tls", MountPath: "/etc/ssl/elastic/"},
-	}
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
 		Image:         constructImage(ConsoleEsProxyImageName, c.registry),
-		Env:           c.consoleEsProxyEnv(),
-		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleEsProxyProbe(),
 	}
 

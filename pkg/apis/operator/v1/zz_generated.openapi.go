@@ -11,38 +11,35 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/tigera/operator/pkg/apis/operator/v1.APIServer":                     schema_pkg_apis_operator_v1_APIServer(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerSpec":                 schema_pkg_apis_operator_v1_APIServerSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerStatus":               schema_pkg_apis_operator_v1_APIServerStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Auth":                          schema_pkg_apis_operator_v1_Auth(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.CNISpec":                       schema_pkg_apis_operator_v1_CNISpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Compliance":                    schema_pkg_apis_operator_v1_Compliance(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceSpec":                schema_pkg_apis_operator_v1_ComplianceSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceStatus":              schema_pkg_apis_operator_v1_ComplianceStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ComponentsSpec":                schema_pkg_apis_operator_v1_ComponentsSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Console":                       schema_pkg_apis_operator_v1_Console(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleSpec":                   schema_pkg_apis_operator_v1_ConsoleSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleStatus":                 schema_pkg_apis_operator_v1_ConsoleStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.Installation":                  schema_pkg_apis_operator_v1_Installation(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationSpec":              schema_pkg_apis_operator_v1_InstallationSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationStatus":            schema_pkg_apis_operator_v1_InstallationStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetection":            schema_pkg_apis_operator_v1_IntrusionDetection(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionSpec":        schema_pkg_apis_operator_v1_IntrusionDetectionSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionStatus":      schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec":           schema_pkg_apis_operator_v1_KubeControllersSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.LogCollector":                  schema_pkg_apis_operator_v1_LogCollector(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.LogCollectorSpec":              schema_pkg_apis_operator_v1_LogCollectorSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.LogCollectorStatus":            schema_pkg_apis_operator_v1_LogCollectorStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.LogStorage":                    schema_pkg_apis_operator_v1_LogStorage(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.LogStorageSpec":                schema_pkg_apis_operator_v1_LogStorageSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.LogStorageStatus":              schema_pkg_apis_operator_v1_LogStorageStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfiguration":       schema_pkg_apis_operator_v1_MonitoringConfiguration(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec":   schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus": schema_pkg_apis_operator_v1_MonitoringConfigurationStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec":                      schema_pkg_apis_operator_v1_NodeSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatus":                  schema_pkg_apis_operator_v1_TigeraStatus(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusSpec":              schema_pkg_apis_operator_v1_TigeraStatusSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusStatus":            schema_pkg_apis_operator_v1_TigeraStatusStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.APIServer":                schema_pkg_apis_operator_v1_APIServer(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerSpec":            schema_pkg_apis_operator_v1_APIServerSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.APIServerStatus":          schema_pkg_apis_operator_v1_APIServerStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Auth":                     schema_pkg_apis_operator_v1_Auth(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.CNISpec":                  schema_pkg_apis_operator_v1_CNISpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Compliance":               schema_pkg_apis_operator_v1_Compliance(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceSpec":           schema_pkg_apis_operator_v1_ComplianceSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ComplianceStatus":         schema_pkg_apis_operator_v1_ComplianceStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ComponentsSpec":           schema_pkg_apis_operator_v1_ComponentsSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Console":                  schema_pkg_apis_operator_v1_Console(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleSpec":              schema_pkg_apis_operator_v1_ConsoleSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.ConsoleStatus":            schema_pkg_apis_operator_v1_ConsoleStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.Installation":             schema_pkg_apis_operator_v1_Installation(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationSpec":         schema_pkg_apis_operator_v1_InstallationSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.InstallationStatus":       schema_pkg_apis_operator_v1_InstallationStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetection":       schema_pkg_apis_operator_v1_IntrusionDetection(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionSpec":   schema_pkg_apis_operator_v1_IntrusionDetectionSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.IntrusionDetectionStatus": schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.KubeControllersSpec":      schema_pkg_apis_operator_v1_KubeControllersSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.LogCollector":             schema_pkg_apis_operator_v1_LogCollector(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.LogCollectorSpec":         schema_pkg_apis_operator_v1_LogCollectorSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.LogCollectorStatus":       schema_pkg_apis_operator_v1_LogCollectorStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.LogStorage":               schema_pkg_apis_operator_v1_LogStorage(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.LogStorageSpec":           schema_pkg_apis_operator_v1_LogStorageSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.LogStorageStatus":         schema_pkg_apis_operator_v1_LogStorageStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.NodeSpec":                 schema_pkg_apis_operator_v1_NodeSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatus":             schema_pkg_apis_operator_v1_TigeraStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusSpec":         schema_pkg_apis_operator_v1_TigeraStatusSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusStatus":       schema_pkg_apis_operator_v1_TigeraStatusStatus(ref),
 	}
 }
 
@@ -844,91 +841,6 @@ func schema_pkg_apis_operator_v1_LogStorageStatus(ref common.ReferenceCallback) 
 						},
 					},
 				},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
-func schema_pkg_apis_operator_v1_MonitoringConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "MonitoringConfiguration is the Schema for the monitoringconfigurations API",
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
-						},
-					},
-					"spec": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec"),
-						},
-					},
-					"status": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus"),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationSpec", "github.com/tigera/operator/pkg/apis/operator/v1.MonitoringConfigurationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
-	}
-}
-
-func schema_pkg_apis_operator_v1_MonitoringConfigurationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "MonitoringConfigurationSpec defines the desired state of MonitoringConfiguration",
-				Properties: map[string]spec.Schema{
-					"clusterName": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"elasticsearch": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.ElasticConfig"),
-						},
-					},
-					"kibana": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.KibanaConfig"),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.ElasticConfig", "github.com/tigera/operator/pkg/apis/operator/v1.KibanaConfig"},
-	}
-}
-
-func schema_pkg_apis_operator_v1_MonitoringConfigurationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "MonitoringConfigurationStatus defines the observed state of MonitoringConfiguration",
-				Properties:  map[string]spec.Schema{},
 			},
 		},
 		Dependencies: []string{},

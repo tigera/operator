@@ -19,7 +19,6 @@ import (
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -33,23 +32,34 @@ const (
 	ComplianceNamespace = "tigera-compliance"
 )
 
+const (
+	ElasticsearchUserComplianceBenchmarker = "tigera-ee-compliance-benchmarker"
+	ElasticsearchUserComplianceController  = "tigera-ee-compliance-controller"
+	ElasticsearchUserComplianceReporter    = "tigera-ee-compliance-reporter"
+	ElasticsearchUserComplianceSnapshotter = "tigera-ee-compliance-snapshotter"
+	ElasticsearchUserComplianceServer      = "tigera-ee-compliance-server"
+)
+
 func Compliance(
+	esSecrets []*corev1.Secret,
 	registry string,
-	m *operatorv1.MonitoringConfiguration,
+	clusterName string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 ) Component {
 	return &complianceComponent{
+		esSecrets:   esSecrets,
 		registry:    registry,
-		monitoring:  m,
+		clusterName: clusterName,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
 	}
 }
 
 type complianceComponent struct {
+	esSecrets   []*corev1.Secret
 	registry    string
-	monitoring  *operatorv1.MonitoringConfiguration
+	clusterName string
 	pullSecrets []*corev1.Secret
 	openshift   bool
 }
@@ -98,6 +108,8 @@ func (c *complianceComponent) Objects() []runtime.Object {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	}
 
+	complianceObjs = append(complianceObjs, copySecrets(ComplianceNamespace, c.esSecrets...)...)
+
 	return complianceObjs
 }
 
@@ -108,32 +120,6 @@ func (c *complianceComponent) Ready() bool {
 var complianceBoolTrue = true
 var complianceReplicas int32 = 1
 
-func (c *complianceComponent) GetElasticEnvVars() []corev1.EnvVar {
-	esScheme, esHost, esPort, _ := ParseEndpoint(c.monitoring.Spec.Elasticsearch.Endpoint)
-	return []corev1.EnvVar{
-		{Name: "ELASTIC_INDEX_SUFFIX", Value: c.monitoring.Spec.ClusterName},
-		{Name: "ELASTIC_SCHEME", Value: esScheme},
-		{Name: "ELASTIC_HOST", Value: esHost},
-		{Name: "ELASTIC_PORT", Value: esPort},
-		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-		{Name: "ELASTIC_CA", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "tigera-es-config",
-				},
-				Key:      "tigera.elasticsearch.ca.path",
-				Optional: &complianceBoolTrue},
-		}},
-	}
-}
-
-var complianceVolumeMounts = []corev1.VolumeMount{
-	{
-		Name:      "elastic-ca-cert-volume",
-		MountPath: "/etc/ssl/elastic/",
-	},
-}
-
 // complianceLivenssProbe is the liveness probe to use for compliance components.
 // They all use the same liveness configuration, so we just define it once here.
 var complianceLivenessProbe = &corev1.Probe{
@@ -141,24 +127,6 @@ var complianceLivenessProbe = &corev1.Probe{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: "/liveness",
 			Port: intstr.FromInt(9099),
-		},
-	},
-}
-
-var complianceVolumes = []corev1.Volume{
-	{
-		Name: "elastic-ca-cert-volume",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				Optional: &complianceBoolTrue,
-				Items: []corev1.KeyToPath{
-					{
-						Key:  "tigera.elasticsearch.ca",
-						Path: "ca.pem",
-					},
-				},
-				SecretName: "tigera-es-config",
-			},
 		},
 	},
 }
@@ -257,24 +225,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
-		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "controller.username",
-				Optional: &complianceBoolTrue},
-		}},
-		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "controller.password",
-				Optional: &complianceBoolTrue},
-		}},
 	}
-	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -299,7 +250,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 						"k8s-app": "compliance-controller",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector: map[string]string{
 						"beta.kubernetes.io/os": "linux",
 					},
@@ -312,16 +263,14 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					},
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						{
+						ElasticsearchContainerDecorate(corev1.Container{
 							Name:          "compliance-controller",
 							Image:         constructImage(ComplianceControllerImage, c.registry),
 							Env:           envVars,
-							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
-						},
+						}, c.clusterName, ElasticsearchUserComplianceController),
 					},
-					Volumes: complianceVolumes,
-				},
+				}),
 			},
 		},
 	}
@@ -371,25 +320,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "warning"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
-		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "reporter.username",
-				Optional: &complianceBoolTrue},
-		}},
-		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "reporter.password",
-				Optional: &complianceBoolTrue},
-		}},
 	}
-	envVars = append(envVars, c.GetElasticEnvVars()...)
-
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -407,7 +338,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					"k8s-app": "compliance-reporter",
 				},
 			},
-			Spec: corev1.PodSpec{
+			Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 				NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
 				ServiceAccountName: "tigera-compliance-reporter",
 				Tolerations: []corev1.Toleration{
@@ -418,16 +349,14 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				},
 				ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 				Containers: []corev1.Container{
-					{
+					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          "reporter",
 						Image:         constructImage(ComplianceReporterImage, c.registry),
 						Env:           envVars,
-						VolumeMounts:  complianceVolumeMounts,
 						LivenessProbe: complianceLivenessProbe,
-					},
+					}, c.clusterName, ElasticsearchUserComplianceReporter),
 				},
-				Volumes: complianceVolumes,
-			},
+			}),
 		},
 	}
 }
@@ -504,24 +433,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
-		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "server.username",
-				Optional: &complianceBoolTrue},
-		}},
-		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "server.password",
-				Optional: &complianceBoolTrue},
-		}},
 	}
-	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -546,7 +458,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						"k8s-app": "compliance-server",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
 					ServiceAccountName: "tigera-compliance-server",
 					Tolerations: []corev1.Toleration{
@@ -557,15 +469,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					},
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						{
-							Name:         "compliance-server",
-							Image:        constructImage(ComplianceServerImage, c.registry),
-							Env:          envVars,
-							VolumeMounts: complianceVolumeMounts,
-						},
+						ElasticsearchContainerDecorate(corev1.Container{
+							Name:  "compliance-server",
+							Image: constructImage(ComplianceServerImage, c.registry),
+							Env:   envVars,
+						}, c.clusterName, ElasticsearchUserComplianceServer),
 					},
-					Volumes: complianceVolumes,
-				},
+				}),
 			},
 		},
 	}
@@ -624,24 +534,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
-		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "snapshotter.username",
-				Optional: &complianceBoolTrue},
-		}},
-		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "snapshotter.password",
-				Optional: &complianceBoolTrue},
-		}},
 	}
-	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -666,7 +559,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 						"k8s-app": "compliance-snapshotter",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
 					ServiceAccountName: "tigera-compliance-snapshotter",
 					Tolerations: []corev1.Toleration{
@@ -677,16 +570,14 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					},
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						{
+						ElasticsearchContainerDecorate(corev1.Container{
 							Name:          "compliance-snapshotter",
 							Image:         constructImage(ComplianceSnapshotterImage, c.registry),
 							Env:           envVars,
-							VolumeMounts:  complianceVolumeMounts,
 							LivenessProbe: complianceLivenessProbe,
-						},
+						}, c.clusterName, ElasticsearchUserComplianceSnapshotter),
 					},
-					Volumes: complianceVolumes,
-				},
+				}),
 			},
 		},
 	}
@@ -741,24 +632,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
-		{Name: "ELASTIC_USER", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "benchmarker.username",
-				Optional: &complianceBoolTrue},
-		}},
-		{Name: "ELASTIC_PASSWORD", ValueFrom: &v1.EnvVarSource{
-			ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "elastic-compliance-user",
-				},
-				Key:      "benchmarker.password",
-				Optional: &complianceBoolTrue},
-		}},
 	}
-	envVars = append(envVars, c.GetElasticEnvVars()...)
 
 	volMounts := []corev1.VolumeMount{
 		{Name: "var-lib-etcd", MountPath: "/var/lib/etcd", ReadOnly: true},
@@ -767,7 +641,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
 		{Name: "usr-bin", MountPath: "/usr/bin", ReadOnly: true},
 	}
-	volMounts = append(volMounts, complianceVolumeMounts...)
 
 	vols := []corev1.Volume{
 		{
@@ -791,7 +664,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/usr/bin"}},
 		},
 	}
-	vols = append(vols, complianceVolumes...)
 
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -811,7 +683,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 						"k8s-app": "compliance-benchmarker",
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
 					ServiceAccountName: "tigera-compliance-benchmarker",
 					HostPID:            true,
@@ -831,16 +703,16 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 					},
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						{
+						ElasticsearchContainerDecorate(corev1.Container{
 							Name:          "compliance-benchmarker",
 							Image:         constructImage(ComplianceBenchmarkerImage, c.registry),
 							Env:           envVars,
 							VolumeMounts:  volMounts,
 							LivenessProbe: complianceLivenessProbe,
-						},
+						}, c.clusterName, ElasticsearchUserComplianceBenchmarker),
 					},
 					Volumes: vols,
-				},
+				}),
 			},
 		},
 	}

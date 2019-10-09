@@ -3,6 +3,8 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/elasticsearch"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -22,6 +24,78 @@ import (
 )
 
 var log = logf.Log.WithName("controller_compliance")
+
+func init() {
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserComplianceBenchmarker,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserComplianceBenchmarker,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_benchmark_results.*"},
+				Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+			}},
+		}},
+	})
+	esusers.AddUser(
+		elasticsearch.User{Username: render.ElasticsearchUserComplianceController,
+			Roles: []elasticsearch.Role{{
+				Name:    render.ElasticsearchUserComplianceController,
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_compliance_reports.*"},
+					Privileges: []string{"read"},
+				}},
+			}},
+		})
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserComplianceReporter,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserComplianceReporter,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{
+				{
+					Names:      []string{"tigera_secure_ee_audit_*"},
+					Privileges: []string{"read"},
+				},
+				{
+					Names:      []string{"tigera_secure_ee_snapshots.*"},
+					Privileges: []string{"read"},
+				},
+				{
+					Names:      []string{"tigera_secure_ee_benchmark_results.*"},
+					Privileges: []string{"read"},
+				},
+				{
+					Names:      []string{"tigera_secure_ee_compliance_reports.*"},
+					Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+				},
+			},
+		}},
+	})
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserComplianceSnapshotter,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserComplianceSnapshotter,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_snapshots.*"},
+				Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+			}},
+		}},
+	})
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserComplianceServer,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserComplianceServer,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_compliance_reports.*"},
+				Privileges: []string{"read"},
+			}},
+		}},
+	})
+}
 
 // Add creates a new Compliance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -63,12 +137,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch Network resource: %v", err)
 	}
 
-	if err = utils.AddMonitoringWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch MonitoringConfiguration resource: %v", err)
-	}
-
 	if err = utils.AddAPIServerWatch(c); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %v", err)
+	}
+
+	for _, secretName := range []string{
+		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserComplianceBenchmarker,
+		render.ElasticsearchUserComplianceController, render.ElasticsearchUserComplianceReporter,
+		render.ElasticsearchUserComplianceSnapshotter, render.ElasticsearchUserComplianceServer} {
+		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("compliance-controller failed to watch the Secret resource: %v", err)
+		}
 	}
 
 	return nil
@@ -145,23 +224,32 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	monitoringConfig, err := utils.GetMonitoringConfig(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading monitoring config")
-		r.status.SetDegraded("Error reading monitoring config", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	if err = utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
-		log.Error(err, "Validation of monitoring config failed")
-		r.status.SetDegraded("Error validating monitoring config", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
-		log.Error(err, "Error with Pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		log.Error(err, "Failed to retrieve pull secrets")
+		r.status.SetDegraded("Failed to retrieve pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	clusterName, err := utils.ClusterName(context.Background(), r.client)
+	if err != nil {
+		log.Error(err, "Failed to get the cluster name")
+		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{
+		render.ElasticsearchUserComplianceBenchmarker, render.ElasticsearchUserComplianceController,
+		render.ElasticsearchUserComplianceReporter, render.ElasticsearchUserComplianceSnapshotter,
+		render.ElasticsearchUserComplianceServer,
+	}, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
+			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -172,7 +260,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Compliance(
-		network.Spec.Registry, monitoringConfig, pullSecrets, openshift)
+		esSecrets, network.Spec.Registry, clusterName, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

@@ -280,7 +280,6 @@ KUBECONFIG?=./kubeconfig.yaml
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		./kubectl apply -f deploy/crds/operator_v1_console_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_monitoringconfiguration_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_logcollector_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_intrusiondetection_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_compliance_crd.yaml && \

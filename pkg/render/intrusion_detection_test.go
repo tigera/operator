@@ -17,29 +17,15 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/elasticsearch"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
-	var monitoring *operator.MonitoringConfiguration
-	BeforeEach(func() {
-		monitoring = &operator.MonitoringConfiguration{
-			Spec: operator.MonitoringConfigurationSpec{
-				ClusterName: "clusterTestName",
-				Elasticsearch: &operator.ElasticConfig{
-					Endpoint: "https://elastic.search:1234",
-				},
-				Kibana: &operator.KibanaConfig{
-					Endpoint: "https://kibana.stuff:1234",
-				},
-			},
-		}
-	})
-
+	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserIntrusionDetection})
 	It("should render all resources for a default configuration", func() {
-		component := render.IntrusionDetection("testregistry.com/", monitoring, nil, notOpenshift)
+		component := render.IntrusionDetection(nil, "testregistry.com/", "clusterTestName", nil, notOpenshift)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(8))
 

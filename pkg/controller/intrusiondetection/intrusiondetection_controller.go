@@ -3,6 +3,8 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/elasticsearch"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -22,6 +24,26 @@ import (
 )
 
 var log = logf.Log.WithName("controller_intrusiondetection")
+
+func init() {
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserIntrusionDetection,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserIntrusionDetection,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{
+				{
+					Names:      []string{"tigera_secure_ee_*"},
+					Privileges: []string{"read"},
+				},
+				{
+					Names:      []string{".tigera.ipset.*", "tigera_secure_ee_events.*"},
+					Privileges: []string{"all"},
+				},
+			},
+		}},
+	})
+}
 
 // Add creates a new IntrusionDetection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -63,15 +85,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
 	}
 
-	if err = utils.AddMonitoringWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch MonitoringConfiguration resource: %v", err)
-	}
-
 	if err = utils.AddAPIServerWatch(c); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
 	}
 
-	// TODO: Watch for dependent objects.
+	for _, secretName := range []string{render.ElasticsearchPublicCertSecret, render.ElasticsearchUserIntrusionDetection} {
+		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -140,26 +163,29 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// Query for Monitoring Config
-	monitoringConfig, err := utils.GetMonitoringConfig(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading monitoring config")
-		r.status.SetDegraded("Error reading monitoring config", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	// Validate Monitoring Config
-	if err = utils.ValidateMonitoringConfig(monitoringConfig); err != nil {
-		log.Error(err, "Validation of monitoring config failed")
-		r.status.SetDegraded("Error validating monitoring config", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+	clusterName, err := utils.ClusterName(context.Background(), r.client)
+	if err != nil {
+		log.Error(err, "Failed to get the cluster name")
+		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserIntrusionDetection},
+		r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
+			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -169,8 +195,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	component := render.IntrusionDetection(
+		esSecrets,
 		network.Spec.Registry,
-		monitoringConfig,
+		clusterName,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 	)

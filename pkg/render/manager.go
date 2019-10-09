@@ -18,7 +18,7 @@ import (
 const (
 	managerPort           = 9443
 	managerTargetPort     = 9443
-	ManagerNamespace      = "tigera-console"
+	ManagerNamespace      = "tigera-manager"
 	ManagerTLSSecretName  = "manager-tls"
 	ManagerSecretKeyName  = "key"
 	ManagerSecretCertName = "cert"
@@ -26,8 +26,8 @@ const (
 	ElasticsearchUserManager = "tigera-ee-manager"
 )
 
-func Console(
-	cr *operator.Console,
+func Manager(
+	cr *operator.Manager,
 	esSecrets []*corev1.Secret,
 	clusterName string,
 	tlsKeyPair *corev1.Secret,
@@ -52,7 +52,7 @@ func Console(
 	copy := tlsKeyPair.DeepCopy()
 	copy.ObjectMeta.Namespace = ManagerNamespace
 	tlsSecrets = append(tlsSecrets, copy)
-	return &consoleComponent{
+	return &managerComponent{
 		cr:          cr,
 		esSecrets:   esSecrets,
 		clusterName: clusterName,
@@ -63,8 +63,8 @@ func Console(
 	}, nil
 }
 
-type consoleComponent struct {
-	cr          *operator.Console
+type managerComponent struct {
+	cr          *operator.Manager
 	esSecrets   []*corev1.Secret
 	clusterName string
 	tlsSecrets  []*corev1.Secret
@@ -73,20 +73,20 @@ type consoleComponent struct {
 	registry    string
 }
 
-func (c *consoleComponent) Objects() []runtime.Object {
+func (c *managerComponent) Objects() []runtime.Object {
 	objs := []runtime.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
 	objs = append(objs,
-		c.consoleManagerServiceAccount(),
-		c.consoleManagerClusterRole(),
-		c.consoleManagerClusterRoleBinding(),
+		c.managerServiceAccount(),
+		c.managerClusterRole(),
+		c.managerClusterRoleBinding(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
-		c.consoleManagerDeployment(),
-		c.consoleManagerService(),
+		c.managerDeployment(),
+		c.managerService(),
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 	)
@@ -100,12 +100,12 @@ func (c *consoleComponent) Objects() []runtime.Object {
 	return objs
 }
 
-func (c *consoleComponent) Ready() bool {
+func (c *managerComponent) Ready() bool {
 	return true
 }
 
-// consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
-func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
+// managerDeployment creates a deployment for the Tigera Secure manager component.
+func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -145,14 +145,14 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 						"beta.kubernetes.io/os": "linux",
 					},
 					ServiceAccountName: "cnx-manager",
-					Tolerations:        c.consoleTolerations(),
+					Tolerations:        c.managerTolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(c.consoleManagerContainer(), c.clusterName, ElasticsearchUserManager),
-						ElasticsearchContainerDecorate(c.consoleEsProxyContainer(), c.clusterName, ElasticsearchUserManager),
-						c.consoleProxyContainer(),
+						ElasticsearchContainerDecorate(c.managerContainer(), c.clusterName, ElasticsearchUserManager),
+						ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.clusterName, ElasticsearchUserManager),
+						c.managerProxyContainer(),
 					},
-					Volumes: c.consoleManagerVolumes(),
+					Volumes: c.managerVolumes(),
 				}),
 			},
 		},
@@ -160,8 +160,8 @@ func (c *consoleComponent) consoleManagerDeployment() *appsv1.Deployment {
 	return d
 }
 
-// consoleManagerVolumes returns the volumes for the Tigera Secure console component.
-func (c *consoleComponent) consoleManagerVolumes() []v1.Volume {
+// managerVolumes returns the volumes for the Tigera Secure manager component.
+func (c *managerComponent) managerVolumes() []v1.Volume {
 	return []v1.Volume{
 		{
 			Name: ManagerTLSSecretName,
@@ -174,8 +174,8 @@ func (c *consoleComponent) consoleManagerVolumes() []v1.Volume {
 	}
 }
 
-// consoleManagerProbe returns the probe for the manager container.
-func (c *consoleComponent) consoleManagerProbe() *v1.Probe {
+// managerProbe returns the probe for the manager container.
+func (c *managerComponent) managerProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -189,8 +189,8 @@ func (c *consoleComponent) consoleManagerProbe() *v1.Probe {
 	}
 }
 
-// consoleEsProxyProbe returns the probe for the ES proxy container.
-func (c *consoleComponent) consoleEsProxyProbe() *v1.Probe {
+// managerEsProxyProbe returns the probe for the ES proxy container.
+func (c *managerComponent) managerEsProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -204,8 +204,8 @@ func (c *consoleComponent) consoleEsProxyProbe() *v1.Probe {
 	}
 }
 
-// consoleProxyProbe returns the probe for the proxy container.
-func (c *consoleComponent) consoleProxyProbe() *v1.Probe {
+// managerProxyProbe returns the probe for the proxy container.
+func (c *managerComponent) managerProxyProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -219,8 +219,8 @@ func (c *consoleComponent) consoleProxyProbe() *v1.Probe {
 	}
 }
 
-// consoleManagerEnvVars returns the envvars for the console manager container.
-func (c *consoleComponent) consoleManagerEnvVars() []v1.EnvVar {
+// managerEnvVars returns the envvars for the manager container.
+func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	envs := []v1.EnvVar{
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
@@ -232,22 +232,22 @@ func (c *consoleComponent) consoleManagerEnvVars() []v1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 	}
 
-	envs = append(envs, c.consoleOAuth2EnvVars()...)
+	envs = append(envs, c.managerOAuth2EnvVars()...)
 	return envs
 }
 
-// consoleManagerContainer returns the manager container.
-func (c *consoleComponent) consoleManagerContainer() corev1.Container {
+// managerContainer returns the manager container.
+func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
 		Name:          "cnx-manager",
-		Image:         constructImage(ConsoleManagerImageName, c.registry),
-		Env:           c.consoleManagerEnvVars(),
-		LivenessProbe: c.consoleManagerProbe(),
+		Image:         constructImage(ManagerImageName, c.registry),
+		Env:           c.managerEnvVars(),
+		LivenessProbe: c.managerProbe(),
 	}
 }
 
-// consoleOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
-func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
+// managerOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
+func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(c.cr.Spec.Auth.Type)},
 	}
@@ -269,11 +269,11 @@ func (c *consoleComponent) consoleOAuth2EnvVars() []v1.EnvVar {
 	return envs
 }
 
-// consoleProxyContainer returns the container for the console proxy container.
-func (c *consoleComponent) consoleProxyContainer() corev1.Container {
+// managerProxyContainer returns the container for the manager proxy container.
+func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  "tigera-voltron",
-		Image: constructImage(ConsoleProxyImageName, c.registry),
+		Image: constructImage(ManagerProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{Name: "VOLTRON_PORT",
 				Value: "9443"},
@@ -286,23 +286,23 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
 			{Name: ManagerTLSSecretName, MountPath: "/certs/tunnel"},
 		},
-		LivenessProbe: c.consoleProxyProbe(),
+		LivenessProbe: c.managerProxyProbe(),
 	}
 }
 
-// consoleEsProxyContainer returns the ES proxy container
-func (c *consoleComponent) consoleEsProxyContainer() corev1.Container {
+// managerEsProxyContainer returns the ES proxy container
+func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:          "tigera-es-proxy",
-		Image:         constructImage(ConsoleEsProxyImageName, c.registry),
-		LivenessProbe: c.consoleEsProxyProbe(),
+		Image:         constructImage(ManagerEsProxyImageName, c.registry),
+		LivenessProbe: c.managerEsProxyProbe(),
 	}
 
 	return apiServer
 }
 
-// consoleTolerations returns the tolerations for the Tigera Secure console deployment pods.
-func (c *consoleComponent) consoleTolerations() []v1.Toleration {
+// managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
+func (c *managerComponent) managerTolerations() []v1.Toleration {
 	return []v1.Toleration{
 		{
 			Key:    "node-role.kubernetes.io/master",
@@ -317,8 +317,8 @@ func (c *consoleComponent) consoleTolerations() []v1.Toleration {
 	}
 }
 
-// consoleManagerService returns the service exposing the Tigera Secure web app.
-func (c *consoleComponent) consoleManagerService() *v1.Service {
+// managerService returns the service exposing the Tigera Secure web app.
+func (c *managerComponent) managerService() *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -340,16 +340,16 @@ func (c *consoleComponent) consoleManagerService() *v1.Service {
 	}
 }
 
-// consoleManagerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-func (c *consoleComponent) consoleManagerServiceAccount() *v1.ServiceAccount {
+// managerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
+func (c *managerComponent) managerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: ManagerNamespace},
 	}
 }
 
-// consoleManagerClusterRole returns a clusterrole that allows authn/authz review requests.
-func (c *consoleComponent) consoleManagerClusterRole() *rbacv1.ClusterRole {
+// managerClusterRole returns a clusterrole that allows authn/authz review requests.
+func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -375,9 +375,9 @@ func (c *consoleComponent) consoleManagerClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// consoleManagerClusterRoleBinding returns a clusterrolebinding that gives the cnx-manager serviceaccount
+// managerClusterRoleBinding returns a clusterrolebinding that gives the cnx-manager serviceaccount
 // the permissions in the cnx-manager-role.
-func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *managerComponent) managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager-binding"},
@@ -397,7 +397,7 @@ func (c *consoleComponent) consoleManagerClusterRoleBinding() *rbacv1.ClusterRol
 }
 
 // tigeraUserClusterRole returns a cluster role for a default Tigera Secure user.
-func (c *consoleComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
+func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -452,7 +452,7 @@ func (c *consoleComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				ResourceNames: []string{"default"},
 				Verbs:         []string{"get"},
 			},
-			// List and download the reports in the Tigera Secure console.
+			// List and download the reports in the Tigera Secure manager.
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -467,8 +467,8 @@ func (c *consoleComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure console network admin.
-func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
+// tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure manager network admin.
+func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -496,7 +496,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 			},
-			// Additional "list" requests that the Tigera Secure console needs
+			// Additional "list" requests that the Tigera Secure manager needs
 			{
 				APIGroups: []string{""},
 				Resources: []string{"namespaces"},
@@ -520,7 +520,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"get"},
 			},
-			// Manage globalreport configuration, view report generation status, and list reports in the Tigera Secure console.
+			// Manage globalreport configuration, view report generation status, and list reports in the Tigera Secure manager.
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -531,7 +531,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"globalreports/status"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			// List and download the reports in the Tigera Secure console.
+			// List and download the reports in the Tigera Secure manager.
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -542,7 +542,7 @@ func (c *consoleComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 }
 
 // TODO: Can we get rid of this and instead just bind to default ones?
-func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextConstraints {
+func (c *managerComponent) securityContextConstraints() *ocsv1.SecurityContextConstraints {
 	privilegeEscalation := false
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
@@ -565,7 +565,7 @@ func (c *consoleComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 	}
 }
 
-func (c *consoleComponent) getTLSObjects() []runtime.Object {
+func (c *managerComponent) getTLSObjects() []runtime.Object {
 	objs := []runtime.Object{}
 	for _, s := range c.tlsSecrets {
 		objs = append(objs, s)

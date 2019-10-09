@@ -4,18 +4,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ConsoleSpec defines optional configuration for the Tigera Secure management console.
+// ManagerSpec defines optional configuration for the Tigera Secure management console.
 // Valid only for the variant 'TigeraSecureEnterprise'.
 // +k8s:openapi-gen=true
-type ConsoleSpec struct {
+type ManagerSpec struct {
 	// Auth is optional authentication configuration for the Tigera Secure management console.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 }
 
-// ConsoleStatus defines the observed state of Console
+// ManagerStatus defines the observed state of Manager
 // +k8s:openapi-gen=true
-type ConsoleStatus struct {
+type ManagerStatus struct {
 	Auth *Auth `json:"auth,omitempty"`
 }
 
@@ -47,26 +47,26 @@ const (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Console is the Schema for the consoles API
+// Manager is the Schema for the managers API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-type Console struct {
+type Manager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ConsoleSpec   `json:"spec,omitempty"`
-	Status ConsoleStatus `json:"status,omitempty"`
+	Spec   ManagerSpec   `json:"spec,omitempty"`
+	Status ManagerStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ConsoleList contains a list of Console
-type ConsoleList struct {
+// ManagerList contains a list of Manager
+type ManagerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Console `json:"items"`
+	Items           []Manager `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Console{}, &ConsoleList{})
+	SchemeBuilder.Register(&Manager{}, &ManagerList{})
 }

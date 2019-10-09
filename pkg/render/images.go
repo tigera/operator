@@ -50,10 +50,10 @@ const (
 	IntrusionDetectionControllerImageName   = "intrusion-detection-controller:" + components.VersionIntrusionDetectionController
 	IntrusionDetectionJobInstallerImageName = "intrusion-detection-job-installer:" + components.VersionIntrusionDetectionJobInstaller
 
-	// Console images.
-	ConsoleManagerImageName = "cnx-manager:" + components.VersionConsoleManager
-	ConsoleProxyImageName   = "voltron:" + components.VersionConsoleProxy
-	ConsoleEsProxyImageName = "es-proxy:" + components.VersionConsoleEsProxy
+	// Manager images.
+	ManagerImageName        = "cnx-manager:" + components.VersionManager
+	ManagerProxyImageName   = "voltron:" + components.VersionManagerProxy
+	ManagerEsProxyImageName = "es-proxy:" + components.VersionManagerEsProxy
 
 	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
 	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch

@@ -64,7 +64,7 @@ rules:
   - operator.tigera.io
   resources:
   - '*'
-  - consoles
+  - managers
   - apiservers
   - tigerastatuses
   - intrusiondetections

@@ -87,9 +87,9 @@ func main() {
 		fmt.Println("ComplianceBenchmarker:", components.VersionComplianceBenchmarker)
 		fmt.Println("IntrusionDetectionController:", components.VersionIntrusionDetectionController)
 		fmt.Println("IntrusionDetectionJobInstaller:", components.VersionIntrusionDetectionJobInstaller)
-		fmt.Println("ConsoleManager:", components.VersionConsoleManager)
-		fmt.Println("ConsoleProxy:", components.VersionConsoleProxy)
-		fmt.Println("ConsoleEsProxy:", components.VersionConsoleEsProxy)
+		fmt.Println("Manager:", components.VersionManager)
+		fmt.Println("ManagerProxy:", components.VersionManagerProxy)
+		fmt.Println("ManagerEsProxy:", components.VersionManagerEsProxy)
 
 		os.Exit(0)
 	}

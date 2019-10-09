@@ -133,6 +133,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 				Value: "true",
 			},
 		},
+		SecurityContext:securityContext(),
 	}
 }
 
@@ -313,6 +314,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			},
 			InitialDelaySeconds: 5,
 		},
+		SecurityContext: securityContext(),
 	}
 }
 

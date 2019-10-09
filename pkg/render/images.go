@@ -13,6 +13,7 @@ const (
 	K8sGcrRegistry           = "gcr.io/google-containers/"
 	ECKOperatorRegistry      = "docker.elastic.co/eck/"
 	ECKElasticsearchRegistry = "docker.elastic.co/elasticsearch/"
+	TigeraInternalRegistry   = "gcr.io/unique-caldron-775/cnx/tigera"
 )
 
 // This section contains images used when installing open-source Calico.
@@ -82,6 +83,17 @@ func constructImage(imageName string, registry string) string {
 		reg = ECKElasticsearchRegistry
 	case ECKOperatorImageName:
 		reg = ECKOperatorRegistry
+	case IntrusionDetectionControllerImageName,
+		IntrusionDetectionJobInstallerImageName,
+		ConsoleManagerImageName,
+		ConsoleProxyImageName,
+		ConsoleEsProxyImageName,
+		ComplianceSnapshotterImage,
+		ComplianceServerImage,
+		ComplianceControllerImage,
+		APIServerImageName,
+		QueryServerImageName:
+		reg = TigeraInternalRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

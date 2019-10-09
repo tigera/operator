@@ -255,6 +255,7 @@ func (c *consoleComponent) consoleManagerContainer() corev1.Container {
 		Env:           c.consoleManagerEnvVars(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleManagerProbe(),
+		SecurityContext: securityContext(),
 	}
 }
 
@@ -299,6 +300,7 @@ func (c *consoleComponent) consoleProxyContainer() corev1.Container {
 			{Name: ManagerTLSSecretName, MountPath: "/certs/tunnel"},
 		},
 		LivenessProbe: c.consoleProxyProbe(),
+		SecurityContext: securityContext(),
 	}
 }
 
@@ -341,6 +343,7 @@ func (c *consoleComponent) consoleEsProxyContainer() corev1.Container {
 		Env:           c.consoleEsProxyEnv(),
 		VolumeMounts:  volumeMounts,
 		LivenessProbe: c.consoleEsProxyProbe(),
+		SecurityContext: securityContext(),
 	}
 
 	return apiServer

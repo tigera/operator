@@ -357,15 +357,15 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 		image = constructImage(TyphaImageNameTigera, c.cr.Spec.Registry)
 	}
 	return v1.Container{
-		Name:           "calico-typha",
-		Image:          image,
-		Resources:      c.typhaResources(),
-		Env:            c.typhaEnvVars(),
-		VolumeMounts:   c.typhaVolumeMounts(),
-		Ports:          c.typhaPorts(),
-		LivenessProbe:  lp,
-		ReadinessProbe: rp,
-		//SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
+		Name:            "calico-typha",
+		Image:           image,
+		Resources:       c.typhaResources(),
+		Env:             c.typhaEnvVars(),
+		VolumeMounts:    c.typhaVolumeMounts(),
+		Ports:           c.typhaPorts(),
+		LivenessProbe:   lp,
+		ReadinessProbe:  rp,
+		SecurityContext: securityContext(),
 	}
 }
 

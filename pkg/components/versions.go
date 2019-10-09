@@ -14,31 +14,31 @@ const (
 const (
 	// Overrides for Calico.
 	VersionTigeraNode            = "v2.5.0"
-	VersionTigeraTypha           = "v2.4.2"
+	VersionTigeraTypha           = "master"
 	VersionTigeraKubeControllers = "v2.4.2"
 
 	// API server images.
-	VersionAPIServer   = "v2.5.0"
-	VersionQueryServer = "v2.4.0"
+	VersionAPIServer   = "master"
+	VersionQueryServer = "master"
 
 	// Logging
 	VersionFluentd = "es7-v2.5.1-dev-1"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.4.2"
+	VersionComplianceController  = "master"
 	VersionComplianceReporter    = "v2.4.2"
-	VersionComplianceServer      = "v2.4.2"
-	VersionComplianceSnapshotter = "v2.4.2"
+	VersionComplianceServer      = "master"
+	VersionComplianceSnapshotter = "master"
 	VersionComplianceBenchmarker = "v2.5.1"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.4.2"
-	VersionIntrusionDetectionJobInstaller = "v2.4.2"
+	VersionIntrusionDetectionController   = "master"
+	VersionIntrusionDetectionJobInstaller = "master"
 
 	// Console images.
-	VersionConsoleManager = "v2.4.2"
-	VersionConsoleProxy   = "v1.0.0.rc1"
-	VersionConsoleEsProxy = "v2.4.0"
+	VersionConsoleManager = "master"
+	VersionConsoleProxy   = "master"
+	VersionConsoleEsProxy = "master"
 
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.0"

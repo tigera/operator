@@ -105,6 +105,9 @@ func writeVersions(osVersions, eeVersions Components) error {
 		`	VersionAPIServer   = "` + eeVersions.get("cnx-apiserver") + `"`,
 		`	VersionQueryServer = "` + eeVersions.get("cnx-queryserver") + `"`,
 		"",
+		"	// Logging",
+		`	VersionFluentd = "` + eeVersions.get("fluentd") + `"`,
+		"",
 		"	// Compliance images",
 		`	VersionComplianceController  = "` + eeVersions.get("compliance-controller") + `"`,
 		`	VersionComplianceReporter    = "` + eeVersions.get("compliance-reporter") + `"`,
@@ -120,6 +123,11 @@ func writeVersions(osVersions, eeVersions Components) error {
 		`	VersionManager = "` + eeVersions.get("cnx-manager") + `"`,
 		`	VersionManagerProxy   = "` + eeVersions.get("voltron") + `"`,
 		`	VersionManagerEsProxy = "` + eeVersions.get("es-proxy") + `"`,
+		"",
+		"	// ECK Elasticsearch images",
+		`	VersionECKOperator = "` + eeVersions.get("elasticsearch-operator") + `"`,
+		`	VersionECKElasticsearch = "` + eeVersions.get("elasticsearch") + `"`,
+		`	VersionECKKibana = "` + eeVersions.get("kibana") + `"`,
 		")",
 	}
 

@@ -40,6 +40,7 @@ const (
 	VersionManagerProxy   = "v1.0.0.rc1"
 	VersionManagerEsProxy = "v2.4.0"
 
+	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.0"
 )

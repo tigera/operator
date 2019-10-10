@@ -227,7 +227,6 @@ func (m *StatusManager) syncState() bool {
 	numDaemonSets := len(m.daemonsets)
 	numDeployments := len(m.deployments)
 	numStatefulSets := len(m.statefulsets)
-	// numCronJobs := len(m.statefulsets)
 	if len(m.daemonsets) > 0 {
 		// For each daemonset, check its rollout status.
 		for _, dsnn := range m.daemonsets {

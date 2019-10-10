@@ -28,11 +28,8 @@ type LogStorageSpec struct {
 	Nodes *Nodes `json:"nodes,omitempty"`
 	// Index defines the configuration for the indices in the elasticsearch cluster
 	Indices *Indices `json:"indices,omitempty"`
-
-	FlowRetention             int
-	AuditRetention            int
-	SnapshotRetention         int
-	ComplianceReportRetention int
+	// Retention defines how long data is retained in the elasticsearch cluster before it is cleared.
+	Retention *Retention `json:"retention,omitempty"`
 }
 
 type Nodes struct {
@@ -45,6 +42,13 @@ type Nodes struct {
 type Indices struct {
 	// Replicas defines how many replicas each index will have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
 	Replicas int64 `json:"replicas"`
+}
+
+type Retention struct {
+	FlowRetention             int `json:"flows"`
+	AuditRetention            int `json:"auditReports"`
+	SnapshotRetention         int `json:"snapshots"`
+	ComplianceReportRetention int `json:"complianceReports"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

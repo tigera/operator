@@ -16,11 +16,13 @@ var (
 	EsCuratorName = "elastic-curator"
 )
 
-func ElasticCurator(logStorage operatorv1.LogStorage, pullSecrets []*corev1.Secret, registry string) Component {
+func ElasticCurator(logStorage operatorv1.LogStorage, esSecrets, pullSecrets []*corev1.Secret, registry, clusterName string) Component {
 	return &elasticCuratorComponent{
 		logStorage:  logStorage,
 		pullSecrets: pullSecrets,
+		esSecrets:   esSecrets,
 		registry:    registry,
+		clusterName: clusterName,
 	}
 }
 
@@ -30,14 +32,19 @@ func (es *elasticCuratorComponent) Ready() bool {
 
 type elasticCuratorComponent struct {
 	logStorage  operatorv1.LogStorage
+	esSecrets   []*corev1.Secret
 	pullSecrets []*corev1.Secret
 	registry    string
+	clusterName string
 }
 
 func (ec *elasticCuratorComponent) Objects() []runtime.Object {
-	return []runtime.Object{
+	objs := []runtime.Object{
 		ec.cronJob(),
 	}
+	objs = append(objs, copyImagePullSecrets(ec.pullSecrets, ElasticsearchNamespace)...)
+	return append(objs, copySecrets(ElasticsearchNamespace, ec.esSecrets...)...)
+
 }
 
 func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
@@ -76,13 +83,11 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 				// Template: batch.JobTemplateSpec{},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
+						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 							Containers: []corev1.Container{
-								{
+								ElasticsearchContainerDecorate(corev1.Container{
 									Name:  EsCuratorName,
 									Image: constructImage(EsCuratorImageName, ec.registry),
-									// TODO: generalize these volume mounts
-									VolumeMounts: complianceVolumeMounts,
 									// TODO: add es connection settings
 									Env:           ec.envVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
@@ -90,13 +95,11 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 										RunAsNonRoot:             &f,
 										AllowPrivilegeEscalation: &f,
 									},
-								},
+								}, ec.clusterName, ElasticsearchUserCurator),
 							},
-							// TODO: generalize these volumes
-							Volumes:          complianceVolumes,
 							ImagePullSecrets: getImagePullSecretReferenceList(ec.pullSecrets),
 							RestartPolicy:    v1.RestartPolicyOnFailure,
-						},
+						}),
 					},
 				},
 			},
@@ -106,9 +109,10 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 
 func (ec elasticCuratorComponent) envVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.FlowRetention)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.AuditRetention)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.SnapshotRetention)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.ComplianceReportRetention)},
+		// TODO: handle nil
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.FlowRetention)},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.AuditRetention)},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.SnapshotRetention)},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.ComplianceReportRetention)},
 	}
 }

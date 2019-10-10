@@ -11,6 +11,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +29,20 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logstorage")
+
+func init() {
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserCurator,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserCurator,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_*"},
+				Privileges: []string{"all"},
+			}},
+		}},
+	})
+}
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -216,6 +231,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
+	clusterName, err := utils.ClusterName(context.Background(), r.client)
+	if err != nil {
+		log.Error(err, "Failed to get the cluster name")
+		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	reqLogger.V(2).Info("Creating Elasticsearch components")
 
 	reqLogger.V(2).Info("Creating Elasticsearch components")
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
@@ -280,15 +303,24 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// TODO: remove?
-	// r.status.SetCronJobs([]types.NamespacedName{{Name: "elastic-curator", Namespace: "tigera-elasticsearch"}})
-	curatorHandler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
-	curatorComponent := render.ElasticCurator(*ls, pullSecrets, network.Spec.Registry)
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserCurator}, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
+			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
+		return reconcile.Result{}, err
+	}
 
-	if err := curatorHandler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
+	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network.Spec.Registry, clusterName)
+	if err := hdler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
+
+	r.status.SetCronJobs([]types.NamespacedName{{Name: render.EsCuratorName, Namespace: render.ElasticsearchNamespace}})
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

@@ -1,4 +1,4 @@
-package console
+package manager
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_console")
+var log = logf.Log.WithName("controller_manager")
 
 func init() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager,
@@ -40,7 +40,7 @@ func init() {
 	})
 }
 
-// Add creates a new Console Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 	if !tsee {
@@ -52,11 +52,11 @@ func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
-	c := &ReconcileConsole{
+	c := &ReconcileManager{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: provider,
-		status:   status.New(mgr.GetClient(), "console"),
+		status:   status.New(mgr.GetClient(), "manager"),
 	}
 	c.status.Run()
 	return c
@@ -66,40 +66,40 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("console-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create console-controller: %v", err)
+		return fmt.Errorf("Failed to create manager-controller: %v", err)
 	}
 
-	// Watch for changes to primary resource Console
-	err = c.Watch(&source.Kind{Type: &operatorv1.Console{}}, &handler.EnqueueRequestForObject{})
+	// Watch for changes to primary resource Manager
+	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("console-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
 	}
 
 	err = utils.AddAPIServerWatch(c)
 	if err != nil {
-		return fmt.Errorf("console-controller failed to watch APIServer resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch APIServer resource: %v", err)
 	}
 
 	err = utils.AddComplianceWatch(c)
 	if err != nil {
-		return fmt.Errorf("console-controller failed to watch compliance resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch compliance resource: %v", err)
 	}
 
 	for _, secretName := range []string{render.ElasticsearchPublicCertSecret, render.ElasticsearchUserManager} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("console-controller failed to watch the Secret resource: %v", err)
+			return fmt.Errorf("manager-controller failed to watch the Secret resource: %v", err)
 		}
 	}
 
 	return nil
 }
 
-var _ reconcile.Reconciler = &ReconcileConsole{}
+var _ reconcile.Reconciler = &ReconcileManager{}
 
-// ReconcileConsole reconciles a Console object
-type ReconcileConsole struct {
+// ReconcileManager reconciles a Manager object
+type ReconcileManager struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client   client.Client
@@ -108,10 +108,10 @@ type ReconcileConsole struct {
 	status   *status.StatusManager
 }
 
-// GetConsole returns the default console instance with defaults populated.
-func GetConsole(ctx context.Context, cli client.Client, provider operatorv1.Provider) (*operatorv1.Console, error) {
-	// Fetch the console instance. We only support a single instance named "default".
-	instance := &operatorv1.Console{}
+// GetManager returns the default manager instance with defaults populated.
+func GetManager(ctx context.Context, cli client.Client, provider operatorv1.Provider) (*operatorv1.Manager, error) {
+	// Fetch the manager instance. We only support a single instance named "default".
+	instance := &operatorv1.Manager{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
 		return nil, err
@@ -128,23 +128,23 @@ func GetConsole(ctx context.Context, cli client.Client, provider operatorv1.Prov
 	return instance, nil
 }
 
-// Reconcile reads that state of the cluster for a Console object and makes changes based on the state read
-// and what is in the Console.Spec
+// Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
+// and what is in the Manager.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Console")
+	reqLogger.Info("Reconciling Manager")
 
-	// Fetch the Console instance
-	instance, err := GetConsole(context.Background(), r.client, r.provider)
+	// Fetch the Manager instance
+	instance, err := GetManager(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.Info("Console object not found")
+			reqLogger.Info("Manager object not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Error querying Console", err.Error())
+		r.status.SetDegraded("Error querying Manager", err.Error())
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
@@ -231,7 +231,7 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Console(
+	component, err := render.Manager(
 		instance,
 		esSecrets,
 		clusterName,
@@ -241,8 +241,8 @@ func (r *ReconcileConsole) Reconcile(request reconcile.Request) (reconcile.Resul
 		installation.Spec.Registry,
 	)
 	if err != nil {
-		log.Error(err, "Error rendering Console")
-		r.status.SetDegraded("Error rendering Console", err.Error())
+		log.Error(err, "Error rendering Manager")
+		r.status.SetDegraded("Error rendering Manager", err.Error())
 		return reconcile.Result{}, err
 	}
 

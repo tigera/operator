@@ -24,15 +24,15 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-var _ = Describe("Tigera Secure Console rendering tests", func() {
-	var instance *operator.Console
+var _ = Describe("Tigera Secure Manager rendering tests", func() {
+	var instance *operator.Manager
 	var registry string
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operator.Console{
-			Spec: operator.ConsoleSpec{
+		instance = &operator.Manager{
+			Spec: operator.ManagerSpec{
 				Auth: &operator.Auth{
 					Type: operator.AuthTypeBasic,
 				},
@@ -41,8 +41,8 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Console(instance, nil, "clusterTestName", nil, nil, notOpenshift, registry)
-		Expect(err).To(BeNil(), "Expected Console to create successfully %s", err)
+		component, err := render.Manager(instance, nil, "clusterTestName", nil, nil, notOpenshift, registry)
+		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(10))
 
@@ -54,14 +54,14 @@ var _ = Describe("Tigera Secure Console rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-console", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "cnx-manager", ns: "tigera-console", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-manager", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "cnx-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "cnx-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
-			{name: "manager-tls", ns: "tigera-console", group: "", version: "v1", kind: "Secret"},
-			{name: "cnx-manager", ns: "tigera-console", group: "", version: "v1", kind: "Deployment"},
-			{name: "cnx-manager", ns: "tigera-console", group: "", version: "v1", kind: "Service"},
+			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
+			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
+			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 		}

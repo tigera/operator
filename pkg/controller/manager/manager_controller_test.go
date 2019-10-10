@@ -1,4 +1,4 @@
-package console
+package manager
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
-var _ = Describe("Console controller tests", func() {
+var _ = Describe("Manager controller tests", func() {
 	var c client.Client
 	BeforeEach(func() {
 		// Create a Kubernetes client.
@@ -21,15 +21,15 @@ var _ = Describe("Console controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should query a default console instance", func() {
+	It("should query a default manager instance", func() {
 		By("Creating a CRD")
-		instance := &operatorv1.Console{
-			TypeMeta:   metav1.TypeMeta{Kind: "Console", APIVersion: "operator.tigera.io/v1"},
+		instance := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 		err := c.Create(context.Background(), instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetConsole(context.Background(), c, operatorv1.ProviderNone)
+		instance, err = GetManager(context.Background(), c, operatorv1.ProviderNone)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

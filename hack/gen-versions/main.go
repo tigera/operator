@@ -116,10 +116,10 @@ func writeVersions(osVersions, eeVersions Components) error {
 		`	VersionIntrusionDetectionController   = "` + eeVersions.get("intrusion-detection-controller") + `"`,
 		`	VersionIntrusionDetectionJobInstaller = "` + eeVersions.get("elastic-tsee-installer") + `"`,
 		"",
-		"	// Console images.",
-		`	VersionConsoleManager = "` + eeVersions.get("cnx-manager") + `"`,
-		`	VersionConsoleProxy   = "` + eeVersions.get("voltron") + `"`,
-		`	VersionConsoleEsProxy = "` + eeVersions.get("es-proxy") + `"`,
+		"	// Manager images.",
+		`	VersionManager = "` + eeVersions.get("cnx-manager") + `"`,
+		`	VersionManagerProxy   = "` + eeVersions.get("voltron") + `"`,
+		`	VersionManagerEsProxy = "` + eeVersions.get("es-proxy") + `"`,
 		")",
 	}
 

@@ -35,10 +35,10 @@ const (
 	VersionIntrusionDetectionController   = "es7-v2.5.1-dev-1"
 	VersionIntrusionDetectionJobInstaller = "es7-v2.5.1-dev-1"
 
-	// Console images.
-	VersionConsoleManager = "v2.4.2"
-	VersionConsoleProxy   = "v1.0.0.rc1"
-	VersionConsoleEsProxy = "v2.4.0"
+	// Manager images.
+	VersionManager        = "v2.4.2"
+	VersionManagerProxy   = "v1.0.0.rc1"
+	VersionManagerEsProxy = "v2.4.0"
 
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.0"

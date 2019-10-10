@@ -125,7 +125,7 @@ func (c *fluentdComponent) filtersConfigMap() *corev1.ConfigMap {
 	}
 }
 
-// consoleManagerDeployment creates a deployment for the Tigera Secure console manager component.
+// managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)

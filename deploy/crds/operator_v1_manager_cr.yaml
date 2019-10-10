@@ -1,4 +1,4 @@
 apiVersion: operator.tigera.io/v1
-kind: Console
+kind: Manager
 metadata:
   name: tigera-secure

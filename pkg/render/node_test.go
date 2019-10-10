@@ -25,7 +25,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
@@ -34,83 +33,9 @@ var (
 )
 
 var _ = Describe("Node rendering tests", func() {
-	var instance *operator.Installation
 	var defaultInstance *operator.Installation
 
-	tolerations := []v1.Toleration{
-		{Operator: "Exists", Effect: "PreferNoSchedule"},
-		{
-			Key:      "somekey",
-			Operator: v1.TolerationOpEqual,
-			Value:    "somevalue",
-			Effect:   v1.TaintEffectNoSchedule,
-		},
-	}
-	nodeVolume := v1.Volume{
-		Name: "extravolNode",
-		VolumeSource: v1.VolumeSource{
-			EmptyDir: &v1.EmptyDirVolumeSource{},
-		},
-	}
-	nodeVolumeMount := v1.VolumeMount{
-		Name:      "extravolNode",
-		MountPath: "/tmp/calico/testing/node",
-	}
-	cniVolume := v1.Volume{
-		Name: "extravolCNI",
-		VolumeSource: v1.VolumeSource{
-			EmptyDir: &v1.EmptyDirVolumeSource{},
-		},
-	}
-	cniVolumeMount := v1.VolumeMount{
-		Name:      "extravolCNI",
-		MountPath: "/tmp/calico/testing/cni",
-	}
-	// For both node and CNI, override an existing env and add a new one.
-	nodeEnv := []v1.EnvVar{
-		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "testing"},
-		{Name: "node-env", Value: "node-value"},
-	}
-	cniEnv := []v1.EnvVar{
-		{Name: "CNI_CONF_NAME", Value: "testing"},
-		{Name: "cni-env", Value: "cni-value"},
-	}
-	nodeResources := v1.ResourceRequirements{
-		Requests: v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("1000m"),
-			v1.ResourceMemory: resource.MustParse("250Mi"),
-		},
-		Limits: v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("1500m"),
-			v1.ResourceMemory: resource.MustParse("500Mi"),
-		},
-	}
-
 	BeforeEach(func() {
-		maxUnavailable := intstr.FromInt(2)
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				IPPools: []operator.IPPool{
-					{CIDR: "192.168.1.0/16"},
-				},
-				Components: operator.ComponentsSpec{
-					Node: operator.NodeSpec{
-						MaxUnavailable:    &maxUnavailable,
-						ExtraEnv:          nodeEnv,
-						ExtraVolumes:      []v1.Volume{nodeVolume},
-						ExtraVolumeMounts: []v1.VolumeMount{nodeVolumeMount},
-						Tolerations:       tolerations,
-						Resources:         nodeResources,
-					},
-					CNI: operator.CNISpec{
-						ExtraEnv:          cniEnv,
-						ExtraVolumes:      []v1.Volume{cniVolume},
-						ExtraVolumeMounts: []v1.VolumeMount{cniVolumeMount},
-					},
-				},
-			},
-		}
-
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
 				IPPools: []operator.IPPool{
@@ -137,29 +62,10 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
 		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
+
 		cniContainer := GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 		ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-	})
-
-	It("should render all resources for a custom configuration", func() {
-		component := render.Node(instance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(5))
-
-		// Should render the correct resources.
-		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
-		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
-
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-		Expect(dsResource).ToNot(BeNil())
-
-		// The DaemonSet should have the correct configuration.
-		ds := dsResource.(*apps.DaemonSet)
 
 		// Node image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
@@ -180,6 +86,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
@@ -223,13 +130,11 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			// Custom env vars.
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "testing"},
-			{Name: "node-env", Value: "node-value"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 
 		expectedCNIEnv := []v1.EnvVar{
+			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 			{Name: "SLEEP", Value: "false"},
 			{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
 			{
@@ -243,9 +148,6 @@ var _ = Describe("Node rendering tests", func() {
 					},
 				},
 			},
-			// Custom env vars.
-			{Name: "CNI_CONF_NAME", Value: "testing"},
-			{Name: "cni-env", Value: "cni-value"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
@@ -279,9 +181,6 @@ var _ = Describe("Node rendering tests", func() {
 				},
 			},
 			{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
-			// Custom volumes
-			{Name: "extravolNode", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
-			{Name: "extravolCNI", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 		}
 		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
 
@@ -294,21 +193,14 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			// Custom volumes
-			{MountPath: "/tmp/calico/testing/node", Name: "extravolNode"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-			// Custom volumes
-			{MountPath: "/tmp/calico/testing/cni", Name: "extravolCNI"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
-
-		// Verify resources.
-		Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(nodeResources))
 
 		// Verify tolerations.
 		expectedTolerations := []v1.Toleration{
@@ -316,7 +208,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Operator: "Exists", Effect: "NoExecute"},
 			{Operator: "Exists", Key: "CriticalAddonsOnly"},
 		}
-		expectedTolerations = append(expectedTolerations, tolerations...)
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
 		verifyProbes(ds, false)

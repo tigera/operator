@@ -319,9 +319,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 				},
 			},
 			UpdateStrategy: apps.DaemonSetUpdateStrategy{
-				RollingUpdate: &apps.RollingUpdateDaemonSet{
-					MaxUnavailable: c.cr.Spec.Components.Node.MaxUnavailable,
-				},
+				RollingUpdate: &apps.RollingUpdateDaemonSet{},
 			},
 		},
 	}
@@ -336,15 +334,11 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 
 // nodeTolerations creates the node's tolerations.
 func (c *nodeComponent) nodeTolerations() []v1.Toleration {
-	tolerations := []v1.Toleration{
+	return []v1.Toleration{
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
 		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 	}
-
-	// Merge in any user-supplied overrides.
-	tolerations = setCustomTolerations(tolerations, c.cr.Spec.Components.Node.Tolerations)
-	return tolerations
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.
@@ -429,9 +423,6 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		},
 	}
 	volumes = append(volumes, flexVolume)
-
-	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.Node.ExtraVolumes)
-	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.CNI.ExtraVolumes)
 	return volumes
 }
 
@@ -443,10 +434,6 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
-
-	// Merge in any user-supplied overrides.
-	cniEnv = setCustomEnv(cniEnv, c.cr.Spec.Components.CNI.ExtraEnv)
-	cniVolumeMounts = setCustomVolumeMounts(cniVolumeMounts, c.cr.Spec.Components.CNI.ExtraVolumeMounts)
 
 	return v1.Container{
 		Name:         "install-cni",
@@ -522,12 +509,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 
 // nodeResources creates the node's resource requirements.
 func (c *nodeComponent) nodeResources() v1.ResourceRequirements {
-	res := v1.ResourceRequirements{}
-	if len(c.cr.Spec.Components.Node.Resources.Limits) > 0 || len(c.cr.Spec.Components.Node.Resources.Requests) > 0 {
-		res.Requests = c.cr.Spec.Components.Node.Resources.Requests
-		res.Limits = c.cr.Spec.Components.Node.Resources.Limits
-	}
-	return res
+	return v1.ResourceRequirements{}
 }
 
 // nodeVolumeMounts creates the node's volume mounts.
@@ -547,8 +529,6 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	}
-
-	nodeVolumeMounts = setCustomVolumeMounts(nodeVolumeMounts, c.cr.Spec.Components.Node.ExtraVolumeMounts)
 	return nodeVolumeMounts
 }
 
@@ -660,8 +640,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
 	}
-
-	nodeEnv = setCustomEnv(nodeEnv, c.cr.Spec.Components.Node.ExtraEnv)
 	return nodeEnv
 }
 

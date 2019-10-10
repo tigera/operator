@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
@@ -35,9 +33,5 @@ func fillDefaults(instance *operator.Installation, provider operator.Provider) {
 		instance.Spec.IPPools = []operator.IPPool{
 			{CIDR: "192.168.0.0/16"},
 		}
-	}
-	if instance.Spec.Components.Node.MaxUnavailable == nil {
-		mu := intstr.FromInt(1)
-		instance.Spec.Components.Node.MaxUnavailable = &mu
 	}
 }

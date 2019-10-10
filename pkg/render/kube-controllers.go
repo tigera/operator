@@ -153,27 +153,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
 		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
 	}
-	tolerations = setCustomTolerations(tolerations, c.cr.Spec.Components.KubeControllers.Tolerations)
-
-	volumeMounts := []v1.VolumeMount{}
-	volumeMounts = setCustomVolumeMounts(volumeMounts, c.cr.Spec.Components.KubeControllers.ExtraVolumeMounts)
-
-	volumes := []v1.Volume{}
-	volumes = setCustomVolumes(volumes, c.cr.Spec.Components.KubeControllers.ExtraVolumes)
 
 	env := []v1.EnvVar{
 		{Name: "ENABLED_CONTROLLERS", Value: "node"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-	}
-	env = setCustomEnv(env, c.cr.Spec.Components.KubeControllers.ExtraEnv)
-
-	resources := v1.ResourceRequirements{
-		Requests: v1.ResourceList{},
-		Limits:   v1.ResourceList{},
-	}
-	if len(c.cr.Spec.Components.KubeControllers.Resources.Limits) > 0 || len(c.cr.Spec.Components.KubeControllers.Resources.Requests) > 0 {
-		resources.Requests = c.cr.Spec.Components.KubeControllers.Resources.Requests
-		resources.Limits = c.cr.Spec.Components.KubeControllers.Resources.Limits
 	}
 
 	// Pick which image to use based on variant.
@@ -218,11 +201,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
-							Name:         "calico-kube-controllers",
-							Image:        image,
-							Resources:    resources,
-							Env:          env,
-							VolumeMounts: volumeMounts,
+							Name:  "calico-kube-controllers",
+							Image: image,
+							Env:   env,
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{
 									Exec: &v1.ExecAction{
@@ -235,7 +216,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 							},
 						},
 					},
-					Volumes: volumes,
 				},
 			},
 		},

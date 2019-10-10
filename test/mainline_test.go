@@ -25,11 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
@@ -164,114 +161,6 @@ var _ = Describe("Mainline component function tests", func() {
 			}
 			return assertAvailable(ts)
 		}, 60*time.Second).Should(BeNil())
-	})
-
-	It("Should install resources for a CRD with node overrides", func() {
-		By("Creating a CRD with overrides")
-
-		toleration := corev1.Toleration{
-			Key:      "somekey",
-			Operator: corev1.TolerationOpEqual,
-			Value:    "somevalue",
-			Effect:   corev1.TaintEffectNoSchedule,
-		}
-		volume := corev1.Volume{
-			Name: "extravol",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		}
-		volumeMount := corev1.VolumeMount{
-			Name:      "extravol",
-			MountPath: "/test/calico/kubecontrollers",
-		}
-		envVar := corev1.EnvVar{
-			Name:  "env1",
-			Value: "env1-value",
-		}
-		resourceRequirements := corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1m"),
-				corev1.ResourceMemory: resource.MustParse("1Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1500m"),
-				corev1.ResourceMemory: resource.MustParse("2500Mi"),
-			},
-		}
-
-		maxUnavailable := intstr.FromInt(2)
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Spec: operator.InstallationSpec{
-				Components: operator.ComponentsSpec{
-					Node: operator.NodeSpec{
-						MaxUnavailable:    &maxUnavailable,
-						ExtraEnv:          []corev1.EnvVar{envVar},
-						ExtraVolumes:      []corev1.Volume{volume},
-						ExtraVolumeMounts: []corev1.VolumeMount{volumeMount},
-						Tolerations:       []corev1.Toleration{toleration},
-						Resources:         resourceRequirements,
-					},
-				},
-			},
-		}
-		err := c.Create(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("Running the operator")
-		stopChan := RunOperator(mgr)
-		defer close(stopChan)
-
-		By("Verifying the resources were created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, kc)
-
-		By("Verifying the resources are Ready")
-		Eventually(func() error {
-			err = GetResource(c, ds)
-			if err != nil {
-				return err
-			}
-			if ds.Status.NumberAvailable == 0 {
-				return fmt.Errorf("No node pods running")
-			}
-			if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
-				return nil
-			}
-			return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
-		}, 240*time.Second).Should(BeNil())
-
-		Eventually(func() error {
-			err = GetResource(c, kc)
-			if err != nil {
-				return err
-			}
-			if kc.Status.AvailableReplicas == 1 {
-				return nil
-			}
-			return fmt.Errorf("kube-controllers not yet ready: %#v", kc.Status)
-		}, 240*time.Second).Should(BeNil())
-
-		By("Verifying the tigera status CRD is updated")
-		Eventually(func() error {
-			ts, err := getTigeraStatus(c, "network")
-			if err != nil {
-				return err
-			}
-			return assertAvailable(ts)
-		}, 60*time.Second).Should(BeNil())
-
-		By("Verifying the daemonset has the overrides")
-		err = GetResource(c, ds)
-		Expect(err).To(BeNil())
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ContainElement(toleration))
-		Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(volume))
-		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(envVar))
-		Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(resourceRequirements))
 	})
 })
 

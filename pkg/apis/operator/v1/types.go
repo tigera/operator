@@ -17,7 +17,6 @@ package v1
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // NOTE: json tags are required. Any new fields you add must have json tags for the fields to be serialized.
@@ -46,10 +45,6 @@ type InstallationSpec struct {
 	// +optional
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
-	// Components specifies the configuration of components.
-	// +optional
-	Components ComponentsSpec `json:"components,omitempty"`
-
 	// KubernetesProvider specifies which platform this cluster is running on. Operator will
 	// do it's best to autodetect and set this. But can be overridden here.
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
@@ -64,92 +59,6 @@ var (
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )
-
-// ComponentsSpec defines the desired state of components.
-// +k8s:openapi-gen=true
-type ComponentsSpec struct {
-	// Node is optional configuration for the node component.
-	// +optional
-	Node NodeSpec `json:"node,omitempty"`
-
-	// CNI is optional configuration for the CNI component.
-	// +optional
-	CNI CNISpec `json:"cni,omitempty"`
-
-	// KubeControllers is optional configuration for the kube-controllers component.
-	// +optional
-	KubeControllers KubeControllersSpec `json:"kubeControllers,omitempty"`
-}
-
-// KubeControllersSpec defines optional configuration for the kube-controllers component.
-// +k8s:openapi-gen=true
-type KubeControllersSpec struct {
-	// ExtraEnv adds extra environment variables to the kube-controllers container.
-	// +optional
-	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
-
-	// ExtraVolumes configures custom volumes to be used by the kube-controllers container.
-	// +optional
-	ExtraVolumes []v1.Volume `json:"extraVolumes,omitempty"`
-
-	// ExtraVolumeMounts configures custom volume mounts to be used by the kube-controllers container.
-	// +optional
-	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-
-	// Tolerations configures custom tolerations on the kube-controllers deployment.
-	// +optional
-	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
-
-	// Resources configures custom resource requirements on the kube-controllers container.
-	// +optional
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// NodeSpec defines optional configuration for the node component.
-// +k8s:openapi-gen=true
-type NodeSpec struct {
-	// MaxUnavailable configures the maximum number of pods that can be unavailable during a rolling update of the
-	// node daemonset.
-	// Default: 1
-	// +optional
-	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
-
-	// ExtraEnv adds extra environment variables to the node container.
-	// +optional
-	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
-
-	// ExtraVolumes configures custom volumes to be used by the node daemonset.
-	// +optional
-	ExtraVolumes []v1.Volume `json:"extraVolumes,omitempty"`
-
-	// ExtraVolumeMounts configures custom volume mounts to be used by the node container.
-	// +optional
-	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-
-	// Tolerations configures custom tolerations on the node daemonset.
-	// +optional
-	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
-
-	// Resources configures custom resource requirements on the node container.
-	// +optional
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// CNISpec defines optional configuration for the CNI component.
-// +k8s:openapi-gen=true
-type CNISpec struct {
-	// ExtraEnv adds extra environment variables to the CNI container.
-	// +optional
-	ExtraEnv []v1.EnvVar `json:"extraEnv,omitempty"`
-
-	// ExtraVolumes configures custom volumes to be used by the CNI container.
-	// +optional
-	ExtraVolumes []v1.Volume `json:"extraVolumes,omitempty"`
-
-	// ExtraVolumeMounts configures custom volume mounts to be used by the CNI container.
-	// +optional
-	ExtraVolumeMounts []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-}
 
 type ProductVariant string
 

@@ -28,6 +28,36 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            s3:
+              properties:
+                bucketName:
+                  description: Name of the S3 bucket to send logs
+                  type: string
+                bucketPath:
+                  description: Path in the S3 bucket where to send logs
+                  type: string
+                region:
+                  description: AWS Region of the S3 bucket
+                  type: string
+              required:
+              - region
+              - bucketName
+              - bucketPath
+              type: object
+            syslog:
+              properties:
+                endpoint:
+                  description: 'Endpoint where to seen syslog. exmple: tcp://1.2.3.4:601'
+                  type: string
+                packetsize:
+                  description: PacketSize is only needed if you notice long logs being
+                    truncated. The default for the fluentd output plugin is 1024.
+                  format: int32
+                  type: integer
+              required:
+              - endpoint
+              type: object
           type: object
         status:
           properties:

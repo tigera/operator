@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -132,7 +133,7 @@ func CheckLicenseKey(ctx context.Context, cli client.Client) error {
 	return cli.Get(ctx, DefaultInstanceKey, instance)
 }
 
-// validateCertPair checks if the given secret exists and if so
+// ValidateCertPair checks if the given secret exists and if so
 // that it contains key and cert fields. If a secret exists then it is returned.
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.

@@ -74,15 +74,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					{CIDR: "192.168.1.0/16"},
 				},
 				Registry: "test-reg/",
-				Components: operator.ComponentsSpec{
-					KubeControllers: operator.KubeControllersSpec{
-						ExtraEnv:          envVars,
-						ExtraVolumes:      []v1.Volume{volume},
-						ExtraVolumeMounts: []v1.VolumeMount{volumeMount},
-						Tolerations:       tolerations,
-						Resources:         res,
-					},
-				},
 			},
 		}
 

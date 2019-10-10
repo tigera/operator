@@ -93,21 +93,6 @@ var _ = Describe("Node rendering tests", func() {
 				IPPools: []operator.IPPool{
 					{CIDR: "192.168.1.0/16"},
 				},
-				Components: operator.ComponentsSpec{
-					Node: operator.NodeSpec{
-						MaxUnavailable:    &maxUnavailable,
-						ExtraEnv:          nodeEnv,
-						ExtraVolumes:      []v1.Volume{nodeVolume},
-						ExtraVolumeMounts: []v1.VolumeMount{nodeVolumeMount},
-						Tolerations:       tolerations,
-						Resources:         nodeResources,
-					},
-					CNI: operator.CNISpec{
-						ExtraEnv:          cniEnv,
-						ExtraVolumes:      []v1.Volume{cniVolume},
-						ExtraVolumeMounts: []v1.VolumeMount{cniVolumeMount},
-					},
-				},
 			},
 		}
 

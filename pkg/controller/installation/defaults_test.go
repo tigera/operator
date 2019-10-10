@@ -18,14 +18,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
-	maxUnavailable := intstr.FromInt(2)
 	It("should properly fill defaults on an empty instance", func() {
 		instance := &operator.Installation{}
 		fillDefaults(instance, operator.ProviderNone)
@@ -33,8 +30,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
-		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
-		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -45,8 +40,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
-		Expect(instance.Spec.Components.Node.MaxUnavailable).To(Not(BeNil()))
-		Expect(instance.Spec.Components.Node.MaxUnavailable.IntVal).To(Equal(int32(1)))
 	})
 
 	It("should not override custom configuration", func() {
@@ -64,92 +57,6 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				IPPools: []operator.IPPool{
 					{CIDR: "1.2.3.0/24"},
-				},
-				Components: operator.ComponentsSpec{
-					Node: operator.NodeSpec{
-						MaxUnavailable: &maxUnavailable,
-						ExtraEnv: []v1.EnvVar{
-							{
-								Name:  "project",
-								Value: "calico",
-							},
-						},
-						ExtraVolumes: []v1.Volume{
-							{
-								Name: "volume1",
-								VolumeSource: v1.VolumeSource{
-									NFS: &v1.NFSVolumeSource{
-										Server: "localhost",
-										Path:   "/",
-									},
-								},
-							},
-						},
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceCPU:    resource.MustParse("100m"),
-								v1.ResourceMemory: resource.MustParse("250Mi"),
-							},
-							Limits: v1.ResourceList{
-								v1.ResourceCPU:    resource.MustParse("100m"),
-								v1.ResourceMemory: resource.MustParse("250Mi"),
-							},
-						},
-						Tolerations: []v1.Toleration{
-							{Operator: v1.TolerationOpEqual, Value: "nodeValue", Effect: v1.TaintEffectNoSchedule, Key: "node"},
-						},
-					},
-					KubeControllers: operator.KubeControllersSpec{
-						ExtraEnv: []v1.EnvVar{
-							{
-								Name:  "project",
-								Value: "calico",
-							},
-						},
-						ExtraVolumes: []v1.Volume{
-							{
-								Name: "volume1",
-								VolumeSource: v1.VolumeSource{
-									NFS: &v1.NFSVolumeSource{
-										Server: "localhost",
-										Path:   "/",
-									},
-								},
-							},
-						},
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceCPU:    resource.MustParse("150m"),
-								v1.ResourceMemory: resource.MustParse("350Mi"),
-							},
-							Limits: v1.ResourceList{
-								v1.ResourceCPU:    resource.MustParse("150m"),
-								v1.ResourceMemory: resource.MustParse("350Mi"),
-							},
-						},
-						Tolerations: []v1.Toleration{
-							{Operator: v1.TolerationOpEqual, Value: "kubecontrollersValue", Effect: v1.TaintEffectNoSchedule, Key: "kubecontrollers"},
-						},
-					},
-					CNI: operator.CNISpec{
-						ExtraEnv: []v1.EnvVar{
-							{
-								Name:  "project",
-								Value: "calico",
-							},
-						},
-						ExtraVolumes: []v1.Volume{
-							{
-								Name: "volume1",
-								VolumeSource: v1.VolumeSource{
-									NFS: &v1.NFSVolumeSource{
-										Server: "localhost",
-										Path:   "/",
-									},
-								},
-							},
-						},
-					},
 				},
 			},
 		}

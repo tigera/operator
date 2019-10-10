@@ -100,7 +100,10 @@ func addNamespacedWatch(c controller.Controller, obj runtime.Object) error {
 			return e.MetaNew.GetNamespace() == objMeta.GetNamespace()
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return false
+			if objMeta.GetName() != "" && e.Meta.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Meta.GetNamespace() == objMeta.GetNamespace()
 		},
 	}
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)

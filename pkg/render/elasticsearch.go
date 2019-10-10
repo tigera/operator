@@ -24,7 +24,7 @@ const (
 	ElasticsearchName         = "tigera-secure"
 )
 
-func Elasticsearch(logStorage *operatorv1.LogStorage, certSecret *corev1.Secret, openShift bool, registry string) (Component, error) {
+func Elasticsearch(logStorage *operatorv1.LogStorage, certSecret *corev1.Secret, createWebhookSecret bool, pullSecrets []*corev1.Secret, openShift bool, registry string) (Component, error) {
 	var certSecrets []runtime.Object
 	if certSecret == nil {
 		var err error
@@ -42,18 +42,22 @@ func Elasticsearch(logStorage *operatorv1.LogStorage, certSecret *corev1.Secret,
 
 	certSecrets = append(certSecrets, copySecrets(ElasticsearchNamespace, certSecret)...)
 	return &elasticsearchComponent{
-		logStorage:  logStorage,
-		certSecrets: certSecrets,
-		openShift:   openShift,
-		registry:    registry,
+		logStorage:          logStorage,
+		certSecrets:         certSecrets,
+		createWebhookSecret: createWebhookSecret,
+		pullSecrets:         pullSecrets,
+		openShift:           openShift,
+		registry:            registry,
 	}, nil
 }
 
 type elasticsearchComponent struct {
-	logStorage  *operatorv1.LogStorage
-	certSecrets []runtime.Object
-	openShift   bool
-	registry    string
+	logStorage          *operatorv1.LogStorage
+	certSecrets         []runtime.Object
+	createWebhookSecret bool
+	pullSecrets         []*corev1.Secret
+	openShift           bool
+	registry            string
 }
 
 func (es *elasticsearchComponent) Objects() []runtime.Object {
@@ -61,6 +65,7 @@ func (es *elasticsearchComponent) Objects() []runtime.Object {
 	objs = append(objs, es.eckOperator()...)
 	objs = append(objs, createNamespace(ElasticsearchNamespace, es.openShift))
 
+	objs = append(objs, copySecrets(ElasticsearchNamespace, es.pullSecrets...)...)
 	objs = append(objs, es.certSecrets...)
 
 	objs = append(objs, es.elasticsearchCluster())
@@ -132,6 +137,11 @@ func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsear
 						},
 					},
 					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{es.pvcTemplate()},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+						},
+					},
 				},
 			},
 		},
@@ -139,15 +149,20 @@ func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsear
 }
 
 func (es elasticsearchComponent) eckOperator() []runtime.Object {
-
-	return []runtime.Object{
+	objs := []runtime.Object{
 		createNamespace(ECKOperatorNamespace, es.openShift),
-		es.eckOperatorWebhookSecret(),
 		es.eckOperatorClusterRole(),
 		es.eckOperatorClusterRoleBinding(),
 		es.eckOperatorServiceAccount(),
-		es.eckOperatorStatefulSet(),
 	}
+
+	objs = append(objs, copySecrets(ECKOperatorNamespace, es.pullSecrets...)...)
+	if es.createWebhookSecret {
+		objs = append(objs, es.eckOperatorWebhookSecret())
+	}
+	objs = append(objs, es.eckOperatorStatefulSet())
+
+	return objs
 }
 
 func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
@@ -277,6 +292,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "elastic-operator",
+					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					Containers: []corev1.Container{{
 						Image: constructImage(ECKOperatorImageName, es.registry),
 						Name:  "manager",

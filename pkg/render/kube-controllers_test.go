@@ -18,7 +18,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -27,43 +26,6 @@ import (
 
 var _ = Describe("kube-controllers rendering tests", func() {
 	var instance *operator.Installation
-
-	tolerations := []v1.Toleration{
-		// This overrides node-role.kubernetes.io/master with a different effect.
-		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectPreferNoSchedule},
-		// A custom toleration
-		{
-			Key:      "somekey",
-			Operator: v1.TolerationOpEqual,
-			Value:    "somevalue",
-			Effect:   v1.TaintEffectNoSchedule,
-		},
-	}
-	volume := v1.Volume{
-		Name: "extravolKubeControllers",
-		VolumeSource: v1.VolumeSource{
-			EmptyDir: &v1.EmptyDirVolumeSource{},
-		},
-	}
-	volumeMount := v1.VolumeMount{
-		Name:      "extravolKubeControllers",
-		MountPath: "/test/calico/kubecontrollers",
-	}
-	// Override an existing env and add a new one.
-	envVars := []v1.EnvVar{
-		{Name: "ENABLED_CONTROLLERS", Value: "node,namespace"},
-		{Name: "kubecontrollers-env", Value: "kubecontrollers-value"},
-	}
-	res := v1.ResourceRequirements{
-		Requests: v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("1000m"),
-			v1.ResourceMemory: resource.MustParse("250Mi"),
-		},
-		Limits: v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("1500m"),
-			v1.ResourceMemory: resource.MustParse("500Mi"),
-		},
-	}
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -97,29 +59,22 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v3.8.1"))
 
 		// Verify env
-		expectedEnv := []v1.EnvVar{{Name: "DATASTORE_TYPE", Value: "kubernetes"}}
-		expectedEnv = append(expectedEnv, envVars...)
+		expectedEnv := []v1.EnvVar{
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "ENABLED_CONTROLLERS", Value: "node"},
+		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
-
-		// Verify volumes and volumeMounts.
-		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(volume))
-		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(volumeMount))
-
-		// Verify resources.
-		Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(res))
 
 		// Verify tolerations.
 		expectedTolerations := []v1.Toleration{
 			{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
 			{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
 		}
-		expectedTolerations = append(expectedTolerations, tolerations...)
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.Components.KubeControllers = operator.KubeControllersSpec{}
 
 		component := render.KubeControllers(instance)
 		resources := component.Objects()

@@ -56,6 +56,7 @@ var (
 	ProviderNone      Provider = ""
 	ProviderEKS       Provider = "EKS"
 	ProviderGKE       Provider = "GKE"
+	ProviderAKS       Provider = "AKS"
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )

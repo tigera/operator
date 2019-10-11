@@ -349,6 +349,7 @@ func (c *nodeComponent) cniDirectories() (string, string) {
 		cniNetDir = "/etc/kubernetes/cni/net.d"
 		cniBinDir = "/var/lib/cni/bin"
 	case operator.ProviderGKE:
+		// Used if we're installing a CNI plugin. If using the GKE plugin, these are not necessary.
 		cniBinDir = "/home/kubernetes/bin"
 		cniNetDir = "/etc/cni/net.d"
 	default:
@@ -364,16 +365,11 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
 
-	// Determine directories to use for CNI artifacts based on the provider.
-	cniNetDir, cniBinDir := c.cniDirectories()
-
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-		{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}},
-		{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
 			Name: "typha-ca",
@@ -395,6 +391,14 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		},
 	}
 
+	// If needed for this configuration, then include the CNI volumes.
+	if c.netConfig.CNI != CNINone {
+		// Determine directories to use for CNI artifacts based on the provider.
+		cniNetDir, cniBinDir := c.cniDirectories()
+		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
+		volumes = append(volumes, v1.Volume{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}})
+	}
+
 	// Override with Tigera-specific config.
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Add volume for calico logs.
@@ -413,6 +417,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 	} else if c.provider == operator.ProviderGKE {
 		flexVolumePluginsPath = "/home/kubernetes/flexvolume/"
+	} else if c.provider == operator.ProviderAKS {
+		flexVolumePluginsPath = "/etc/kubernetes/volumeplugins/"
 	}
 
 	// Create and append flexvolume
@@ -544,6 +550,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",eks"
 	case operator.ProviderGKE:
 		clusterType = clusterType + ",gke"
+	case operator.ProviderAKS:
+		clusterType = clusterType + ",aks"
 	}
 
 	if c.netConfig.CNI == CNICalico {
@@ -639,6 +647,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// The GKE CNI plugin has its own iptables rules. Defer to them after ours.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
+	case operator.ProviderAKS:
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 	return nodeEnv
 }

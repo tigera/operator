@@ -415,10 +415,13 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}
+
 	if c.provider == operator.ProviderEKS {
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 	} else if c.provider == operator.ProviderGKE {
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
+	} else if c.provider == operator.ProviderAKS {
+		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
 	return typhaEnv

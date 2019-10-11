@@ -20,14 +20,17 @@ import (
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserIntrusionDetection})
+	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserIntrusionDetectionJob})
 	It("should render all resources for a default configuration", func() {
-		component := render.IntrusionDetection(nil, "testregistry.com/", "clusterTestName", nil, notOpenshift)
+		component := render.IntrusionDetection(nil, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, "testregistry.com/", "clusterTestName", nil, notOpenshift)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(8))
+		Expect(len(resources)).To(Equal(9))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -38,6 +41,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.TigeraKibanaCertSecret, ns: "tigera-intrusion-detection", group: "", version: "", kind: ""},
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},

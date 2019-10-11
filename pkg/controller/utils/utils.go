@@ -62,6 +62,10 @@ func AddComplianceWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
 }
 
+func AddLogStorageWatch(c controller.Controller) error {
+	return c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
+}
+
 func AddSecretsWatch(c controller.Controller, name, namespace string) error {
 	s := &v1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
@@ -126,6 +130,22 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 	return true
+}
+
+func IsLogStorageReady(ctx context.Context, cli client.Client) (bool, error) {
+	instance := &operatorv1.LogStorage{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if instance.Status.State != operatorv1.LogStorageStatusReady {
+		return false, nil
+	}
+	return true, nil
 }
 
 // CheckLicenseKey checks if a license has been installed. It's useful

@@ -83,6 +83,7 @@ func constructImage(imageName string, registry string) string {
 		reg = ECKElasticsearchRegistry
 	case ECKOperatorImageName:
 		reg = ECKOperatorRegistry
+/*
 	case IntrusionDetectionControllerImageName,
 		IntrusionDetectionJobInstallerImageName,
 		ConsoleManagerImageName,
@@ -94,6 +95,7 @@ func constructImage(imageName string, registry string) string {
 		APIServerImageName,
 		QueryServerImageName:
 		reg = TigeraInternalRegistry
+	*/
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

@@ -42,5 +42,6 @@ const (
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
-	VersionECKElasticsearch = "7.3.0"
+	VersionECKElasticsearch = "7.3.2"
+	VersionECKKibana        = "7.3.2"
 )

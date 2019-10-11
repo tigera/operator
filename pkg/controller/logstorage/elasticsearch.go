@@ -20,7 +20,7 @@ const (
 	ElasticsearchUserPasswordLength = 100
 	DefaultElasticsearchUser        = "elastic"
 	ElasticsearchUserSecret         = "tigera-secure-es-elastic-user"
-	ElasticsearchHTTPEndpoint       = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	ElasticsearchHTTPSEndpoint      = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
 
 // elasticsearchUsers creates / updates all the Elasticsearch users returned by esusers.GetUsers, along with the roles attached
@@ -65,7 +65,7 @@ func elasticsearchUsers(ctx context.Context, rootsSecret *corev1.Secret, cli cli
 			return nil, err
 		}
 
-		if err := upsertElasticsearchUser(ElasticsearchHTTPEndpoint, esUser, roots, esUserSecret); err != nil {
+		if err := upsertElasticsearchUser(ElasticsearchHTTPSEndpoint, esUser, roots, esUserSecret); err != nil {
 			return nil, err
 		}
 		users = append(users, esUser)

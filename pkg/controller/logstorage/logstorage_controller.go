@@ -3,7 +3,9 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -68,11 +70,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &eckv1alpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
+	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &operator.LogStorage{},
 	}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &operator.LogStorage{},
+	}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 
 	esUsers := esusers.GetUsers()
@@ -80,7 +89,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, user := range esUsers {
 		secretsToWatch = append(secretsToWatch, user.SecretName())
 	}
-	secretsToWatch = append(secretsToWatch, render.TigeraElasticsearchCertSecret, render.ECKWebhookSecretName)
+	secretsToWatch = append(secretsToWatch, render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret, render.ECKWebhookSecretName)
 
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range secretsToWatch {
@@ -183,6 +192,17 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
+	kibanaCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, kibanaCertSecret); err != nil {
+		if errors.IsNotFound(err) {
+			kibanaCertSecret = nil
+		} else {
+			reqLogger.Error(err, "Failed to read Kibana cert secret")
+			r.status.SetDegraded("Failed to read Kibana cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// The ECK operator requires that we provide it with a secret so it can add certificate information in for it's webhooks.
 	// If it's created we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
 	createWebhookSecret := false
@@ -201,6 +221,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	component, err := render.Elasticsearch(
 		ls,
 		esCertSecret,
+		kibanaCertSecret,
 		createWebhookSecret,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
@@ -230,12 +251,29 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	reqLogger.V(2).Info("Elasticsearch is operational, creating elasticsearch users and secrets for components that need Elasticsearch access")
+	reqLogger.V(2).Info("Checking if Kibana is operational")
+	if isOp, err := r.isKibanaReady(ctx); err != nil {
+		reqLogger.Error(err, "Failed to figure out if Kibana is operational")
+		r.status.SetDegraded("Failed to figure out if Kibana is operational", err.Error())
+		return reconcile.Result{}, err
+	} else if !isOp {
+		reqLogger.Info("Waiting for Kibana to be operational")
+		r.status.SetDegraded("Waiting for Kibana to be operational", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 
+	reqLogger.V(2).Info("Elasticsearch and Kibana are operational")
 	esPublicCertSecret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}, esPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Elasticsearch public cert secret")
 		r.status.SetDegraded("Failed to read Elasticsearch public cert secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	kibanaPublicCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}, kibanaPublicCertSecret); err != nil {
+		reqLogger.Error(err, "Failed to read Kibana public cert secret")
+		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -246,7 +284,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esUsers, esPublicCertSecret), r.status); err != nil {
+	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esUsers, esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
 		reqLogger.Error(err, "Error creating / update resource")
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
@@ -266,10 +304,21 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 }
 
 func (r *ReconcileLogStorage) isElasticsearchOperational(ctx context.Context) (bool, error) {
-	es := &eckv1alpha1.Elasticsearch{}
+	es := &esalpha1.Elasticsearch{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, es); err != nil {
 		return false, err
-	} else if es.Status.Phase == "Operational" || es.Status.Phase == eckv1alpha1.ElasticsearchReadyPhase {
+	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, error) {
+	es := &kibanaalpha1.Kibana{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, es); err != nil {
+		return false, err
+	} else if es.Status.AssociationStatus == cmneckalpha1.AssociationEstablished {
 		return true, nil
 	}
 

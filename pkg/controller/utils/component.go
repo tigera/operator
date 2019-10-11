@@ -7,7 +7,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 
-	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -165,10 +166,19 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 			dsa.Secrets = csa.Secrets
 		}
 		return dsa
-	case *eckv1alpha1.Elasticsearch:
+	case *esalpha1.Elasticsearch:
 		// Only update if the spec has changed
-		csa := current.(*eckv1alpha1.Elasticsearch)
-		dsa := desired.(*eckv1alpha1.Elasticsearch)
+		csa := current.(*esalpha1.Elasticsearch)
+		dsa := desired.(*esalpha1.Elasticsearch)
+
+		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
+			return csa
+		}
+		return dsa
+	case *kibanaalpha1.Kibana:
+		// Only update if the spec has changed
+		csa := current.(*kibanaalpha1.Kibana)
+		dsa := desired.(*kibanaalpha1.Kibana)
 
 		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
 			return csa

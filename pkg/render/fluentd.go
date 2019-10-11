@@ -24,7 +24,6 @@ const (
 	s3CredentialHashAnnotation    = "hash.operator.tigera.io/s3-credentials"
 	fluentdDefaultFlush           = "5s"
 	ElasticsearchUserLogCollector = "tigera-fluentd"
-	ElasticsearchHTTPEndpoint     = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
 
 type FluentdFilters struct {

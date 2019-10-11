@@ -1,8 +1,6 @@
 package render
 
 import (
-	"strconv"
-
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"
@@ -16,13 +14,14 @@ var (
 	EsCuratorName = "elastic-curator"
 )
 
-func ElasticCurator(logStorage operatorv1.LogStorage, esSecrets, pullSecrets []*corev1.Secret, registry, clusterName string) Component {
+func ElasticCurator(logStorage operatorv1.LogStorage, retention Retention, esSecrets, pullSecrets []*corev1.Secret, registry, clusterName string) Component {
 	return &elasticCuratorComponent{
 		logStorage:  logStorage,
 		pullSecrets: pullSecrets,
 		esSecrets:   esSecrets,
 		registry:    registry,
 		clusterName: clusterName,
+		retention:   retention,
 	}
 }
 
@@ -36,6 +35,14 @@ type elasticCuratorComponent struct {
 	pullSecrets []*corev1.Secret
 	registry    string
 	clusterName string
+	retention   Retention
+}
+
+type Retention struct {
+	Flow             string
+	AuditReport      string
+	Snapshot         string
+	ComplianceReport string
 }
 
 func (ec *elasticCuratorComponent) Objects() []runtime.Object {
@@ -110,9 +117,9 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 func (ec elasticCuratorComponent) envVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		// TODO: handle nil
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.FlowRetention)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.AuditRetention)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.SnapshotRetention)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: strconv.Itoa(ec.logStorage.Spec.Retention.ComplianceReportRetention)},
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: ec.retention.Flow},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: ec.retention.AuditReport},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: ec.retention.Snapshot},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: ec.retention.ComplianceReport},
 	}
 }

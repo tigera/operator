@@ -314,7 +314,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network.Spec.Registry, clusterName)
+	curatorComponent := render.ElasticCurator(*ls, parseRetention(ls.Spec.Retention), esSecrets, pullSecrets, network.Spec.Registry, clusterName)
 	if err := hdler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
@@ -376,4 +376,31 @@ func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func parseRetention(opr *operatorv1.Retention) render.Retention {
+	var retention = render.Retention{
+		Flow:             "8",
+		AuditReport:      "365",
+		Snapshot:         "365",
+		ComplianceReport: "365",
+	}
+	if opr == nil {
+		return retention
+	}
+
+	if opr.FlowRetention != nil {
+		retention.Flow = fmt.Sprint(*opr.FlowRetention)
+	}
+	if opr.AuditReportRetention != nil {
+		retention.AuditReport = fmt.Sprint(*opr.AuditReportRetention)
+	}
+	if opr.SnapshotRetention != nil {
+		retention.Snapshot = fmt.Sprint(*opr.SnapshotRetention)
+	}
+	if opr.ComplianceReportRetention != nil {
+		retention.ComplianceReport = fmt.Sprint(*opr.SnapshotRetention)
+	}
+
+	return retention
 }

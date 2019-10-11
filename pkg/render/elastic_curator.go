@@ -68,10 +68,6 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 				},
 			},
 		},
-		// TODO: confirm / deny hunch that these numbers are just high because there previously
-		// wasn't a way to wait until elasticsearch was ready
-		InitialDelaySeconds: 60,
-		PeriodSeconds:       60,
 	}
 
 	const schedule = "@daily"
@@ -93,9 +89,8 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
-									Name:  EsCuratorName,
-									Image: constructImage(EsCuratorImageName, ec.registry),
-									// TODO: add es connection settings
+									Name:          EsCuratorName,
+									Image:         constructImage(EsCuratorImageName, ec.registry),
 									Env:           ec.envVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &v1.SecurityContext{
@@ -116,7 +111,6 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 
 func (ec elasticCuratorComponent) envVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
-		// TODO: handle nil
 		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: ec.retention.Flow},
 		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: ec.retention.AuditReport},
 		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: ec.retention.Snapshot},

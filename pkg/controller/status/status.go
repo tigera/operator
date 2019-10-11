@@ -299,17 +299,11 @@ func (m *StatusManager) syncState() bool {
 	for _, depnn := range m.cronjobs {
 		cj := &batch.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
-			// TODO: feels like we gave up a little too quickly here...
 			log.WithValues("error", err).Info("Error querying cronjobs")
 			continue
 		}
 
-		// CronJob status only indicates whether it launched the jobs - Not whether those jobs completed successfully.
-		// As such, we query the past few jobs and make sure they did eventually complete.
-		var (
-			numSuccess = 0
-			numFailed  = 0
-		)
+		var numFailed = 0
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
 			if err := m.client.Get(context.TODO(), types.NamespacedName{jref.Namespace, jref.Name}, j); err != nil {
@@ -318,18 +312,14 @@ func (m *StatusManager) syncState() bool {
 			}
 
 			if j.Status.Failed > 0 {
-				numFailed += 1
-			}
-			if j.Status.Succeeded > 0 {
-				numSuccess += 1
+				numFailed++
 			}
 		}
 
-		// A cronjob can be considered unsuccessful if it hasn't succeeded recently and has tried at least once.
-		if numSuccess == 0 && numFailed != 0 {
+		if numFailed > 0 {
 			// if a cronjob isn't successful, we don't want to set the entire status as NotReady.
 			// therefore, just mark it as degraded
-			m.SetDegraded("CronJob hasn't launched any successful jobs", "cronjob/"+cj.Name)
+			m.SetDegraded("CronJob ", "cronjob/"+cj.Name+" failed")
 		}
 	}
 

@@ -317,9 +317,7 @@ func (m *StatusManager) syncState() bool {
 		}
 
 		if numFailed > 0 {
-			// if a cronjob isn't successful, we don't want to set the entire status as NotReady.
-			// therefore, just mark it as degraded
-			m.SetDegraded("CronJob ", "cronjob/"+cj.Name+" failed")
+			failing = append(failing, "cronjob/"+cj.Name+" failed")
 		}
 	}
 

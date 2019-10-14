@@ -479,7 +479,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	isPrivileged := true
-        runAsNonRoot := true
+	runAsNonRoot := true
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",

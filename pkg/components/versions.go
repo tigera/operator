@@ -4,7 +4,7 @@ package components
 const (
 	VersionCalicoNode            = "v3.8.1"
 	VersionCalicoCNI             = "v3.8.1"
-	VersionCalicoTypha           = "v3.8.1"
+	VersionCalicoTypha           = "master"
 	VersionCalicoKubeControllers = "v3.8.1"
 	VersionFlexVolume            = "v3.8.1"
 	VersionCPHAutoscaler         = "1.7.1"
@@ -15,7 +15,7 @@ const (
 	// Overrides for Calico.
 
 	VersionTigeraNode            = "v2.5.0"
-	VersionTigeraTypha           = "v2.4.2"
+	VersionTigeraTypha           = "master"
 	VersionTigeraKubeControllers = "v2.4.2"
 
 	// API server images.

@@ -534,6 +534,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
+		SecurityContext:securityContext(),
 	}
 	return container
 }

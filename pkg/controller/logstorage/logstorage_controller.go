@@ -9,6 +9,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -72,6 +73,20 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		OwnerType:    &operator.LogStorage{},
 	}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+	}
+
+	esUsers := esusers.GetUsers()
+	var secretsToWatch []string
+	for _, user := range esUsers {
+		secretsToWatch = append(secretsToWatch, user.SecretName())
+	}
+	secretsToWatch = append(secretsToWatch, render.TigeraElasticsearchCertSecret, render.ECKWebhookSecretName)
+
+	// Watch all the secrets created by this controller so we can regenerate any that are deleted
+	for _, secretName := range secretsToWatch {
+		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
+		}
 	}
 
 	return nil
@@ -144,6 +159,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	if err != nil {
+		log.Error(err, "Error retrieving pull secrets")
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass))
 		r.status.SetDegraded(fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass), err.Error())
@@ -155,18 +177,32 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		if errors.IsNotFound(err) {
 			esCertSecret = nil
 		} else {
-			reqLogger.Error(err, "Failed to read Elasticearch cert secret")
-			r.status.SetDegraded("Failed to read Elasticearch cert secret", err.Error())
+			reqLogger.Error(err, "Failed to read Elasticsearch cert secret")
+			r.status.SetDegraded("Failed to read Elasticsearch cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	// ECK requires that we provide it a secret to put add certificate information in for it's webhooks. If it's created
+	// we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
+	createWebhookSecret := false
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKWebhookSecretName, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
+		if errors.IsNotFound(err) {
+			createWebhookSecret = true
+		} else {
+			reqLogger.Error(err, "Failed to read Elasticsearch webhook secret")
+			r.status.SetDegraded("Failed to read Elasticsearch webhook secret", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
 
 	reqLogger.V(2).Info("Creating Elasticsearch components")
-
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	component, err := render.Elasticsearch(
 		ls,
 		esCertSecret,
+		createWebhookSecret,
+		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		network.Spec.Registry,
 	)

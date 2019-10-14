@@ -29,22 +29,48 @@ spec:
           type: object
         spec:
           properties:
+            calicoNetwork:
+              description: CalicoNetwork specifies configuration options when using
+                Calico provided pod networking.
+              properties:
+                ipPools:
+                  description: 'IPPools contains a list of IP pools to use for allocating
+                    pod IP addresses. For now, a maximum of one IP pool is supported.
+                    Default: 192.168.0.0/16'
+                  items:
+                    properties:
+                      cidr:
+                        description: CIDR contains the CIDR of the IP Pool.
+                        type: string
+                      encapsulation:
+                        description: Encapsulation specifies the encapsulation type
+                          that will be used with the IP Pool. VXLAN is the default.
+                        enum:
+                        - IPIPCrossSubnet
+                        - IPIP
+                        - VXLAN
+                        - None
+                        type: string
+                      natOutgoing:
+                        description: NATOutgoing specifies if NAT will be enabled
+                          or disabled for outgoing traffic. Enabled is the default.
+                        enum:
+                        - Enabled
+                        - Disabled
+                        type: string
+                      nodeSelector:
+                        description: NodeSelector specifies the node selector that
+                          will be set for the IP Pool. Default is 'all()'.
+                        type: string
+                    required:
+                    - cidr
+                    type: object
+                  type: array
+              type: object
             imagePullSecrets:
               description: ImagePullSecrets is an array of references to Docker registry
                 pull secrets.
               items:
-                type: object
-              type: array
-            ipPools:
-              description: 'IPPools contains a list of IP pools to use for allocating
-                pod IP addresses. For now, a maximum of one IP pool is supported.
-                Default: 192.168.0.0/16.'
-              items:
-                properties:
-                  cidr:
-                    type: string
-                required:
-                - cidr
                 type: object
               type: array
             kubernetesProvider:

@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -66,7 +67,7 @@ var _ = Describe("Node rendering tests", func() {
 		ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		// Node image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.10.0"))
 
 		// Validate correct number of init containers.
 		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
@@ -317,7 +318,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.8.1"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.10.0"))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
 
@@ -555,6 +556,133 @@ var _ = Describe("Node rendering tests", func() {
 				SubPath:   "template-1.yaml",
 			}))
 	})
+	DescribeTable("test IP Pool configuration",
+		func(pool operator.IPPool, expect map[string]string) {
+			// Provider does not matter for IPPool configuration
+			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			nodeEnvs := ds.Spec.Template.Spec.Containers[0].Env
+
+			for _, envVar := range []string{
+				"CALICO_IPV4POOL_CIDR",
+				"CALICO_IPV4POOL_IPIP",
+				"CALICO_IPV4POOL_VXLAN",
+				"CALICO_IPV4POOL_NAT_OUTGOING",
+				"CALICO_IPV4POOL_NODE_SELECTOR",
+			} {
+				v, ok := expect[envVar]
+				if ok {
+					Expect(nodeEnvs).To(ContainElement(v1.EnvVar{Name: envVar, Value: v}))
+				} else {
+					found := false
+					for _, ev := range nodeEnvs {
+						if ev.Name == envVar {
+							found = true
+							break
+						}
+					}
+					Expect(found).To(BeFalse(), "Expected EnvVars %v to not have %s", nodeEnvs, envVar)
+				}
+			}
+		},
+
+		Entry("Default pool",
+			operator.IPPool{
+				CIDR: "192.168.0.0/16",
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR": "192.168.0.0/16",
+				"CALICO_IPV4POOL_IPIP": "Always",
+			}),
+		Entry("Pool with nat outgoing disabled",
+			operator.IPPool{
+				CIDR:        "172.16.0.0/24",
+				NATOutgoing: "Disabled",
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":         "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":         "Always",
+				"CALICO_IPV4POOL_NAT_OUTGOING": "false",
+			}),
+		Entry("Pool with nat outgoing enabled",
+			operator.IPPool{
+				CIDR:        "172.16.0.0/24",
+				NATOutgoing: "Enabled",
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR": "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP": "Always",
+				// Enabled is the default so we don't set
+				// NAT_OUTGOING if it is enabled.
+			}),
+		Entry("Pool with CrossSubnet",
+			operator.IPPool{
+				CIDR:          "172.16.0.0/24",
+				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR": "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP": "CrossSubnet",
+			}),
+		Entry("Pool with VXLAN",
+			operator.IPPool{
+				CIDR:          "172.16.0.0/24",
+				Encapsulation: operator.EncapsulationVXLAN,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":  "172.16.0.0/24",
+				"CALICO_IPV4POOL_VXLAN": "Always",
+			}),
+		Entry("Pool with VXLANCrossSubnet",
+			operator.IPPool{
+				CIDR:          "172.16.0.0/24",
+				Encapsulation: operator.EncapsulationVXLANCrossSubnet,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":  "172.16.0.0/24",
+				"CALICO_IPV4POOL_VXLAN": "CrossSubnet",
+			}),
+		Entry("Pool with no encapsulation",
+			operator.IPPool{
+				CIDR:          "172.16.0.0/24",
+				Encapsulation: operator.EncapsulationNone,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR": "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP": "Never",
+			}),
+		Entry("Pool with node selector",
+			operator.IPPool{
+				CIDR:         "172.16.0.0/24",
+				NodeSelector: "has(thiskey)",
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":          "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":          "Always",
+				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
+			}),
+		Entry("Pool with all fields set",
+			operator.IPPool{
+				CIDR:          "172.16.0.0/24",
+				Encapsulation: operator.EncapsulationIPIP,
+				NATOutgoing:   "Disabled",
+				NodeSelector:  "has(thiskey)",
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":          "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":          "Always",
+				"CALICO_IPV4POOL_NAT_OUTGOING":  "false",
+				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
+			}),
+	)
 })
 
 // verifyProbes asserts the expected node liveness and readiness probe.

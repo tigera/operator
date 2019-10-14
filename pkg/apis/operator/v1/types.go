@@ -39,11 +39,13 @@ type InstallationSpec struct {
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
-	// KubernetesProvider specifies which platform this cluster is running on.
+	// KubernetesProvider specifies which platform this cluster is running on. Operator will
+	// do it's best to autodetect and set this. But can be overridden here.
 	// +optional
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CalicoNetwork specifies configuration options when using Calico provided pod networking.
+	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 }
 
@@ -78,8 +80,76 @@ type CalicoNetworkSpec struct {
 	MTU *int32 `json:"mtu,omitempty"`
 }
 
+type EncapsulationType string
+
+const (
+	EncapsulationIPIPCrossSubnet  EncapsulationType = "IPIPCrossSubnet"
+	EncapsulationIPIP             EncapsulationType = "IPIP"
+	EncapsulationVXLAN            EncapsulationType = "VXLAN"
+	EncapsulationVXLANCrossSubnet EncapsulationType = "VXLANCrossSubnet"
+	EncapsulationNone             EncapsulationType = "None"
+	EncapsulationDefault          EncapsulationType = "IPIP"
+)
+
+var EncapsulationTypes []EncapsulationType = []EncapsulationType{
+	EncapsulationIPIPCrossSubnet,
+	EncapsulationIPIP,
+	EncapsulationVXLAN,
+	EncapsulationVXLANCrossSubnet,
+	EncapsulationNone,
+}
+var EncapsulationTypesString []string = []string{
+	EncapsulationIPIPCrossSubnet.String(),
+	EncapsulationIPIP.String(),
+	EncapsulationVXLAN.String(),
+	EncapsulationVXLANCrossSubnet.String(),
+	EncapsulationNone.String(),
+}
+
+func (et EncapsulationType) String() string {
+	return string(et)
+}
+
+type NATOutgoingType string
+
+const (
+	NATOutgoingEnabled  NATOutgoingType = "Enabled"
+	NATOutgoingDisabled NATOutgoingType = "Disabled"
+	NATOutgoingDefault  NATOutgoingType = "Enabled"
+)
+
+var NATOutgoingTypes []NATOutgoingType = []NATOutgoingType{
+	NATOutgoingEnabled,
+	NATOutgoingDisabled,
+}
+var NATOutgoingTypesString []string = []string{
+	NATOutgoingEnabled.String(),
+	NATOutgoingDisabled.String(),
+}
+
+func (nt NATOutgoingType) String() string {
+	return string(nt)
+}
+
+const NodeSelectorDefault string = "all()"
+
 type IPPool struct {
+	// CIDR contains the CIDR of the IP Pool.
 	CIDR string `json:"cidr"`
+	// Encapsulation specifies the encapsulation type that will be used with
+	// the IP Pool. IPIP is the default.
+	// +optional
+	// +kubebuilder:validation:Enum=IPIPCrossSubnet,IPIP,VXLAN,None
+	Encapsulation EncapsulationType `json:"encapsulation,omitempty"`
+	// NATOutgoing specifies if NAT will be enabled or disabled for outgoing
+	// traffic. Enabled is the default.
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled,Disabled
+	NATOutgoing NATOutgoingType `json:"natOutgoing,omitempty"`
+	// NodeSelector specifies the node selector that will be set for the
+	// IP Pool. Default is 'all()'.
+	// +optional
+	NodeSelector string `json:"nodeSelector,omitempty"`
 }
 
 // InstallationStatus defines the observed state of Installation

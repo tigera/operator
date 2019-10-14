@@ -16,10 +16,12 @@ package installation
 
 import (
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
 
+	osconfigv1 "github.com/openshift/api/config/v1"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
@@ -65,8 +67,13 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools: []operator.IPPool{{CIDR: "1.2.3.0/24"}},
-					MTU:     &mtu,
+					IPPools: []operator.IPPool{{
+						CIDR:          "1.2.3.0/24",
+						Encapsulation: "IPIPCrossSubnet",
+						NATOutgoing:   "Enabled",
+						NodeSelector:  "has(thiskey)",
+					}},
+					MTU: &mtu,
 				},
 			},
 		}
@@ -84,4 +91,49 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
 	})
+
+	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",
+		func(i *operator.Installation, on *osconfigv1.Network) {
+			Expect(mergeAndFillDefaults(i, on)).To(BeNil())
+			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) == 1 {
+				pool := i.Spec.CalicoNetwork.IPPools[0]
+				Expect(pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", pool)
+				Expect(pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", pool)
+				Expect(pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", pool)
+				Expect(pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", pool)
+			}
+		},
+
+		table.Entry("Empty config defaults IPPool", &operator.Installation{}, &osconfigv1.Network{}),
+		table.Entry("Openshift only CIDR",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{},
+				},
+			}, &osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			}),
+		table.Entry("CIDR specified from OS config and Calico config",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						IPPools: []operator.IPPool{
+							operator.IPPool{
+								CIDR: "10.0.0.0/24",
+							},
+						},
+					},
+				},
+			}, &osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			}),
+	)
 })

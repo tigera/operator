@@ -44,6 +44,7 @@ func schema_pkg_apis_operator_v1_APIServer(ref common.ReferenceCallback) common.
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "APIServer is the Schema for the apiservers API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -87,10 +88,9 @@ func schema_pkg_apis_operator_v1_APIServerSpec(ref common.ReferenceCallback) com
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "APIServerSpec defines the desired state of APIServer",
-				Properties:  map[string]spec.Schema{},
+				Type:        []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -99,6 +99,7 @@ func schema_pkg_apis_operator_v1_APIServerStatus(ref common.ReferenceCallback) c
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "APIServerStatus defines the observed state of APIServer",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -110,7 +111,6 @@ func schema_pkg_apis_operator_v1_APIServerStatus(ref common.ReferenceCallback) c
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -119,6 +119,7 @@ func schema_pkg_apis_operator_v1_Auth(ref common.ReferenceCallback) common.OpenA
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Auth defines authentication configuration.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
@@ -144,7 +145,6 @@ func schema_pkg_apis_operator_v1_Auth(ref common.ReferenceCallback) common.OpenA
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -153,6 +153,7 @@ func schema_pkg_apis_operator_v1_Compliance(ref common.ReferenceCallback) common
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Compliance is the Schema for the compliances API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -196,10 +197,9 @@ func schema_pkg_apis_operator_v1_ComplianceSpec(ref common.ReferenceCallback) co
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ComplianceSpec defines the desired state of Compliance",
-				Properties:  map[string]spec.Schema{},
+				Type:        []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -208,6 +208,7 @@ func schema_pkg_apis_operator_v1_ComplianceStatus(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ComplianceStatus defines the observed state of Compliance",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -219,7 +220,6 @@ func schema_pkg_apis_operator_v1_ComplianceStatus(ref common.ReferenceCallback) 
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -228,6 +228,7 @@ func schema_pkg_apis_operator_v1_Installation(ref common.ReferenceCallback) comm
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Installation is the Schema for the cores API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -271,6 +272,7 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "InstallationSpec defines the desired state of Installation.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"variant": {
 						SchemaProps: spec.SchemaProps{
@@ -299,19 +301,6 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 							},
 						},
 					},
-					"ipPools": {
-						SchemaProps: spec.SchemaProps{
-							Description: "IPPools contains a list of IP pools to use for allocating pod IP addresses. For now, a maximum of one IP pool is supported. Default: 192.168.0.0/16.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.IPPool"),
-									},
-								},
-							},
-						},
-					},
 					"kubernetesProvider": {
 						SchemaProps: spec.SchemaProps{
 							Description: "KubernetesProvider specifies which platform this cluster is running on. Operator will do it's best to autodetect and set this. But can be overridden here.",
@@ -319,11 +308,17 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 							Format:      "",
 						},
 					},
+					"calicoNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CalicoNetwork specifies configuration options when using Calico provided pod networking.",
+							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.CalicoNetworkSpec"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.IPPool", "k8s.io/api/core/v1.LocalObjectReference"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.CalicoNetworkSpec", "k8s.io/api/core/v1.LocalObjectReference"},
 	}
 }
 
@@ -332,6 +327,7 @@ func schema_pkg_apis_operator_v1_InstallationStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "InstallationStatus defines the observed state of Installation",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"variant": {
 						SchemaProps: spec.SchemaProps{
@@ -343,7 +339,6 @@ func schema_pkg_apis_operator_v1_InstallationStatus(ref common.ReferenceCallback
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -352,6 +347,7 @@ func schema_pkg_apis_operator_v1_IntrusionDetection(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "IntrusionDetection is the Schema for the intrusiondetections API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -395,10 +391,9 @@ func schema_pkg_apis_operator_v1_IntrusionDetectionSpec(ref common.ReferenceCall
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "IntrusionDetectionSpec defines the desired state of IntrusionDetection",
-				Properties:  map[string]spec.Schema{},
+				Type:        []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -407,6 +402,7 @@ func schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref common.ReferenceCa
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "IntrusionDetectionStatus defines the observed state of IntrusionDetection",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -418,7 +414,6 @@ func schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref common.ReferenceCa
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -427,6 +422,7 @@ func schema_pkg_apis_operator_v1_LogCollector(ref common.ReferenceCallback) comm
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollector is the Schema for the logcollectors API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -470,6 +466,7 @@ func schema_pkg_apis_operator_v1_LogCollectorSpec(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollectorSpec defines the desired state of LogCollector Valid only for the variant 'TigeraSecureEnterprise'.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"s3": {
 						SchemaProps: spec.SchemaProps{
@@ -494,6 +491,7 @@ func schema_pkg_apis_operator_v1_LogCollectorStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollectorStatus defines the observed state of LogCollector",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -505,7 +503,6 @@ func schema_pkg_apis_operator_v1_LogCollectorStatus(ref common.ReferenceCallback
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -514,6 +511,7 @@ func schema_pkg_apis_operator_v1_LogStorage(ref common.ReferenceCallback) common
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogStorage is the Schema for the logstorages  API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -557,6 +555,7 @@ func schema_pkg_apis_operator_v1_LogStorageSpec(ref common.ReferenceCallback) co
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogStorageSpec defines the desired state of LogStorage",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"nodes": {
 						SchemaProps: spec.SchemaProps{
@@ -583,6 +582,7 @@ func schema_pkg_apis_operator_v1_LogStorageStatus(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogStorageStatus defines the observed state of LogStorage",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -608,7 +608,6 @@ func schema_pkg_apis_operator_v1_LogStorageStatus(ref common.ReferenceCallback) 
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -617,6 +616,7 @@ func schema_pkg_apis_operator_v1_Manager(ref common.ReferenceCallback) common.Op
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Manager is the Schema for the managers API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -660,6 +660,7 @@ func schema_pkg_apis_operator_v1_ManagerSpec(ref common.ReferenceCallback) commo
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ManagerSpec defines optional configuration for the Tigera Secure management console. Valid only for the variant 'TigeraSecureEnterprise'.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"auth": {
 						SchemaProps: spec.SchemaProps{
@@ -680,6 +681,7 @@ func schema_pkg_apis_operator_v1_ManagerStatus(ref common.ReferenceCallback) com
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ManagerStatus defines the observed state of Manager",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"auth": {
 						SchemaProps: spec.SchemaProps{
@@ -699,6 +701,7 @@ func schema_pkg_apis_operator_v1_TigeraStatus(ref common.ReferenceCallback) comm
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "TigeraStatus is the Schema for the tigerastatuses API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -741,10 +744,9 @@ func schema_pkg_apis_operator_v1_TigeraStatusSpec(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Type: []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -753,6 +755,7 @@ func schema_pkg_apis_operator_v1_TigeraStatusStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "TigeraStatusStatus defines the observed state of TigeraStatus",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"conditions": {
 						SchemaProps: spec.SchemaProps{

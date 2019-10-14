@@ -17,6 +17,7 @@ package installation
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -187,10 +188,30 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 		return nil, err
 	}
 
-	if err = fillDefaults(instance); err != nil {
+	var openshiftConfig *configv1.Network
+	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		// If configured to run in openshift, then also fetch the openshift configuration API.
+		err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
+		}
+	}
+
+	err = mergeAndFillDefaults(instance, openshiftConfig)
+	if err != nil {
 		return nil, err
 	}
 	return instance, nil
+}
+
+func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network) error {
+	if o != nil {
+		if err := updateInstallationForOpenshiftNetwork(i, o); err != nil {
+			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
+		}
+	}
+
+	return fillDefaults(i)
 }
 
 // fillDefaults populates the default values onto an Installation object.
@@ -224,10 +245,25 @@ func fillDefaults(instance *operator.Installation) error {
 
 	// If Calico networking is in use, then default some fields.
 	if instance.Spec.CalicoNetwork != nil {
-		// Default IP pools.
-		if len(instance.Spec.CalicoNetwork.IPPools) == 0 {
+		// Default IP pools, only if it is nil.
+		// If it is an empty slice then that means no default IPPools
+		// should be created.
+		if instance.Spec.CalicoNetwork.IPPools == nil {
 			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 				{CIDR: "192.168.0.0/16"},
+			}
+		}
+		if len(instance.Spec.CalicoNetwork.IPPools) == 1 {
+			// Ensure all fields are set on pool
+			pool := &instance.Spec.CalicoNetwork.IPPools[0]
+			if pool.Encapsulation == "" {
+				pool.Encapsulation = operator.EncapsulationDefault
+			}
+			if pool.NATOutgoing == "" {
+				pool.NATOutgoing = operator.NATOutgoingDefault
+			}
+			if pool.NodeSelector == "" {
+				pool.NodeSelector = operator.NodeSelectorDefault
 			}
 		}
 	}
@@ -279,6 +315,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	// Validate the configuration.
+	if err = validateCustomResource(instance); err != nil {
+		r.status.SetDegraded("Error validating CRD", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	if err = r.client.Update(ctx, instance); err != nil {
@@ -309,34 +351,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
-
-	openshiftConfig := &configv1.Network{}
-	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		// If configured to run in openshift, then also fetch the openshift configuration API.
-		reqLogger.V(1).Info("Querying for openshift network config")
-		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
-		if err != nil {
-			// Error reading the object - requeue the request.
-			r.status.SetDegraded("Unable to read openshift network configuration", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if instance.Spec.CalicoNetwork == nil {
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
-		}
-
-		// Use the openshift provided CIDRs.
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
-		for _, net := range openshiftConfig.Spec.ClusterNetwork {
-			instance.Spec.CalicoNetwork.IPPools = append(instance.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: net.CIDR})
-		}
-	}
-
-	// Validate the configuration.
-	if err = validateCustomResource(instance); err != nil {
-		r.status.SetDegraded("Error validating CRD", err.Error())
-		return reconcile.Result{}, err
-	}
 
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
@@ -393,6 +407,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// We have successfully reconciled the Calico installation.
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		openshiftConfig := &configv1.Network{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
+		if err != nil {
+			r.status.SetDegraded("Unable to update OpenShift Network config: failed to read OpenShift network configuration", err.Error())
+			return reconcile.Result{}, err
+		}
 		// If configured to run in openshift, update the config status with the current state.
 		reqLogger.V(1).Info("Updating openshift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
@@ -433,7 +453,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	return reconcile.Result{}, nil
 }
 
-// GenerateRenderConfig converts user input and detected settings into render config.
+// GenerateRenderConfig converts installation into render config.
 func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	config := render.NetworkConfig{CNI: render.CNINone}
 
@@ -569,4 +589,63 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 		bt[k] = v
 	}
 	return bt, nil
+}
+
+func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {
+	if i.Spec.CalicoNetwork == nil {
+		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	}
+
+	// if IPPools is nil, add IPPool with openshift CIDR
+	if i.Spec.CalicoNetwork.IPPools == nil {
+		// If the openshift spec has no ClusterNetworks then return and let the
+		// normal defaulting happen.
+		if len(o.Spec.ClusterNetwork) == 0 {
+			return nil
+		}
+		i.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			operator.IPPool{
+				CIDR: o.Spec.ClusterNetwork[0].CIDR,
+			},
+		}
+	} else {
+		// Empty IPPools list so nothing to do.
+		if len(i.Spec.CalicoNetwork.IPPools) == 0 {
+			return nil
+		}
+
+		pool := i.Spec.CalicoNetwork.IPPools[0]
+		within := false
+		for _, osCIDR := range o.Spec.ClusterNetwork {
+			within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)
+		}
+		if !within {
+			return fmt.Errorf("The specified IPPool is not within the OpenShift ClusterNetwork")
+		}
+	}
+	return nil
+}
+
+// cidrWithinCidr checks that all IPs in the pool passed in are within the
+// passed in CIDR
+func cidrWithinCidr(cidr, pool string) bool {
+	_, cNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return false
+	}
+	_, pNet, err := net.ParseCIDR(pool)
+	if err != nil {
+		return false
+	}
+	ipMin := pNet.IP
+	pOnes, _ := pNet.Mask.Size()
+	cOnes, _ := cNet.Mask.Size()
+
+	// If the cidr contains the network (1st) address of the pool and the
+	// prefix on the pool is larger than or equal to the cidr prefix (the pool size is
+	// smaller than the cidr) then the pool network is within the cidr network.
+	if cNet.Contains(ipMin) && pOnes >= cOnes {
+		return true
+	}
+	return false
 }

@@ -18,15 +18,17 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
-	"github.com/onsi/ginkgo/extensions/table"
+	osconfigv1 "github.com/openshift/api/config/v1"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 var mismatchedError = fmt.Errorf("Installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
 
 var _ = Describe("Testing core-controller installation", func() {
+
 	table.DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
@@ -43,5 +45,176 @@ var _ = Describe("Testing core-controller installation", func() {
 		table.Entry("Same detected/configured provider", operator.ProviderOpenShift, operator.ProviderOpenShift, nil),
 		table.Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderDockerEE, mismatchedError),
 		table.Entry("Same detected/configured managed provider", operator.ProviderEKS, operator.ProviderEKS, nil),
+	)
+
+	table.DescribeTable("test cidrWithinCidr function",
+		func(CIDR, pool string, expectedResult bool) {
+			if expectedResult {
+				Expect(cidrWithinCidr(CIDR, pool)).To(BeTrue(), "Expected pool %s to be within CIDR %s", pool, CIDR)
+			} else {
+				Expect(cidrWithinCidr(CIDR, pool)).To(BeFalse(), "Expected pool %s to not be within CIDR %s", pool, CIDR)
+			}
+		},
+
+		table.Entry("Default as CIDR and pool", "192.168.0.0/16", "192.168.0.0/16", true),
+		table.Entry("Pool larger than CIDR should fail", "192.168.0.0/16", "192.168.0.0/15", false),
+		table.Entry("Pool larger than CIDR should fail", "192.168.2.0/24", "192.168.0.0/16", false),
+		table.Entry("Non overlapping CIDR and pool should fail", "192.168.0.0/16", "172.168.0.0/16", false),
+		table.Entry("CIDR with smaller pool", "192.168.0.0/16", "192.168.2.0/24", true),
+		table.Entry("IPv6 matching CIDR and pool", "fd00:1234::/32", "fd00:1234::/32", true),
+		table.Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234::/32", "fd00:1234::/31", false),
+		table.Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234:5600::/40", "fd00:1234::/32", false),
+		table.Entry("IPv6 Non overlapping CIDR and pool should fail", "fd00:1234::/32", "fd00:5678::/32", false),
+		table.Entry("IPv6 CIDR with smaller pool", "fd00:1234::/32", "fd00:1234:5600::/40", true),
+	)
+	var defaultMTU int32 = 1440
+	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
+		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
+			if expectSuccess {
+				Expect(mergeAndFillDefaults(i, on)).To(BeNil())
+			} else {
+				Expect(mergeAndFillDefaults(i, on)).ToNot(BeNil())
+				return
+			}
+
+			if calicoNet == nil {
+				Expect(i.Spec.CalicoNetwork).To(BeNil())
+				return
+			}
+			if calicoNet.IPPools == nil {
+				Expect(i.Spec.CalicoNetwork).To(BeNil())
+				return
+			}
+			if len(calicoNet.IPPools) == 0 {
+				Expect(i.Spec.CalicoNetwork.IPPools).To(HaveLen(0))
+				return
+			}
+			Expect(i.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+			pool := i.Spec.CalicoNetwork.IPPools[0]
+			pExpect := calicoNet.IPPools[0]
+			Expect(pool).To(Equal(pExpect))
+		},
+
+		table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{}, &osconfigv1.Network{}, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/16",
+						Encapsulation: "IPIP",
+						NATOutgoing:   "Enabled",
+						NodeSelector:  "all()",
+					},
+				},
+				MTU: &defaultMTU,
+			}),
+		table.Entry("Openshift only CIDR",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{},
+				},
+			}, &osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			}, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "10.0.0.0/8",
+						Encapsulation: "IPIP",
+						NATOutgoing:   "Enabled",
+						NodeSelector:  "all()",
+					},
+				},
+				MTU: &defaultMTU,
+			}),
+		table.Entry("CIDR specified from OpenShift config and Calico config",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						IPPools: []operator.IPPool{
+							operator.IPPool{
+								CIDR:          "10.0.0.0/24",
+								Encapsulation: "VXLAN",
+								NATOutgoing:   "Disabled",
+							},
+						},
+					},
+				},
+			}, &osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			}, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "10.0.0.0/24",
+						Encapsulation: "VXLAN",
+						NATOutgoing:   "Disabled",
+						NodeSelector:  "all()",
+					},
+				},
+				MTU: &defaultMTU,
+			}),
+		table.Entry("Failure when IPPool is smaller than OpenShift Network",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						IPPools: []operator.IPPool{
+							operator.IPPool{
+								CIDR:          "10.0.0.0/16",
+								Encapsulation: "VXLAN",
+								NATOutgoing:   "Disabled",
+							},
+						},
+					},
+				},
+			}, &osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "10.0.0.0/24"},
+					},
+				},
+			}, false, nil),
+		table.Entry("Empty IPPool list results in no IPPool with OpenShift",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						IPPools: []operator.IPPool{},
+					},
+				},
+			}, &osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			}, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{},
+				MTU:     &defaultMTU,
+			}),
+		table.Entry("Normal defaults with no IPPools",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{},
+				},
+			}, nil, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/16",
+						Encapsulation: "IPIP",
+						NATOutgoing:   "Enabled",
+						NodeSelector:  "all()",
+					},
+				},
+				MTU: &defaultMTU,
+			}),
 	)
 })

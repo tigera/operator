@@ -177,13 +177,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
-	if err != nil {
-		log.Error(err, "Error with Pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil

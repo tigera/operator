@@ -384,7 +384,7 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				Verbs:     []string{"create"},
 			},
 			{
-				APIGroups: []string{"authentication.k8s.io"},
+				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},

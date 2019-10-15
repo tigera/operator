@@ -183,8 +183,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
-	// ECK requires that we provide it a secret to put add certificate information in for it's webhooks. If it's created
-	// we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
+	// The ECK operator requires that we provide it with a secret so it can add certificate information in for it's webhooks.
+	// If it's created we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
 	createWebhookSecret := false
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKWebhookSecretName, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
 		if errors.IsNotFound(err) {

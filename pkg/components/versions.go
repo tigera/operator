@@ -13,32 +13,32 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
+
 	VersionTigeraNode            = "v2.5.0"
 	VersionTigeraTypha           = "v2.4.2"
 	VersionTigeraKubeControllers = "v2.4.2"
 
 	// API server images.
-	VersionAPIServer   = "v2.5.0"
-	VersionQueryServer = "v2.4.0"
-
+	VersionAPIServer   = "v2.5.0-mcm0.1-31-g54c4ff40"
+	VersionQueryServer = "v2.6.0-0.dev-7-g5e69bfc"
 	// Logging
 	VersionFluentd = "es7-v2.5.1-dev-1"
 
 	// Compliance images.
-	VersionComplianceController  = "es7-v2.5.1-dev-1"
-	VersionComplianceReporter    = "es7-v2.5.1-dev-1"
-	VersionComplianceServer      = "es7-v2.5.1-dev-1"
-	VersionComplianceSnapshotter = "es7-v2.5.1-dev-1"
-	VersionComplianceBenchmarker = "es7-v2.5.1-dev-1"
+	VersionComplianceController  = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceReporter    = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceServer      = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceSnapshotter = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceBenchmarker = "v2.6.0-0.dev-42-g5bb7357"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "es7-v2.5.1-dev-1"
-	VersionIntrusionDetectionJobInstaller = "es7-v2.5.1-dev-1"
+	VersionIntrusionDetectionController   = "v2.6.0-0.dev-53-g6045051"
+	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
 
 	// Manager images.
-	VersionManager        = "v2.4.2"
+	VersionManager        = "v2.5.0-mcm0.1-148-g346baab9"
 	VersionManagerProxy   = "v1.0.0.rc1"
-	VersionManagerEsProxy = "v2.4.0"
+	VersionManagerEsProxy = "v2.6.0-0.dev-88-gbd4f9c3"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"

@@ -105,7 +105,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTP)
+	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTPSEndpoint)
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
 		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),

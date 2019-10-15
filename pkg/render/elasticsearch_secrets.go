@@ -21,16 +21,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// elasticsearchAccess is a Component that contains the k8s resources required for another component to have elasticsearch access.
+// elasticsearchSecrets is a Component that contains the secrets that need to be created in the tigera operator namespace
+// after Elasticsearch and Kibana are running. At this time these secrets contain elasticsearch users credentials and
+// tls certificate information.
 type elasticsearchSecrets struct {
-	esUsers            []elasticsearch.User
-	esPublicCertSecret *corev1.Secret
+	esUsers                []elasticsearch.User
+	esPublicCertSecret     *corev1.Secret
+	kibanaPublicCertSecret *corev1.Secret
 }
 
-func ElasticsearchSecrets(esUsers []elasticsearch.User, esPublicCertSecret *corev1.Secret) Component {
+func ElasticsearchSecrets(esUsers []elasticsearch.User, esPublicCertSecret *corev1.Secret, kibanaPublicCertSecret *corev1.Secret) Component {
 	return &elasticsearchSecrets{
-		esUsers:            esUsers,
-		esPublicCertSecret: esPublicCertSecret,
+		esUsers:                esUsers,
+		esPublicCertSecret:     esPublicCertSecret,
+		kibanaPublicCertSecret: kibanaPublicCertSecret,
 	}
 }
 
@@ -51,7 +55,7 @@ func (es elasticsearchSecrets) Objects() []runtime.Object {
 		objs = append(objs, secret)
 	}
 
-	objs = append(objs, copySecrets(OperatorNamespace(), es.esPublicCertSecret)...)
+	objs = append(objs, copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)
 	return objs
 }
 

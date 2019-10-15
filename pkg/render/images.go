@@ -13,6 +13,7 @@ const (
 	K8sGcrRegistry           = "gcr.io/google-containers/"
 	ECKOperatorRegistry      = "docker.elastic.co/eck/"
 	ECKElasticsearchRegistry = "docker.elastic.co/elasticsearch/"
+	ECKKibanaRegistry        = "docker.elastic.co/kibana/"
 )
 
 // This section contains images used when installing open-source Calico.
@@ -57,6 +58,7 @@ const (
 
 	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
 	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch
+	ECKKibanaImageName        = "kibana:" + components.VersionECKKibana
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.
@@ -82,6 +84,8 @@ func constructImage(imageName string, registry string) string {
 		reg = ECKElasticsearchRegistry
 	case ECKOperatorImageName:
 		reg = ECKOperatorRegistry
+	case ECKKibanaImageName:
+		reg = ECKKibanaRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

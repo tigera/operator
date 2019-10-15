@@ -338,6 +338,9 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
 			Namespace: CalicoNamespace,
+			Annotations: map[string]string{
+				"scheduler.alpha.kubernetes.io/critical-pod": "",
+			},
 		},
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},

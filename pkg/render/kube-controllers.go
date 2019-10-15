@@ -173,6 +173,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
 			},
+			Annotations: map[string]string{
+				"scheduler.alpha.kubernetes.io/critical-pod": "",
+			},
 		},
 		Spec: apps.DeploymentSpec{
 			Replicas: &replicas,

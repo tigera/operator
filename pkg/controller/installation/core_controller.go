@@ -66,7 +66,7 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *
 		scheme:       mgr.GetScheme(),
 		watches:      make(map[runtime.Object]struct{}),
 		provider:     provider,
-		status:       status.New(mgr.GetClient(), "network"),
+		status:       status.New(mgr.GetClient(), "calico"),
 		requiresTSEE: tsee,
 	}
 	r.status.Run()

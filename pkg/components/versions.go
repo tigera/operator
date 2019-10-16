@@ -33,7 +33,7 @@ const (
 
 	// Intrusion detection images.
 	VersionIntrusionDetectionController   = "es7-v2.5.1-dev-1"
-	VersionIntrusionDetectionJobInstaller = "es7-v2.5.1-dev-1"
+	VersionIntrusionDetectionJobInstaller = "es7-v2.6.0-0-dev-6045051"
 
 	// Manager images.
 	VersionManager        = "v2.4.2"

@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	LogStorageStatusReady = "Ready"
+	LogStorageStatusDegraded = "Degraded"
+	LogStorageStatusReady    = "Ready"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.

@@ -15,6 +15,7 @@
 package render
 
 import (
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,38 +28,42 @@ import (
 const (
 	IntrusionDetectionNamespace = "tigera-intrusion-detection"
 
-	ElasticsearchUserIntrusionDetection = "tigera-ee-intrusion-detection"
+	ElasticsearchUserIntrusionDetection    = "tigera-ee-intrusion-detection"
+	ElasticsearchUserIntrusionDetectionJob = "tigera-ee-installer"
 )
 
 func IntrusionDetection(
 	esSecrets []*corev1.Secret,
+	kibanaCertSecret *corev1.Secret,
 	registry string,
 	clusterName string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 ) Component {
 	return &intrusionDetectionComponent{
-		esSecrets:   esSecrets,
-		registry:    registry,
-		clusterName: clusterName,
-		pullSecrets: pullSecrets,
-		openshift:   openshift,
+		esSecrets:        esSecrets,
+		kibanaCertSecret: kibanaCertSecret,
+		registry:         registry,
+		clusterName:      clusterName,
+		pullSecrets:      pullSecrets,
+		openshift:        openshift,
 	}
 }
 
 type intrusionDetectionComponent struct {
-	esSecrets   []*corev1.Secret
-	registry    string
-	clusterName string
-	pullSecrets []*corev1.Secret
-	openshift   bool
+	esSecrets        []*corev1.Secret
+	kibanaCertSecret *corev1.Secret
+	registry         string
+	clusterName      string
+	pullSecrets      []*corev1.Secret
+	openshift        bool
 }
 
 func (c *intrusionDetectionComponent) Objects() []runtime.Object {
-
 	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
 	objs = append(objs, copySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)
+	objs = append(objs, copySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)
 
 	return append(objs,
 		c.intrusionDetectionServiceAccount(),
@@ -96,8 +101,19 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 					RestartPolicy:    v1.RestartPolicyOnFailure,
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []v1.Container{
-						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.clusterName, ElasticsearchUserIntrusionDetection),
+						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.clusterName, ElasticsearchUserIntrusionDetectionJob),
 					},
+					Volumes: []corev1.Volume{{
+						Name: "kibana-ca-cert-volume",
+						VolumeSource: v1.VolumeSource{
+							Secret: &v1.SecretVolumeSource{
+								SecretName: KibanaPublicCertSecret,
+								Items: []v1.KeyToPath{
+									{Key: "tls.crt", Path: "ca.pem"},
+								},
+							},
+						},
+					}},
 				}),
 			},
 		},
@@ -105,7 +121,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
+	esUser, err := esusers.GetUser(ElasticsearchUserIntrusionDetectionJob)
+	if err != nil {
+		// The esUser should exist at this point and if it doesn't it's a programming error
+		panic(err)
+	}
+	secretName := esUser.SecretName()
 	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTPSEndpoint)
+
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
 		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
@@ -126,7 +149,20 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 				Name:  "START_XPACK_TRIAL",
 				Value: "true",
 			},
+			{
+				Name:      "USER",
+				ValueFrom: envVarSourceFromSecret(secretName, "username", false),
+			},
+			{
+				Name:      "PASSWORD",
+				ValueFrom: envVarSourceFromSecret(secretName, "password", false),
+			},
+			{Name: "KB_CA_CERT", Value: KibanaDefaultCertPath},
 		},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      "kibana-ca-cert-volume",
+			MountPath: "/etc/ssl/kibana/",
+		}},
 	}
 }
 
@@ -263,7 +299,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 					ServiceAccountName: "intrusion-detection-controller",
 					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.clusterName, ElasticsearchUserIntrusionDetection),
+						ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.clusterName, ElasticsearchUserIntrusionDetectionJob),
 					},
 				}),
 			},

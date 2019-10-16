@@ -31,6 +31,7 @@ const (
 	KibanaNamespace        = "tigera-kibana"
 	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 )
 
 func Elasticsearch(

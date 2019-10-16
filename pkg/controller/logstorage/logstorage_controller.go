@@ -233,19 +233,21 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	reqLogger.V(2).Info("Checking if Elasticsearch is operational")
-	if isOp, err := r.isElasticsearchOperational(ctx); err != nil {
+	isReady, es, err := r.isElasticsearchReady(ctx)
+	if err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error figuring out if elasticsearch is operational", err)
 		return reconcile.Result{}, err
-	} else if !isOp {
+	} else if !isReady {
 		r.setDegraded(ctx, reqLogger, ls, "Waiting for Elasticsearch cluster to be operational", nil)
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	reqLogger.V(2).Info("Checking if Kibana is operational")
-	if isOp, err := r.isKibanaReady(ctx); err != nil {
+	isReady, kb, err := r.isKibanaReady(ctx)
+	if err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Failed to figure out if Kibana is operational", err)
 		return reconcile.Result{}, err
-	} else if !isOp {
+	} else if !isReady {
 		r.setDegraded(ctx, reqLogger, ls, "Waiting for Kibana to be operational", nil)
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -277,6 +279,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 	reqLogger.V(2).Info("Elasticsearch users and secrets created for components needing Elasticsearch access")
+	ls.Status.ElasticsearchHash = render.AnnotationHash(es.GetCreationTimestamp())
+	ls.Status.KibanaHash = render.AnnotationHash(kb.GetCreationTimestamp())
 	if err := r.updateStatus(ctx, reqLogger, ls, operatorv1.LogStorageStatusReady); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -308,24 +312,24 @@ func (r *ReconcileLogStorage) updateStatus(ctx context.Context, reqLogger logr.L
 	return nil
 }
 
-func (r *ReconcileLogStorage) isElasticsearchOperational(ctx context.Context) (bool, error) {
+func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, *esalpha1.Elasticsearch, error) {
 	es := &esalpha1.Elasticsearch{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, es); err != nil {
-		return false, err
+		return false, nil, err
 	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
-		return true, nil
+		return true, es, nil
 	}
 
-	return false, nil
+	return false, nil, nil
 }
 
-func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, error) {
-	es := &kibanaalpha1.Kibana{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, es); err != nil {
-		return false, err
-	} else if es.Status.AssociationStatus == cmneckalpha1.AssociationEstablished {
-		return true, nil
+func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, *kibanaalpha1.Kibana, error) {
+	kb := &kibanaalpha1.Kibana{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kb); err != nil {
+		return false, nil, err
+	} else if kb.Status.AssociationStatus == cmneckalpha1.AssociationEstablished {
+		return true, kb, nil
 	}
 
-	return false, nil
+	return false, nil, nil
 }

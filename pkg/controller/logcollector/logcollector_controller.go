@@ -84,6 +84,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
+	if err = utils.AddLogStorageWatch(c); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch LogStorage resource: %v", err)
+	}
+
 	esUser, err := esusers.GetUser(render.ElasticsearchUserLogCollector)
 	if err != nil {
 		// this error indicates a programming error, where we are trying to get an Elasticsearch user that hasn't been
@@ -190,6 +194,17 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	reqLogger.V(2).Info("Retrieving LogStorage resource")
+	ls, err := utils.GetReadyLogStorage(context.Background(), r.client)
+	if ls == nil {
+		if err == nil || errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for Tigera LogStorage resource to be ready", "")
+			return reconcile.Result{}, nil
+		}
+
+		log.Error(err, "Failed to retrieve Tigera LogStorage resource")
+		r.status.SetDegraded("Failed to retrieve Tigera LogStorage resource", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
@@ -244,6 +259,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Fluentd(
 		instance,
+		ls,
 		esSecrets,
 		clusterName,
 		s3Credential,

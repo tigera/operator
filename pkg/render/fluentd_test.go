@@ -32,6 +32,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var s3Creds *render.S3Credential
 	var filters *render.FluentdFilters
 	var installation *operatorv1.Installation
+	var ls *operatorv1.LogStorage
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -44,10 +45,15 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		s3Creds = nil
 		filters = nil
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserLogCollector})
+		ls = &operatorv1.LogStorage{
+			Status: operatorv1.LogStorageStatus{
+				ElasticsearchHash: "randomhash",
+			},
+		}
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -80,7 +86,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			BucketName: "thebucket",
 			BucketPath: "bucketpath",
 		}
-		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
@@ -144,7 +150,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Endpoint:   "tcp://1.2.3.4:80",
 			PacketSize: &ps,
 		}
-		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -212,7 +218,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		filters = &render.FluentdFilters{
 			Flow: "flow-filter",
 		}
-		component := render.Fluentd(instance, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 

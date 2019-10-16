@@ -24,23 +24,24 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
+var mismatchedError = fmt.Errorf("Installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
+
 var _ = Describe("Testing core-controller installation", func() {
 	table.DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
 			configuredInstallation.Spec.KubernetesProvider = configuredProvider
 
-			renderingProvider, _, err := GenerateRenderConfig(detectedProvider, configuredInstallation)
-
+			err := mergeProvider(configuredInstallation, detectedProvider)
 			if expectedErr == nil {
 				Expect(err).To(BeNil())
-				Expect(renderingProvider).To(Equal(detectedProvider))
+				Expect(configuredInstallation.Spec.KubernetesProvider).To(Equal(detectedProvider))
 			} else {
 				Expect(err).To(Equal(expectedErr))
 			}
 		},
 		table.Entry("Same detected/configured provider", operator.ProviderOpenShift, operator.ProviderOpenShift, nil),
-		table.Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderDockerEE, fmt.Errorf("Can't specify provider '%s' with %s", operator.ProviderDockerEE, operator.ProviderOpenShift)),
+		table.Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderDockerEE, mismatchedError),
 		table.Entry("Same detected/configured managed provider", operator.ProviderEKS, operator.ProviderEKS, nil),
 	)
 })

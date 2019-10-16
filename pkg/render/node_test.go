@@ -231,7 +231,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:v2.5.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.5.0"))
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		optional := true
@@ -436,7 +436,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/tigera/cnx-node:v2.5.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.5.0"))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
 

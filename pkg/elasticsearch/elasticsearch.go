@@ -42,14 +42,21 @@ func (u User) SecretName() string {
 
 // Role represents an Elasticsearch role that may be attached to a User
 type Role struct {
-	Name    string      `json:"-"`
-	Cluster []string    `json:"cluster"`
-	Indices []RoleIndex `json:"indices"`
+	Name         string        `json:"-"`
+	Cluster      []string      `json:"cluster"`
+	Indices      []RoleIndex   `json:"indices"`
+	Applications []Application `json:"applications,omitempty"`
 }
 
 type RoleIndex struct {
 	Names      []string `json:"names"`
 	Privileges []string `json:"privileges"`
+}
+
+type Application struct {
+	Application string   `json:"application"`
+	Privileges  []string `json:"privileges"`
+	Resources   []string `json:"resources"`
 }
 
 func NewClient(url, username, password string, roots *x509.CertPool) (*Client, error) {

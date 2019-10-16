@@ -3,7 +3,10 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
+	"github.com/go-logr/logr"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -68,11 +71,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &eckv1alpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
+	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &operator.LogStorage{},
 	}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &operator.LogStorage{},
+	}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 
 	esUsers := esusers.GetUsers()
@@ -80,7 +90,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, user := range esUsers {
 		secretsToWatch = append(secretsToWatch, user.SecretName())
 	}
-	secretsToWatch = append(secretsToWatch, render.TigeraElasticsearchCertSecret, render.ECKWebhookSecretName)
+	secretsToWatch = append(secretsToWatch, render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret, render.ECKWebhookSecretName)
 
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range secretsToWatch {
@@ -147,10 +157,10 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.setDegraded(ctx, reqLogger, ls, "Installation not found", err)
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Error querying installation", err)
 		return reconcile.Result{}, err
 	}
 
@@ -161,14 +171,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Error retrieving pull secrets", err)
 		return reconcile.Result{}, err
 	}
 
 	if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
-		reqLogger.Error(err, fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass))
-		r.status.SetDegraded(fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass), err.Error())
+		r.setDegraded(ctx, reqLogger, ls, fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass), err)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -177,21 +185,29 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		if errors.IsNotFound(err) {
 			esCertSecret = nil
 		} else {
-			reqLogger.Error(err, "Failed to read Elasticsearch cert secret")
-			r.status.SetDegraded("Failed to read Elasticsearch cert secret", err.Error())
+			r.setDegraded(ctx, reqLogger, ls, "Failed to read Elasticsearch cert secret", err)
 			return reconcile.Result{}, err
 		}
 	}
 
-	// ECK requires that we provide it a secret to put add certificate information in for it's webhooks. If it's created
-	// we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
+	kibanaCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, kibanaCertSecret); err != nil {
+		if errors.IsNotFound(err) {
+			kibanaCertSecret = nil
+		} else {
+			r.setDegraded(ctx, reqLogger, ls, "Failed to read Kibana cert secret", err)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// The ECK operator requires that we provide it with a secret so it can add certificate information in for it's webhooks.
+	// If it's created we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
 	createWebhookSecret := false
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKWebhookSecretName, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
 		if errors.IsNotFound(err) {
 			createWebhookSecret = true
 		} else {
-			reqLogger.Error(err, "Failed to read Elasticsearch webhook secret")
-			r.status.SetDegraded("Failed to read Elasticsearch webhook secret", err.Error())
+			r.setDegraded(ctx, reqLogger, ls, "Failed to read Elasticsearch webhook secret", err)
 			return reconcile.Result{}, err
 		}
 	}
@@ -201,75 +217,114 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	component, err := render.Elasticsearch(
 		ls,
 		esCertSecret,
+		kibanaCertSecret,
 		createWebhookSecret,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		network.Spec.Registry,
 	)
 	if err != nil {
-		reqLogger.Error(err, "Error rendering LogStorage")
-		r.status.SetDegraded("Error rendering LogStorage", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Error rendering LogStorage", err)
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
-		reqLogger.Error(err, "Error creating / update resource")
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Error creating / updating resource", err)
 		return reconcile.Result{}, err
 	}
 
 	reqLogger.V(2).Info("Checking if Elasticsearch is operational")
 	if isOp, err := r.isElasticsearchOperational(ctx); err != nil {
-		reqLogger.Error(err, "Error figuring out if elasticsearch is operational")
-		r.status.SetDegraded("Error figuring out if elasticsearch is operational", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Error figuring out if elasticsearch is operational", err)
 		return reconcile.Result{}, err
 	} else if !isOp {
-		reqLogger.Info("Waiting for Elasticsearch to be operational")
-		r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
-
+		r.setDegraded(ctx, reqLogger, ls, "Waiting for Elasticsearch cluster to be operational", nil)
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	reqLogger.V(2).Info("Elasticsearch is operational, creating elasticsearch users and secrets for components that need Elasticsearch access")
+	reqLogger.V(2).Info("Checking if Kibana is operational")
+	if isOp, err := r.isKibanaReady(ctx); err != nil {
+		r.setDegraded(ctx, reqLogger, ls, "Failed to figure out if Kibana is operational", err)
+		return reconcile.Result{}, err
+	} else if !isOp {
+		r.setDegraded(ctx, reqLogger, ls, "Waiting for Kibana to be operational", nil)
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 
+	reqLogger.V(2).Info("Elasticsearch and Kibana are operational")
 	esPublicCertSecret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}, esPublicCertSecret); err != nil {
-		reqLogger.Error(err, "Failed to read Elasticsearch public cert secret")
-		r.status.SetDegraded("Failed to read Elasticsearch public cert secret", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Failed to read Elasticsearch public cert secret", err)
+		return reconcile.Result{}, err
+	}
+
+	kibanaPublicCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}, kibanaPublicCertSecret); err != nil {
+		r.setDegraded(ctx, reqLogger, ls, "Failed to read Kibana public cert secret", err)
 		return reconcile.Result{}, err
 	}
 
 	esUsers, err := elasticsearchUsers(ctx, esPublicCertSecret, r.client)
 	if err != nil {
-		reqLogger.Error(err, "Error creating Elasticsearch credentials")
-		r.status.SetDegraded("Error creating Elasticsearch credentials", err.Error())
+		r.setDegraded(ctx, reqLogger, ls, "Error creating Elasticsearch credentials", err)
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esUsers, esPublicCertSecret), r.status); err != nil {
-		reqLogger.Error(err, "Error creating / update resource")
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esUsers, esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
+		r.setDegraded(ctx, reqLogger, ls, "Error creating / update resource", err)
 		return reconcile.Result{}, err
 	}
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 	reqLogger.V(2).Info("Elasticsearch users and secrets created for components needing Elasticsearch access")
-	ls.Status.State = operatorv1.LogStorageStatusReady
-	if err := r.client.Status().Update(ctx, ls); err != nil {
-		reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady))
-		r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady), err.Error())
+	if err := r.updateStatus(ctx, reqLogger, ls, operatorv1.LogStorageStatusReady); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
 }
 
+func (r *ReconcileLogStorage) setDegraded(ctx context.Context, reqLogger logr.Logger, ls *operatorv1.LogStorage, message string, err error) {
+	if err := r.updateStatus(ctx, reqLogger, ls, operatorv1.LogStorageStatusDegraded); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Failed to update LogStorage status to %s", operatorv1.LogStorageStatusDegraded))
+	}
+	if err == nil {
+		reqLogger.Info(message)
+		r.status.SetDegraded(message, "")
+	} else {
+		reqLogger.Error(err, message)
+		r.status.SetDegraded(message, err.Error())
+	}
+}
+
+func (r *ReconcileLogStorage) updateStatus(ctx context.Context, reqLogger logr.Logger, ls *operatorv1.LogStorage, state string) error {
+	ls.Status.State = state
+	if err := r.client.Status().Update(ctx, ls); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", state))
+		r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", state), err.Error())
+		return err
+	}
+
+	return nil
+}
+
 func (r *ReconcileLogStorage) isElasticsearchOperational(ctx context.Context) (bool, error) {
-	es := &eckv1alpha1.Elasticsearch{}
+	es := &esalpha1.Elasticsearch{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, es); err != nil {
 		return false, err
-	} else if es.Status.Phase == "Operational" || es.Status.Phase == eckv1alpha1.ElasticsearchReadyPhase {
+	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, error) {
+	es := &kibanaalpha1.Kibana{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, es); err != nil {
+		return false, err
+	} else if es.Status.AssociationStatus == cmneckalpha1.AssociationEstablished {
 		return true, nil
 	}
 

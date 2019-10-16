@@ -25,24 +25,33 @@ import (
 var _ = Describe("Defaulting logic tests", func() {
 	It("should properly fill defaults on an empty instance", func() {
 		instance := &operator.Installation{}
-		fillDefaults(instance, operator.ProviderNone)
+		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		fillDefaults(instance, operator.ProviderNone)
+		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+	})
+
+	It("should error if CalicoNetwork is provided on EKS", func() {
+		instance := &operator.Installation{}
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		instance.Spec.KubernetesProvider = operator.ProviderEKS
+		Expect(fillDefaults(instance)).To(HaveOccurred())
 	})
 
 	It("should not override custom configuration", func() {
+		var mtu int32 = 1500
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -55,13 +64,14 @@ var _ = Describe("Defaulting logic tests", func() {
 						Name: "pullSecret2",
 					},
 				},
-				IPPools: []operator.IPPool{
-					{CIDR: "1.2.3.0/24"},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{{CIDR: "1.2.3.0/24"}},
+					MTU:     &mtu,
 				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
-		fillDefaults(instanceCopy, operator.ProviderNone)
+		fillDefaults(instanceCopy)
 		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
 	})
 
@@ -71,7 +81,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				Registry: "test-reg",
 			},
 		}
-		fillDefaults(instance, operator.ProviderNone)
+		fillDefaults(instance)
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
 	})
 })

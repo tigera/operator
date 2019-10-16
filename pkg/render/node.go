@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 
@@ -249,6 +250,12 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		return nil
 	}
 
+	// Determine MTU to use for veth interfaces.
+	var mtu int32 = 1410
+	if c.cr.Spec.CalicoNetwork.MTU != nil {
+		mtu = *c.cr.Spec.CalicoNetwork.MTU
+	}
+
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -256,7 +263,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1440,
+      "mtu": %d,
       "nodename_file_optional": %v,
       "ipam": {
           "type": "calico-ipam"
@@ -274,7 +281,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"portMappings": true}
     }
   ]
-}`, c.netConfig.NodenameFileOptional)
+}`, mtu, c.netConfig.NodenameFileOptional)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -547,7 +554,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"
 	case operator.ProviderEKS:
-		clusterType = clusterType + ",eks"
+		clusterType = clusterType + ",ecs"
 	case operator.ProviderGKE:
 		clusterType = clusterType + ",gke"
 	case operator.ProviderAKS:
@@ -607,15 +614,24 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}},
 	}
 
-	// set the networking backend
+	// Set networking-specific configuration.
 	if c.netConfig.CNI == CNINone {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 	} else {
+		// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults.
+		ipipMtu := "1440"
+		vxlanMtu := "1410"
+		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MTU != nil {
+			ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
+			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
+		}
+
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.IPPools[0].CIDR})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.CalicoNetwork.IPPools[0].CIDR})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: "1440"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
@@ -641,6 +657,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
 	case operator.ProviderEKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
 	case operator.ProviderGKE:
 		// The GKE CNI plugin uses its own interface prefix.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})

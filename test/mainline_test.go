@@ -155,7 +155,7 @@ var _ = Describe("Mainline component function tests", func() {
 
 		By("Verifying the tigera status CRD is updated")
 		Eventually(func() error {
-			ts, err := getTigeraStatus(c, "network")
+			ts, err := getTigeraStatus(c, "calico")
 			if err != nil {
 				return err
 			}

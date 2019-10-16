@@ -61,13 +61,13 @@ func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *ReconcileInstallation {
 	r := &ReconcileInstallation{
-		config:       mgr.GetConfig(),
-		client:       mgr.GetClient(),
-		scheme:       mgr.GetScheme(),
-		watches:      make(map[runtime.Object]struct{}),
-		provider:     provider,
-		status:       status.New(mgr.GetClient(), "network"),
-		requiresTSEE: tsee,
+		config:               mgr.GetConfig(),
+		client:               mgr.GetClient(),
+		scheme:               mgr.GetScheme(),
+		watches:              make(map[runtime.Object]struct{}),
+		autoDetectedProvider: provider,
+		status:               status.New(mgr.GetClient(), "calico"),
+		requiresTSEE:         tsee,
 	}
 	r.status.Run()
 	return r
@@ -89,7 +89,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 	}
 
-	if r.provider == operator.ProviderOpenShift {
+	if r.autoDetectedProvider == operator.ProviderOpenShift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
@@ -156,14 +156,14 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config       *rest.Config
-	client       client.Client
-	scheme       *runtime.Scheme
-	controller   controller.Controller
-	watches      map[runtime.Object]struct{}
-	provider     operator.Provider
-	status       *status.StatusManager
-	requiresTSEE bool
+	config               *rest.Config
+	client               client.Client
+	scheme               *runtime.Scheme
+	controller           controller.Controller
+	watches              map[runtime.Object]struct{}
+	autoDetectedProvider operator.Provider
+	status               *status.StatusManager
+	requiresTSEE         bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
@@ -175,9 +175,77 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 		return nil, err
 	}
 
-	// Populate the instance with defaults for any fields not provided by the user.
-	fillDefaults(instance, provider)
+	// Determine the provider in use by combining any auto-detected value with any value
+	// specified in the Installation CR. mergeProvider updates the CR with the correct value.
+	err = mergeProvider(instance, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = fillDefaults(instance); err != nil {
+		return nil, err
+	}
 	return instance, nil
+}
+
+// fillDefaults populates the default values onto an Installation object.
+func fillDefaults(instance *operator.Installation) error {
+	// Populate the instance with defaults for any fields not provided by the user.
+	if len(instance.Spec.Registry) != 0 && !strings.HasSuffix(instance.Spec.Registry, "/") {
+		// Make sure registry always ends with a slash.
+		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
+	}
+
+	if len(instance.Spec.Variant) == 0 {
+		// Default to installing Calico.
+		instance.Spec.Variant = operator.Calico
+	}
+
+	// Based on the Kubernetes provider, we may or may not need to default to using Calico networking.
+	// For managed clouds, we use the cloud provided networking. For other platforms, use Calico networking.
+	switch instance.Spec.KubernetesProvider {
+	case operator.ProviderAKS, operator.ProviderEKS, operator.ProviderGKE:
+		if instance.Spec.CalicoNetwork != nil {
+			// For these platforms, it's an error to have CalicoNetwork set.
+			msg := "Installation spec.calicoNetwork must not be set for provider %s"
+			return fmt.Errorf(msg, instance.Spec.KubernetesProvider)
+		}
+	default:
+		if instance.Spec.CalicoNetwork == nil {
+			// For all other platforms, default to using Calico networking.
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		}
+	}
+
+	// If Calico networking is in use, then default some fields.
+	if instance.Spec.CalicoNetwork != nil {
+		// Default IP pools.
+		if len(instance.Spec.CalicoNetwork.IPPools) == 0 {
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{CIDR: "192.168.0.0/16"},
+			}
+		}
+	}
+	return nil
+}
+
+// mergeProvider determines the correct provider based on the auto-detected value, and the user-provided one,
+// and updates the Installation CR accordingly. It returns an error if incompatible values are provided.
+func mergeProvider(cr *operator.Installation, provider operator.Provider) error {
+	// If we detected one provider but user set provider to something else, throw an error
+	if provider != operator.ProviderNone && cr.Spec.KubernetesProvider != operator.ProviderNone && cr.Spec.KubernetesProvider != provider {
+		msg := "Installation spec.kubernetesProvider '%s' does not match auto-detected value '%s'"
+		return fmt.Errorf(msg, cr.Spec.KubernetesProvider, provider)
+	}
+
+	// If we've reached this point, it means only one source of provider is being used - auto-detection or
+	// user-provided, but not both. Or, it means that both have been specified but are the same.
+	// If it's the CR provided one, then just use that. Otherwise, use the auto-detected one.
+	if cr.Spec.KubernetesProvider == operator.ProviderNone {
+		cr.Spec.KubernetesProvider = provider
+	}
+	log.WithValues("provider", cr.Spec.KubernetesProvider).Info("Determined provider")
+	return nil
 }
 
 // Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
@@ -190,7 +258,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	ctx := context.Background()
 
 	// Query for the installation object.
-	instance, err := GetInstallation(ctx, r.client, r.provider)
+	instance, err := GetInstallation(ctx, r.client, r.autoDetectedProvider)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -205,6 +273,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
+
+	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	if err = r.client.Update(ctx, instance); err != nil {
+		r.status.SetDegraded("Failed to write defaults", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
 	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
@@ -227,15 +302,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// convert specified and detected settings into render configuration.
-	provider, netConf, err := GenerateRenderConfig(r.provider, instance)
-	if err != nil {
-		r.status.SetDegraded("Invalid settings", err.Error())
-		return reconcile.Result{}, err
-	}
+	// Convert specified and detected settings into render configuration.
+	netConf := GenerateRenderConfig(instance)
 
 	openshiftConfig := &configv1.Network{}
-	if provider == operator.ProviderOpenShift {
+	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		reqLogger.V(1).Info("Querying for openshift network config")
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
@@ -245,10 +316,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, err
 		}
 
+		if instance.Spec.CalicoNetwork == nil {
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		}
+
 		// Use the openshift provided CIDRs.
-		instance.Spec.IPPools = []operator.IPPool{}
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
 		for _, net := range openshiftConfig.Spec.ClusterNetwork {
-			instance.Spec.IPPools = append(instance.Spec.IPPools, operator.IPPool{CIDR: net.CIDR})
+			instance.Spec.CalicoNetwork.IPPools = append(instance.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: net.CIDR})
 		}
 	}
 
@@ -282,7 +357,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		pullSecrets,
 		caConfigMap,
 		typhaSecrets,
-		provider,
+		instance.Spec.KubernetesProvider,
 		netConf,
 	)
 	if err != nil {
@@ -304,13 +379,21 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.SetDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 
 	// We have successfully reconciled the Calico installation.
-	if provider == operator.ProviderOpenShift {
+	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		// If configured to run in openshift, update the config status with the current state.
 		reqLogger.V(1).Info("Updating openshift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
-		openshiftConfig.Status.ClusterNetworkMTU = 1440
 		openshiftConfig.Status.NetworkType = "Calico"
+		if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
+			// If specified in the spec, then use the value provided by the user.
+			// This is what the rendering code will have populated into the created resources.
+			openshiftConfig.Status.ClusterNetworkMTU = int(*instance.Spec.CalicoNetwork.MTU)
+		} else if instance.Spec.CalicoNetwork != nil {
+			// If not specified, then use the value for Calico VXLAN networking. This is the smallest
+			// value, so might not perform the best but will work everywhere.
+			openshiftConfig.Status.ClusterNetworkMTU = 1410
+		}
 		if err = r.client.Update(ctx, openshiftConfig); err != nil {
 			r.status.SetDegraded("Error updating openshift network status", err.Error())
 			return reconcile.Result{}, err
@@ -338,29 +421,21 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 }
 
 // GenerateRenderConfig converts user input and detected settings into render config.
-func GenerateRenderConfig(provider operator.Provider, install *operator.Installation) (
-	operator.Provider, render.NetworkConfig, error) {
+func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
+	config := render.NetworkConfig{CNI: render.CNINone}
 
-	// if we detected one provider but user set Provider to something else, throw an error
-	if provider != operator.ProviderNone &&
-		install.Spec.KubernetesProvider != "" &&
-		install.Spec.KubernetesProvider != provider {
-		return operator.ProviderNone, render.NetworkConfig{},
-			fmt.Errorf("Can't specify provider '%s' with %s", install.Spec.KubernetesProvider, provider)
+	// If CalicoNetwork is specified, then use Calico networking.
+	if install.Spec.CalicoNetwork != nil {
+		config.CNI = render.CNICalico
 	}
 
-	switch provider {
-	case operator.ProviderOpenShift:
-		return provider, render.NetworkConfig{CNI: render.CNICalico}, nil
+	// Set other provider-specific settings.
+	switch install.Spec.KubernetesProvider {
 	case operator.ProviderDockerEE:
-		return provider, render.NetworkConfig{CNI: render.CNICalico, NodenameFileOptional: true}, nil
-	case operator.ProviderEKS, operator.ProviderGKE, operator.ProviderAKS:
-		// These platforms all currently use a platform specific CNI plugin,
-		// rather than the Calico CNI plugin.
-		return provider, render.NetworkConfig{CNI: render.CNINone}, nil
-	default:
-		return operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil
+		config.NodenameFileOptional = true
 	}
+
+	return config
 }
 
 // GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for

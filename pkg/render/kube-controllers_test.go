@@ -32,8 +32,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// desired configuration.
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				IPPools: []operator.IPPool{
-					{CIDR: "192.168.1.0/16"},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{{CIDR: "192.168.1.0/16"}},
 				},
 				Registry: "test-reg/",
 			},

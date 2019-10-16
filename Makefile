@@ -287,7 +287,8 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator_v1_installation_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_logstorage_crd.yaml && \
-		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml
+		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
+		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) kubectl create ns tigera-operator

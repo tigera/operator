@@ -39,15 +39,12 @@ type InstallationSpec struct {
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
-	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
-	// a maximum of one IP pool is supported.
-	// Default: 192.168.0.0/16.
+	// KubernetesProvider specifies which platform this cluster is running on.
 	// +optional
-	IPPools []IPPool `json:"ipPools,omitempty"`
-
-	// KubernetesProvider specifies which platform this cluster is running on. Operator will
-	// do it's best to autodetect and set this. But can be overridden here.
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
+
+	// CalicoNetwork specifies configuration options when using Calico provided pod networking.
+	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 }
 
 type Provider string
@@ -67,6 +64,19 @@ var (
 	Calico                 ProductVariant = "Calico"
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
 )
+
+type CalicoNetworkSpec struct {
+	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
+	// a maximum of one IP pool is supported.
+	// Default: 192.168.0.0/16
+	// +optional
+	IPPools []IPPool `json:"ipPools,omitempty"`
+
+	// MTU specifies the maximum transmission unit to use for pods on the Calico network.
+	// Default: 1410
+	// +optional
+	MTU *int32 `json:"mtu,omitempty"`
+}
 
 type IPPool struct {
 	CIDR string `json:"cidr"`

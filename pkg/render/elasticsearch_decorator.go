@@ -36,7 +36,7 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserna
 		// The esUser should be validated before we call ElasticsearchContainerDecorateENVVars
 		panic(err)
 	}
-	esScheme, esHost, esPort, _ := ParseEndpoint(ElasticsearchHTTPEndpoint)
+	esScheme, esHost, esPort, _ := ParseEndpoint(ElasticsearchHTTPSEndpoint)
 	secretName := esUser.SecretName()
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
@@ -58,6 +58,7 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserna
 			ValueFrom: envVarSourceFromSecret(secretName, "password", false),
 		},
 		{Name: "ELASTIC_CA", Value: ElasticsearchDefaultCertPath},
+		{Name: "ES_CA_CERT", Value: ElasticsearchDefaultCertPath},
 	}
 
 	c.Env = append(c.Env, envVars...)

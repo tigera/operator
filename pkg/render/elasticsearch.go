@@ -2,7 +2,8 @@ package render
 
 import (
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
-	eckv1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
+	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
 	apps "k8s.io/api/apps/v1"
@@ -14,36 +15,68 @@ import (
 )
 
 const (
-	ECKOperatorName           = "elastic-operator"
-	ECKOperatorNamespace      = "tigera-eck-operator"
-	ECKWebhookSecretName      = "webhook-server-secret"
-	ElasticsearchStorageClass = "tigera-elasticsearch"
-	ElasticsearchNamespace    = "tigera-elasticsearch"
-	ElasticsearchClusterHTTP  = "tigera-secure-es-http.tigera-elasticsearch.svc"
-	KibanaHTTP                = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	ElasticsearchName         = "tigera-secure"
+	ECKOperatorName      = "elastic-operator"
+	ECKOperatorNamespace = "tigera-eck-operator"
+	ECKWebhookSecretName = "webhook-server-secret"
+
+	ElasticsearchStorageClass  = "tigera-elasticsearch"
+	ElasticsearchNamespace     = "tigera-elasticsearch"
+	ElasticsearchHTTPURL       = "tigera-secure-es-http.tigera-elasticsearch.svc"
+	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	ElasticsearchName          = "tigera-secure"
+
+	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc"
+	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	KibanaName             = "tigera-secure"
+	KibanaNamespace        = "tigera-kibana"
+	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
+	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 )
 
-func Elasticsearch(logStorage *operatorv1.LogStorage, certSecret *corev1.Secret, createWebhookSecret bool, pullSecrets []*corev1.Secret, openShift bool, registry string) (Component, error) {
-	var certSecrets []runtime.Object
-	if certSecret == nil {
+func Elasticsearch(
+	logStorage *operatorv1.LogStorage,
+	esCertSecret *corev1.Secret,
+	kibanaCertSecret *corev1.Secret,
+	createWebhookSecret bool,
+	pullSecrets []*corev1.Secret,
+	openShift bool,
+	registry string) (Component, error) {
+	var esCertSecrets, kibanaCertSecrets []runtime.Object
+	if esCertSecret == nil {
 		var err error
-		certSecret, err = createOperatorTLSSecret(nil,
+		esCertSecret, err = createOperatorTLSSecret(nil,
 			TigeraElasticsearchCertSecret,
 			"tls.key",
 			"tls.crt",
-			nil, ElasticsearchClusterHTTP,
+			nil, ElasticsearchHTTPURL,
 		)
 		if err != nil {
 			return nil, err
 		}
-		certSecrets = []runtime.Object{certSecret}
+		esCertSecrets = []runtime.Object{esCertSecret}
 	}
 
-	certSecrets = append(certSecrets, copySecrets(ElasticsearchNamespace, certSecret)...)
+	if kibanaCertSecret == nil {
+		var err error
+		kibanaCertSecret, err = createOperatorTLSSecret(nil,
+			TigeraKibanaCertSecret,
+			"tls.key",
+			"tls.crt",
+			nil, KibanaHTTPURL,
+		)
+		if err != nil {
+			return nil, err
+		}
+		kibanaCertSecrets = []runtime.Object{kibanaCertSecret}
+	}
+
+	esCertSecrets = append(esCertSecrets, copySecrets(ElasticsearchNamespace, esCertSecret)...)
+	kibanaCertSecrets = append(kibanaCertSecrets, copySecrets(KibanaNamespace, kibanaCertSecret)...)
 	return &elasticsearchComponent{
 		logStorage:          logStorage,
-		certSecrets:         certSecrets,
+		esCertSecrets:       esCertSecrets,
+		kibanaCertSecrets:   kibanaCertSecrets,
 		createWebhookSecret: createWebhookSecret,
 		pullSecrets:         pullSecrets,
 		openShift:           openShift,
@@ -53,7 +86,8 @@ func Elasticsearch(logStorage *operatorv1.LogStorage, certSecret *corev1.Secret,
 
 type elasticsearchComponent struct {
 	logStorage          *operatorv1.LogStorage
-	certSecrets         []runtime.Object
+	esCertSecrets       []runtime.Object
+	kibanaCertSecrets   []runtime.Object
 	createWebhookSecret bool
 	pullSecrets         []*corev1.Secret
 	openShift           bool
@@ -66,9 +100,10 @@ func (es *elasticsearchComponent) Objects() []runtime.Object {
 	objs = append(objs, createNamespace(ElasticsearchNamespace, es.openShift))
 
 	objs = append(objs, copySecrets(ElasticsearchNamespace, es.pullSecrets...)...)
-	objs = append(objs, es.certSecrets...)
+	objs = append(objs, es.esCertSecrets...)
 
 	objs = append(objs, es.elasticsearchCluster())
+	objs = append(objs, es.kibana()...)
 
 	return objs
 }
@@ -104,10 +139,10 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsearch {
+func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
 
-	return &eckv1alpha1.Elasticsearch{
+	return &esalpha1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
@@ -116,7 +151,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsear
 				"common.k8s.elastic.co/controller-version": components.VersionECKOperator,
 			},
 		},
-		Spec: eckv1alpha1.ElasticsearchSpec{
+		Spec: esalpha1.ElasticsearchSpec{
 			Version: components.VersionECKElasticsearch,
 			Image:   constructImage(ECKElasticsearchImageName, es.registry),
 			HTTP: cmneckalpha1.HTTPConfig{
@@ -126,7 +161,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *eckv1alpha1.Elasticsear
 					},
 				},
 			},
-			Nodes: []eckv1alpha1.NodeSpec{
+			Nodes: []esalpha1.NodeSpec{
 				{
 					NodeCount: int32(nodeConfig.Count),
 					Config: &cmneckalpha1.Config{
@@ -341,6 +376,58 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 							},
 						},
 					}},
+				},
+			},
+		},
+	}
+}
+
+// Create resources needed to run a Kibana cluster (namespace, Kibana resource, secrets...)
+func (es elasticsearchComponent) kibana() []runtime.Object {
+	objs := []runtime.Object{createNamespace(KibanaNamespace, false)}
+	objs = append(objs, copySecrets(KibanaNamespace, es.pullSecrets...)...)
+	objs = append(objs, es.kibanaCertSecrets...)
+	objs = append(objs, es.kibanaCR())
+	return objs
+}
+
+func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
+	return &kibanav1alpha1.Kibana{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KibanaName,
+			Namespace: KibanaNamespace,
+			Labels: map[string]string{
+				"k8s-app": KibanaName,
+			},
+			Annotations: map[string]string{
+				"common.k8s.elastic.co/controller-version": components.VersionECKOperator,
+			},
+		},
+		Spec: kibanav1alpha1.KibanaSpec{
+			Version:   components.VersionECKKibana,
+			Image:     constructImage(ECKKibanaImageName, es.registry),
+			NodeCount: 1,
+			HTTP: cmneckalpha1.HTTPConfig{
+				TLS: cmneckalpha1.TLSOptions{
+					Certificate: cmneckalpha1.SecretRef{
+						SecretName: TigeraKibanaCertSecret,
+					},
+				},
+			},
+			ElasticsearchRef: cmneckalpha1.ObjectSelector{
+				Name:      ElasticsearchName,
+				Namespace: ElasticsearchNamespace,
+			},
+			PodTemplate: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: KibanaNamespace,
+					Labels: map[string]string{
+						"name":    KibanaName,
+						"k8s-app": KibanaName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
 				},
 			},
 		},

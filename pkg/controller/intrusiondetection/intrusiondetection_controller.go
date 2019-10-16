@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
+	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -12,6 +13,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +43,24 @@ func init() {
 					Privileges: []string{"all"},
 				},
 			},
+		}},
+	})
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserIntrusionDetectionJob,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserIntrusionDetectionJob,
+			Cluster: []string{"manage_ml", "manage_watcher", "manage"},
+			Indices: []elasticsearch.RoleIndex{
+				{
+					Names:      []string{"tigera_secure_ee_*"},
+					Privileges: []string{"read", "write"},
+				},
+			},
+			Applications: []elasticsearch.Application{{
+				Application: "kibana-.kibana",
+				Privileges:  []string{"all"},
+				Resources:   []string{"*"},
+			}},
 		}},
 	})
 }
@@ -89,7 +109,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
 	}
 
-	for _, secretName := range []string{render.ElasticsearchPublicCertSecret, render.ElasticsearchUserIntrusionDetection} {
+	if err = utils.AddLogStorageWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch LogStorage resource: %v", err)
+	}
+
+	for _, secretName := range []string{
+		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserIntrusionDetection,
+		render.ElasticsearchUserIntrusionDetectionJob, render.KibanaPublicCertSecret,
+	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 		}
@@ -170,6 +197,20 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
+
+	// If either of the Elasticsearch or Kibana resources are recreated the old public certs will still exist in the
+	// tigera-operator namespace, so don't precede past this point unless LogStorage is ready (LogStorage is ready when
+	// both the Elasticsearch and Kibana resources are created and operational)
+	if ready, err := utils.IsLogStorageReady(ctx, r.client); err != nil {
+		log.Error(err, "Failed to figure out if LogStorage is ready")
+		r.status.SetDegraded("Failed to figure out if LogStorage is ready", err.Error())
+		return reconcile.Result{}, err
+	} else if !ready {
+		log.Info("LogStorage is not ready, waiting until it is before preceding.")
+		r.status.SetDegraded("LogStorage is not ready, waiting until it is before preceding.", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	clusterName, err := utils.ClusterName(context.Background(), r.client)
 	if err != nil {
 		log.Error(err, "Failed to get the cluster name")
@@ -177,7 +218,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserIntrusionDetection},
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{
+		render.ElasticsearchUserIntrusionDetection, render.ElasticsearchUserIntrusionDetectionJob,
+	},
 		r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -189,6 +232,13 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	kibanaPublicCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+		reqLogger.Error(err, "Failed to read Kibana public cert secret")
+		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -196,6 +246,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	// Render the desired objects from the CRD and create or update them.
 	component := render.IntrusionDetection(
 		esSecrets,
+		kibanaPublicCertSecret,
 		network.Spec.Registry,
 		clusterName,
 		pullSecrets,

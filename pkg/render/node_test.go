@@ -38,9 +38,7 @@ var _ = Describe("Node rendering tests", func() {
 	BeforeEach(func() {
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				IPPools: []operator.IPPool{
-					{CIDR: "192.168.1.0/16"},
-				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{IPPools: []operator.IPPool{{CIDR: "192.168.1.0/16"}}},
 			},
 		}
 	})
@@ -92,6 +90,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -247,6 +246,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -367,6 +367,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -451,6 +452,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},

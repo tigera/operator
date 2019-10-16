@@ -15,9 +15,7 @@
 package render
 
 import (
-	"github.com/tigera/operator/pkg/elasticsearch"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -25,14 +23,14 @@ import (
 // after Elasticsearch and Kibana are running. At this time these secrets contain elasticsearch users credentials and
 // tls certificate information.
 type elasticsearchSecrets struct {
-	esUsers                []elasticsearch.User
+	updatedESUserSecrets   []*corev1.Secret
 	esPublicCertSecret     *corev1.Secret
 	kibanaPublicCertSecret *corev1.Secret
 }
 
-func ElasticsearchSecrets(esUsers []elasticsearch.User, esPublicCertSecret *corev1.Secret, kibanaPublicCertSecret *corev1.Secret) Component {
+func ElasticsearchSecrets(updatedESUserSecrets []*corev1.Secret, esPublicCertSecret *corev1.Secret, kibanaPublicCertSecret *corev1.Secret) Component {
 	return &elasticsearchSecrets{
-		esUsers:                esUsers,
+		updatedESUserSecrets:   updatedESUserSecrets,
 		esPublicCertSecret:     esPublicCertSecret,
 		kibanaPublicCertSecret: kibanaPublicCertSecret,
 	}
@@ -40,22 +38,17 @@ func ElasticsearchSecrets(esUsers []elasticsearch.User, esPublicCertSecret *core
 
 func (es elasticsearchSecrets) Objects() []runtime.Object {
 	var objs []runtime.Object
+	objs = append(objs, convertSecretsToRuntime(es.updatedESUserSecrets)...)
+	objs = append(objs, copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)
+	return objs
+}
 
-	for _, user := range es.esUsers {
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      user.SecretName(),
-				Namespace: OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"username": []byte(user.Username),
-				"password": []byte(user.Password),
-			},
-		}
+func convertSecretsToRuntime(secrets []*corev1.Secret) []runtime.Object {
+	var objs []runtime.Object
+	for _, secret := range secrets {
 		objs = append(objs, secret)
 	}
 
-	objs = append(objs, copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)
 	return objs
 }
 

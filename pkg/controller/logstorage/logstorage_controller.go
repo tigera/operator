@@ -7,7 +7,6 @@ import (
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	"github.com/go-logr/logr"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -73,14 +72,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &operator.LogStorage{},
+		OwnerType:    &operatorv1.LogStorage{},
 	}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &operator.LogStorage{},
+		OwnerType:    &operatorv1.LogStorage{},
 	}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
@@ -264,13 +263,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	esUsers, err := elasticsearchUsers(ctx, esPublicCertSecret, r.client)
+	updatedESUserSecrets, err := updatedElasticsearchUserSecrets(ctx, esPublicCertSecret, r.client)
 	if err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error creating Elasticsearch credentials", err)
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esUsers, esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
+	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(updatedESUserSecrets, esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error creating / update resource", err)
 		return reconcile.Result{}, err
 	}

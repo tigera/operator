@@ -354,11 +354,13 @@ func GenerateRenderConfig(provider operator.Provider, install *operator.Installa
 		return provider, render.NetworkConfig{CNI: render.CNICalico}, nil
 	case operator.ProviderDockerEE:
 		return provider, render.NetworkConfig{CNI: render.CNICalico, NodenameFileOptional: true}, nil
-	case operator.ProviderEKS, operator.ProviderGKE, operator.ProviderAKS:
-		// These platforms all currently use a platform specific CNI plugin,
-		// rather than the Calico CNI plugin.
-		return provider, render.NetworkConfig{CNI: render.CNINone}, nil
 	default:
+		switch install.Spec.KubernetesProvider {
+		case operator.ProviderEKS, operator.ProviderGKE, operator.ProviderAKS:
+			// These platforms all currently use a platform specific CNI plugin,
+			// rather than the Calico CNI plugin.
+			return install.Spec.KubernetesProvider, render.NetworkConfig{CNI: render.CNINone}, nil
+		}
 		return operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil
 	}
 }

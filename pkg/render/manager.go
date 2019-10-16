@@ -82,6 +82,8 @@ func (c *managerComponent) Objects() []runtime.Object {
 		c.managerServiceAccount(),
 		c.managerClusterRole(),
 		c.managerClusterRoleBinding(),
+		c.managerPolicyImpactPreviewClusterRole(),
+		c.managerPolicyImpactPreviewClusterRoleBinding(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
@@ -385,6 +387,66 @@ func (c *managerComponent) managerClusterRoleBinding() *rbacv1.ClusterRoleBindin
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     "cnx-manager-role",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "cnx-manager",
+				Namespace: ManagerNamespace,
+			},
+		},
+	}
+}
+
+// managerClusterRole returns a clusterrole that allows authn/authz review requests.
+func (c *managerComponent) managerPolicyImpactPreviewClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cnx-manager-pip",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"networksets",
+					"globalnetworksets",
+					"globalnetworkpolicies",
+					"tier.globalnetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
+				},
+				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts", "namespaces"},
+				Verbs:     []string{"list"},
+			},
+		},
+	}
+}
+
+func (c *managerComponent) managerPolicyImpactPreviewClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager-pip"},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "cnx-manager-pip",
 		},
 		Subjects: []rbacv1.Subject{
 			{

@@ -44,7 +44,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		component, err := render.Manager(instance, nil, "clusterTestName", nil, nil, notOpenshift, registry)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources := component.Objects()
-		Expect(len(resources)).To(Equal(10))
+		Expect(len(resources)).To(Equal(12))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -58,6 +58,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "cnx-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "cnx-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "cnx-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "cnx-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},

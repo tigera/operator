@@ -17,11 +17,12 @@ package render
 import (
 	"fmt"
 
-	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
+
+	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,12 +34,24 @@ const (
 )
 
 const (
-	ElasticsearchUserComplianceBenchmarker = "tigera-ee-compliance-benchmarker"
-	ElasticsearchUserComplianceController  = "tigera-ee-compliance-controller"
-	ElasticsearchUserComplianceReporter    = "tigera-ee-compliance-reporter"
-	ElasticsearchUserComplianceSnapshotter = "tigera-ee-compliance-snapshotter"
-	ElasticsearchUserComplianceServer      = "tigera-ee-compliance-server"
-	ElasticsearchUserCurator               = "tigera-ee-curator"
+	ElasticsearchUserComplianceBenchmarker     = "tigera-ee-compliance-benchmarker"
+	ElasticsearchUserComplianceController      = "tigera-ee-compliance-controller"
+	ElasticsearchUserComplianceReporter        = "tigera-ee-compliance-reporter"
+	ElasticsearchUserComplianceSnapshotter     = "tigera-ee-compliance-snapshotter"
+	ElasticsearchUserComplianceServer          = "tigera-ee-compliance-server"
+	ElasticsearchUserCurator                   = "tigera-ee-curator"
+	ElasticsearchUserComplianceEksLogForwarder = "tigera-ee-compliance-eks-log-forwarder"
+)
+
+const (
+	EksLogForwarderConfig           = "eks-log-forwarder-config"
+	EksLogForwarderLogGroup         = "eks.cloudwatch.log-group"
+	EksLogForwarderLogStreamPrefix  = "eks.cloudwatch.log-stream-prefix"
+	EksLogForwarderLogFetchInterval = "eks.cloudwatch.log-fetch-interval"
+	EksLogForwarderSecretConfig     = "eks-log-forwarder-secret-config"
+	EksLogForwarderAwsRegion        = "eks.cloudwatch.aws-region"
+	EksLogForwarderAwsId            = "eks.cloudwatch.aws-id"
+	EksLogForwarderAwsKey           = "eks.cloudwatch.aws-key"
 )
 
 func Compliance(
@@ -47,6 +60,7 @@ func Compliance(
 	clusterName string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
+	eksConfig *EksConfig,
 ) Component {
 	return &complianceComponent{
 		esSecrets:   esSecrets,
@@ -54,7 +68,17 @@ func Compliance(
 		clusterName: clusterName,
 		pullSecrets: pullSecrets,
 		openshift:   openshift,
+		eksConfig:   eksConfig,
 	}
+}
+
+type EksConfig struct {
+	AwsRegion        []byte
+	AwsId            []byte
+	AwsKey           []byte
+	LogGroup         string
+	LogStreamPrefix  string
+	LogFetchInterval string
 }
 
 type complianceComponent struct {
@@ -62,6 +86,7 @@ type complianceComponent struct {
 	registry    string
 	clusterName string
 	pullSecrets []*corev1.Secret
+	eksConfig   *EksConfig
 	openshift   bool
 }
 
@@ -109,6 +134,14 @@ func (c *complianceComponent) Objects() []runtime.Object {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	}
 
+	if c.eksConfig != nil {
+		complianceObjs = append(complianceObjs,
+			c.complianceEksLogForwarderServiceAccount(),
+			c.complianceEksLogForwarderConfigMap(),
+			c.complianceEksLogForwarderSecret(),
+			c.complianceEksLogForwarderDeployment())
+	}
+
 	complianceObjs = append(complianceObjs, copySecrets(ComplianceNamespace, c.esSecrets...)...)
 
 	return complianceObjs
@@ -120,6 +153,7 @@ func (c *complianceComponent) Ready() bool {
 
 var complianceBoolTrue = true
 var complianceReplicas int32 = 1
+var complianceEksLogForwarderReplicas int32 = 1
 
 // complianceLivenssProbe is the liveness probe to use for compliance components.
 // They all use the same liveness configuration, so we just define it once here.
@@ -132,8 +166,8 @@ var complianceLivenessProbe = &corev1.Probe{
 	},
 }
 
-func (c *complianceComponent) complianceControllerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: ComplianceNamespace},
 	}
@@ -265,10 +299,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-controller",
-							Image:         constructImage(ComplianceControllerImage, c.registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "compliance-controller",
+							Image:           constructImage(ComplianceControllerImage, c.registry),
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceController),
 					},
@@ -278,8 +312,8 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	}
 }
 
-func (c *complianceComponent) complianceReporterServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: ComplianceNamespace},
 	}
@@ -363,8 +397,8 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	}
 }
 
-func (c *complianceComponent) complianceServerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: ComplianceNamespace},
 	}
@@ -413,8 +447,8 @@ func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
-func (c *complianceComponent) complianceServerService() *v1.Service {
-	return &v1.Service{
+func (c *complianceComponent) complianceServerService() *corev1.Service {
+	return &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: ComplianceNamespace},
 		Spec: corev1.ServiceSpec{
@@ -472,9 +506,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:  "compliance-server",
-							Image: constructImage(ComplianceServerImage, c.registry),
-							Env:   envVars,
+							Name:            "compliance-server",
+							Image:           constructImage(ComplianceServerImage, c.registry),
+							Env:             envVars,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceServer),
 					},
@@ -484,8 +518,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	}
 }
 
-func (c *complianceComponent) complianceSnapshotterServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: ComplianceNamespace},
 	}
@@ -574,10 +608,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-snapshotter",
-							Image:         constructImage(ComplianceSnapshotterImage, c.registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "compliance-snapshotter",
+							Image:           constructImage(ComplianceSnapshotterImage, c.registry),
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceSnapshotter),
 					},
@@ -587,8 +621,8 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	}
 }
 
-func (c *complianceComponent) complianceBenchmarkerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: ComplianceNamespace},
 	}
@@ -985,6 +1019,173 @@ func (c *complianceComponent) complianceGlobalReportCISBenchmark() *v3.GlobalRep
 			UISummaryTemplate: v3.ReportTemplate{
 				Name:     "ui-summary.json",
 				Template: `{{ $n := len .CISBenchmark }}\n{\n\t"heading": "Kubernetes CIS Benchmark",\n\t"type":"row",\n\t"widgets": [{\n\t\t"heading": "Node Failure Summary",\n\t\t"type":"cis-benchmark-nodes",\n\t\t"summary": {\n\t\t\t"label": "Total",\n\t\t\t"total":{{ $n }}\n\t\t},\n\t\t"data": [{\n\t\t\t"label": "HIGH",\n\t\t\t"value":{{ .CISBenchmarkSummary.HighCount }},\n\t\t\t"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}% or more tests passing"\n\t\t}, {\n\t\t\t"label": "MED",\n\t\t\t"value": {{ .CISBenchmarkSummary.MedCount }},\n\t\t\t"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing"\n\t\t}, {\n\t\t\t"label": "LOW",\n\t\t\t"value": {{ .CISBenchmarkSummary.LowCount }},\n\t\t\t"desc": "Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing"\n\t\t}]\n\t}\n{{ if .CISBenchmark }}\n\t, {\n\t\t"heading": "Top Failed Tests",\n\t\t"type": "cis-benchmark-tests",\n\t\t"topFailedTests": {\n\t\t\t"tests": [\n{{ $tests := cisTopFailedTests . }}\n{{ $nTests := len $tests }}\n{{ range $i, $test := $tests }}\n\t\t\t{\n\t\t\t\t"index": "{{ $test.TestNumber }}",\n\t\t\t\t"description": "{{ $test.TestDesc }}",\n\t\t\t\t"failedCount": "{{ $test.Count }}"\n\t\t\t} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}\n{{ end }}\n\t\t\t]} \n\t}\n{{ end }}\n\t]\n}\n`,
+			},
+		},
+	}
+}
+
+func (c *complianceComponent) complianceEksLogForwarderServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: ComplianceNamespace},
+	}
+}
+
+func (c *complianceComponent) complianceEksLogForwarderConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EksLogForwarderConfig,
+			Namespace: ComplianceNamespace,
+		},
+		Data: map[string]string{
+			EksLogForwarderLogGroup:         c.eksConfig.LogGroup,
+			EksLogForwarderLogStreamPrefix:  c.eksConfig.LogStreamPrefix,
+			EksLogForwarderLogFetchInterval: c.eksConfig.LogFetchInterval,
+		},
+	}
+}
+
+func (c *complianceComponent) complianceEksLogForwarderSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EksLogForwarderSecretConfig,
+			Namespace: ComplianceNamespace,
+		},
+		Data: map[string][]byte{
+			EksLogForwarderAwsRegion: c.eksConfig.AwsRegion,
+			EksLogForwarderAwsId:     c.eksConfig.AwsId,
+			EksLogForwarderAwsKey:    c.eksConfig.AwsKey,
+		},
+	}
+}
+
+func (c *complianceComponent) complianceEksLogForwarderDeployment() *appsv1.Deployment {
+	esUser, err := esusers.GetUser(ElasticsearchUserComplianceEksLogForwarder)
+	if err != nil {
+		// The esUser should exist at this point and if it doesn't it's a programming error
+		panic(err)
+	}
+	secretName := esUser.SecretName()
+
+	envVars := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "FLUENT_UID", Value: "0"},
+
+		{Name: "MANAGED_K8S", Value: "true"},
+		{Name: "K8S_PLATFORM", Value: "eks"},
+
+		{Name: "EKS_CLOUDWATCH_LOG_GROUP", ValueFrom: envVarSourceFromConfigmap(EksLogForwarderConfig, EksLogForwarderLogGroup)},
+		{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", ValueFrom: envVarSourceFromConfigmap(EksLogForwarderConfig, EksLogForwarderLogStreamPrefix)},
+		{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", ValueFrom: envVarSourceFromConfigmap(EksLogForwarderConfig, EksLogForwarderLogFetchInterval)},
+		{Name: "AWS_REGION", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecretConfig, EksLogForwarderAwsRegion, false)},
+		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecretConfig, EksLogForwarderAwsId, false)},
+		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecretConfig, EksLogForwarderAwsKey, false)},
+		{Name: "FLUENTD_ES_SECURE", Value: "true"},
+		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+		{Name: "ELASTIC_SCHEME", Value: "https"},
+		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
+		{Name: "ELASTIC_PORT", Value: "9200"},
+		{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
+		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
+		{Name: "ELASTIC_USER", ValueFrom: envVarSourceFromSecret(secretName, "username", false)},
+		{Name: "ELASTIC_PASSWORD", ValueFrom: envVarSourceFromSecret(secretName, "password", false)},
+		{Name: "ELASTIC_CA", Value: "/etc/fluentd/elastic/ca.pem"},
+	}
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "eks-log-forwarder",
+			Namespace: ComplianceNamespace,
+			Labels: map[string]string{
+				"k8s-app": "eks-log-forwarder",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &complianceEksLogForwarderReplicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": "eks-log-forwarder",
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "eks-log-forwarder",
+					Namespace: ComplianceNamespace,
+					Labels: map[string]string{
+						"k8s-app": "eks-log-forwarder",
+					},
+				},
+				Spec: corev1.PodSpec{
+					NodeSelector: map[string]string{
+						"beta.kubernetes.io/os": "linux",
+					},
+					ServiceAccountName: "eks-log-forwarder",
+					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					InitContainers: []corev1.Container{
+						{
+							Name:         "eks-log-forwarder-startup",
+							Image:        constructImage(ComplianceEksLogForwarderImage, c.registry),
+							Command:      []string{"/bin/eks-log-forwarder-startup"},
+							Env:          envVars,
+							VolumeMounts: c.eksLogForwarderVolumeMounts(),
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:         "eks-log-forwarder",
+							Image:        constructImage(ComplianceEksLogForwarderImage, c.registry),
+							Env:          envVars,
+							VolumeMounts: c.eksLogForwarderVolumeMounts(),
+						},
+					},
+					Volumes: c.eksLogForwarderVolumes(),
+				},
+			},
+		},
+	}
+}
+
+func (c *complianceComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      "plugin-statefile-dir",
+			MountPath: "/fluentd/cloudwatch-logs/",
+		},
+		{
+			Name:      "elastic-ca-cert-volume",
+			MountPath: "/etc/fluentd/elastic/",
+		},
+	}
+}
+
+func (c *complianceComponent) eksLogForwarderVolumes() []corev1.Volume {
+	var mode int32 = 420
+	return []corev1.Volume{
+		{
+			Name: "elastic-ca-cert-volume",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  "tigera-secure-es-http-certs-public",
+					DefaultMode: &mode,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "tls.crt",
+							Path: "ca.pem",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "plugin-statefile-dir",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: nil,
 			},
 		},
 	}

@@ -41,11 +41,12 @@ const (
 	FluentdImageName = "fluentd:" + components.VersionFluentd
 
 	// Compliance images.
-	ComplianceControllerImage  = "compliance-controller:" + components.VersionComplianceController
-	ComplianceReporterImage    = "compliance-reporter:" + components.VersionComplianceReporter
-	ComplianceServerImage      = "compliance-server:" + components.VersionComplianceServer
-	ComplianceSnapshotterImage = "compliance-snapshotter:" + components.VersionComplianceSnapshotter
-	ComplianceBenchmarkerImage = "compliance-benchmarker:" + components.VersionComplianceBenchmarker
+	ComplianceControllerImage      = "compliance-controller:" + components.VersionComplianceController
+	ComplianceReporterImage        = "compliance-reporter:" + components.VersionComplianceReporter
+	ComplianceServerImage          = "compliance-server:" + components.VersionComplianceServer
+	ComplianceSnapshotterImage     = "compliance-snapshotter:" + components.VersionComplianceSnapshotter
+	ComplianceBenchmarkerImage     = "compliance-benchmarker:" + components.VersionComplianceBenchmarker
+	ComplianceEksLogForwarderImage = "fluentd:" + components.VersionComplianceEksLogForwarder
 
 	// Intrusion detection images.
 	IntrusionDetectionControllerImageName   = "intrusion-detection-controller:" + components.VersionIntrusionDetectionController

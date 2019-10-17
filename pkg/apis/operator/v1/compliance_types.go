@@ -11,6 +11,17 @@ const (
 // ComplianceSpec defines the desired state of Tigera compliance reporting capabilities.
 // +k8s:openapi-gen=true
 type ComplianceSpec struct {
+	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
+	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+
+	EksConfig *EksLogForwarderSpec `json:"eksConfig,omitEmpty"`
+}
+
+type EksLogForwarderSpec struct {
+	// Secret containing AWS information
+	AwsSecretName string `json:"awsSecretName"`
+	// ConfigMap containing Cloudwatch log information.
+	LogConfigMapName string `json:"logConfigMapName"`
 }
 
 // ComplianceStatus defines the observed state of Tigera compliance reporting capabilities.

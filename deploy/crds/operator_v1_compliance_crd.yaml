@@ -29,6 +29,15 @@ spec:
           type: object
         spec:
           description: Specification of the desired state for Tigera compliance reporting.
+          eksConfig:
+            description: 'EKS configuration to enable Compliance reporting in EKS'
+            type: object
+            awsSecretName:
+              description: 'Name of secret resource containing AWS credentials, region information.'
+              type: string
+            logConfigMapName: 'Name of config-map resource containing Cloudwatch log group name, stream prefix, and fetch interval.'
+              description:
+              type: string
           type: object
         status:
           description: Most recently observed state for Tigera compliance reporting.

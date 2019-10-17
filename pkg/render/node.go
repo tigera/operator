@@ -32,15 +32,21 @@ var (
 	nodeMetricsPort int32 = 9081
 )
 
+const (
+	BirdTemplatesConfigMapName = "bird-templates"
+	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
+)
+
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt}
 }
 
 type nodeComponent struct {
-	cr        *operator.Installation
-	provider  operator.Provider
-	netConfig NetworkConfig
+	cr            *operator.Installation
+	provider      operator.Provider
+	netConfig     NetworkConfig
+	birdTemplates map[string]string
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
@@ -48,7 +54,6 @@ func (c *nodeComponent) Objects() []runtime.Object {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
-		c.nodeDaemonset(),
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
@@ -58,6 +63,12 @@ func (c *nodeComponent) Objects() []runtime.Object {
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
 		objs = append(objs, cniConfig)
 	}
+
+	if btcm := c.birdTemplateConfigMap(); btcm != nil {
+		objs = append(objs, btcm)
+	}
+
+	objs = append(objs, c.nodeDaemonset())
 
 	return objs
 }
@@ -295,9 +306,32 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 	}
 }
 
+func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {
+	if len(c.birdTemplates) == 0 {
+		return nil
+	}
+	cm := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      BirdTemplatesConfigMapName,
+			Namespace: CalicoNamespace,
+		},
+		Data: map[string]string{},
+	}
+	for k, v := range c.birdTemplates {
+		cm.Data[k] = v
+	}
+	return &cm
+}
+
 // nodeDaemonset creates the node damonset.
 func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	var terminationGracePeriod int64 = 0
+
+	annotations := make(map[string]string)
+	if len(c.birdTemplates) != 0 {
+		annotations[birdTemplateHashAnnotation] = annotationHash(c.birdTemplates)
+	}
 
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -312,6 +346,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 					Labels: map[string]string{
 						"k8s-app": "calico-node",
 					},
+					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:                  map[string]string{},
@@ -429,13 +464,25 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Create and append flexvolume
-	flexVolume := v1.Volume{
+	volumes = append(volumes, v1.Volume{
 		Name: "flexvol-driver-host",
 		VolumeSource: v1.VolumeSource{
 			HostPath: &v1.HostPathVolumeSource{Path: flexVolumePluginsPath + "nodeagent~uds", Type: &dirOrCreate},
 		},
+	})
+	if c.birdTemplates != nil {
+		volumes = append(volumes,
+			v1.Volume{
+				Name: "bird-templates",
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: BirdTemplatesConfigMapName,
+						},
+					},
+				},
+			})
 	}
-	volumes = append(volumes, flexVolume)
 	return volumes
 }
 
@@ -541,6 +588,18 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
+	}
+
+	if c.birdTemplates != nil {
+		for k := range c.birdTemplates {
+			nodeVolumeMounts = append(nodeVolumeMounts,
+				v1.VolumeMount{
+					Name:      k,
+					ReadOnly:  true,
+					MountPath: fmt.Sprintf("/etc/calico/confd/templates/%s", k),
+					SubPath:   k,
+				})
+		}
 	}
 	return nodeVolumeMounts
 }

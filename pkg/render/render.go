@@ -54,6 +54,7 @@ func Calico(
 	pullSecrets []*corev1.Secret,
 	typhaCAConfigMap *corev1.ConfigMap,
 	typhaSecrets []*corev1.Secret,
+	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
 ) (Renderer, error) {
@@ -98,6 +99,7 @@ func Calico(
 		pullSecrets:     pullSecrets,
 		typhaConfigMaps: tcms,
 		typhaSecrets:    tss,
+		birdTemplates:   bt,
 		provider:        p,
 		networkConfig:   nc,
 	}, nil
@@ -161,6 +163,7 @@ type calicoRenderer struct {
 	pullSecrets     []*corev1.Secret
 	typhaConfigMaps []*corev1.ConfigMap
 	typhaSecrets    []*corev1.Secret
+	birdTemplates   map[string]string
 	provider        operator.Provider
 	networkConfig   NetworkConfig
 }
@@ -173,7 +176,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, ConfigMaps(r.typhaConfigMaps))
 	components = appendNotNil(components, Secrets(r.typhaSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider))
-	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig))
+	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates))
 	components = appendNotNil(components, KubeControllers(r.installation))
 	return components
 }

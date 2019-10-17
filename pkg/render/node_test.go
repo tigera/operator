@@ -44,7 +44,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -214,7 +214,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -302,7 +302,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when running on openshift", func() {
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico})
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -418,7 +418,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico})
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -509,6 +509,51 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
 		verifyProbes(ds, true)
+	})
+
+	It("should render volumes and node volumemounts when bird templates are provided", func() {
+		bt := map[string]string{
+			"template-1.yaml": "dataforTemplate1 that is not used here",
+		}
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt)
+		resources := component.Objects()
+		Expect(len(resources)).To(Equal(6))
+
+		// Should render the correct resources.
+		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "bird-templates", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+
+		// The DaemonSet should have the correct configuration.
+		ds := dsResource.(*apps.DaemonSet)
+		volumes := ds.Spec.Template.Spec.Volumes
+		//Expect(ds.Spec.Template.Spec.Volumes).To(Equal())
+		Expect(volumes).To(ContainElement(
+			v1.Volume{
+				Name: "bird-templates",
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: "bird-templates",
+						},
+					},
+				},
+			}))
+
+		volumeMounts := ds.Spec.Template.Spec.Containers[0].VolumeMounts
+		Expect(volumeMounts).To(ContainElement(
+			v1.VolumeMount{
+				Name:      "template-1.yaml",
+				ReadOnly:  true,
+				MountPath: "/etc/calico/confd/templates/template-1.yaml",
+				SubPath:   "template-1.yaml",
+			}))
 	})
 })
 

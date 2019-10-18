@@ -104,11 +104,28 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			continue
 		}
 		logCtx.V(1).Info("Resource already exists, update it")
-		err = c.client.Update(ctx, mergeState(obj, old))
-		if err != nil {
-			logCtx.WithValues("key", key).Info("Failed to update object.")
-			return err
+
+		// if mergeState returns nil we don't want to update the object
+		if mobj := mergeState(obj, old); mobj != nil {
+			switch obj.(type) {
+			case *batchv1.Job:
+				// Jobs can't be updated, they can't only be deleted then created
+				if err := c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
+					return err
+				}
+
+				if err := c.client.Create(ctx, obj); err != nil {
+					return err
+				}
+			default:
+				if err := c.client.Update(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Info("Failed to update object.")
+					return err
+				}
+			}
 		}
+
 		continue
 	}
 	if status != nil {
@@ -139,12 +156,16 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		ds.Spec.ClusterIP = cs.Spec.ClusterIP
 		return ds
 	case *batchv1.Job:
-		// Jobs have controller-uid values added to spec.selector and spec.template.metadata.labels.
-		// spec.selector and podtemplatespec are immutable so just copy real values over to desired state.
 		cj := current.(*batchv1.Job)
 		dj := desired.(*batchv1.Job)
-		dj.Spec.Selector = cj.Spec.Selector
-		dj.Spec.Template = cj.Spec.Template
+
+		// We're only comparing jobs based off of annotations for now so we can send a signal to recreate a job. Later
+		// we might want to have some better comparison of jobs so that a changed in the container spec would trigger
+		// a recreation of the job
+		if reflect.DeepEqual(cj.Spec.Template.Annotations, dj.Spec.Template.Annotations) {
+			return nil
+		}
+
 		return dj
 	case *apps.Deployment:
 		cd := current.(*apps.Deployment)

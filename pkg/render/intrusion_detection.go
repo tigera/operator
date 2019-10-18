@@ -15,6 +15,7 @@
 package render
 
 import (
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -33,6 +34,7 @@ const (
 )
 
 func IntrusionDetection(
+	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
 	registry string,
@@ -41,6 +43,7 @@ func IntrusionDetection(
 	openshift bool,
 ) Component {
 	return &intrusionDetectionComponent{
+		ls:               ls,
 		esSecrets:        esSecrets,
 		kibanaCertSecret: kibanaCertSecret,
 		registry:         registry,
@@ -51,6 +54,7 @@ func IntrusionDetection(
 }
 
 type intrusionDetectionComponent struct {
+	ls               *operatorv1.LogStorage
 	esSecrets        []*corev1.Secret
 	kibanaCertSecret *corev1.Secret
 	registry         string
@@ -95,6 +99,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						operatorv1.ElasticsearchHashAnnotation: c.ls.Status.ElasticsearchHash,
+					},
 					Labels: map[string]string{"job-name": "intrusion-detection-es-job-installer"},
 				},
 				Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{

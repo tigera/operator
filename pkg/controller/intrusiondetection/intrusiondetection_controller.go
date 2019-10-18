@@ -201,14 +201,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	// If either of the Elasticsearch or Kibana resources are recreated the old public certs will still exist in the
 	// tigera-operator namespace, so don't precede past this point unless LogStorage is ready (LogStorage is ready when
 	// both the Elasticsearch and Kibana resources are created and operational)
-	if ready, err := utils.IsLogStorageReady(ctx, r.client); err != nil {
-		log.Error(err, "Failed to figure out if LogStorage is ready")
-		r.status.SetDegraded("Failed to figure out if LogStorage is ready", err.Error())
+	ls, err := utils.GetReadyLogStorage(context.Background(), r.client)
+	if ls == nil {
+		if err == nil || errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for Tigera LogStorage resource to be ready", "")
+			return reconcile.Result{}, nil
+		}
+
+		log.Error(err, "Failed to retrieve Tigera LogStorage resource")
+		r.status.SetDegraded("Failed to retrieve Tigera LogStorage resource", err.Error())
 		return reconcile.Result{}, err
-	} else if !ready {
-		log.Info("LogStorage is not ready, waiting until it is before preceding.")
-		r.status.SetDegraded("LogStorage is not ready, waiting until it is before preceding.", "")
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	clusterName, err := utils.ClusterName(context.Background(), r.client)
@@ -245,6 +247,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	component := render.IntrusionDetection(
+		ls,
 		esSecrets,
 		kibanaPublicCertSecret,
 		network.Spec.Registry,

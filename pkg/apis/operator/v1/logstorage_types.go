@@ -39,6 +39,9 @@ type LogStorageSpec struct {
 	Nodes *Nodes `json:"nodes,omitempty"`
 	// Index defines the configuration for the indices in the elasticsearch cluster
 	Indices *Indices `json:"indices,omitempty"`
+	// Retention defines how long data is retained in the elasticsearch cluster before it is cleared.
+	// +optional
+	Retention *Retention `json:"retention,omitempty"`
 }
 
 type Nodes struct {
@@ -51,6 +54,35 @@ type Nodes struct {
 type Indices struct {
 	// Replicas defines how many replicas each index will have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
 	Replicas int64 `json:"replicas"`
+}
+
+type Retention struct {
+	// Flows configures the retention period for flow logs, in days.  Logs written on a day that started at least this long ago
+	// are removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 8
+	// +optional
+	FlowRetention *int32 `json:"flows"`
+	// AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
+	// removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 367
+	// +optional
+	AuditReportRetention *int32 `json:"auditReports"`
+	// Snapshots configures the retention period for snapshots, in days. Snapshots are periodic captures
+	// of resources which along with audit events are used to generate reports.
+	// Consult the Compliance Reporting documentation for more details on snapshots.
+	// Logs written on a day that started at least this long ago are
+	// removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 367
+	// +optional
+	SnapshotRetention *int32 `json:"snapshots"`
+	// ComplianceReports configures the retention period for compliance reports, in days. Reports are output
+	// from the analysis of the system state and audit events for compliance reporting.
+	// Consult the Compliance Reporting documentation for more details on reports.
+	// Logs written on a day that started at least this long ago are
+	// removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 367
+	// +optional
+	ComplianceReportRetention *int32 `json:"complianceReports"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

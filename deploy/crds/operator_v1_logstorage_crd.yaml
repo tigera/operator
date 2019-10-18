@@ -57,6 +57,50 @@ spec:
                     and requirements for the elasticsearch cluster (i.e. cpu, size)
                   type: object
               type: object
+            retention:
+              description: Retention defines how long data is retained in the elasticsearch
+                cluster before it is cleared.
+              properties:
+                auditReports:
+                  description: 'AuditReports configures the retention period for audit
+                    logs, in days.  Logs written on a day that started at least this
+                    long ago are removed.  To keep logs for at least x days, use a
+                    retention period of x+1. Default: 367'
+                  format: int32
+                  type: integer
+                complianceReports:
+                  description: 'ComplianceReports configures the retention period
+                    for compliance reports, in days. Reports are output from the analysis
+                    of the system state and audit events for compliance reporting.
+                    Consult the Compliance Reporting documentation for more details
+                    on reports. Logs written on a day that started at least this long
+                    ago are removed.  To keep logs for at least x days, use a retention
+                    period of x+1. Default: 367'
+                  format: int32
+                  type: integer
+                flows:
+                  description: 'Flows configures the retention period for flow logs,
+                    in days.  Logs written on a day that started at least this long
+                    ago are removed.  To keep logs for at least x days, use a retention
+                    period of x+1. Default: 8'
+                  format: int32
+                  type: integer
+                snapshots:
+                  description: 'Snapshots configures the retention period for snapshots,
+                    in days. Snapshots are periodic captures of resources which along
+                    with audit events are used to generate reports. Consult the Compliance
+                    Reporting documentation for more details on snapshots. Logs written
+                    on a day that started at least this long ago are removed.  To
+                    keep logs for at least x days, use a retention period of x+1.
+                    Default: 367'
+                  format: int32
+                  type: integer
+              required:
+              - flows
+              - auditReports
+              - snapshots
+              - complianceReports
+              type: object
           type: object
         status:
           properties:

@@ -38,6 +38,7 @@ const (
 	ElasticsearchUserComplianceReporter    = "tigera-ee-compliance-reporter"
 	ElasticsearchUserComplianceSnapshotter = "tigera-ee-compliance-snapshotter"
 	ElasticsearchUserComplianceServer      = "tigera-ee-compliance-server"
+	ElasticsearchUserCurator               = "tigera-ee-curator"
 )
 
 func Compliance(

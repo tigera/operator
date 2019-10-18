@@ -3,6 +3,8 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"time"
+	
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
@@ -11,6 +13,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
@@ -25,10 +28,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"time"
 )
 
 var log = logf.Log.WithName("controller_logstorage")
+
+func init() {
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserCurator,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserCurator,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_*"},
+				Privileges: []string{"all"},
+			}},
+		}},
+	})
+}
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -121,7 +137,32 @@ func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStora
 		return nil, err
 	}
 
+	fillDefaults(instance)
+
 	return instance, nil
+}
+
+func fillDefaults(opr *operatorv1.LogStorage) {
+	if opr.Spec.Retention == nil {
+		opr.Spec.Retention = &operatorv1.Retention{}
+	}
+
+	if opr.Spec.Retention.FlowRetention == nil {
+		var fr int32 = 8
+		opr.Spec.Retention.FlowRetention = &fr
+	}
+	if opr.Spec.Retention.AuditReportRetention == nil {
+		var arr int32 = 365
+		opr.Spec.Retention.AuditReportRetention = &arr
+	}
+	if opr.Spec.Retention.SnapshotRetention == nil {
+		var sr int32 = 365
+		opr.Spec.Retention.SnapshotRetention = &sr
+	}
+	if opr.Spec.Retention.ComplianceReportRetention == nil {
+		var crr int32 = 365
+		opr.Spec.Retention.ComplianceReportRetention = &crr
+	}
 }
 
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
@@ -210,6 +251,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
+	clusterName, err := utils.ClusterName(context.Background(), r.client)
+	if err != nil {
+		log.Error(err, "Failed to get the cluster name")
+		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	reqLogger.V(2).Info("Creating Elasticsearch components")
 
 	reqLogger.V(2).Info("Creating Elasticsearch components")
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
@@ -275,6 +324,25 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.setDegraded(ctx, reqLogger, ls, "Error creating / update resource", err)
 		return reconcile.Result{}, err
 	}
+
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserCurator}, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
+			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network.Spec.Registry, clusterName)
+	if err := hdler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	r.status.SetCronJobs([]types.NamespacedName{{Name: render.EsCuratorName, Namespace: render.ElasticsearchNamespace}})
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

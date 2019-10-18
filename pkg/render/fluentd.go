@@ -13,17 +13,19 @@ import (
 )
 
 const (
-	LogCollectorNamespace         = "tigera-fluentd"
-	FluentdFilterConfigMapName    = "fluentd-filters"
-	FluentdFilterFlowName         = "flow"
-	FluentdFilterDNSName          = "dns"
-	S3FluentdSecretName           = "log-collector-s3-credentials"
-	S3KeyIdName                   = "key-id"
-	S3KeySecretName               = "key-secret"
-	filterHashAnnotation          = "hash.operator.tigera.io/fluentd-filters"
-	s3CredentialHashAnnotation    = "hash.operator.tigera.io/s3-credentials"
-	fluentdDefaultFlush           = "5s"
-	ElasticsearchUserLogCollector = "tigera-fluentd"
+	LogCollectorNamespace          = "tigera-fluentd"
+	FluentdFilterConfigMapName     = "fluentd-filters"
+	FluentdFilterFlowName          = "flow"
+	FluentdFilterDNSName           = "dns"
+	S3FluentdSecretName            = "log-collector-s3-credentials"
+	S3KeyIdName                    = "key-id"
+	S3KeySecretName                = "key-secret"
+	logStorageHashAnnotation       = "hash.operator.tigera.io/log-storage"
+	elasticsearchSecretsAnnotation = "hash.operator.tigera.io/elasticsearch-secrets"
+	filterHashAnnotation           = "hash.operator.tigera.io/fluentd-filters"
+	s3CredentialHashAnnotation     = "hash.operator.tigera.io/s3-credentials"
+	fluentdDefaultFlush            = "5s"
+	ElasticsearchUserLogCollector  = "tigera-fluentd"
 )
 
 type FluentdFilters struct {
@@ -38,6 +40,7 @@ type S3Credential struct {
 
 func Fluentd(
 	lc *operatorv1.LogCollector,
+	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
 	cluster string,
 	s3C *S3Credential,
@@ -48,6 +51,7 @@ func Fluentd(
 ) Component {
 	return &fluentdComponent{
 		lc:           lc,
+		ls:           ls,
 		esSecrets:    esSecrets,
 		cluster:      cluster,
 		s3Credential: s3C,
@@ -59,6 +63,7 @@ func Fluentd(
 
 type fluentdComponent struct {
 	lc           *operatorv1.LogCollector
+	ls           *operatorv1.LogStorage
 	esSecrets    []*corev1.Secret
 	cluster      string
 	s3Credential *S3Credential
@@ -131,12 +136,16 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	// Add Hashes of ConfigMap and Secrets as annotations so if either change
 	// it will trigger a rolling update.
-	annots := make(map[string]string)
+	annots := map[string]string{
+		logStorageHashAnnotation:       c.ls.Status.ElasticsearchHash,
+		elasticsearchSecretsAnnotation: secretsAnnotationHash(c.esSecrets...),
+	}
+
 	if c.s3Credential != nil {
-		annots[s3CredentialHashAnnotation] = annotationHash(c.s3Credential)
+		annots[s3CredentialHashAnnotation] = AnnotationHash(c.s3Credential)
 	}
 	if c.filters != nil {
-		annots[filterHashAnnotation] = annotationHash(c.filters)
+		annots[filterHashAnnotation] = AnnotationHash(c.filters)
 	}
 
 	ds := appsv1.DaemonSet{

@@ -8,6 +8,9 @@ import (
 const (
 	LogStorageStatusDegraded = "Degraded"
 	LogStorageStatusReady    = "Ready"
+
+	ElasticsearchHashAnnotation = "hash.operator.tigera.io/elasticsearch"
+	KibanaHashAnnotation        = "hash.operator.tigera.io/kibana"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -17,6 +20,14 @@ const (
 type LogStorageStatus struct {
 	// State indicates the state of the deployment by the LogStorage controller
 	State string `json:"state,omitempty"`
+	// ElasticsearchHash is a hash representation of the Elasticsearch cluster, and is used so interested components
+	// can be notified that the Elasticsearch cluster has be changed in a way that requires the component to recreate
+	// it's objects
+	ElasticsearchHash string `json:"elasticsearchHash,omitempty"`
+	// KibanaHash is a hash representation of the Kibana cluster, and is used so interested components
+	// can be notified that the Kibana cluster has be changed in a way that requires the component to recreate
+	// it's objects
+	KibanaHash string `json:"kibanaHash,omitempty"`
 }
 
 // LogStorageSpec defines the desired state of LogStorage

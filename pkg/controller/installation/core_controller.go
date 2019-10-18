@@ -108,6 +108,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %v", err)
 	}
 
+	cm := render.BirdTemplatesConfigMapName
+	if err = utils.AddConfigMapWatch(c, cm, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %v", cm, err)
+	}
+
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -347,6 +352,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	birdTemplates, err := getBirdTemplates(r.client)
+	if err != nil {
+		log.Error(err, "Error retrieving confd templates")
+		r.status.SetDegraded("Error retrieving confd templates", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -357,6 +369,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		pullSecrets,
 		caConfigMap,
 		typhaSecrets,
+		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
 	)
@@ -535,4 +548,25 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	}
 
 	return cm, nil
+}
+
+func getBirdTemplates(client client.Client) (map[string]string, error) {
+	cmName := render.BirdTemplatesConfigMapName
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      cmName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+	}
+
+	bt := make(map[string]string)
+	for k, v := range cm.Data {
+		bt[k] = v
+	}
+	return bt, nil
 }

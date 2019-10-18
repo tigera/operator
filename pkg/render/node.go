@@ -681,16 +681,43 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults.
 		ipipMtu := "1440"
 		vxlanMtu := "1410"
-		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MTU != nil {
+		if c.cr.Spec.CalicoNetwork.MTU != nil {
 			ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
 
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: c.cr.Spec.CalicoNetwork.IPPools[0].CIDR})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		if len(c.cr.Spec.CalicoNetwork.IPPools) == 1 {
+			pool := c.cr.Spec.CalicoNetwork.IPPools[0]
+			// set the networking backend
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: pool.CIDR})
+			switch pool.Encapsulation {
+			case operator.EncapsulationIPIPCrossSubnet:
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
+			case operator.EncapsulationIPIP:
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+			case operator.EncapsulationVXLAN:
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
+			case operator.EncapsulationVXLANCrossSubnet:
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
+			case operator.EncapsulationNone:
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
+			default:
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+			}
+			// Default for NAT Outgoing is enabled so it is only necessary to
+			// set when it is being disabled.
+			if pool.NATOutgoing == operator.NATOutgoingDisabled {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
+			}
+			if pool.NodeSelector != "" {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: pool.NodeSelector})
+			}
+		} else if len(c.cr.Spec.CalicoNetwork.IPPools) == 0 {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+		}
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {

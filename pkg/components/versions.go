@@ -2,7 +2,7 @@ package components
 
 // This section contains images used when installing open-source Calico.
 const (
-	VersionCalicoNode            = "v3.8.1"
+	VersionCalicoNode            = "v3.10.0"
 	VersionCalicoCNI             = "v3.8.1"
 	VersionCalicoTypha           = "v3.8.1"
 	VersionCalicoKubeControllers = "v3.8.1"

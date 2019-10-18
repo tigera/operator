@@ -330,7 +330,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 
 	annotations := make(map[string]string)
 	if len(c.birdTemplates) != 0 {
-		annotations[birdTemplateHashAnnotation] = annotationHash(c.birdTemplates)
+		annotations[birdTemplateHashAnnotation] = AnnotationHash(c.birdTemplates)
 	}
 
 	ds := apps.DaemonSet{

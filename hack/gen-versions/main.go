@@ -127,7 +127,8 @@ func writeVersions(osVersions, eeVersions Components) error {
 		"	// ECK Elasticsearch images",
 		`	VersionECKOperator = "` + eeVersions.get("elasticsearch-operator") + `"`,
 		`	VersionECKElasticsearch = "` + eeVersions.get("elasticsearch") + `"`,
-		`	VersionECKKibana = "` + eeVersions.get("kibana") + `"`,
+		`	VersionECKKibana = "` + eeVersions.get("eck-kibana") + `"`,
+		`	VersionKibana = "` + eeVersions.get("kibana") + `"`,
 		")",
 	}
 

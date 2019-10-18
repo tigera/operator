@@ -12,6 +12,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -23,11 +24,12 @@ const (
 	ElasticsearchHTTPSEndpoint      = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
 
-// elasticsearchUsers creates / updates all the Elasticsearch users returned by esusers.GetUsers, along with the roles attached
-// to those users. The users return by esusers.GetUsers are registered through calling esusers.AddUser with an Elasticsearch
-// user.
-func elasticsearchUsers(ctx context.Context, rootsSecret *corev1.Secret, cli client.Client) ([]elasticsearch.User, error) {
-	var users []elasticsearch.User
+// updatedElasticsearchUserSecrets creates / updates all the Elasticsearch users returned by esusers.GetUsers with the username
+// and password found in the users corresponding secret and the roles attached to that user. If there is no secret for an
+// es user then the secret is generated and populated with the username and randomly, securely, generated password. Only
+// secrets that need to be created or updated are returned by this function.
+func updatedElasticsearchUserSecrets(ctx context.Context, rootsSecret *corev1.Secret, cli client.Client) ([]*corev1.Secret, error) {
+	var secrets []*corev1.Secret
 	esUserSecret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      ElasticsearchUserSecret,
@@ -45,6 +47,7 @@ func elasticsearchUsers(ctx context.Context, rootsSecret *corev1.Secret, cli cli
 				if err != nil {
 					return nil, err
 				}
+				secrets = append(secrets, createESUserSecret(esUser))
 			} else {
 				return nil, err
 			}
@@ -55,6 +58,7 @@ func elasticsearchUsers(ctx context.Context, rootsSecret *corev1.Secret, cli cli
 				if err != nil {
 					return nil, err
 				}
+				secrets = append(secrets, createESUserSecret(esUser))
 			} else {
 				esUser.Password = string(password)
 			}
@@ -68,10 +72,22 @@ func elasticsearchUsers(ctx context.Context, rootsSecret *corev1.Secret, cli cli
 		if err := upsertElasticsearchUser(ElasticsearchHTTPSEndpoint, esUser, roots, esUserSecret); err != nil {
 			return nil, err
 		}
-		users = append(users, esUser)
 	}
 
-	return users, nil
+	return secrets, nil
+}
+
+func createESUserSecret(user elasticsearch.User) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      user.SecretName(),
+			Namespace: render.OperatorNamespace(),
+		},
+		Data: map[string][]byte{
+			"username": []byte(user.Username),
+			"password": []byte(user.Password),
+		},
+	}
 }
 
 // upsertElasticsearchUser creates or updates an elasticsearch user as well as the roles it needs to have

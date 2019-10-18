@@ -317,7 +317,7 @@ func (m *StatusManager) syncState() bool {
 		}
 
 		if numFailed > 0 {
-			failing = append(failing, "cronjob/"+cj.Name+" failed")
+			failing = append(failing, "cronjob/"+cj.Name+" failed in ns '"+cj.Namespace+"'")
 		}
 	}
 

@@ -76,7 +76,6 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: EsCuratorName,
 				},
-				// Template: batch.JobTemplateSpec{},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{

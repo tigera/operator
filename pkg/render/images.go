@@ -56,6 +56,8 @@ const (
 	ManagerProxyImageName   = "voltron:" + components.VersionManagerProxy
 	ManagerEsProxyImageName = "es-proxy:" + components.VersionManagerEsProxy
 
+	KibanaImageName = "kibana:" + components.VersionKibana
+
 	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
 	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch
 	ECKKibanaImageName        = "kibana:" + components.VersionECKKibana
@@ -85,8 +87,6 @@ func constructImage(imageName string, registry string) string {
 		reg = ECKElasticsearchRegistry
 	case ECKOperatorImageName:
 		reg = ECKOperatorRegistry
-	case ECKKibanaImageName:
-		reg = ECKKibanaRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

@@ -405,7 +405,7 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 		},
 		Spec: kibanav1alpha1.KibanaSpec{
 			Version:   components.VersionECKKibana,
-			Image:     constructImage(ECKKibanaImageName, es.registry),
+			Image:     constructImage(KibanaImageName, es.registry),
 			NodeCount: 1,
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{

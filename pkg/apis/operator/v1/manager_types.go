@@ -4,18 +4,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ManagerSpec defines optional configuration for the Tigera Secure management console.
-// Valid only for the variant 'TigeraSecureEnterprise'.
+// ManagerSpec defines configuration for the Tigera Secure manager GUI.
 // +k8s:openapi-gen=true
 type ManagerSpec struct {
-	// Auth is optional authentication configuration for the Tigera Secure management console.
+	// Auth defines the authentication strategy for the Tigera Secure manager GUI.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 }
 
-// ManagerStatus defines the observed state of Manager
+// ManagerStatus defines the observed state of the Tigera Secure manager GUI.
 // +k8s:openapi-gen=true
 type ManagerStatus struct {
+	// The last successfully applied authentication configuration.
+	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 }
 
@@ -23,7 +24,8 @@ type ManagerStatus struct {
 // +k8s:openapi-gen=true
 type Auth struct {
 	// Type configures the type of authentication used by the manager.
-	// Default: "Basic"
+	// Default: Token
+	// +kubebuilder:validation:Enum=Token,Basic,OIDC,OAuth
 	Type AuthType `json:"type,omitempty"`
 
 	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
@@ -47,14 +49,18 @@ const (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Manager is the Schema for the managers API
+// Manager installs the Tigera Secure manager graphical user interface. At most one instance
+// of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 type Manager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ManagerSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for the Tigera Secure EE manager.
+	Spec ManagerSpec `json:"spec,omitempty"`
+
+	// Most recently observed state for the Tigera Secure EE manager.
 	Status ManagerStatus `json:"status,omitempty"`
 }
 

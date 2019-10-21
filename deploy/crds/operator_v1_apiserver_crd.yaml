@@ -28,14 +28,13 @@ spec:
         metadata:
           type: object
         spec:
+          description: Specification of the desired state for the Tigera API server.
           type: object
         status:
+          description: Most recently observed status for the Tigera API server.
           properties:
             state:
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                of cluster Important: Run "operator-sdk generate k8s" to regenerate
-                code after modifying this file Add custom validation using kubebuilder
-                tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html'
+              description: State provides user-readable status.
               type: string
           type: object
   version: v1

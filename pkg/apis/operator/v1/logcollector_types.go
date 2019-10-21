@@ -8,54 +8,65 @@ const (
 	LogControllerStatusReady = "Ready"
 )
 
-// LogCollectorSpec defines the desired state of LogCollector
-// Valid only for the variant 'TigeraSecureEnterprise'.
+// LogCollectorSpec defines the desired state of Tigera flow and DNS log collection.
 // +k8s:openapi-gen=true
 type LogCollectorSpec struct {
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	// If specified, enables exporting of flow and DNS logs to Amazon S3 storage.
+	// +optional
+	S3 *S3StoreSpec `json:"s3,omitempty"`
 
-	S3     *S3StoreSpec     `json:"s3,omitempty"`
+	// If specified, enables exporting of flow and DNS logs to syslog.
+	// +optional
 	Syslog *SyslogStoreSpec `json:"syslog,omitempty"`
 }
 
+// S3StoreSpec defines configuration for exporting logs to Amazon S3.
+// +k8s:openapi-gen=true
 type S3StoreSpec struct {
 	// AWS Region of the S3 bucket
 	Region string `json:"region"`
+
 	// Name of the S3 bucket to send logs
 	BucketName string `json:"bucketName"`
+
 	// Path in the S3 bucket where to send logs
 	BucketPath string `json:"bucketPath"`
 }
 
+// SyslogStoreSpec defines configuration for exporting lgos to syslog.
 type SyslogStoreSpec struct {
-	// Endpoint where to seen syslog. exmple: tcp://1.2.3.4:601
+	// Location of the syslog server. exmple: tcp://1.2.3.4:601
 	Endpoint string `json:"endpoint"`
-	// PacketSize is only needed if you notice long logs being truncated.
-	// The default for the fluentd output plugin is 1024.
+
+	// PacketSize defines the maximum size of packets to send to syslog.
+	// In general this is only needed if you notice long logs being truncated.
+	// Default: 1024
+	// +optional
 	PacketSize *int32 `json:"packetsize,omitempty"`
 }
 
-// LogCollectorStatus defines the observed state of LogCollector
+// LogCollectorStatus defines the observed state of Tigera flow and DNS log collection
 // +k8s:openapi-gen=true
 type LogCollectorStatus struct {
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
-
-	// State indicates the state of the daemonset by the LogCollector controller
+	// State provides user-readable status.
 	State string `json:"state,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LogCollector is the Schema for the logcollectors API
+// LogCollector installs the components required for Tigera flow and DNS log collection. At most one instance
+// of this resource is supported. It must be named "tigera-secure". When created, this installs fluentd on all nodes
+// configured to collect Tigera log data and export it to Tigera's Elasticsearch cluster as well as any additionally configured destinations.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 type LogCollector struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LogCollectorSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for Tigera log collection.
+	Spec LogCollectorSpec `json:"spec,omitempty"`
+
+	// Most recently observed state for Tigera log collection.
 	Status LogCollectorStatus `json:"status,omitempty"`
 }
 

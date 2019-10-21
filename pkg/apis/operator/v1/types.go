@@ -19,36 +19,37 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NOTE: json tags are required. Any new fields you add must have json tags for the fields to be serialized.
-// NOTE: After modifying this file, run `make gen-files` to regenerate code.
-
-// InstallationSpec defines the desired state of Installation.
+// InstallationSpec defines configuration for a Calico or Tigera Secure EE installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
 	// Default: Calico
 	// +optional
+	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
-	// Registry is the default Docker registry used for component Docker images.
-	// Default: docker.io/
+	// Registry is the default Docker registry used for component Docker images. If specified,
+	// all Calico and Tigera Secure images will be pulled from this registry.
 	// +optional
 	Registry string `json:"registry,omitempty"`
 
-	// ImagePullSecrets is an array of references to Docker registry pull secrets.
+	// ImagePullSecrets is an array of references to container registry pull secrets to use. These are
+	// applied to all images to be pulled.
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
-	// KubernetesProvider specifies which platform this cluster is running on. Operator will
-	// do it's best to autodetect and set this. But can be overridden here.
+	// KubernetesProvider specifies a particular provider of the Kubernetes platform. This is often auto-detected.
+	// If specified, this enables provider-specific configuration and must match the auto-detected value (if any).
 	// +optional
+	// +kubebuilder:validation:Enum=EKS,GKE,AKS,OpenShift,DockerEnterprise
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
-	// CalicoNetwork specifies configuration options when using Calico provided pod networking.
+	// CalicoNetwork specifies configuration options for Calico provided pod networking.
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 }
 
+// Provider represents a particular provider or flavor of Kubernetes.
 type Provider string
 
 var (
@@ -60,6 +61,7 @@ var (
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )
 
+// ProductVariant represents the variant of the product - either Calico or TigeraSecureEnterprise.
 type ProductVariant string
 
 var (
@@ -67,10 +69,10 @@ var (
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
 )
 
+// CalicoNetwork specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
-	// IPPools contains a list of IP pools to use for allocating pod IP addresses. For now,
-	// a maximum of one IP pool is supported.
-	// Default: 192.168.0.0/16
+	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
+	// may be specified. If omitted, a single pool will be configured. If empty, no IP pools will be created.
 	// +optional
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
@@ -110,6 +112,7 @@ func (et EncapsulationType) String() string {
 	return string(et)
 }
 
+// NATOutgoingType describe the type of outgoing NAT to use.
 type NATOutgoingType string
 
 const (
@@ -134,28 +137,33 @@ func (nt NATOutgoingType) String() string {
 const NodeSelectorDefault string = "all()"
 
 type IPPool struct {
-	// CIDR contains the CIDR of the IP Pool.
+	// CIDR contains the address range for the IP Pool in classless inter-domain routing format.
 	CIDR string `json:"cidr"`
+
 	// Encapsulation specifies the encapsulation type that will be used with
-	// the IP Pool. IPIP is the default.
+	// the IP Pool.
+	// Default: IPIP
 	// +optional
-	// +kubebuilder:validation:Enum=IPIPCrossSubnet,IPIP,VXLAN,None
+	// +kubebuilder:validation:Enum=IPIPCrossSubnet,IPIP,VXLAN,VXLANCrossSubnet,None
 	Encapsulation EncapsulationType `json:"encapsulation,omitempty"`
-	// NATOutgoing specifies if NAT will be enabled or disabled for outgoing
-	// traffic. Enabled is the default.
+
+	// NATOutgoing specifies if NAT will be enabled or disabled for outgoing traffic.
+	// Default: Enabled
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled,Disabled
 	NATOutgoing NATOutgoingType `json:"natOutgoing,omitempty"`
-	// NodeSelector specifies the node selector that will be set for the
-	// IP Pool. Default is 'all()'.
+
+	// NodeSelector specifies the node selector that will be set for the IP Pool.
+	// Default: 'all()'
 	// +optional
 	NodeSelector string `json:"nodeSelector,omitempty"`
 }
 
-// InstallationStatus defines the observed state of Installation
+// InstallationStatus defines the observed state of the Calico or Tigera Secure installation.
 // +k8s:openapi-gen=true
 type InstallationStatus struct {
-	// Variant is the installed product - one of Calico or TigeraSecureEnterprise
+	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 }
 
@@ -168,7 +176,10 @@ type Installation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   InstallationSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for the Calico or Tigera Secure EE installation.
+	Spec InstallationSpec `json:"spec,omitempty"`
+
+	// Most recently observed state for the Calico or Tigera Secure EE installation.
 	Status InstallationStatus `json:"status,omitempty"`
 }
 

@@ -28,69 +28,97 @@ spec:
         metadata:
           type: object
         spec:
+          description: Specification of the desired state for the Calico or Tigera
+            Secure EE installation.
           properties:
             calicoNetwork:
-              description: CalicoNetwork specifies configuration options when using
-                Calico provided pod networking.
+              description: CalicoNetwork specifies configuration options for Calico
+                provided pod networking.
               properties:
                 ipPools:
-                  description: 'IPPools contains a list of IP pools to use for allocating
-                    pod IP addresses. For now, a maximum of one IP pool is supported.
-                    Default: 192.168.0.0/16'
+                  description: IPPools contains a list of IP pools to use for allocating
+                    pod IP addresses. At most one IP pool may be specified. If omitted,
+                    a single pool will be configured. If empty, no IP pools will be
+                    created.
                   items:
                     properties:
                       cidr:
-                        description: CIDR contains the CIDR of the IP Pool.
+                        description: CIDR contains the address range for the IP Pool
+                          in classless inter-domain routing format.
                         type: string
                       encapsulation:
-                        description: Encapsulation specifies the encapsulation type
-                          that will be used with the IP Pool. VXLAN is the default.
+                        description: 'Encapsulation specifies the encapsulation type
+                          that will be used with the IP Pool. Default: IPIP'
                         enum:
                         - IPIPCrossSubnet
                         - IPIP
                         - VXLAN
+                        - VXLANCrossSubnet
                         - None
                         type: string
                       natOutgoing:
-                        description: NATOutgoing specifies if NAT will be enabled
-                          or disabled for outgoing traffic. Enabled is the default.
+                        description: 'NATOutgoing specifies if NAT will be enabled
+                          or disabled for outgoing traffic. Default: Enabled'
                         enum:
                         - Enabled
                         - Disabled
                         type: string
                       nodeSelector:
-                        description: NodeSelector specifies the node selector that
-                          will be set for the IP Pool. Default is 'all()'.
+                        description: 'NodeSelector specifies the node selector that
+                          will be set for the IP Pool. Default: ''all()'''
                         type: string
                     required:
                     - cidr
                     type: object
                   type: array
+                mtu:
+                  description: 'MTU specifies the maximum transmission unit to use
+                    for pods on the Calico network. Default: 1410'
+                  format: int32
+                  type: integer
               type: object
             imagePullSecrets:
-              description: ImagePullSecrets is an array of references to Docker registry
-                pull secrets.
+              description: ImagePullSecrets is an array of references to container
+                registry pull secrets to use. These are applied to all images to be
+                pulled.
               items:
                 type: object
               type: array
             kubernetesProvider:
-              description: KubernetesProvider specifies which platform this cluster
-                is running on. Operator will do it's best to autodetect and set this.
-                But can be overridden here.
+              description: KubernetesProvider specifies a particular provider of the
+                Kubernetes platform. This is often auto-detected. If specified, this
+                enables provider-specific configuration and must match the auto-detected
+                value (if any).
+              enum:
+              - EKS
+              - GKE
+              - AKS
+              - OpenShift
+              - DockerEnterprise
               type: string
             registry:
-              description: 'Registry is the default Docker registry used for component
-                Docker images. Default: docker.io/'
+              description: Registry is the default Docker registry used for component
+                Docker images. If specified, all Calico and Tigera Secure images will
+                be pulled from this registry.
               type: string
             variant:
               description: 'Variant is the product to install - one of Calico or TigeraSecureEnterprise
                 Default: Calico'
+              enum:
+              - Calico
+              - TigeraSecureEnterprise
               type: string
           type: object
         status:
+          description: Most recently observed state for the Calico or Tigera Secure
+            EE installation.
           properties:
             variant:
-              description: Variant is the installed product - one of Calico or TigeraSecureEnterprise
+              description: Variant is the most recently observed installed variant
+                - one of Calico or TigeraSecureEnterprise
+              enum:
+              - Calico
+              - TigeraSecureEnterprise
               type: string
           type: object
   version: v1

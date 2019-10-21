@@ -28,8 +28,11 @@ spec:
         metadata:
           type: object
         spec:
+          description: Specification of the desired state for Tigera log collection.
           properties:
             s3:
+              description: If specified, enables exporting of flow and DNS logs to
+                Amazon S3 storage.
               properties:
                 bucketName:
                   description: Name of the S3 bucket to send logs
@@ -46,13 +49,16 @@ spec:
               - bucketPath
               type: object
             syslog:
+              description: If specified, enables exporting of flow and DNS logs to
+                syslog.
               properties:
                 endpoint:
-                  description: 'Endpoint where to seen syslog. exmple: tcp://1.2.3.4:601'
+                  description: 'Location of the syslog server. exmple: tcp://1.2.3.4:601'
                   type: string
                 packetsize:
-                  description: PacketSize is only needed if you notice long logs being
-                    truncated. The default for the fluentd output plugin is 1024.
+                  description: 'PacketSize defines the maximum size of packets to
+                    send to syslog. In general this is only needed if you notice long
+                    logs being truncated. Default: 1024'
                   format: int32
                   type: integer
               required:
@@ -60,10 +66,10 @@ spec:
               type: object
           type: object
         status:
+          description: Most recently observed state for Tigera log collection.
           properties:
             state:
-              description: State indicates the state of the daemonset by the LogCollector
-                controller
+              description: State provides user-readable status.
               type: string
           type: object
   version: v1

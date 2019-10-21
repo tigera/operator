@@ -594,7 +594,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		for k := range c.birdTemplates {
 			nodeVolumeMounts = append(nodeVolumeMounts,
 				v1.VolumeMount{
-					Name:      k,
+					Name:      "bird-templates",
 					ReadOnly:  true,
 					MountPath: fmt.Sprintf("/etc/calico/confd/templates/%s", k),
 					SubPath:   k,

@@ -550,7 +550,7 @@ var _ = Describe("Node rendering tests", func() {
 		volumeMounts := ds.Spec.Template.Spec.Containers[0].VolumeMounts
 		Expect(volumeMounts).To(ContainElement(
 			v1.VolumeMount{
-				Name:      "template-1.yaml",
+				Name:      "bird-templates",
 				ReadOnly:  true,
 				MountPath: "/etc/calico/confd/templates/template-1.yaml",
 				SubPath:   "template-1.yaml",

@@ -243,6 +243,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 		Image:         constructImage(ManagerImageName, c.registry),
 		Env:           c.managerEnvVars(),
 		LivenessProbe: c.managerProbe(),
+		SecurityContext: securityContext(),
 	}
 }
 
@@ -287,6 +288,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 			{Name: ManagerTLSSecretName, MountPath: "/certs/tunnel"},
 		},
 		LivenessProbe: c.managerProxyProbe(),
+		SecurityContext: securityContext(),
 	}
 }
 
@@ -296,6 +298,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Name:          "tigera-es-proxy",
 		Image:         constructImage(ManagerEsProxyImageName, c.registry),
 		LivenessProbe: c.managerEsProxyProbe(),
+		SecurityContext: securityContext(),
 	}
 
 	return apiServer

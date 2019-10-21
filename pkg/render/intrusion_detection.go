@@ -297,7 +297,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "intrusion-detection-controller",
-					Namespace: "calico-monitoring",
+					Namespace: IntrusionDetectionNamespace,
 					Labels: map[string]string{
 						"k8s-app": "intrusion-detection-controller",
 					},

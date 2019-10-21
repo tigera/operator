@@ -72,7 +72,7 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
-		// - 1 ns (calico-monitoring)
+		// - 1 ns (tigera-prometheus)
 		// - 7 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c, err := render.Calico(instance, nil, nil, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})

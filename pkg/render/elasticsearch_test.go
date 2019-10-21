@@ -31,7 +31,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 
 	It("should render an elasticsearchComponent", func() {
-		component, err := render.Elasticsearch(logStorage, nil, nil, false, nil, false, "docker.elastic.co/eck/")
+		component, err := render.Elasticsearch(logStorage, nil, nil, false, nil, operator.ProviderNone, "docker.elastic.co/eck/")
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(13))
 		Expect(err).NotTo(HaveOccurred())
@@ -65,7 +65,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 	It("should render pull secrets", func() {
 		component, err := render.Elasticsearch(logStorage, nil, nil, false,
-			[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret"}}}, false, "docker.elastic.co/eck/")
+			[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret"}}}, operator.ProviderNone, "docker.elastic.co/eck/")
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(16))
 		Expect(err).NotTo(HaveOccurred())
@@ -101,7 +101,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 
 	It("should render an elasticsearchComponent with openShift", func() {
-		component, err := render.Elasticsearch(logStorage, nil, nil, false, nil, true, "docker.elastic.co/eck/")
+		component, err := render.Elasticsearch(logStorage, nil, nil, false, nil, operator.ProviderOpenShift, "docker.elastic.co/eck/")
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(13))
 		Expect(err).NotTo(HaveOccurred())
@@ -134,7 +134,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 
 	It("should render an elasticsearchComponent with a webhook secret", func() {
-		component, err := render.Elasticsearch(logStorage, nil, nil, true, nil, true, "docker.elastic.co/eck/")
+		component, err := render.Elasticsearch(logStorage, nil, nil, true, nil, operator.ProviderOpenShift, "docker.elastic.co/eck/")
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(14))
 		Expect(err).NotTo(HaveOccurred())
@@ -170,7 +170,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	It("should not render Elasticsearch or Kibana cert secrets in the operator namespace when they are provided", func() {
 		component, err := render.Elasticsearch(logStorage,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, false, nil, true, "")
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, false, nil, operator.ProviderOpenShift, "")
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(11))
 		Expect(err).NotTo(HaveOccurred())

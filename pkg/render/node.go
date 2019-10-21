@@ -68,6 +68,10 @@ func (c *nodeComponent) Objects() []runtime.Object {
 		objs = append(objs, btcm)
 	}
 
+	if c.provider == operator.ProviderDockerEE {
+		objs = append(objs, c.clusterAdminClusterRoleBinding())
+	}
+
 	objs = append(objs, c.nodeDaemonset())
 
 	return objs
@@ -322,6 +326,31 @@ func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {
 		cm.Data[k] = v
 	}
 	return &cm
+}
+
+// clusterAdminClusterRoleBinding returns a ClusterRoleBinding for DockerEE to give
+// the cluster-admin role to calico-node, this is needed for calico-node to be
+// able to use hostNetwork in Docker Enterprise.
+func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "calico-cluster-admin",
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-node",
+				Namespace: CalicoNamespace,
+			},
+		},
+	}
 }
 
 // nodeDaemonset creates the node damonset.

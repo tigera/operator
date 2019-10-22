@@ -61,7 +61,6 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Annotations).To(HaveKeyWithValue("scheduler.alpha.kubernetes.io/critical-pod", ""))
 		ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 		cniContainer := GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")

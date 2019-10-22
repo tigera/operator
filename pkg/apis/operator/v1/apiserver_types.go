@@ -21,6 +21,7 @@ type APIServerStatus struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
 
 // APIServer installs the Tigera API server and related resources. At most one instance
 // of this resource is supported. It must be named "tigera-secure".

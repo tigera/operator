@@ -17,6 +17,7 @@ type TigeraStatusStatus struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
 
 // TigeraStatus represents the most recently observed status for Calico or a Tigera Secure EE functional area.
 // +k8s:openapi-gen=true

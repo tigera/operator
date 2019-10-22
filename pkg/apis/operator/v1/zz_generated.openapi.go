@@ -234,7 +234,7 @@ func schema_pkg_apis_operator_v1_Installation(ref common.ReferenceCallback) comm
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Installation is the Schema for the cores API",
+				Description: "Installation configures an installation of Calico or Tigera Secure EE. At most one instance of this resource is supported. It must be named \"default\". The Installation API installs core networking and network policy components, and provides general install-time configuration.",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{

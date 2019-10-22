@@ -168,8 +168,11 @@ type InstallationStatus struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
 
-// Installation is the Schema for the cores API
+// Installation configures an installation of Calico or Tigera Secure EE. At most one instance
+// of this resource is supported. It must be named "default". The Installation API installs core networking
+// and network policy components, and provides general install-time configuration.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 type Installation struct {

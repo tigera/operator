@@ -24,6 +24,7 @@ const (
 	ManagerSecretCertName = "cert"
 
 	ElasticsearchUserManager = "tigera-ee-manager"
+	DefaultKibanaURL         = "https://localhost:5601"
 )
 
 func Manager(
@@ -226,7 +227,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
-		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: KibanaHTTPURL},
+		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: DefaultKibanaURL},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "false"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},

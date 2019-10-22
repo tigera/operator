@@ -40,7 +40,7 @@ func Elasticsearch(
 	kibanaCertSecret *corev1.Secret,
 	createWebhookSecret bool,
 	pullSecrets []*corev1.Secret,
-	openShift bool,
+	provider operatorv1.Provider,
 	registry string) (Component, error) {
 	var esCertSecrets, kibanaCertSecrets []runtime.Object
 	if esCertSecret == nil {
@@ -79,7 +79,7 @@ func Elasticsearch(
 		kibanaCertSecrets:   kibanaCertSecrets,
 		createWebhookSecret: createWebhookSecret,
 		pullSecrets:         pullSecrets,
-		openShift:           openShift,
+		provider:            provider,
 		registry:            registry,
 	}, nil
 }
@@ -90,14 +90,14 @@ type elasticsearchComponent struct {
 	kibanaCertSecrets   []runtime.Object
 	createWebhookSecret bool
 	pullSecrets         []*corev1.Secret
-	openShift           bool
+	provider            operatorv1.Provider
 	registry            string
 }
 
 func (es *elasticsearchComponent) Objects() []runtime.Object {
 	var objs []runtime.Object
 	objs = append(objs, es.eckOperator()...)
-	objs = append(objs, createNamespace(ElasticsearchNamespace, es.openShift))
+	objs = append(objs, createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift))
 
 	objs = append(objs, copySecrets(ElasticsearchNamespace, es.pullSecrets...)...)
 	objs = append(objs, es.esCertSecrets...)
@@ -185,10 +185,16 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 
 func (es elasticsearchComponent) eckOperator() []runtime.Object {
 	objs := []runtime.Object{
-		createNamespace(ECKOperatorNamespace, es.openShift),
+		createNamespace(ECKOperatorNamespace, es.provider == operatorv1.ProviderOpenShift),
 		es.eckOperatorClusterRole(),
 		es.eckOperatorClusterRoleBinding(),
 		es.eckOperatorServiceAccount(),
+	}
+
+	// This is needed for the operator to be able to set privileged mode for pods.
+	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
+	if es.provider == operatorv1.ProviderDockerEE {
+		objs = append(objs, es.eckOperatorClusterAdminClusterRoleBinding())
 	}
 
 	objs = append(objs, copySecrets(ECKOperatorNamespace, es.pullSecrets...)...)
@@ -273,6 +279,26 @@ func (es elasticsearchComponent) eckOperatorClusterRoleBinding() *rbacv1.Cluster
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     ECKOperatorName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "elastic-operator",
+				Namespace: ECKOperatorNamespace,
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) eckOperatorClusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "elastic-operator-docker-enterprise",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
 		},
 		Subjects: []rbacv1.Subject{
 			{

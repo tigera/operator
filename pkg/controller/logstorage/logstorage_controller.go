@@ -268,7 +268,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		kibanaCertSecret,
 		createWebhookSecret,
 		pullSecrets,
-		r.provider == operatorv1.ProviderOpenShift,
+		r.provider,
 		network.Spec.Registry,
 	)
 	if err != nil {

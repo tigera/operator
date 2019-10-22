@@ -11,12 +11,14 @@ type TigeraStatusSpec struct {
 // TigeraStatusStatus defines the observed state of TigeraStatus
 // +k8s:openapi-gen=true
 type TigeraStatusStatus struct {
+	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
+	// Available, Progressing, or Degraded.
 	Conditions []TigeraStatusCondition `json:"conditions"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TigeraStatus is the Schema for the tigerastatuses API
+// TigeraStatus represents the most recently observed status for Calico or a Tigera Secure EE functional area.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=="Available")].status",description="Whether the component running and stable."
@@ -39,11 +41,11 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// StatusConditionType is a type of operator status.
+// StatusConditionType is a type of condition that may apply to a particular component.
 type StatusConditionType string
 
 const (
-	// Available indicates that the installed component is healthy.
+	// Available indicates that the component is healthy.
 	ComponentAvailable StatusConditionType = "Available"
 
 	// Progressing means that the component is in the process of being installed or upgraded.
@@ -53,13 +55,23 @@ const (
 	ComponentDegraded StatusConditionType = "Degraded"
 )
 
+// TigeraStatusCondition represents a condition attached to a particular component.
 // +k8s:deepcopy-gen=true
 type TigeraStatusCondition struct {
-	Type               StatusConditionType `json:"type"`
-	Status             ConditionStatus     `json:"status"`
-	LastTransitionTime metav1.Time         `json:"lastTransitionTime"`
-	Reason             string              `json:"reason,omitempty"`
-	Message            string              `json:"message,omitempty"`
+	// The type of condition. May be Available, Progressing, or Degraded.
+	Type StatusConditionType `json:"type"`
+
+	// The status of the condition. May be True, False, or Unknown.
+	Status ConditionStatus `json:"status"`
+
+	// The timestamp representing the start time for the current status.
+	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
+
+	// A brief reason explaining the condition.
+	Reason string `json:"reason,omitempty"`
+
+	// Optionally, a detailed message providing additional context.
+	Message string `json:"message,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -28,12 +28,13 @@ spec:
         metadata:
           type: object
         spec:
+          description: Specification of the desired state for Tigera intrusion detection.
           type: object
         status:
+          description: Most recently observed state for Tigera intrusion detection.
           properties:
             state:
-              description: State indicates the state of the deployment by the IntrusionDetection
-                controller
+              description: State provides user-readable status.
               type: string
           type: object
   version: v1

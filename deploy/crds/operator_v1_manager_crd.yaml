@@ -28,10 +28,12 @@ spec:
         metadata:
           type: object
         spec:
+          description: Specification of the desired state for the Tigera Secure EE
+            manager.
           properties:
             auth:
-              description: Auth is optional authentication configuration for the Tigera
-                Secure management console.
+              description: Auth defines the authentication strategy for the Tigera
+                Secure manager GUI.
               properties:
                 authority:
                   description: 'Authority configures the OAuth2/OIDC authority/issuer
@@ -43,13 +45,20 @@ spec:
                   type: string
                 type:
                   description: 'Type configures the type of authentication used by
-                    the manager. Default: "Basic"'
+                    the manager. Default: Token'
+                  enum:
+                  - Token
+                  - Basic
+                  - OIDC
+                  - OAuth
                   type: string
               type: object
           type: object
         status:
+          description: Most recently observed state for the Tigera Secure EE manager.
           properties:
             auth:
+              description: The last successfully applied authentication configuration.
               properties:
                 authority:
                   description: 'Authority configures the OAuth2/OIDC authority/issuer
@@ -61,7 +70,12 @@ spec:
                   type: string
                 type:
                   description: 'Type configures the type of authentication used by
-                    the manager. Default: "Basic"'
+                    the manager. Default: Token'
+                  enum:
+                  - Token
+                  - Basic
+                  - OIDC
+                  - OAuth
                   type: string
               type: object
           type: object

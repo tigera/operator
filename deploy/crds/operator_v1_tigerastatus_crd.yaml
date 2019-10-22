@@ -49,18 +49,30 @@ spec:
         status:
           properties:
             conditions:
+              description: Conditions represents the latest observed set of conditions
+                for this component. A component may be one or more of Available, Progressing,
+                or Degraded.
               items:
                 properties:
                   lastTransitionTime:
+                    description: The timestamp representing the start time for the
+                      current status.
                     format: date-time
                     type: string
                   message:
+                    description: Optionally, a detailed message providing additional
+                      context.
                     type: string
                   reason:
+                    description: A brief reason explaining the condition.
                     type: string
                   status:
+                    description: The status of the condition. May be True, False,
+                      or Unknown.
                     type: string
                   type:
+                    description: The type of condition. May be Available, Progressing,
+                      or Degraded.
                     type: string
                 required:
                 - type

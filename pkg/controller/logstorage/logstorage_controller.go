@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	
+
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
@@ -147,21 +147,21 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		opr.Spec.Retention = &operatorv1.Retention{}
 	}
 
-	if opr.Spec.Retention.FlowRetention == nil {
+	if opr.Spec.Retention.Flows == nil {
 		var fr int32 = 8
-		opr.Spec.Retention.FlowRetention = &fr
+		opr.Spec.Retention.Flows = &fr
 	}
-	if opr.Spec.Retention.AuditReportRetention == nil {
+	if opr.Spec.Retention.AuditReports == nil {
 		var arr int32 = 365
-		opr.Spec.Retention.AuditReportRetention = &arr
+		opr.Spec.Retention.AuditReports = &arr
 	}
-	if opr.Spec.Retention.SnapshotRetention == nil {
+	if opr.Spec.Retention.Snapshots == nil {
 		var sr int32 = 365
-		opr.Spec.Retention.SnapshotRetention = &sr
+		opr.Spec.Retention.Snapshots = &sr
 	}
-	if opr.Spec.Retention.ComplianceReportRetention == nil {
+	if opr.Spec.Retention.ComplianceReports == nil {
 		var crr int32 = 365
-		opr.Spec.Retention.ComplianceReportRetention = &crr
+		opr.Spec.Retention.ComplianceReports = &crr
 	}
 }
 

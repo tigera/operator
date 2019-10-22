@@ -28,10 +28,11 @@ spec:
         metadata:
           type: object
         spec:
+          description: Specification of the desired state for Tigera log storage.
           properties:
             indices:
               description: Index defines the configuration for the indices in the
-                elasticsearch cluster
+                Elasticsearch cluster.
               properties:
                 replicas:
                   description: Replicas defines how many replicas each index will
@@ -42,23 +43,21 @@ spec:
               - replicas
               type: object
             nodes:
-              description: Node defines the configuration for the elasticsearch cluster
-                nodes. The nodes created will all be of type master, data, and ingest,
-                and the number of nodes, where their data is stored, and what the
-                resource requirements are configured here
+              description: Nodes defines the configuration for a set of identical
+                Elasticsearch cluster nodes, each of type master, data, and ingest.
               properties:
                 count:
-                  description: Count defines the number of nodes that the elasticsearch
-                    cluster will have
+                  description: Count defines the number of nodes in the Elasticsearch
+                    cluster.
                   format: int64
                   type: integer
                 resourceRequirements:
-                  description: ResourceRequirements represents the resource limits
-                    and requirements for the elasticsearch cluster (i.e. cpu, size)
+                  description: ResourceRequirements defines the resource limits and
+                    requirements for the Elasticsearch cluster.
                   type: object
               type: object
             retention:
-              description: Retention defines how long data is retained in the elasticsearch
+              description: Retention defines how long data is retained in the Elasticsearch
                 cluster before it is cleared.
               properties:
                 auditReports:
@@ -103,22 +102,21 @@ spec:
               type: object
           type: object
         status:
+          description: Most recently observed state for Tigera log storage.
           properties:
             elasticsearchHash:
-              description: ElasticsearchHash is a hash representation of the Elasticsearch
-                cluster, and is used so interested components can be notified that
-                the Elasticsearch cluster has be changed in a way that requires the
-                component to recreate it's objects
+              description: ElasticsearchHash represents the current revision and configuration
+                of the installed Elasticsearch cluster. This is an opaque string which
+                can be monitored for changes to perform actions when Elasticsearch
+                is modified.
               type: string
             kibanaHash:
-              description: KibanaHash is a hash representation of the Kibana cluster,
-                and is used so interested components can be notified that the Kibana
-                cluster has be changed in a way that requires the component to recreate
-                it's objects
+              description: KibanaHash represents the current revision and configuration
+                of the installed Kibana dashboard. This is an opaque string which
+                can be monitored for changes to perform actions when Kibana is modified.
               type: string
             state:
-              description: State indicates the state of the deployment by the LogStorage
-                controller
+              description: State provides user-readable status.
               type: string
           type: object
   version: v1

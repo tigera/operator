@@ -103,9 +103,9 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 
 func (ec elasticCuratorComponent) envVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.FlowRetention)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.AuditReportRetention)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.SnapshotRetention)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.ComplianceReportRetention)},
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.Flows)},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.AuditReports)},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.Snapshots)},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.ComplianceReports)},
 	}
 }

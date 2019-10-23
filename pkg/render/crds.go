@@ -232,6 +232,30 @@ func tigeraSecureCRDs() []runtime.Object {
 		{
 			scope: apiextensions.ClusterScoped,
 			names: apiextensions.CustomResourceDefinitionNames{
+				Plural:   "stagedglobalnetworkpolicies",
+				Singular: "stagedglobalnetworkpolicy",
+				Kind:     "StagedGlobalNetworkPolicy",
+			},
+		},
+		{
+			scope: apiextensions.NamespaceScoped,
+			names: apiextensions.CustomResourceDefinitionNames{
+				Plural:   "stagedkubernetesnetworkpolicies",
+				Singular: "stagedkubernetesnetworkpolicy",
+				Kind:     "StagedKubernetesNetworkPolicy",
+			},
+		},
+		{
+			scope: apiextensions.NamespaceScoped,
+			names: apiextensions.CustomResourceDefinitionNames{
+				Plural:   "stagednetworkpolicies",
+				Singular: "stagednetworkpolicy",
+				Kind:     "StagedNetworkPolicy",
+			},
+		},
+		{
+			scope: apiextensions.ClusterScoped,
+			names: apiextensions.CustomResourceDefinitionNames{
 				Plural:   "tiers",
 				Singular: "tier",
 				Kind:     "Tier",

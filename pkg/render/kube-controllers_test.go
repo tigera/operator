@@ -56,7 +56,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ds := resources[3].(*apps.Deployment)
 
 		// Image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v3.8.1"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v3.10.0"))
 
 		// Verify env
 		expectedEnv := []v1.EnvVar{
@@ -89,6 +89,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)
 
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v2.5.1"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v2.6.0-0.dev-86-g506e244-dirty"))
 	})
 })

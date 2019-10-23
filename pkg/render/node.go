@@ -239,6 +239,9 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"licensekeys",
 					"remoteclusterconfigurations",
+					"stagedglobalnetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"stagednetworkpolicies",
 					"tiers",
 				},
 				Verbs: []string{"get", "list", "watch"},

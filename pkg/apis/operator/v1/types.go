@@ -83,6 +83,8 @@ type CalicoNetworkSpec struct {
 	MTU *int32 `json:"mtu,omitempty"`
 }
 
+// EncapsulationType is the type of encapsulation to use on an IP pool. Valid
+// options are: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None.
 type EncapsulationType string
 
 const (

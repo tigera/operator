@@ -41,7 +41,7 @@ type S3StoreSpec struct {
 
 // SyslogStoreSpec defines configuration for exporting lgos to syslog.
 type SyslogStoreSpec struct {
-	// Location of the syslog server. exmple: tcp://1.2.3.4:601
+	// Location of the syslog server. example: tcp://1.2.3.4:601
 	Endpoint string `json:"endpoint"`
 
 	// PacketSize defines the maximum size of packets to send to syslog.

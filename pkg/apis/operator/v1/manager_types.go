@@ -38,6 +38,8 @@ type Auth struct {
 	ClientID string `json:"clientID,omitempty"`
 }
 
+// AuthType represents the type of authentication to use. Valid
+// options are: Token, Basic, OIDC, OAuth
 type AuthType string
 
 const (

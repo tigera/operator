@@ -49,7 +49,8 @@ type InstallationSpec struct {
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 }
 
-// Provider represents a particular provider or flavor of Kubernetes.
+// Provider represents a particular provider or flavor of Kubernetes. Valid options
+// are: EKS, GKE, AKS, OpenShift, DockerEnterprise.
 type Provider string
 
 var (
@@ -61,7 +62,7 @@ var (
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )
 
-// ProductVariant represents the variant of the product - either Calico or TigeraSecureEnterprise.
+// ProductVariant represents the variant of the product. Valid options are: Calico, TigeraSecureEnterprise.
 type ProductVariant string
 
 var (

@@ -34,6 +34,7 @@ type TigeraStatus struct {
 	Status TigeraStatusStatus `json:"status,omitempty"`
 }
 
+// ConditionStatus represents the status of a particular condition. A condition may be one of: True, False, Unknown.
 type ConditionStatus string
 
 const (

@@ -274,6 +274,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 					"hostendpoints",
 					"licensekeys",
 					"globalnetworksets",
+					"networksets",
 					"globalthreatfeeds",
 					"globalreporttypes",
 					"globalreports",
@@ -407,6 +408,7 @@ rules:
     - globalnetworkpolicies
     - networkpolicies
     - globalnetworksets
+    - networksets
     - tiers
     - hostendpoints`
 

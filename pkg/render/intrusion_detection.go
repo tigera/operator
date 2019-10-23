@@ -196,6 +196,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 					"projectcalico.org",
 				},
 				Resources: []string{
+					"globalalerts",
+					"globalalerts/status",
 					"globalthreatfeeds",
 					"globalthreatfeeds/status",
 					"globalnetworksets",

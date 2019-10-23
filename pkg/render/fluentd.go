@@ -244,57 +244,61 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 	}
 
-	if c.lc.Spec.S3 != nil {
-		envs = append(envs,
-			corev1.EnvVar{Name: "AWS_KEY_ID",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: S3FluentdSecretName,
-						},
-						Key: S3KeyIdName,
-					},
-				}},
-			corev1.EnvVar{Name: "AWS_SECRET_KEY",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: S3FluentdSecretName,
-						},
-						Key: S3KeySecretName,
-					},
-				}},
-			corev1.EnvVar{Name: "S3_STORAGE", Value: "true"},
-			corev1.EnvVar{Name: "S3_BUCKET_NAME", Value: c.lc.Spec.S3.BucketName},
-			corev1.EnvVar{Name: "AWS_REGION", Value: c.lc.Spec.S3.Region},
-			corev1.EnvVar{Name: "S3_BUCKET_PATH", Value: c.lc.Spec.S3.BucketPath},
-			corev1.EnvVar{Name: "S3_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
-		)
-	}
-	if c.lc.Spec.Syslog != nil {
-		proto, host, port, _ := ParseEndpoint(c.lc.Spec.Syslog.Endpoint)
-		envs = append(envs,
-			corev1.EnvVar{Name: "SYSLOG_FLOW_LOG", Value: "true"},
-			corev1.EnvVar{Name: "SYSLOG_AUDIT_LOG", Value: "true"},
-			corev1.EnvVar{Name: "SYSLOG_HOST", Value: host},
-			corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
-			corev1.EnvVar{Name: "SYSLOG_PROTOCOL", Value: proto},
-			corev1.EnvVar{Name: "SYSLOG_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
-			corev1.EnvVar{Name: "SYSLOG_HOSTNAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
-					},
-				},
-			},
-		)
-		if c.lc.Spec.Syslog.PacketSize != nil {
+	if c.lc.Spec.AdditionalStores != nil {
+		s3 := c.lc.Spec.AdditionalStores.S3
+		if s3 != nil {
 			envs = append(envs,
-				corev1.EnvVar{
-					Name:  "SYSLOG_PACKET_SIZE",
-					Value: fmt.Sprintf("%d", *c.lc.Spec.Syslog.PacketSize),
+				corev1.EnvVar{Name: "AWS_KEY_ID",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: S3FluentdSecretName,
+							},
+							Key: S3KeyIdName,
+						},
+					}},
+				corev1.EnvVar{Name: "AWS_SECRET_KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: S3FluentdSecretName,
+							},
+							Key: S3KeySecretName,
+						},
+					}},
+				corev1.EnvVar{Name: "S3_STORAGE", Value: "true"},
+				corev1.EnvVar{Name: "S3_BUCKET_NAME", Value: s3.BucketName},
+				corev1.EnvVar{Name: "AWS_REGION", Value: s3.Region},
+				corev1.EnvVar{Name: "S3_BUCKET_PATH", Value: s3.BucketPath},
+				corev1.EnvVar{Name: "S3_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
+			)
+		}
+		syslog := c.lc.Spec.AdditionalStores.Syslog
+		if syslog != nil {
+			proto, host, port, _ := ParseEndpoint(syslog.Endpoint)
+			envs = append(envs,
+				corev1.EnvVar{Name: "SYSLOG_FLOW_LOG", Value: "true"},
+				corev1.EnvVar{Name: "SYSLOG_AUDIT_LOG", Value: "true"},
+				corev1.EnvVar{Name: "SYSLOG_HOST", Value: host},
+				corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
+				corev1.EnvVar{Name: "SYSLOG_PROTOCOL", Value: proto},
+				corev1.EnvVar{Name: "SYSLOG_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
+				corev1.EnvVar{Name: "SYSLOG_HOSTNAME",
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
+							FieldPath: "spec.nodeName",
+						},
+					},
 				},
 			)
+			if syslog.PacketSize != nil {
+				envs = append(envs,
+					corev1.EnvVar{
+						Name:  "SYSLOG_PACKET_SIZE",
+						Value: fmt.Sprintf("%d", *syslog.PacketSize),
+					},
+				)
+			}
 		}
 	}
 

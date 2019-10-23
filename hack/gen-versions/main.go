@@ -129,6 +129,7 @@ func writeVersions(osVersions, eeVersions Components) error {
 		`	VersionECKElasticsearch = "` + eeVersions.get("elasticsearch") + `"`,
 		`	VersionECKKibana = "` + eeVersions.get("eck-kibana") + `"`,
 		`	VersionKibana = "` + eeVersions.get("kibana") + `"`,
+		`	VersionEsCurator = "` + eeVersions.get("es-curator") + `"`,
 		")",
 	}
 

@@ -73,11 +73,11 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 		// CNI container uses image override.
-		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal("docker.io/calico/cni:v3.8.1"))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal("docker.io/calico/cni:v3.10.0"))
 
 		// Verify the Flex volume container image.
 
-		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal("docker.io/calico/pod2daemon-flexvol:v3.8.1"))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal("docker.io/calico/pod2daemon-flexvol:v3.10.0"))
 
 		optional := true
 		// Verify env
@@ -232,7 +232,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.5.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.6.0-0.dev-170-gecea86e-dirty"))
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		optional := true
@@ -437,7 +437,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.5.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.6.0-0.dev-170-gecea86e-dirty"))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
 

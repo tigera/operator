@@ -135,9 +135,10 @@ func GetManager(ctx context.Context, cli client.Client, provider operatorv1.Prov
 func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Manager")
+	ctx := context.Background()
 
 	// Fetch the Manager instance
-	instance, err := GetManager(context.Background(), r.client, r.provider)
+	instance, err := GetManager(ctx, r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Manager object not found")
@@ -150,12 +151,18 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
 
+	// Write the manager back to the datastore.
+	if err = r.client.Update(ctx, instance); err != nil {
+		r.status.SetDegraded("Failed to write defaults", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, nil
 	}
 
-	if err = utils.CheckLicenseKey(context.Background(), r.client); err != nil {
+	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
 		r.status.SetDegraded("License not found", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 	}
@@ -163,7 +170,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	installation, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	installation, err := installation.GetInstallation(ctx, r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -174,7 +181,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// Check that compliance is running.
-	compliance, err := compliance.GetCompliance(context.Background(), r.client)
+	compliance, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Compliance not found", err.Error())
@@ -209,14 +216,14 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	clusterName, err := utils.ClusterName(context.Background(), r.client)
+	clusterName, err := utils.ClusterName(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Failed to get the cluster name")
 		r.status.SetDegraded("Failed to get the cluster name", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserManager}, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchUserManager}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
@@ -246,7 +253,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -255,7 +262,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	r.status.ClearDegraded()
 	if r.status.IsAvailable() {
 		instance.Status.Auth = instance.Spec.Auth
-		if err = r.client.Status().Update(context.Background(), instance); err != nil {
+		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

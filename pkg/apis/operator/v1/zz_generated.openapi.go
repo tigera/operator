@@ -132,7 +132,7 @@ func schema_pkg_apis_operator_v1_Auth(ref common.ReferenceCallback) common.OpenA
 					},
 					"authority": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login. Default: \"\"https://accounts.google.com\"",
+							Description: "Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

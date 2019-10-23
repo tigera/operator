@@ -8,14 +8,20 @@ const (
 	LogControllerStatusReady = "Ready"
 )
 
-// LogCollectorSpec defines the desired state of Tigera flow and DNS log collection.
+// LogCollectorSpec defines the desired state of Tigera flow, audit, and DNS log collection.
 // +k8s:openapi-gen=true
 type LogCollectorSpec struct {
-	// If specified, enables exporting of flow and DNS logs to Amazon S3 storage.
+
+	// Configuration for exporting flow, audit, and DNS logs to external storage.
+	// +optional
+	AdditionalStores *AdditionalLogStoreSpec `json:"additionalStores,omitempty"`
+}
+
+type AdditionalLogStoreSpec struct {
+	// If specified, enables exporting of flow, audit, and DNS logs to Amazon S3 storage.
 	// +optional
 	S3 *S3StoreSpec `json:"s3,omitempty"`
-
-	// If specified, enables exporting of flow and DNS logs to syslog.
+	// If specified, enables exporting of flow, audit, and DNS logs to syslog.
 	// +optional
 	Syslog *SyslogStoreSpec `json:"syslog,omitempty"`
 }

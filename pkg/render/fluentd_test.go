@@ -81,10 +81,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			KeyId:     []byte("IdForTheKey"),
 			KeySecret: []byte("SecretForTheKey"),
 		}
-		instance.Spec.S3 = &operatorv1.S3StoreSpec{
-			Region:     "anyplace",
-			BucketName: "thebucket",
-			BucketPath: "bucketpath",
+		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			S3: &operatorv1.S3StoreSpec{
+				Region:     "anyplace",
+				BucketName: "thebucket",
+				BucketPath: "bucketpath",
+			},
 		}
 		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()
@@ -146,9 +148,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 	It("should render with Syslog configuration", func() {
 		var ps int32 = 180
-		instance.Spec.Syslog = &operatorv1.SyslogStoreSpec{
-			Endpoint:   "tcp://1.2.3.4:80",
-			PacketSize: &ps,
+		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				PacketSize: &ps,
+			},
 		}
 		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
 		resources := component.Objects()

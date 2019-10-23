@@ -3,9 +3,10 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -136,10 +137,12 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 		return nil, err
 	}
 
-	if instance.Spec.Syslog != nil {
-		_, _, _, err := render.ParseEndpoint(instance.Spec.Syslog.Endpoint)
-		if err != nil {
-			return nil, fmt.Errorf("Syslog config has invalid Endpoint: %s", err)
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
+			_, _, _, err := render.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint)
+			if err != nil {
+				return nil, fmt.Errorf("Syslog config has invalid Endpoint: %s", err)
+			}
 		}
 	}
 
@@ -232,17 +235,19 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var s3Credential *render.S3Credential
-	if instance.Spec.S3 != nil {
-		s3Credential, err = getS3Credential(r.client)
-		if err != nil {
-			log.Error(err, "Error with S3 credential secret")
-			r.status.SetDegraded("Error with S3 credential secret", err.Error())
-			return reconcile.Result{}, err
-		}
-		if s3Credential == nil {
-			log.Info("S3 credential secret does not exist")
-			r.status.SetDegraded("S3 credential secret does not exist", "")
-			return reconcile.Result{}, nil
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.S3 != nil {
+			s3Credential, err = getS3Credential(r.client)
+			if err != nil {
+				log.Error(err, "Error with S3 credential secret")
+				r.status.SetDegraded("Error with S3 credential secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			if s3Credential == nil {
+				log.Info("S3 credential secret does not exist")
+				r.status.SetDegraded("S3 credential secret does not exist", "")
+				return reconcile.Result{}, nil
+			}
 		}
 	}
 

@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,6 +21,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/elasticsearch"
+	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -39,6 +38,17 @@ func init() {
 			Indices: []elasticsearch.RoleIndex{{
 				Names:      []string{"tigera_secure_ee_*"},
 				Privileges: []string{"create_index", "write"},
+			}},
+		}},
+	})
+	esusers.AddUser(elasticsearch.User{
+		Username: render.ElasticsearchUserEksLogForwarder,
+		Roles: []elasticsearch.Role{{
+			Name:    render.ElasticsearchUserEksLogForwarder,
+			Cluster: []string{"monitor", "manage_index_templates"},
+			Indices: []elasticsearch.RoleIndex{{
+				Names:      []string{"tigera_secure_ee_audit_kube.*"},
+				Privileges: []string{"create_index", "read", "write"},
 			}},
 		}},
 	})
@@ -96,16 +106,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	if err = utils.AddSecretsWatch(c, esUser.SecretName(), render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-collector-controller failed to watch the Secret resource: %v", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.ElasticsearchPublicCertSecret, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-collector-controller failed to watch the Secret resource: %v", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.S3FluentdSecretName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch Secret %s: %v", render.S3FluentdSecretName, err)
+	for _, secretName := range []string{
+		esUser.SecretName(), render.ElasticsearchPublicCertSecret,
+		render.S3FluentdSecretName, render.EksLogForwarderSecret} {
+		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
+		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.FluentdFilterConfigMapName, render.OperatorNamespace()); err != nil {
@@ -223,7 +229,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserLogCollector}, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserLogCollector, render.ElasticsearchUserEksLogForwarder}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
@@ -258,6 +264,25 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	var eksConfig *render.EksCloudwatchLogConfig
+	if installation.Spec.KubernetesProvider == operatorv1.ProviderEKS {
+		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
+		if instance.Spec.AdditionalSources != nil {
+			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				eksConfig, err = getEksCloudwatchLogConfig(r.client,
+					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
+					instance.Spec.AdditionalSources.EksCloudwatchLog.GroupName,
+					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix,
+					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval)
+				if err != nil {
+					log.Error(err, "Error retrieving EKS Cloudwatch Logs configuration")
+					r.status.SetDegraded("Error retrieving EKS Cloudwatch Logs configuration", err.Error())
+					return reconcile.Result{}, err
+				}
+			}
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -269,6 +294,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		clusterName,
 		s3Credential,
 		filters,
+		eksConfig,
 		pullSecrets,
 		installation,
 	)
@@ -344,5 +370,49 @@ func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
 	return &render.FluentdFilters{
 		Flow: cm.Data[render.FluentdFilterFlowName],
 		DNS:  cm.Data[render.FluentdFilterDNSName],
+	}, nil
+}
+
+func getEksCloudwatchLogConfig(client client.Client, region, group, prefix, interval string) (*render.EksCloudwatchLogConfig, error) {
+	if region == "" {
+		return nil, fmt.Errorf("Missing AWS region info")
+	}
+
+	if group == "" {
+		return nil, fmt.Errorf("Missing Cloudwatch log group name")
+	}
+
+	if prefix == "" {
+		prefix = "kube-apiserver-audit-"
+	}
+
+	if interval == "" {
+		interval = "600"
+	}
+
+	secret := &corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{
+		Name:      render.EksLogForwarderSecret,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read Secret %q: %s", render.EksLogForwarderSecret, err)
+	}
+
+	if len(secret.Data[render.EksLogForwarderAwsId]) == 0 ||
+		len(secret.Data[render.EksLogForwarderAwsKey]) == 0 {
+		return nil, fmt.Errorf("Incomplete Cloudwatch credentials")
+	}
+
+	return &render.EksCloudwatchLogConfig{
+		AwsId:         secret.Data[render.EksLogForwarderAwsId],
+		AwsKey:        secret.Data[render.EksLogForwarderAwsKey],
+		AwsRegion:     region,
+		GroupName:     group,
+		StreamPrefix:  prefix,
+		FetchInterval: interval,
 	}, nil
 }

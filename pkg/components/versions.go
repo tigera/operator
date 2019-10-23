@@ -22,15 +22,15 @@ const (
 	VersionQueryServer = "v2.6.0-0.dev-7-g5e69bfc"
 
 	// Logging
-	VersionFluentd = "es7-v2.5.1-dev-1"
+	VersionFluentd         = "es7-v2.5.1-dev-1"
+	VersionEksLogForwarder = "gauravk-eks-operator-support" //TODO: testing, to be removed before submit.
 
 	// Compliance images.
-	VersionComplianceController      = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceReporter        = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceServer          = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceSnapshotter     = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceBenchmarker     = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceEksLogForwarder = "gauravk-eks-operator-support" //TODO: testing, to be removed before submit.
+	VersionComplianceController  = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceReporter    = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceServer      = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceSnapshotter = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceBenchmarker = "v2.6.0-0.dev-42-g5bb7357"
 
 	// Intrusion detection images.
 	VersionIntrusionDetectionController   = "v2.6.0-0.dev-53-g6045051"

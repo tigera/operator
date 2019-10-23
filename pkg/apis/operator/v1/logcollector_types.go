@@ -15,6 +15,10 @@ type LogCollectorSpec struct {
 	// Configuration for exporting flow, audit, and DNS logs to external storage.
 	// +optional
 	AdditionalStores *AdditionalLogStoreSpec `json:"additionalStores,omitempty"`
+
+	// Configuration for importing audit logs from managed kubernetes cluster log sources.
+	// +optional
+	AdditionalSources *AdditionalLogSourceSpec `json:"additionalSources,omitempty"`
 }
 
 type AdditionalLogStoreSpec struct {
@@ -24,6 +28,13 @@ type AdditionalLogStoreSpec struct {
 	// If specified, enables exporting of flow, audit, and DNS logs to syslog.
 	// +optional
 	Syslog *SyslogStoreSpec `json:"syslog,omitempty"`
+}
+
+type AdditionalLogSourceSpec struct {
+	// If specified with EKS Provider in Installation, enables fetching EKS
+	// audit logs.
+	// +optional
+	EksCloudwatchLog *EksCloudwatchLogsSpec `json:"eksCloudwatchLog,omitempty"`
 }
 
 // S3StoreSpec defines configuration for exporting logs to Amazon S3.
@@ -49,6 +60,23 @@ type SyslogStoreSpec struct {
 	// Default: 1024
 	// +optional
 	PacketSize *int32 `json:"packetsize,omitempty"`
+}
+
+// EksConfigSpec defines configuration for fetching EKS audit logs.
+type EksCloudwatchLogsSpec struct {
+	// AWS Region EKS cluster is hosted in.
+	Region string `json:"region"`
+
+	// Cloudwatch log-group name containing EKS audit logs.
+	GroupName string `json:"groupName"`
+
+	// Prefix of Cloudwatch log stream containing EKS audit logs in the log-group.
+	// Default: kube-apiserver-audit-
+	StreamPrefix string `json:"streamPrefix,omitempty"`
+
+	// Cloudwatch audit log fetching interval.
+	// Default: 600
+	FetchInterval string `json:"fetchInterval,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of Tigera flow and DNS log collection

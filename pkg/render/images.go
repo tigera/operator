@@ -38,15 +38,15 @@ const (
 	QueryServerImageName = "cnx-queryserver:" + components.VersionQueryServer
 
 	// Logging
-	FluentdImageName = "fluentd:" + components.VersionFluentd
+	FluentdImageName                = "fluentd:" + components.VersionFluentd
+	FluentdEksLogForwarderImageName = "fluentd:" + components.VersionEksLogForwarder
 
 	// Compliance images.
-	ComplianceControllerImage      = "compliance-controller:" + components.VersionComplianceController
-	ComplianceReporterImage        = "compliance-reporter:" + components.VersionComplianceReporter
-	ComplianceServerImage          = "compliance-server:" + components.VersionComplianceServer
-	ComplianceSnapshotterImage     = "compliance-snapshotter:" + components.VersionComplianceSnapshotter
-	ComplianceBenchmarkerImage     = "compliance-benchmarker:" + components.VersionComplianceBenchmarker
-	ComplianceEksLogForwarderImage = "fluentd:" + components.VersionComplianceEksLogForwarder
+	ComplianceControllerImage  = "compliance-controller:" + components.VersionComplianceController
+	ComplianceReporterImage    = "compliance-reporter:" + components.VersionComplianceReporter
+	ComplianceServerImage      = "compliance-server:" + components.VersionComplianceServer
+	ComplianceSnapshotterImage = "compliance-snapshotter:" + components.VersionComplianceSnapshotter
+	ComplianceBenchmarkerImage = "compliance-benchmarker:" + components.VersionComplianceBenchmarker
 
 	// Intrusion detection images.
 	IntrusionDetectionControllerImageName   = "intrusion-detection-controller:" + components.VersionIntrusionDetectionController

@@ -1,3 +1,17 @@
+// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package render
 
 import (
@@ -13,19 +27,25 @@ import (
 )
 
 const (
-	LogCollectorNamespace          = "tigera-fluentd"
-	FluentdFilterConfigMapName     = "fluentd-filters"
-	FluentdFilterFlowName          = "flow"
-	FluentdFilterDNSName           = "dns"
-	S3FluentdSecretName            = "log-collector-s3-credentials"
-	S3KeyIdName                    = "key-id"
-	S3KeySecretName                = "key-secret"
-	logStorageHashAnnotation       = "hash.operator.tigera.io/log-storage"
-	elasticsearchSecretsAnnotation = "hash.operator.tigera.io/elasticsearch-secrets"
-	filterHashAnnotation           = "hash.operator.tigera.io/fluentd-filters"
-	s3CredentialHashAnnotation     = "hash.operator.tigera.io/s3-credentials"
-	fluentdDefaultFlush            = "5s"
-	ElasticsearchUserLogCollector  = "tigera-fluentd"
+	LogCollectorNamespace                    = "tigera-fluentd"
+	FluentdFilterConfigMapName               = "fluentd-filters"
+	FluentdFilterFlowName                    = "flow"
+	FluentdFilterDNSName                     = "dns"
+	S3FluentdSecretName                      = "log-collector-s3-credentials"
+	S3KeyIdName                              = "key-id"
+	S3KeySecretName                          = "key-secret"
+	logStorageHashAnnotation                 = "hash.operator.tigera.io/log-storage"
+	elasticsearchSecretsAnnotation           = "hash.operator.tigera.io/elasticsearch-secrets"
+	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
+	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
+	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
+	fluentdDefaultFlush                      = "5s"
+	ElasticsearchUserLogCollector            = "tigera-fluentd"
+	ElasticsearchUserEksLogForwarder         = "tigera-eks-log-forwarder"
+	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
+	EksLogForwarderAwsId                     = "aws-id"
+	EksLogForwarderAwsKey                    = "aws-key"
+	eksLogForwarderName                      = "eks-log-forwarder"
 )
 
 type FluentdFilters struct {
@@ -45,6 +65,7 @@ func Fluentd(
 	cluster string,
 	s3C *S3Credential,
 	f *FluentdFilters,
+	eksConfig *EksCloudwatchLogConfig,
 
 	pullSecrets []*corev1.Secret,
 	installation *operatorv1.Installation,
@@ -56,9 +77,19 @@ func Fluentd(
 		cluster:      cluster,
 		s3Credential: s3C,
 		filters:      f,
+		eksConfig:    eksConfig,
 		pullSecrets:  pullSecrets,
 		installation: installation,
 	}
+}
+
+type EksCloudwatchLogConfig struct {
+	AwsId         []byte
+	AwsKey        []byte
+	AwsRegion     string
+	GroupName     string
+	StreamPrefix  string
+	FetchInterval string
 }
 
 type fluentdComponent struct {
@@ -68,6 +99,7 @@ type fluentdComponent struct {
 	cluster      string
 	s3Credential *S3Credential
 	filters      *FluentdFilters
+	eksConfig    *EksCloudwatchLogConfig
 	pullSecrets  []*corev1.Secret
 	installation *operatorv1.Installation
 }
@@ -85,6 +117,12 @@ func (c *fluentdComponent) Objects() []runtime.Object {
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
+	if c.eksConfig != nil {
+		objs = append(objs, c.eksLogForwarderServiceAccount(),
+			c.eksLogForwarderSecret(),
+			c.eksLogForwarderDeployment())
+	}
+
 	objs = append(objs, copySecrets(LogCollectorNamespace, c.esSecrets...)...)
 	objs = append(objs, c.daemonset())
 
@@ -365,4 +403,129 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	}
 
 	return volumes
+}
+
+func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: eksLogForwarderName, Namespace: LogCollectorNamespace},
+	}
+}
+
+func (c *fluentdComponent) eksLogForwarderSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EksLogForwarderSecret,
+			Namespace: LogCollectorNamespace,
+		},
+		Data: map[string][]byte{
+			EksLogForwarderAwsId:  c.eksConfig.AwsId,
+			EksLogForwarderAwsKey: c.eksConfig.AwsKey,
+		},
+	}
+}
+
+func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
+	annots := map[string]string{
+		eksCloudwatchLogCredentialHashAnnotation: AnnotationHash(c.eksConfig),
+	}
+
+	envVars := []corev1.EnvVar{
+		// Meta flags.
+		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "FLUENT_UID", Value: "0"},
+		// Use fluentd for EKS log forwarder.
+		{Name: "MANAGED_K8S", Value: "true"},
+		{Name: "K8S_PLATFORM", Value: "eks"},
+		{Name: "FLUENTD_ES_SECURE", Value: "true"},
+		// Cloudwatch config, credentials.
+		{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: c.eksConfig.GroupName},
+		{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: c.eksConfig.StreamPrefix},
+		{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: c.eksConfig.FetchInterval},
+		{Name: "AWS_REGION", Value: c.eksConfig.AwsRegion},
+		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
+		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
+	}
+
+	var eksLogForwarderReplicas int32 = 1
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      eksLogForwarderName,
+			Namespace: LogCollectorNamespace,
+			Labels: map[string]string{
+				"k8s-app": eksLogForwarderName,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &eksLogForwarderReplicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": eksLogForwarderName,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      eksLogForwarderName,
+					Namespace: LogCollectorNamespace,
+					Labels: map[string]string{
+						"k8s-app": eksLogForwarderName,
+					},
+					Annotations: annots,
+				},
+				Spec: corev1.PodSpec{
+					NodeSelector: map[string]string{
+						"beta.kubernetes.io/os": "linux",
+					},
+					ServiceAccountName: eksLogForwarderName,
+					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
+						Name:         eksLogForwarderName + "-startup",
+						Image:        constructImage(FluentdEksLogForwarderImageName, c.installation.Spec.Registry),
+						Command:      []string{"/bin/eks-log-forwarder-startup"},
+						Env:          envVars,
+						VolumeMounts: c.eksLogForwarderVolumeMounts(),
+					}, c.cluster, ElasticsearchUserEksLogForwarder)},
+					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
+						Name:         eksLogForwarderName,
+						Image:        constructImage(FluentdEksLogForwarderImageName, c.installation.Spec.Registry),
+						Env:          envVars,
+						VolumeMounts: c.eksLogForwarderVolumeMounts(),
+					}, c.cluster, ElasticsearchUserEksLogForwarder)},
+					Volumes: c.eksLogForwarderVolumes(),
+				},
+			},
+		},
+	}
+}
+
+func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		ElasticsearchDefaultVolumeMount(),
+		{
+			Name:      "plugin-statefile-dir",
+			MountPath: "/fluentd/cloudwatch-logs/",
+		},
+		{
+			Name:      "elastic-ca-cert-volume",
+			MountPath: "/etc/fluentd/elastic/",
+		},
+	}
+}
+
+func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		ElasticsearchDefaultVolume(),
+		{
+			Name: "plugin-statefile-dir",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: nil,
+			},
+		},
+	}
 }

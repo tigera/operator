@@ -13,10 +13,8 @@ import (
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -98,17 +96,6 @@ func init() {
 			}},
 		}},
 	})
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserComplianceEksLogForwarder,
-		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserComplianceEksLogForwarder,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_audit_kube.*"},
-				Privileges: []string{"create_index", "read", "write"},
-			}},
-		}},
-	})
 }
 
 // Add creates a new Compliance Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -158,8 +145,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, secretName := range []string{
 		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserComplianceBenchmarker,
 		render.ElasticsearchUserComplianceController, render.ElasticsearchUserComplianceReporter,
-		render.ElasticsearchUserComplianceSnapshotter, render.ElasticsearchUserComplianceServer,
-		render.ElasticsearchUserComplianceEksLogForwarder} {
+		render.ElasticsearchUserComplianceSnapshotter, render.ElasticsearchUserComplianceServer} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("compliance-controller failed to watch the Secret resource: %v", err)
 		}
@@ -256,7 +242,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{
 		render.ElasticsearchUserComplianceBenchmarker, render.ElasticsearchUserComplianceController,
 		render.ElasticsearchUserComplianceReporter, render.ElasticsearchUserComplianceSnapshotter,
-		render.ElasticsearchUserComplianceServer, render.ElasticsearchUserComplianceEksLogForwarder,
+		render.ElasticsearchUserComplianceServer,
 	}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -268,22 +254,6 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	var eksConfig *render.EksConfig
-	if network.Spec.KubernetesProvider == operatorv1.ProviderEKS {
-		log.Info("EKS provider found, checking config and setting up log-forwarder")
-		if instance.Spec.EksConfig != nil {
-			log.Info("Found eks-config ", instance.Spec.EksConfig.AwsSecretName, instance.Spec.EksConfig.LogConfigMapName)
-			eksConfig, err = getEksLogForwarderConfig(r.client,
-				instance.Spec.EksConfig.AwsSecretName,
-				instance.Spec.EksConfig.LogConfigMapName)
-			if err != nil {
-				log.Error(err, "Error retrieving EKS Log Forwarder config")
-				r.status.SetDegraded("Error retrieving EKS Log Forwarder config", err.Error())
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -291,7 +261,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Compliance(
-		esSecrets, network.Spec.Registry, clusterName, pullSecrets, openshift, eksConfig)
+		esSecrets, network.Spec.Registry, clusterName, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
@@ -312,39 +282,4 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func getEksLogForwarderConfig(client client.Client, secName, cmName string) (*render.EksConfig, error) {
-	secret := &corev1.Secret{}
-	secretNamespacedName := types.NamespacedName{
-		Name:      secName,
-		Namespace: render.OperatorNamespace(),
-	}
-	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("Failed to read Secret %q: %s", secName, err)
-	}
-
-	cm := &corev1.ConfigMap{}
-	cmNamespacedName := types.NamespacedName{
-		Name:      cmName,
-		Namespace: render.OperatorNamespace(),
-	}
-	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
-	}
-
-	return &render.EksConfig{
-		LogGroup:         cm.Data[render.EksLogForwarderLogGroup],
-		LogStreamPrefix:  cm.Data[render.EksLogForwarderLogStreamPrefix],
-		LogFetchInterval: cm.Data[render.EksLogForwarderLogFetchInterval],
-		AwsRegion:        secret.Data[render.EksLogForwarderAwsRegion],
-		AwsId:            secret.Data[render.EksLogForwarderAwsId],
-		AwsKey:           secret.Data[render.EksLogForwarderAwsKey],
-	}, nil
 }

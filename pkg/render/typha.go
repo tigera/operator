@@ -368,6 +368,7 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 		Ports:          c.typhaPorts(),
 		LivenessProbe:  lp,
 		ReadinessProbe: rp,
+		SecurityContext: securityContext(),
 	}
 }
 

@@ -36,7 +36,7 @@ const (
 	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
 
 	// Manager images.
-	VersionManager        = "v2.5.0-mcm0.1-148-g346baab9"
+	VersionManager        = "v2.6.0-0.dev-1-g68a6585"
 	VersionManagerProxy   = "v1.0.0.rc1"
 	VersionManagerEsProxy = "v2.6.0-0.dev-88-gbd4f9c3"
 

@@ -36,8 +36,8 @@ spec:
                 Secure manager GUI.
               properties:
                 authority:
-                  description: 'Authority configures the OAuth2/OIDC authority/issuer
-                    when using OAuth2 or OIDC login. Default: ""https://accounts.google.com"'
+                  description: Authority configures the OAuth2/OIDC authority/issuer
+                    when using OAuth2 or OIDC login.
                   type: string
                 clientID:
                   description: ClientId configures the OAuth2/OIDC client ID to use
@@ -61,8 +61,8 @@ spec:
               description: The last successfully applied authentication configuration.
               properties:
                 authority:
-                  description: 'Authority configures the OAuth2/OIDC authority/issuer
-                    when using OAuth2 or OIDC login. Default: ""https://accounts.google.com"'
+                  description: Authority configures the OAuth2/OIDC authority/issuer
+                    when using OAuth2 or OIDC login.
                   type: string
                 clientID:
                   description: ClientId configures the OAuth2/OIDC client ID to use

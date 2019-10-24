@@ -29,7 +29,6 @@ type Auth struct {
 	Type AuthType `json:"type,omitempty"`
 
 	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
-	// Default: https://accounts.google.com
 	// +optional
 	Authority string `json:"authority,omitempty"`
 

@@ -309,7 +309,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 					ServiceAccountName: "intrusion-detection-controller",
 					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.clusterName, ElasticsearchUserIntrusionDetectionJob),
+						ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.clusterName, ElasticsearchUserIntrusionDetection),
 					},
 				}),
 			},

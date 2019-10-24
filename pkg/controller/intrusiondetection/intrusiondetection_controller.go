@@ -39,7 +39,7 @@ func init() {
 					Privileges: []string{"read"},
 				},
 				{
-					Names:      []string{".tigera.ipset.*", "tigera_secure_ee_events.*"},
+					Names:      []string{".tigera.ipset.*", "tigera_secure_ee_events.*", ".tigera.domainnameset.*"},
 					Privileges: []string{"all"},
 				},
 			},

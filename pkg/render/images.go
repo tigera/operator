@@ -38,8 +38,7 @@ const (
 	QueryServerImageName = "cnx-queryserver:" + components.VersionQueryServer
 
 	// Logging
-	FluentdImageName                = "fluentd:" + components.VersionFluentd
-	FluentdEksLogForwarderImageName = "fluentd:" + components.VersionEksLogForwarder
+	FluentdImageName = "fluentd:" + components.VersionFluentd
 
 	// Compliance images.
 	ComplianceControllerImage  = "compliance-controller:" + components.VersionComplianceController

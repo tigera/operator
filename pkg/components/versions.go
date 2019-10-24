@@ -22,8 +22,7 @@ const (
 	VersionQueryServer = "v2.6.0-0.dev-7-g5e69bfc"
 
 	// Logging
-	VersionFluentd         = "es7-v2.5.1-dev-1"
-	VersionEksLogForwarder = "gauravk-eks-operator-support" //TODO: testing, to be removed before submit.
+	VersionFluentd = "v2.6.0-0.dev-27-gdd525f5"
 
 	// Compliance images.
 	VersionComplianceController  = "v2.6.0-0.dev-42-g5bb7357"

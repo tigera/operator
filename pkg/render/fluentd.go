@@ -486,14 +486,14 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName + "-startup",
-						Image:        constructImage(FluentdEksLogForwarderImageName, c.installation.Spec.Registry),
+						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry),
 						Command:      []string{"/bin/eks-log-forwarder-startup"},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.cluster, ElasticsearchUserEksLogForwarder)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName,
-						Image:        constructImage(FluentdEksLogForwarderImageName, c.installation.Spec.Registry),
+						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry),
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.cluster, ElasticsearchUserEksLogForwarder)},

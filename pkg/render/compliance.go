@@ -17,11 +17,11 @@ package render
 import (
 	"fmt"
 
-	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
+	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -132,8 +132,8 @@ var complianceLivenessProbe = &corev1.Probe{
 	},
 }
 
-func (c *complianceComponent) complianceControllerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: ComplianceNamespace},
 	}
@@ -265,10 +265,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-controller",
-							Image:         constructImage(ComplianceControllerImage, c.registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "compliance-controller",
+							Image:           constructImage(ComplianceControllerImage, c.registry),
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceController),
 					},
@@ -278,8 +278,8 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	}
 }
 
-func (c *complianceComponent) complianceReporterServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: ComplianceNamespace},
 	}
@@ -363,8 +363,8 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	}
 }
 
-func (c *complianceComponent) complianceServerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: ComplianceNamespace},
 	}
@@ -413,8 +413,8 @@ func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
-func (c *complianceComponent) complianceServerService() *v1.Service {
-	return &v1.Service{
+func (c *complianceComponent) complianceServerService() *corev1.Service {
+	return &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: ComplianceNamespace},
 		Spec: corev1.ServiceSpec{
@@ -472,9 +472,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:  "compliance-server",
-							Image: constructImage(ComplianceServerImage, c.registry),
-							Env:   envVars,
+							Name:            "compliance-server",
+							Image:           constructImage(ComplianceServerImage, c.registry),
+							Env:             envVars,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceServer),
 					},
@@ -484,8 +484,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	}
 }
 
-func (c *complianceComponent) complianceSnapshotterServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: ComplianceNamespace},
 	}
@@ -574,10 +574,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-snapshotter",
-							Image:         constructImage(ComplianceSnapshotterImage, c.registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "compliance-snapshotter",
+							Image:           constructImage(ComplianceSnapshotterImage, c.registry),
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceSnapshotter),
 					},
@@ -587,8 +587,8 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	}
 }
 
-func (c *complianceComponent) complianceBenchmarkerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: ComplianceNamespace},
 	}

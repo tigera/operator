@@ -31,6 +31,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var instance *operatorv1.LogCollector
 	var s3Creds *render.S3Credential
 	var filters *render.FluentdFilters
+	var eksConfig *render.EksCloudwatchLogConfig
 	var installation *operatorv1.Installation
 	var ls *operatorv1.LogStorage
 	BeforeEach(func() {
@@ -44,7 +45,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		s3Creds = nil
 		filters = nil
+		eksConfig = nil
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserLogCollector})
+		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserEksLogForwarder})
 		ls = &operatorv1.LogStorage{
 			Status: operatorv1.LogStorageStatus{
 				ElasticsearchHash: "randomhash",
@@ -53,7 +56,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, eksConfig, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -88,7 +91,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				BucketPath: "bucketpath",
 			},
 		}
-		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, eksConfig, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
@@ -154,7 +157,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				PacketSize: &ps,
 			},
 		}
-		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, eksConfig, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -222,7 +225,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		filters = &render.FluentdFilters{
 			Flow: "flow-filter",
 		}
-		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, nil, installation)
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, eksConfig, nil, installation)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
@@ -251,5 +254,52 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "FLUENTD_FLOW_FILTERS", Value: "true"}))
 		Expect(envs).ToNot(ContainElement(corev1.EnvVar{Name: "FLUENTD_DNS_FILTERS", Value: "true"}))
+	})
+
+	It("should render with EKS Cloudwatch Log", func() {
+		eksConfig = &render.EksCloudwatchLogConfig{
+			AwsId:     []byte("aws-id"),
+			AwsKey:    []byte("aws-key"),
+			AwsRegion: "us-west-1",
+			GroupName: "dummy-eks-cluster-cloudwatch-log-group",
+		}
+		installation = &operatorv1.Installation{
+			Spec: operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderEKS,
+			},
+		}
+		component := render.Fluentd(instance, ls, nil, "clusterTestName", s3Creds, filters, eksConfig, nil, installation)
+		resources := component.Objects()
+		Expect(len(resources)).To(Equal(5))
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "eks-log-forwarder", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-eks-log-forwarder-secret", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "eks-log-forwarder", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "Deployment"},
+			// Daemonset
+		}
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		deploy := resources[3].(*apps.Deployment)
+		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
+		envs := deploy.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"}))
 	})
 })

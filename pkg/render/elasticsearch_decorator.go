@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	ElasticsearchDefaultCertPath  = "/etc/ssl/elastic/ca.pem"
+	ElasticsearchDefaultCertDir   = "/etc/ssl/elastic/"
+	ElasticsearchDefaultCertPath  = ElasticsearchDefaultCertDir + "ca.pem"
 	TigeraElasticsearchCertSecret = "tigera-secure-elasticsearch-cert"
 	ElasticsearchPublicCertSecret = "tigera-secure-es-http-certs-public"
 )
@@ -66,16 +67,26 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserna
 }
 
 func ElasticsearchContainerDecorateVolumeMounts(c corev1.Container) corev1.Container {
-	c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
-		Name:      "elastic-ca-cert-volume",
-		MountPath: "/etc/ssl/elastic/",
-	})
+	c.VolumeMounts = append(c.VolumeMounts, ElasticsearchDefaultVolumeMount())
 
 	return c
 }
 
+func ElasticsearchDefaultVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      "elastic-ca-cert-volume",
+		MountPath: ElasticsearchDefaultCertDir,
+	}
+}
+
 func ElasticsearchPodSpecDecorate(p corev1.PodSpec) corev1.PodSpec {
-	p.Volumes = append(p.Volumes, corev1.Volume{
+	p.Volumes = append(p.Volumes, ElasticsearchDefaultVolume())
+
+	return p
+}
+
+func ElasticsearchDefaultVolume() corev1.Volume {
+	return corev1.Volume{
 		Name: "elastic-ca-cert-volume",
 		VolumeSource: v1.VolumeSource{
 			Secret: &v1.SecretVolumeSource{
@@ -85,6 +96,5 @@ func ElasticsearchPodSpecDecorate(p corev1.PodSpec) corev1.PodSpec {
 				},
 			},
 		},
-	})
-	return p
+	}
 }

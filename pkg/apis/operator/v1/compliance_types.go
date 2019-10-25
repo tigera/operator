@@ -22,6 +22,7 @@ type ComplianceStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
+// +genclient:nonNamespaced
 
 // Compliance installs the components required for Tigera compliance reporting. At most one instance
 // of this resource is supported. It must be named "tigera-secure".

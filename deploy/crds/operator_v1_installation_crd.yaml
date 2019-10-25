@@ -38,8 +38,7 @@ spec:
                 ipPools:
                   description: IPPools contains a list of IP pools to use for allocating
                     pod IP addresses. At most one IP pool may be specified. If omitted,
-                    a single pool will be configured. If empty, no IP pools will be
-                    created.
+                    a single pool will be configured when needed.
                   items:
                     properties:
                       cidr:

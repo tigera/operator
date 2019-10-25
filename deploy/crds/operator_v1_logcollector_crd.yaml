@@ -57,7 +57,7 @@ spec:
                     DNS logs to syslog.
                   properties:
                     endpoint:
-                      description: 'Location of the syslog server. exmple: tcp://1.2.3.4:601'
+                      description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
                       type: string
                     packetsize:
                       description: 'PacketSize defines the maximum size of packets

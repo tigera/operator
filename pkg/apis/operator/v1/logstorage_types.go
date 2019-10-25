@@ -94,6 +94,7 @@ type Retention struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
+// +genclient:nonNamespaced
 
 // LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance
 // of this resource is supported. It must be named "tigera-secure". When created, this installs an Elasticsearch cluster for use by

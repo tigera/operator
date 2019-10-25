@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	"github.com/tigera/operator/pkg/elasticsearch"
@@ -15,6 +16,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,6 +96,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		render.ManagerTLSSecretName,
 		render.ElasticsearchPublicCertSecret,
 		render.ElasticsearchUserManager,
+		render.KibanaPublicCertSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the Secret resource: %v", err)
@@ -223,6 +226,13 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	kibanaPublicCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+		reqLogger.Error(err, "Failed to read Kibana public cert secret")
+		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	clusterName, err := utils.ClusterName(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Failed to get the cluster name")
@@ -248,6 +258,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	component, err := render.Manager(
 		instance,
 		esSecrets,
+		[]*corev1.Secret{kibanaPublicCertSecret},
 		clusterName,
 		tlsSecret,
 		pullSecrets,

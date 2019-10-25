@@ -13,7 +13,7 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.0-0.dev-170-gecea86e-dirty"
+	VersionTigeraNode            = "v2.6.0-0.dev-175-g3f547b6"
 	VersionTigeraTypha           = "v2.6.0-0.dev-104-g6c51073"
 	VersionTigeraKubeControllers = "v2.6.0-0.dev-86-g506e244-dirty"
 

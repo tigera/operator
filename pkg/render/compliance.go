@@ -151,7 +151,7 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"podTemplates"},
+				Resources: []string{"podtemplates"},
 				Verbs:     []string{"get"},
 			},
 		},

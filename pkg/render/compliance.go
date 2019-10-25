@@ -151,7 +151,7 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"podTemplates"},
+				Resources: []string{"podtemplates"},
 				Verbs:     []string{"get"},
 			},
 		},
@@ -265,10 +265,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-controller",
-							Image:         constructImage(ComplianceControllerImage, c.registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "compliance-controller",
+							Image:           constructImage(ComplianceControllerImage, c.registry),
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceController),
 					},
@@ -472,9 +472,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:  "compliance-server",
-							Image: constructImage(ComplianceServerImage, c.registry),
-							Env:   envVars,
+							Name:            "compliance-server",
+							Image:           constructImage(ComplianceServerImage, c.registry),
+							Env:             envVars,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceServer),
 					},
@@ -574,10 +574,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-snapshotter",
-							Image:         constructImage(ComplianceSnapshotterImage, c.registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "compliance-snapshotter",
+							Image:           constructImage(ComplianceSnapshotterImage, c.registry),
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: securityContext(),
 						}, c.clusterName, ElasticsearchUserComplianceSnapshotter),
 					},

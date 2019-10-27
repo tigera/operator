@@ -319,6 +319,9 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 }
 
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
+	dirOrCreate := corev1.HostPathDirectoryOrCreate
+	privileged := true
+
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "warning"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
@@ -356,7 +359,24 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						Image:         constructImage(ComplianceReporterImage, c.registry),
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
+						SecurityContext: &corev1.SecurityContext{
+							Privileged: &privileged,
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{MountPath: "/var/log/calico", Name: "var-log-calico"},
+						},
 					}, c.clusterName, ElasticsearchUserComplianceReporter),
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: "var-log-calico",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/var/log/calico",
+								Type: &dirOrCreate,
+							},
+						},
+					},
 				},
 			}),
 		},

@@ -42,7 +42,11 @@ func (u User) SecretName() string {
 
 // Role represents an Elasticsearch role that may be attached to a User
 type Role struct {
-	Name         string        `json:"-"`
+	Name       string `json:"-"`
+	Definition *RoleDefinition
+}
+
+type RoleDefinition struct {
 	Cluster      []string      `json:"cluster"`
 	Indices      []RoleIndex   `json:"indices"`
 	Applications []Application `json:"applications,omitempty"`
@@ -94,7 +98,7 @@ func (cli Client) createRoles(roles ...Role) error {
 
 // createRole attempts to create (or updated) the given Elasticsearch role.
 func (cli Client) createRole(role Role) error {
-	j, err := json.Marshal(role)
+	j, err := json.Marshal(role.Definition)
 
 	if role.Name == "" {
 		return fmt.Errorf("can't create a role with an empty name")
@@ -123,8 +127,15 @@ func (cli Client) createRole(role Role) error {
 // CreateUser will create the Elasticsearch user and roles (if any roles are defined for the user). If the roles exist they
 // will be updated.
 func (cli Client) CreateUser(user User) error {
-	if len(user.Roles) > 0 {
-		if err := cli.createRoles(user.Roles...); err != nil {
+	var rolesToCreate []Role
+	for _, role := range user.Roles {
+		if role.Definition != nil {
+			rolesToCreate = append(rolesToCreate, role)
+		}
+	}
+
+	if len(rolesToCreate) > 0 {
+		if err := cli.createRoles(rolesToCreate...); err != nil {
 			return err
 		}
 	}
@@ -156,8 +167,15 @@ func (cli Client) CreateUser(user User) error {
 // UpdateUser will update the Elasticsearch users password and roles (if an roles are defined for the user). If the roles
 // don't exist they will be created.
 func (cli Client) UpdateUser(user User) error {
-	if len(user.Roles) > 0 {
-		if err := cli.createRoles(user.Roles...); err != nil {
+	var rolesToCreate []Role
+	for _, role := range user.Roles {
+		if role.Definition != nil {
+			rolesToCreate = append(rolesToCreate, role)
+		}
+	}
+
+	if len(rolesToCreate) > 0 {
+		if err := cli.createRoles(rolesToCreate...); err != nil {
 			return err
 		}
 	}

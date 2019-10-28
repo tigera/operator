@@ -33,23 +33,27 @@ func init() {
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserLogCollector,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserLogCollector,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_*"},
-				Privileges: []string{"create_index", "write"},
-			}},
+			Name: render.ElasticsearchUserLogCollector,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_*"},
+					Privileges: []string{"create_index", "write"},
+				}},
+			},
 		}},
 	})
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserEksLogForwarder,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserEksLogForwarder,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_audit_kube.*"},
-				Privileges: []string{"create_index", "read", "write"},
-			}},
+			Name: render.ElasticsearchUserEksLogForwarder,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_audit_kube.*"},
+					Privileges: []string{"create_index", "read", "write"},
+				}},
+			},
 		}},
 	})
 }

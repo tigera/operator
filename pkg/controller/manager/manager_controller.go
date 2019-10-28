@@ -30,12 +30,14 @@ var log = logf.Log.WithName("controller_manager")
 func init() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserManager,
-			Cluster: []string{"monitor"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_*"},
-				Privileges: []string{"read"},
-			}},
+			Name: render.ElasticsearchUserManager,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_*"},
+					Privileges: []string{"read"},
+				}},
+			},
 		}},
 	})
 }

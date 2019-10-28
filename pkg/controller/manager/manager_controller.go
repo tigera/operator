@@ -34,7 +34,7 @@ func init() {
 			Definition: &elasticsearch.RoleDefinition{
 				Cluster: []string{"monitor"},
 				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_*"},
+					Names:      []string{"tigera_secure_ee_*", ".kibana"},
 					Privileges: []string{"read"},
 				}},
 			},

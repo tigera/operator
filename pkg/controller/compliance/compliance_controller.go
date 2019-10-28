@@ -30,46 +30,52 @@ func init() {
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserComplianceBenchmarker,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserComplianceBenchmarker,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_benchmark_results.*"},
-				Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
-			}},
+			Name: render.ElasticsearchUserComplianceBenchmarker,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_benchmark_results.*"},
+					Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+				}},
+			},
 		}},
 	})
 	esusers.AddUser(
 		elasticsearch.User{Username: render.ElasticsearchUserComplianceController,
 			Roles: []elasticsearch.Role{{
-				Name:    render.ElasticsearchUserComplianceController,
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_compliance_reports.*"},
-					Privileges: []string{"read"},
-				}},
+				Name: render.ElasticsearchUserComplianceController,
+				Definition: &elasticsearch.RoleDefinition{
+					Cluster: []string{"monitor", "manage_index_templates"},
+					Indices: []elasticsearch.RoleIndex{{
+						Names:      []string{"tigera_secure_ee_compliance_reports.*"},
+						Privileges: []string{"read"},
+					}},
+				},
 			}},
 		})
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserComplianceReporter,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserComplianceReporter,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{
-				{
-					Names:      []string{"tigera_secure_ee_audit_*"},
-					Privileges: []string{"read"},
-				},
-				{
-					Names:      []string{"tigera_secure_ee_snapshots.*"},
-					Privileges: []string{"read"},
-				},
-				{
-					Names:      []string{"tigera_secure_ee_benchmark_results.*"},
-					Privileges: []string{"read"},
-				},
-				{
-					Names:      []string{"tigera_secure_ee_compliance_reports.*"},
-					Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+			Name: render.ElasticsearchUserComplianceReporter,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{
+					{
+						Names:      []string{"tigera_secure_ee_audit_*"},
+						Privileges: []string{"read"},
+					},
+					{
+						Names:      []string{"tigera_secure_ee_snapshots.*"},
+						Privileges: []string{"read"},
+					},
+					{
+						Names:      []string{"tigera_secure_ee_benchmark_results.*"},
+						Privileges: []string{"read"},
+					},
+					{
+						Names:      []string{"tigera_secure_ee_compliance_reports.*"},
+						Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+					},
 				},
 			},
 		}},
@@ -77,23 +83,27 @@ func init() {
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserComplianceSnapshotter,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserComplianceSnapshotter,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_snapshots.*"},
-				Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
-			}},
+			Name: render.ElasticsearchUserComplianceSnapshotter,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_snapshots.*"},
+					Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
+				}},
+			},
 		}},
 	})
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserComplianceServer,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserComplianceServer,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_compliance_reports.*"},
-				Privileges: []string{"read"},
-			}},
+			Name: render.ElasticsearchUserComplianceServer,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_compliance_reports.*"},
+					Privileges: []string{"read"},
+				}},
+			},
 		}},
 	})
 }

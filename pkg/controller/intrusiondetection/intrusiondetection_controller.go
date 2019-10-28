@@ -30,37 +30,45 @@ var log = logf.Log.WithName("controller_intrusiondetection")
 func init() {
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserIntrusionDetection,
-		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserIntrusionDetection,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{
-				{
-					Names:      []string{"tigera_secure_ee_*"},
-					Privileges: []string{"read"},
-				},
-				{
-					Names:      []string{".tigera.ipset.*", "tigera_secure_ee_events.*", ".tigera.domainnameset.*"},
-					Privileges: []string{"all"},
+		Roles: []elasticsearch.Role{
+			{
+				Name: render.ElasticsearchUserIntrusionDetection,
+				Definition: &elasticsearch.RoleDefinition{
+					Cluster: []string{"monitor", "manage_index_templates"},
+					Indices: []elasticsearch.RoleIndex{
+						{
+							Names:      []string{"tigera_secure_ee_*"},
+							Privileges: []string{"read"},
+						},
+						{
+							Names:      []string{".tigera.ipset.*", "tigera_secure_ee_events.*", ".tigera.domainnameset.*"},
+							Privileges: []string{"all"},
+						},
+					},
 				},
 			},
-		}},
+			{
+				Name: "watcher_admin",
+			}},
 	})
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserIntrusionDetectionJob,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserIntrusionDetectionJob,
-			Cluster: []string{"manage_ml", "manage_watcher", "manage"},
-			Indices: []elasticsearch.RoleIndex{
-				{
-					Names:      []string{"tigera_secure_ee_*"},
-					Privileges: []string{"read", "write"},
+			Name: render.ElasticsearchUserIntrusionDetectionJob,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"manage_ml", "manage_watcher", "manage"},
+				Indices: []elasticsearch.RoleIndex{
+					{
+						Names:      []string{"tigera_secure_ee_*"},
+						Privileges: []string{"read", "write"},
+					},
 				},
+				Applications: []elasticsearch.Application{{
+					Application: "kibana-.kibana",
+					Privileges:  []string{"all"},
+					Resources:   []string{"*"},
+				}},
 			},
-			Applications: []elasticsearch.Application{{
-				Application: "kibana-.kibana",
-				Privileges:  []string{"all"},
-				Resources:   []string{"*"},
-			}},
 		}},
 	})
 }

@@ -36,12 +36,14 @@ func init() {
 	esusers.AddUser(elasticsearch.User{
 		Username: render.ElasticsearchUserCurator,
 		Roles: []elasticsearch.Role{{
-			Name:    render.ElasticsearchUserCurator,
-			Cluster: []string{"monitor", "manage_index_templates"},
-			Indices: []elasticsearch.RoleIndex{{
-				Names:      []string{"tigera_secure_ee_*"},
-				Privileges: []string{"all"},
-			}},
+			Name: render.ElasticsearchUserCurator,
+			Definition: &elasticsearch.RoleDefinition{
+				Cluster: []string{"monitor", "manage_index_templates"},
+				Indices: []elasticsearch.RoleIndex{{
+					Names:      []string{"tigera_secure_ee_*"},
+					Privileges: []string{"all"},
+				}},
+			},
 		}},
 	})
 }

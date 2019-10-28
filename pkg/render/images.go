@@ -16,6 +16,14 @@ const (
 	ECKKibanaRegistry        = "docker.elastic.co/kibana/"
 )
 
+// This section contains images used for utility operator functions.
+const (
+	// The version will be added to this image by the render'er using
+	// it. This is an abnormal one off and should be fixed/resolved
+	// soon.
+	OperatorInitImageName = "operator-init:"
+)
+
 // This section contains images used when installing open-source Calico.
 const (
 	NodeImageNameCalico            = "node:" + components.VersionCalicoNode

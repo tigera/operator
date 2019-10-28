@@ -190,6 +190,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 
 	var openshiftConfig *configv1.Network
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		openshiftConfig = &configv1.Network{}
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
@@ -373,6 +374,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	openShiftOnAws := false
+	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
+		if err != nil {
+			log.Error(err, "Error checking if OpenShift is on AWS")
+			r.status.SetDegraded("Error checking if OpenShift is on AWS", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -393,7 +404,22 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	for _, component := range calico.Render() {
+	components := []render.Component{}
+	// If we're on OpenShift on AWS render a Job (and needed resources) to
+	// setup the security groups we need for IPIP, BGP, and Typha communication.
+	if openShiftOnAws {
+		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance.Spec.Registry)
+		if err != nil {
+			// If there is a problem rendering this do not degrade or stop rendering
+			// anything else.
+			log.Info(err.Error())
+		} else {
+			components = append(components, awsSetup)
+		}
+	}
+	components = append(components, calico.Render()...)
+
+	for _, component := range components {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
@@ -414,7 +440,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, err
 		}
 		// If configured to run in openshift, update the config status with the current state.
-		reqLogger.V(1).Info("Updating openshift cluster network status")
+		reqLogger.V(1).Info("Updating OpenShift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
 		openshiftConfig.Status.NetworkType = "Calico"
@@ -589,6 +615,21 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 		bt[k] = v
 	}
 	return bt, nil
+}
+
+// isOpenshiftOnAws returns true if running on OpenShift on AWS, this is determined
+// by the KubernetesProvider on the installation and the infrastructure OpenShift
+// status.
+func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, client client.Client) (bool, error) {
+	if install.Spec.KubernetesProvider != operator.ProviderOpenShift {
+		return false, nil
+	}
+	infra := configv1.Infrastructure{}
+	// If configured to run in openshift, then also fetch the openshift configuration API.
+	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
+		return false, fmt.Errorf("Unable to read OpenShift infrastructure configuration: %s", err.Error())
+	}
+	return (infra.Status.Platform == "AWS"), nil
 }
 
 func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {

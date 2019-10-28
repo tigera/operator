@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
@@ -349,6 +350,15 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			envs = append(envs,
 				corev1.EnvVar{Name: "FLUENTD_DNS_FILTERS", Value: "true"})
 		}
+	}
+
+	if c.ls.Spec.Indices != nil && c.ls.Spec.Indices.Replicas != nil {
+		replicas := int(*c.ls.Spec.Indices.Replicas)
+		envs = append(envs,
+			corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(replicas)},
+			corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(replicas)},
+			corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(replicas)},
+		)
 	}
 
 	return envs

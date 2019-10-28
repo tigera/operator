@@ -11,6 +11,7 @@ import (
 
 var _ = Describe("Elasticsearch rendering tests", func() {
 	var logStorage *operator.LogStorage
+	replicas := int32(1)
 	BeforeEach(func() {
 		// Initialize a default logStorage to use. Each test can override this to its
 		// desired configuration.
@@ -21,7 +22,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					ResourceRequirements: nil,
 				},
 				Indices: &operator.Indices{
-					Replicas: 1,
+					Replicas: &replicas,
 				},
 			},
 			Status: operator.LogStorageStatus{

@@ -56,7 +56,8 @@ type Nodes struct {
 // Indices defines the configuration for the indices in an Elasticsearch cluster.
 type Indices struct {
 	// Replicas defines how many replicas each index will have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
-	Replicas int64 `json:"replicas"`
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // Retention defines how long data is retained in an Elasticsearch cluster before it is cleared.

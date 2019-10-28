@@ -63,7 +63,7 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 		},
 	}
 
-	const schedule = "@daily"
+	const schedule = "@hourly"
 
 	return &batch.CronJob{
 		ObjectMeta: metav1.ObjectMeta{

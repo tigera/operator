@@ -113,7 +113,10 @@ func (cli Client) createRole(role Role) error {
 	response, err := cli.Perform(req)
 	if err != nil {
 		return err
-	} else if response.StatusCode != 200 {
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
 		body, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			return err
@@ -153,7 +156,10 @@ func (cli Client) CreateUser(user User) error {
 	response, err := cli.Perform(req)
 	if err != nil {
 		return err
-	} else if response.StatusCode != 200 {
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
 		body, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			return err
@@ -193,7 +199,10 @@ func (cli Client) UpdateUser(user User) error {
 	response, err := cli.Perform(req)
 	if err != nil {
 		return err
-	} else if response.StatusCode != 200 {
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
 		body, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			return err
@@ -211,6 +220,7 @@ func (cli Client) UserExists(username string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	response.Body.Close()
 
 	return response.StatusCode == 200, nil
 }

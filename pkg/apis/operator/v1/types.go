@@ -73,7 +73,7 @@ var (
 // CalicoNetwork specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
-	// may be specified. If omitted, a single pool will be configured. If empty, no IP pools will be created.
+	// may be specified. If omitted, a single pool will be configured when needed.
 	// +optional
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
@@ -172,6 +172,7 @@ type InstallationStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
+// +genclient:nonNamespaced
 
 // Installation configures an installation of Calico or Tigera Secure EE. At most one instance
 // of this resource is supported. It must be named "default". The Installation API installs core networking

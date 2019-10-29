@@ -22,6 +22,7 @@ type IntrusionDetectionStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
+// +genclient:nonNamespaced
 
 // IntrusionDetection installs the components required for Tigera intrusion detection. At most one instance
 // of this resource is supported. It must be named "tigera-secure".

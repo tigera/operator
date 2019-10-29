@@ -88,6 +88,7 @@ type LogCollectorStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
+// +genclient:nonNamespaced
 
 // LogCollector installs the components required for Tigera flow and DNS log collection. At most one instance
 // of this resource is supported. It must be named "tigera-secure". When created, this installs fluentd on all nodes

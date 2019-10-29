@@ -661,7 +661,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
-		{Name: "IP", Value: "autodetect"},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
@@ -709,6 +708,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.netConfig.CNI == CNINone {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
 	} else {
 		// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults.
 		ipipMtu := "1440"
@@ -718,6 +718,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
 
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})

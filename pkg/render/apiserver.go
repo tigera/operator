@@ -268,6 +268,9 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"globalnetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"stagednetworkpolicies",
+					"stagedglobalnetworkpolicies",
 					"networkpolicies",
 					"tiers",
 					"clusterinformations",
@@ -509,7 +512,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-
 	}
 
 	return apiServer
@@ -537,7 +539,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext:securityContext(),
+		SecurityContext: securityContext(),
 	}
 	return container
 }

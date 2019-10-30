@@ -69,7 +69,7 @@ type Retention struct {
 
 	// AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
-	// Default: 367
+	// Default: 91
 	// +optional
 	AuditReports *int32 `json:"auditReports"`
 
@@ -78,7 +78,7 @@ type Retention struct {
 	// Consult the Compliance Reporting documentation for more details on snapshots.
 	// Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
-	// Default: 367
+	// Default: 91
 	// +optional
 	Snapshots *int32 `json:"snapshots"`
 
@@ -87,9 +87,28 @@ type Retention struct {
 	// Consult the Compliance Reporting documentation for more details on reports.
 	// Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
-	// Default: 367
+	// Default: 91
 	// +optional
 	ComplianceReports *int32 `json:"complianceReports"`
+
+	// Elasticsearch by default sets a high watermark threshold at 90% for disk usage. We use
+	// this as the default threshold for rotating the indices in the Tigera Elasticsearch
+	// cluster. As soon as the total disk utilization exceeds this value, indices will be removed
+	// starting with the oldest. Picking a low value leads to low disk utilization, while a high
+	// value might result in unexpected behaviour.
+	// Default: 90
+	// +optional
+	MaxTotalStoragePercent *int32 `json:"maxTotalStoragePercent"`
+
+	// TSEE will remove dns and flow log indices once the combined data exceeds this
+	// threshold. The default value (80% of the cluster size) is used because flow
+	// logs and dns logs often use the most disk space; this allows compliance and
+	// security indices to be retained longer. The oldest indices are removed first.
+	// Set this value to be lower than or equal to, the value for
+	// max-total-storage-pct.
+	// Default: 90
+	// +optional
+	MaxLogsStoragePercent *int32 `json:"maxLogsStoragePercent"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

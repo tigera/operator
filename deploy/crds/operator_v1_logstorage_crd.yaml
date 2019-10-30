@@ -64,7 +64,7 @@ spec:
                   description: 'AuditReports configures the retention period for audit
                     logs, in days.  Logs written on a day that started at least this
                     long ago are removed.  To keep logs for at least x days, use a
-                    retention period of x+1. Default: 367'
+                    retention period of x+1. Default: 91'
                   format: int32
                   type: integer
                 complianceReports:
@@ -74,7 +74,7 @@ spec:
                     Consult the Compliance Reporting documentation for more details
                     on reports. Logs written on a day that started at least this long
                     ago are removed.  To keep logs for at least x days, use a retention
-                    period of x+1. Default: 367'
+                    period of x+1. Default: 91'
                   format: int32
                   type: integer
                 flows:
@@ -91,7 +91,26 @@ spec:
                     Reporting documentation for more details on snapshots. Logs written
                     on a day that started at least this long ago are removed.  To
                     keep logs for at least x days, use a retention period of x+1.
-                    Default: 367'
+                    Default: 91'
+                  format: int32
+                  type: integer
+                maxTotalStoragePercent:
+                  description: 'TSEE uses a default high watermark threshold (90%) for
+                    rotating indices in the Elasticsearch cluster. Indices are deleted
+                    (starting with the oldest) when the disk exceeds this threshold.
+                    Lowering the value leads to lower disk utilization, while increasing
+                    it by too much can have an impact on the stability of your cluster.
+                    Default: 90'
+                  format: int32
+                  type: integer
+                maxLogsStoragePercent:
+                  description: 'TSEE will remove dns and flow log indices once the combined data
+                    exceeds this threshold. The default value (80% of the cluster size) is used
+                    because flow logs and dns logs often use the most disk space; this allows
+                    compliance and security indices to be retained longer. The oldest indices are
+                    removed first. Set this value to be lower than or equal to, the value for
+                    max-total-storage-pct.
+                    Default: 80'
                   format: int32
                   type: integer
               required:

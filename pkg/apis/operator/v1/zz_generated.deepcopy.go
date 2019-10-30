@@ -886,6 +886,16 @@ func (in *Retention) DeepCopyInto(out *Retention) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.MaxTotalStoragePercent != nil {
+		in, out := &in.MaxTotalStoragePercent, &out.MaxTotalStoragePercent
+		*out = new(int32)
+		**out = **in
+	}
+	if in.MaxLogsStoragePercent != nil {
+		in, out := &in.MaxLogsStoragePercent, &out.MaxLogsStoragePercent
+		*out = new(int32)
+		**out = **in
+	}
 	return
 }
 

@@ -45,6 +45,7 @@ func schema_pkg_apis_operator_v1_APIServer(ref common.ReferenceCallback) common.
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "APIServer installs the Tigera API server and related resources. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -90,10 +91,9 @@ func schema_pkg_apis_operator_v1_APIServerSpec(ref common.ReferenceCallback) com
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "APIServerSpec defines the desired state of Tigera API server.",
-				Properties:  map[string]spec.Schema{},
+				Type:        []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -102,6 +102,7 @@ func schema_pkg_apis_operator_v1_APIServerStatus(ref common.ReferenceCallback) c
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "APIServerStatus defines the observed state of Tigera API server.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -113,7 +114,6 @@ func schema_pkg_apis_operator_v1_APIServerStatus(ref common.ReferenceCallback) c
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -122,6 +122,7 @@ func schema_pkg_apis_operator_v1_Auth(ref common.ReferenceCallback) common.OpenA
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Auth defines authentication configuration.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
@@ -147,7 +148,6 @@ func schema_pkg_apis_operator_v1_Auth(ref common.ReferenceCallback) common.OpenA
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -156,6 +156,7 @@ func schema_pkg_apis_operator_v1_Compliance(ref common.ReferenceCallback) common
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Compliance installs the components required for Tigera compliance reporting. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -201,10 +202,9 @@ func schema_pkg_apis_operator_v1_ComplianceSpec(ref common.ReferenceCallback) co
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ComplianceSpec defines the desired state of Tigera compliance reporting capabilities.",
-				Properties:  map[string]spec.Schema{},
+				Type:        []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -213,6 +213,7 @@ func schema_pkg_apis_operator_v1_ComplianceStatus(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ComplianceStatus defines the observed state of Tigera compliance reporting capabilities.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -224,7 +225,6 @@ func schema_pkg_apis_operator_v1_ComplianceStatus(ref common.ReferenceCallback) 
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -233,6 +233,7 @@ func schema_pkg_apis_operator_v1_Installation(ref common.ReferenceCallback) comm
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Installation configures an installation of Calico or Tigera Secure EE. At most one instance of this resource is supported. It must be named \"default\". The Installation API installs core networking and network policy components, and provides general install-time configuration.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -278,6 +279,7 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "InstallationSpec defines configuration for a Calico or Tigera Secure EE installation.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"variant": {
 						SchemaProps: spec.SchemaProps{
@@ -332,6 +334,7 @@ func schema_pkg_apis_operator_v1_InstallationStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "InstallationStatus defines the observed state of the Calico or Tigera Secure installation.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"variant": {
 						SchemaProps: spec.SchemaProps{
@@ -343,7 +346,6 @@ func schema_pkg_apis_operator_v1_InstallationStatus(ref common.ReferenceCallback
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -352,6 +354,7 @@ func schema_pkg_apis_operator_v1_IntrusionDetection(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "IntrusionDetection installs the components required for Tigera intrusion detection. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -397,10 +400,9 @@ func schema_pkg_apis_operator_v1_IntrusionDetectionSpec(ref common.ReferenceCall
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "IntrusionDetectionSpec defines the desired state of Tigera intrusion detection capabilities.",
-				Properties:  map[string]spec.Schema{},
+				Type:        []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -409,6 +411,7 @@ func schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref common.ReferenceCa
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "IntrusionDetectionStatus defines the observed state of Tigera intrusion detection capabilities.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -420,7 +423,6 @@ func schema_pkg_apis_operator_v1_IntrusionDetectionStatus(ref common.ReferenceCa
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -429,6 +431,7 @@ func schema_pkg_apis_operator_v1_LogCollector(ref common.ReferenceCallback) comm
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollector installs the components required for Tigera flow and DNS log collection. At most one instance of this resource is supported. It must be named \"tigera-secure\". When created, this installs fluentd on all nodes configured to collect Tigera log data and export it to Tigera's Elasticsearch cluster as well as any additionally configured destinations.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -474,6 +477,7 @@ func schema_pkg_apis_operator_v1_LogCollectorSpec(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollectorSpec defines the desired state of Tigera flow, audit, and DNS log collection.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"additionalStores": {
 						SchemaProps: spec.SchemaProps{
@@ -481,11 +485,17 @@ func schema_pkg_apis_operator_v1_LogCollectorSpec(ref common.ReferenceCallback) 
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogStoreSpec"),
 						},
 					},
+					"additionalSources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Configuration for importing audit logs from managed kubernetes cluster log sources.",
+							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogSourceSpec"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogStoreSpec"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogSourceSpec", "github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogStoreSpec"},
 	}
 }
 
@@ -494,6 +504,7 @@ func schema_pkg_apis_operator_v1_LogCollectorStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogCollectorStatus defines the observed state of Tigera flow and DNS log collection",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -505,7 +516,6 @@ func schema_pkg_apis_operator_v1_LogCollectorStatus(ref common.ReferenceCallback
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -514,6 +524,7 @@ func schema_pkg_apis_operator_v1_LogStorage(ref common.ReferenceCallback) common
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance of this resource is supported. It must be named \"tigera-secure\". When created, this installs an Elasticsearch cluster for use by Tigera Secure.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -559,6 +570,7 @@ func schema_pkg_apis_operator_v1_LogStorageSpec(ref common.ReferenceCallback) co
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogStorageSpec defines the desired state of Tigera flow and DNS log storage.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"nodes": {
 						SchemaProps: spec.SchemaProps{
@@ -591,6 +603,7 @@ func schema_pkg_apis_operator_v1_LogStorageStatus(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "LogStorageStatus defines the observed state of Tigera flow and DNS log storage.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
@@ -616,7 +629,6 @@ func schema_pkg_apis_operator_v1_LogStorageStatus(ref common.ReferenceCallback) 
 				},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -625,6 +637,7 @@ func schema_pkg_apis_operator_v1_Manager(ref common.ReferenceCallback) common.Op
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Manager installs the Tigera Secure manager graphical user interface. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -670,6 +683,7 @@ func schema_pkg_apis_operator_v1_ManagerSpec(ref common.ReferenceCallback) commo
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ManagerSpec defines configuration for the Tigera Secure manager GUI.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"auth": {
 						SchemaProps: spec.SchemaProps{
@@ -690,6 +704,7 @@ func schema_pkg_apis_operator_v1_ManagerStatus(ref common.ReferenceCallback) com
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "ManagerStatus defines the observed state of the Tigera Secure manager GUI.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"auth": {
 						SchemaProps: spec.SchemaProps{
@@ -710,6 +725,7 @@ func schema_pkg_apis_operator_v1_S3StoreSpec(ref common.ReferenceCallback) commo
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "S3StoreSpec defines configuration for exporting logs to Amazon S3.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"region": {
 						SchemaProps: spec.SchemaProps{
@@ -736,7 +752,6 @@ func schema_pkg_apis_operator_v1_S3StoreSpec(ref common.ReferenceCallback) commo
 				Required: []string{"region", "bucketName", "bucketPath"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -745,6 +760,7 @@ func schema_pkg_apis_operator_v1_TigeraStatus(ref common.ReferenceCallback) comm
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "TigeraStatus represents the most recently observed status for Calico or a Tigera Secure EE functional area.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -787,10 +803,9 @@ func schema_pkg_apis_operator_v1_TigeraStatusSpec(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Type: []string{"object"},
 			},
 		},
-		Dependencies: []string{},
 	}
 }
 
@@ -799,6 +814,7 @@ func schema_pkg_apis_operator_v1_TigeraStatusStatus(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "TigeraStatusStatus defines the observed state of TigeraStatus",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"conditions": {
 						SchemaProps: spec.SchemaProps{

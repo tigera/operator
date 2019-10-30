@@ -15,6 +15,7 @@
 package render_test
 
 import (
+	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -56,7 +57,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ds := resources[3].(*apps.Deployment)
 
 		// Image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:v3.10.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("test-reg/%s", render.KubeControllersImageNameCalico)))
 
 		// Verify env
 		expectedEnv := []v1.EnvVar{

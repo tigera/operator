@@ -660,7 +660,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{ FieldRef: &corev1.ObjectFieldSelector { FieldPath: "spec.nodeName" } }},
 	}
 
 	volMounts := []corev1.VolumeMount{
@@ -840,7 +840,7 @@ func (c *complianceComponent) complianceGlobalReportInventory() *v3.GlobalReport
 			},
 			IncludeEndpointData: true,
 			UISummaryTemplate: v3.ReportTemplate{
-				Name:     "ui-temporary.json",
+				Name:     "ui-summary.json",
 				Template: `{"heading":"Inscope vs Protected","type":"panel","widgets":[{"data":[{"label":"Protected ingress","value":{{ .EndpointsSummary.NumIngressProtected }}}],"heading":"Endpoints","summary":{"label":"Total","total":{{.EndpointsSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected ingress","value":{{ .NamespacesSummary.NumIngressProtected }}}],"heading":"Namespaces","summary":{"label":"Total","total":{{.NamespacesSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected egress","value":{{ .EndpointsSummary.NumEgressProtected }}}],"heading":"Endpoints","summary":{"label":"Total","total":{{.EndpointsSummary.NumTotal }}},"type":"radialbarchart"},{"data":[{"label":"Protected egress","value":{{ .NamespacesSummary.NumEgressProtected }}}],"heading":"Namespaces","summary":{"label":"Total","total":{{.NamespacesSummary.NumTotal }}},"type":"radialbarchart"}]}`,
 			},
 		},
@@ -968,7 +968,6 @@ func (c *complianceComponent) complianceGlobalReportPolicyAudit() *v3.GlobalRepo
 					Template: "{{ toYaml .AuditEvents }}",
 				},
 			},
-			IncludeEndpointData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name: "ui-summary.json",
 				Template: `
@@ -1015,7 +1014,7 @@ func (c *complianceComponent) complianceGlobalReportCISBenchmark() *v3.GlobalRep
 {{- end }}`,
 				},
 			},
-			IncludeEndpointData: true,
+			IncludeCISBenchmarkData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name:     "ui-summary.json",
 				Template: `{{ $n := len .CISBenchmark }}{"heading": "Kubernetes CIS Benchmark","type":"row","widgets": [{"heading": "Node Failure Summary","type":"cis-benchmark-nodes","summary": {"label": "Total","total":{{ $n }}},"data": [{"label": "HIGH","value":{{ .CISBenchmarkSummary.HighCount }},"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}% or more tests passing"}, {"label": "MED","value": {{ .CISBenchmarkSummary.MedCount }},"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing"}, {"label": "LOW","value": {{ .CISBenchmarkSummary.LowCount }},"desc": "Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing"}]}{{ if .CISBenchmark }}, {"heading": "Top Failed Tests","type": "cis-benchmark-tests","topFailedTests": {"tests": [{{ $tests := cisTopFailedTests . }}{{ $nTests := len $tests }}{{ range $i, $test := $tests }}{"index": "{{ $test.TestNumber }}","description": "{{ $test.TestDesc }}","failedCount": "{{ $test.Count }}"} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}{{ end }}]} }{{ end }}]}`,

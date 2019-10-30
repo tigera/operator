@@ -67,17 +67,17 @@ var _ = Describe("Node rendering tests", func() {
 		ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		// Node image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.10.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/calico/%s", render.NodeImageNameCalico)))
 
 		// Validate correct number of init containers.
 		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 		// CNI container uses image override.
-		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal("docker.io/calico/cni:v3.10.0"))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/calico/%s", render.CNIImageName)))
 
 		// Verify the Flex volume container image.
 
-		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal("docker.io/calico/pod2daemon-flexvol:v3.10.0"))
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/calico/%s", render.FlexVolumeImageName)))
 
 		optional := true
 		// Verify env
@@ -318,7 +318,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/calico/node:v3.10.0"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/calico/%s", render.NodeImageNameCalico)))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
 

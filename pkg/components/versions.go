@@ -18,8 +18,8 @@ const (
 	VersionTigeraKubeControllers = "v2.6.0-0.dev-86-g506e244-dirty"
 
 	// API server images.
-	VersionAPIServer   = "v2.5.0-mcm0.1-31-g54c4ff40"
-	VersionQueryServer = "v2.6.0-0.dev-7-g5e69bfc"
+	VersionAPIServer   = "v2.5.0-mcm0.1-49-g909a7f60"
+	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
 
 	// Logging
 	VersionFluentd = "v2.6.0-0.dev-27-gdd525f5"
@@ -36,9 +36,9 @@ const (
 	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
 
 	// Manager images.
-	VersionManager        = "v2.6.0-0.dev-1-g68a6585"
-	VersionManagerProxy   = "v1.0.0.rc1"
-	VersionManagerEsProxy = "v2.6.0-0.dev-88-gbd4f9c3"
+	VersionManager        = "v2.5.0-347-gb01f72d0"
+	VersionManagerProxy   = "v2.5.0-mcm0.1-27-g9d85a20"
+	VersionManagerEsProxy = "v2.6.0-0.dev-96-g38d646f"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"

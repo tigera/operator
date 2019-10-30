@@ -17,6 +17,7 @@ package render_test
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -134,7 +135,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
-		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal("testregistry.com/cnx-apiserver:v2.5.0-mcm0.1-31-g54c4ff40"))
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("testregistry.com/%s", render.APIServerImageName)))
 
 		expectedArgs := []string{
 			"--secure-port=5443",
@@ -162,7 +163,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(*(d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)).To(BeTrue())
 
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal("testregistry.com/cnx-queryserver:v2.6.0-0.dev-7-g5e69bfc"))
+		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("testregistry.com/%s", render.QueryServerImageName)))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
 

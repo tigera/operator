@@ -155,8 +155,13 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	env := []v1.EnvVar{
-		{Name: "ENABLED_CONTROLLERS", Value: "node"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "node,service"})
+	} else {
+		env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "node"})
 	}
 
 	// Pick which image to use based on variant.

@@ -122,7 +122,13 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("2"),
+					"memory": resource.MustParse("3Gi"),
+				},
 				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("2Gi"),
 					"storage": resource.MustParse("10Gi"),
 				},
 			},
@@ -320,10 +326,6 @@ func (es elasticsearchComponent) eckOperatorServiceAccount() *corev1.ServiceAcco
 }
 
 func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
-	cpu1, _ := resource.ParseQuantity("1")
-	cpu2, _ := resource.ParseQuantity("100m")
-	mem1, _ := resource.ParseQuantity("100Mi")
-	mem2, _ := resource.ParseQuantity("20Mi")
 	gracePeriod := int64(10)
 	defaultMode := int32(420)
 
@@ -373,12 +375,12 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
-								"cpu":    cpu1,
-								"memory": mem1,
+								"cpu":    resource.MustParse("1"),
+								"memory": resource.MustParse("100Mi"),
 							},
 							Requests: corev1.ResourceList{
-								"cpu":    cpu2,
-								"memory": mem2,
+								"cpu":    resource.MustParse("100m"),
+								"memory": resource.MustParse("20Mi"),
 							},
 						},
 						Ports: []corev1.ContainerPort{{

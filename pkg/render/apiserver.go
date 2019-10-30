@@ -140,10 +140,13 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRo
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-tiered-policy-passthrough",
 		},
+		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
+		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the
+		// StagedKubernetesNetworkPolicy are handled using normal (non-tiered) RBAC.
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"networkpolicies", "globalnetworkpolicies"},
+				Resources: []string{"networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"},
 				Verbs:     []string{"*"},
 			},
 		},
@@ -268,10 +271,10 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"globalnetworkpolicies",
+					"networkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"stagedglobalnetworkpolicies",
-					"networkpolicies",
 					"tiers",
 					"clusterinformations",
 					"hostendpoints",
@@ -411,6 +414,9 @@ rules:
     resources:
     - globalnetworkpolicies
     - networkpolicies
+    - stagedglobalnetworkpolicies
+    - stagednetworkpolicies
+    - stagedkubernetesnetworkpolicies
     - globalnetworksets
     - networksets
     - tiers

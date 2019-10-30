@@ -524,8 +524,13 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalnetworkpolicies", "networkpolicies", "tier.globalnetworkpolicies",
-					"tier.networkpolicies", "tiers", "hostendpoints", "globalnetworksets"},
+				Resources: []string{"globalnetworkpolicies", "tier.globalnetworkpolicies",
+					"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
+					"networkpolicies", "tier.networkpolicies",
+					"stagednetworkpolicies", "tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"tiers", "hostendpoints",
+					"globalnetworksets", "networksets"},
 				Verbs: []string{"get", "list"},
 			},
 		},
@@ -924,6 +929,15 @@ func (c *complianceComponent) complianceGlobalReportPolicyAudit() *v3.GlobalRepo
 					},
 					{
 						Resource: "networkpolicies",
+					},
+					{
+						Resource: "stagedglobalnetworkpolicies",
+					},
+					{
+						Resource: "stagednetworkpolicies",
+					},
+					{
+						Resource: "stagedkubernetesnetworkpolicies",
 					},
 				},
 			},

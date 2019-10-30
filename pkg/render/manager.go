@@ -419,6 +419,11 @@ func (c *managerComponent) managerPolicyImpactPreviewClusterRole() *rbacv1.Clust
 					"tier.globalnetworkpolicies",
 					"networkpolicies",
 					"tier.networkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
 				},
 				Verbs: []string{"list"},
 			},
@@ -478,9 +483,9 @@ func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 					"extensions",
 					"",
 				},
-				// Use both networkpolicies and tier.networkpolicies, and globalnetworkpolicies and tier.globalnetworkpolicies resource
-				// types to ensure identical behavior irrespective of the Calico RBAC scheme (see the ClusterRole
-				// "ee-calico-tiered-policy-passthru" for more details).
+				// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
+				// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+				// more details).  Similar for all tiered policy resource types.
 				Resources: []string{
 					"tiers",
 					"networkpolicies",
@@ -489,7 +494,13 @@ func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 					"tier.globalnetworkpolicies",
 					"namespaces",
 					"globalnetworksets",
+					"networksets",
 					"managedclusters",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
 				},
 				Verbs: []string{"watch", "list"},
 			},
@@ -548,16 +559,22 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 					"networking.k8s.io",
 					"extensions",
 				},
-				// Use both networkpolicies and tier.networkpolicies, and globalnetworkpolicies and tier.globalnetworkpolicies resource
-				// types to ensure identical behavior irrespective of the Calico RBAC scheme (see the ClusterRole
-				// "ee-calico-tiered-policy-passthru" for more details).
+				// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
+				// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+				// more details).  Similar for all tiered policy resource types.
 				Resources: []string{
 					"tiers",
 					"networkpolicies",
 					"tier.networkpolicies",
 					"globalnetworkpolicies",
 					"tier.globalnetworkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
 					"globalnetworksets",
+					"networksets",
 					"managedclusters",
 				},
 				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},

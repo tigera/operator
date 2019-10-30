@@ -507,7 +507,7 @@ func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"lma.tigera.io"},
 				Resources: []string{"index"},
 				ResourceNames: []string{
-					"flows", "audit*", "events",
+					"flows", "audit*", "events", "dns",
 				},
 				Verbs: []string{"get"},
 			},
@@ -582,7 +582,7 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"lma.tigera.io"},
 				Resources: []string{"index"},
 				ResourceNames: []string{
-					"flows", "audit*", "events",
+					"flows", "audit*", "events", "dns",
 				},
 				Verbs: []string{"get"},
 			},

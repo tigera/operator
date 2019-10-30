@@ -37,10 +37,8 @@ spec:
                 replicas:
                   description: Replicas defines how many replicas each index will
                     have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
-                  format: int64
+                  format: int32
                   type: integer
-              required:
-              - replicas
               type: object
             nodes:
               description: Nodes defines the configuration for a set of identical

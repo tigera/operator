@@ -654,7 +654,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 
 func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {
 	envVars := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "debug"},
+		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{ FieldRef: &corev1.ObjectFieldSelector { FieldPath: "spec.nodeName" } }},
 	}
 

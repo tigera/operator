@@ -113,16 +113,16 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cnx-manager",
+			Name:      "tigera-manager",
 			Namespace: ManagerNamespace,
 			Labels: map[string]string{
-				"k8s-app": "cnx-manager",
+				"k8s-app": "tigera-manager",
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "cnx-manager",
+					"k8s-app": "tigera-manager",
 				},
 			},
 			Replicas: &replicas,
@@ -131,10 +131,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cnx-manager",
+					Name:      "tigera-manager",
 					Namespace: ManagerNamespace,
 					Labels: map[string]string{
-						"k8s-app": "cnx-manager",
+						"k8s-app": "tigera-manager",
 					},
 					Annotations: map[string]string{
 						// Mark this pod as a critical add-on; when enabled, the critical add-on scheduler
@@ -147,7 +147,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					NodeSelector: map[string]string{
 						"beta.kubernetes.io/os": "linux",
 					},
-					ServiceAccountName: "cnx-manager",
+					ServiceAccountName: "tigera-manager",
 					Tolerations:        c.managerTolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
@@ -242,10 +242,10 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
-		Name:          "cnx-manager",
-		Image:         constructImage(ManagerImageName, c.registry),
-		Env:           c.managerEnvVars(),
-		LivenessProbe: c.managerProbe(),
+		Name:            "tigera-manager",
+		Image:           constructImage(ManagerImageName, c.registry),
+		Env:             c.managerEnvVars(),
+		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
 	}
 }
@@ -290,7 +290,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
 			{Name: ManagerTLSSecretName, MountPath: "/certs/tunnel"},
 		},
-		LivenessProbe: c.managerProxyProbe(),
+		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),
 	}
 }
@@ -298,9 +298,9 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	apiServer := corev1.Container{
-		Name:          "tigera-es-proxy",
-		Image:         constructImage(ManagerEsProxyImageName, c.registry),
-		LivenessProbe: c.managerEsProxyProbe(),
+		Name:            "tigera-es-proxy",
+		Image:           constructImage(ManagerEsProxyImageName, c.registry),
+		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 	}
 
@@ -328,7 +328,7 @@ func (c *managerComponent) managerService() *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cnx-manager",
+			Name:      "tigera-manager",
 			Namespace: ManagerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -340,7 +340,7 @@ func (c *managerComponent) managerService() *v1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"k8s-app": "cnx-manager",
+				"k8s-app": "tigera-manager",
 			},
 		},
 	}
@@ -350,7 +350,7 @@ func (c *managerComponent) managerService() *v1.Service {
 func (c *managerComponent) managerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager", Namespace: ManagerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: ManagerNamespace},
 	}
 }
 
@@ -359,7 +359,7 @@ func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "cnx-manager-role",
+			Name: "tigera-manager-role",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -381,21 +381,21 @@ func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// managerClusterRoleBinding returns a clusterrolebinding that gives the cnx-manager serviceaccount
-// the permissions in the cnx-manager-role.
+// managerClusterRoleBinding returns a clusterrolebinding that gives the tigera-manager serviceaccount
+// the permissions in the tigera-manager-role.
 func (c *managerComponent) managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager-binding"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "cnx-manager-role",
+			Name:     "tigera-manager-role",
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "cnx-manager",
+				Name:      "tigera-manager",
 				Namespace: ManagerNamespace,
 			},
 		},
@@ -407,7 +407,7 @@ func (c *managerComponent) managerPolicyImpactPreviewClusterRole() *rbacv1.Clust
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "cnx-manager-pip",
+			Name: "tigera-manager-pip",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -446,16 +446,16 @@ func (c *managerComponent) managerPolicyImpactPreviewClusterRole() *rbacv1.Clust
 func (c *managerComponent) managerPolicyImpactPreviewClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "cnx-manager-pip"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-pip"},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "cnx-manager-pip",
+			Name:     "tigera-manager-pip",
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "cnx-manager",
+				Name:      "tigera-manager",
 				Namespace: ManagerNamespace,
 			},
 		},
@@ -625,7 +625,7 @@ func (c *managerComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 		ReadOnlyRootFilesystem:   false,
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users:                    []string{fmt.Sprintf("system:serviceaccount:%s:cnx-manager", ManagerNamespace)},
+		Users:                    []string{fmt.Sprintf("system:serviceaccount:%s:tigera-manager", ManagerNamespace)},
 		Groups:                   []string{"system:authenticated"},
 		Volumes:                  []ocsv1.FSType{"*"},
 	}

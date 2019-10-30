@@ -55,15 +55,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-manager", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "cnx-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "cnx-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "cnx-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "cnx-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
-			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
-			{name: "cnx-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 		}

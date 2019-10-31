@@ -60,6 +60,7 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserna
 		},
 		{Name: "ELASTIC_CA", Value: ElasticsearchDefaultCertPath},
 		{Name: "ES_CA_CERT", Value: ElasticsearchDefaultCertPath},
+		{Name: "ES_CURATOR_BACKEND_CERT", Value: ElasticsearchDefaultCertPath},
 	}
 
 	c.Env = append(c.Env, envVars...)

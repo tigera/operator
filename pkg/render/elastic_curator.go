@@ -16,6 +16,28 @@ var (
 	EsCuratorName = "elastic-curator"
 )
 
+// These constants should be moved to `logstorage_types` in 2.6.1
+const (
+	// Elasticsearch by default sets a high watermark threshold at 90% for disk usage. We use
+	// this as the default threshold for rotating the indices in the Tigera Elasticsearch
+	// cluster. As soon as the total disk utilization exceeds this value, indices will be removed
+	// starting with the oldest. Picking a low value leads to low disk utilization, while a high
+	// value might result in unexpected behaviour.
+	// Default: 90
+	// +optional
+	maxTotalStoragePercent int32 = 90
+
+	// TSEE will remove dns and flow log indices once the combined data exceeds this
+	// threshold. The default value (80% of the cluster size) is used because flow
+	// logs and dns logs often use the most disk space; this allows compliance and
+	// security indices to be retained longer. The oldest indices are removed first.
+	// Set this value to be lower than or equal to, the value for
+	// max-total-storage-pct.
+	// Default: 80
+	// +optional
+	maxLogsStoragePercent int32 = 80
+)
+
 func ElasticCurator(logStorage operatorv1.LogStorage, esSecrets, pullSecrets []*corev1.Secret, registry, clusterName string) Component {
 	return &elasticCuratorComponent{
 		logStorage:  logStorage,
@@ -103,9 +125,11 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 
 func (ec elasticCuratorComponent) envVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.Flows)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.AuditReports)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.Snapshots)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(ec.logStorage.Spec.Retention.ComplianceReports)},
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*ec.logStorage.Spec.Retention.Flows)},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*ec.logStorage.Spec.Retention.AuditReports)},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*ec.logStorage.Spec.Retention.Snapshots)},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*ec.logStorage.Spec.Retention.ComplianceReports)},
+		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
+		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
 	}
 }

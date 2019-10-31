@@ -291,12 +291,11 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 				Value: "9443"},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT",
 				Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
-			{Name: "VOLTRON_LOG_LEVEL",
+			{Name: "VOLTRON_LOGLEVEL",
 				Value: "info"},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
-			{Name: ManagerTLSSecretName, MountPath: "/certs/tunnel"},
 		},
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),

@@ -3,9 +3,10 @@ package manager
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/compliance"
@@ -89,7 +90,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch compliance resource: %v", err)
 	}
 
-	for _, secretName := range []string{render.ElasticsearchPublicCertSecret, render.ElasticsearchUserManager} {
+	for _, secretName := range []string{
+		render.ManagerTLSSecretName,
+		render.ElasticsearchPublicCertSecret,
+		render.ElasticsearchUserManager,
+	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the Secret resource: %v", err)
 		}

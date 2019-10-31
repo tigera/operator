@@ -25,6 +25,7 @@ const (
 
 	ElasticsearchUserManager = "tigera-ee-manager"
 	DefaultKibanaURL         = "https://localhost:5601"
+	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tlsSecret"
 )
 
 func Manager(
@@ -110,6 +111,18 @@ func (c *managerComponent) Ready() bool {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
+	annotations := map[string]string{
+		// Mark this pod as a critical add-on; when enabled, the critical add-on scheduler
+		// reserves resources for critical add-on pods so that they can be rescheduled after
+		// a failure.  This annotation works in tandem with the toleration below.
+		"scheduler.alpha.kubernetes.io/critical-pod": "",
+	}
+	if len(c.tlsSecrets) > 0 {
+		// Add a hash of the Secret to ensure if it changes the manager will be
+		// redeployed.
+		annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -136,12 +149,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					Labels: map[string]string{
 						"k8s-app": "tigera-manager",
 					},
-					Annotations: map[string]string{
-						// Mark this pod as a critical add-on; when enabled, the critical add-on scheduler
-						// reserves resources for critical add-on pods so that they can be rescheduled after
-						// a failure.  This annotation works in tandem with the toleration below.
-						"scheduler.alpha.kubernetes.io/critical-pod": "",
-					},
+					Annotations: annotations,
 				},
 				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 					NodeSelector: map[string]string{

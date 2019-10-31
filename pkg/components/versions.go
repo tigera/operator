@@ -44,7 +44,7 @@ const (
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "es7-v2.6.0-dev-9184ce66033a"
+	VersionEsCurator        = "v2.6.0-0.dev-25-gb04da05"
 
 	VersionKibana = "7.3"
 )

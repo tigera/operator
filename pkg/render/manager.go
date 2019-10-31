@@ -540,6 +540,11 @@ func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"globalreporttypes"},
 				Verbs:     []string{"get"},
 			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list"},
+			},
 		},
 	}
 }
@@ -619,6 +624,12 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
 				Verbs:     []string{"get"},
+			},
+			// Access to cluster information containing Calico and EE versions from the UI.
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "watch"},
 			},
 		},
 	}

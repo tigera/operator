@@ -90,6 +90,8 @@ func main() {
 		fmt.Println("Manager:", components.VersionManager)
 		fmt.Println("ManagerProxy:", components.VersionManagerProxy)
 		fmt.Println("ManagerEsProxy:", components.VersionManagerEsProxy)
+		fmt.Println("Fluentd:", components.VersionFluentd)
+		fmt.Println("EsCurator:", components.VersionEsCurator)
 
 		os.Exit(0)
 	}

@@ -13,38 +13,38 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.0-0.dev-175-g3f547b6"
-	VersionTigeraTypha           = "v2.6.0-0.dev-104-g6c51073"
-	VersionTigeraKubeControllers = "v2.6.0-0.dev-86-g506e244-dirty"
+	VersionTigeraNode            = "release-v2.6"
+	VersionTigeraTypha           = "release-v2.6"
+	VersionTigeraKubeControllers = "release-v2.6"
 
 	// API server images.
-	VersionAPIServer   = "v2.5.0-mcm0.1-49-g909a7f60"
-	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
+	VersionAPIServer   = "release-v2.6"
+	VersionQueryServer = "release-v2.6"
 
 	// Logging
-	VersionFluentd = "v2.6.0-0.dev-33-g382faf2"
+	VersionFluentd = "release-v2.6"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceReporter    = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceServer      = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceSnapshotter = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceBenchmarker = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceController  = "relesae-v2.6"
+	VersionComplianceReporter    = "relesae-v2.6"
+	VersionComplianceServer      = "relesae-v2.6"
+	VersionComplianceSnapshotter = "relesae-v2.6"
+	VersionComplianceBenchmarker = "relesae-v2.6"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.6.0-0.dev-53-g6045051"
-	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
+	VersionIntrusionDetectionController   = "release-v2.6"
+	VersionIntrusionDetectionJobInstaller = "release-v2.6"
 
 	// Manager images.
-	VersionManager        = "v2.5.0-347-gb01f72d0"
-	VersionManagerProxy   = "v2.5.0-mcm0.1-32-gdd59369"
-	VersionManagerEsProxy = "v2.6.0-0.dev-96-g38d646f"
+	VersionManager        = "release-v2.6"
+	VersionManagerProxy   = "release-v2.6"
+	VersionManagerEsProxy = "release-v2.6"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "v2.6.0-0.dev-25-gb04da05"
+	VersionEsCurator        = "release-v2.6"
 
 	VersionKibana = "7.3"
 )

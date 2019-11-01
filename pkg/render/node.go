@@ -35,11 +35,12 @@ var (
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
+	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS}
 }
 
 type nodeComponent struct {
@@ -47,6 +48,7 @@ type nodeComponent struct {
 	provider      operator.Provider
 	netConfig     NetworkConfig
 	birdTemplates map[string]string
+	typhaNodeTLS  *TyphaNodeTLS
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
@@ -367,6 +369,8 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	if len(c.birdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = AnnotationHash(c.birdTemplates)
 	}
+	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
+	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},

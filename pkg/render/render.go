@@ -49,11 +49,16 @@ type Renderer interface {
 	Render() []Component
 }
 
+type TyphaNodeTLS struct {
+	CAConfigMap *corev1.ConfigMap
+	TyphaSecret *corev1.Secret
+	NodeSecret  *corev1.Secret
+}
+
 func Calico(
 	cr *operator.Installation,
 	pullSecrets []*corev1.Secret,
-	typhaCAConfigMap *corev1.ConfigMap,
-	typhaSecrets []*corev1.Secret,
+	typhaNodeTLS *TyphaNodeTLS,
 	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
@@ -62,65 +67,71 @@ func Calico(
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
 
+	if typhaNodeTLS == nil {
+		typhaNodeTLS = &TyphaNodeTLS{}
+	}
+
 	// Check the CA configMap and Secrets to ensure they are a valid combination and
 	// if the TLS info needs to be created.
 	// We should have them all or none.
-	if typhaCAConfigMap == nil {
-		if len(typhaSecrets) != 0 {
-			return nil, fmt.Errorf("Typha-Felix CA config map did not exist and neither should the Secrets Secrets(%v)", typhaSecrets)
+	if typhaNodeTLS.CAConfigMap == nil {
+		if typhaNodeTLS.TyphaSecret != nil || typhaNodeTLS.NodeSecret != nil {
+			return nil, fmt.Errorf("Typha-Felix CA config map did not exist and neither should the Secrets (%v)", typhaNodeTLS)
 		}
 		var err error
-		typhaCAConfigMap, typhaSecrets, err = createTLS()
+		typhaNodeTLS, err = createTLS()
 		if err != nil {
 			return nil, fmt.Errorf("Failed to create Typha TLS: %s", err)
 		}
-		tcms = append(tcms, typhaCAConfigMap)
-		tss = append(tss, typhaSecrets...)
+		tcms = append(tcms, typhaNodeTLS.CAConfigMap)
+		tss = append(tss, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)
 	} else {
 		// CA ConfigMap exists
-		if len(typhaSecrets) != 2 {
+		if typhaNodeTLS.TyphaSecret == nil || typhaNodeTLS.NodeSecret == nil {
 			return nil, fmt.Errorf("Typha-Felix CA config map exists and so should the Secrets.")
 		}
 	}
 
 	// Create copy to go into Calico Namespace
-	tcm := typhaCAConfigMap.DeepCopy()
-	tcm.ObjectMeta = metav1.ObjectMeta{Name: typhaCAConfigMap.Name, Namespace: CalicoNamespace}
+	tcm := typhaNodeTLS.CAConfigMap.DeepCopy()
+	tcm.ObjectMeta = metav1.ObjectMeta{Name: typhaNodeTLS.CAConfigMap.Name, Namespace: CalicoNamespace}
 	tcms = append(tcms, tcm)
 
-	for _, s := range typhaSecrets {
-		x := s.DeepCopy()
-		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: CalicoNamespace}
-		tss = append(tss, x)
-	}
+	ts := typhaNodeTLS.TyphaSecret.DeepCopy()
+	ts.ObjectMeta = metav1.ObjectMeta{Name: ts.Name, Namespace: CalicoNamespace}
+	ns := typhaNodeTLS.NodeSecret.DeepCopy()
+	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: CalicoNamespace}
+	tss = append(tss, ts, ns)
 
 	return calicoRenderer{
-		installation:    cr,
-		pullSecrets:     pullSecrets,
-		typhaConfigMaps: tcms,
-		typhaSecrets:    tss,
-		birdTemplates:   bt,
-		provider:        p,
-		networkConfig:   nc,
+		installation:  cr,
+		pullSecrets:   pullSecrets,
+		typhaNodeTLS:  typhaNodeTLS,
+		tlsConfigMaps: tcms,
+		tlsSecrets:    tss,
+		birdTemplates: bt,
+		provider:      p,
+		networkConfig: nc,
 	}, nil
 }
 
-func createTLS() (*corev1.ConfigMap, []*corev1.Secret, error) {
+func createTLS() (*TyphaNodeTLS, error) {
 	// Make CA
 	ca, err := makeCA()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	crtContent := &bytes.Buffer{}
 	keyContent := &bytes.Buffer{}
 	if err := ca.Config.WriteCertConfig(crtContent, keyContent); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
+	tntls := TyphaNodeTLS{}
 	// Take CA cert and create ConfigMap
 	data := make(map[string]string)
 	data[TyphaCABundleName] = crtContent.String()
-	cm := &corev1.ConfigMap{
+	tntls.CAConfigMap = &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaCAConfigMapName,
@@ -130,42 +141,43 @@ func createTLS() (*corev1.ConfigMap, []*corev1.Secret, error) {
 	}
 
 	// Create TLS Secret for Felix using ca from above
-	f, err := createOperatorTLSSecret(ca,
+	tntls.NodeSecret, err = createOperatorTLSSecret(ca,
 		FelixTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
 		[]crypto.CertificateExtensionFunc{setClientAuth},
 		"typha-client")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// Set the CommonName used to create cert
-	f.Data[CommonName] = []byte("typha-client")
+	tntls.NodeSecret.Data[CommonName] = []byte("typha-client")
 
 	// Create TLS Secret for Felix using ca from above
-	t, err := createOperatorTLSSecret(ca,
+	tntls.TyphaSecret, err = createOperatorTLSSecret(ca,
 		TyphaTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
 		[]crypto.CertificateExtensionFunc{setServerAuth},
 		"typha-server")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// Set the CommonName used to create cert
-	t.Data[CommonName] = []byte("typha-server")
+	tntls.TyphaSecret.Data[CommonName] = []byte("typha-server")
 
-	return cm, []*corev1.Secret{f, t}, nil
+	return &tntls, nil
 }
 
 type calicoRenderer struct {
-	installation    *operator.Installation
-	pullSecrets     []*corev1.Secret
-	typhaConfigMaps []*corev1.ConfigMap
-	typhaSecrets    []*corev1.Secret
-	birdTemplates   map[string]string
-	provider        operator.Provider
-	networkConfig   NetworkConfig
+	installation  *operator.Installation
+	pullSecrets   []*corev1.Secret
+	typhaNodeTLS  *TyphaNodeTLS
+	tlsConfigMaps []*corev1.ConfigMap
+	tlsSecrets    []*corev1.Secret
+	birdTemplates map[string]string
+	provider      operator.Provider
+	networkConfig NetworkConfig
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -173,10 +185,10 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, CustomResourceDefinitions(r.installation))
 	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
 	components = appendNotNil(components, Namespaces(r.installation, r.provider == operator.ProviderOpenShift, r.pullSecrets))
-	components = appendNotNil(components, ConfigMaps(r.typhaConfigMaps))
-	components = appendNotNil(components, Secrets(r.typhaSecrets))
-	components = appendNotNil(components, Typha(r.installation, r.provider))
-	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates))
+	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
+	components = appendNotNil(components, Secrets(r.tlsSecrets))
+	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS))
+	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS))
 	components = appendNotNil(components, KubeControllers(r.installation))
 	return components
 }

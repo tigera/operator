@@ -466,7 +466,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 			Name: "felix-certs",
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: FelixTLSSecretName,
+					SecretName: NodeTLSSecretName,
 				},
 			},
 		},

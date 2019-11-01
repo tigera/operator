@@ -251,6 +251,8 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	var terminationGracePeriod int64 = 0
 	var revisionHistoryLimit int32 = 2
+	maxUnavailable := intstr.FromInt(1)
+	maxSurge := intstr.FromString("25%")
 
 	annotations := make(map[string]string)
 	annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"] = "true"
@@ -269,6 +271,13 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		Spec: apps.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{AppLabelName: TyphaK8sAppName},
+			},
+			Strategy: apps.DeploymentStrategy{
+				Type: apps.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &apps.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+					MaxSurge:       &maxSurge,
+				},
 			},
 			RevisionHistoryLimit: &revisionHistoryLimit,
 			Template: v1.PodTemplateSpec{
@@ -402,7 +411,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		{Name: "TYPHA_CLIENTCN", ValueFrom: &v1.EnvVarSource{
 			SecretKeyRef: &v1.SecretKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
-					Name: FelixTLSSecretName,
+					Name: NodeTLSSecretName,
 				},
 				Key:      CommonName,
 				Optional: &optional,
@@ -411,7 +420,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &v1.EnvVarSource{
 			SecretKeyRef: &v1.SecretKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
-					Name: FelixTLSSecretName,
+					Name: NodeTLSSecretName,
 				},
 				Key:      URISAN,
 				Optional: &optional,

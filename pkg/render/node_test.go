@@ -182,7 +182,7 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.FelixTLSSecretName,
+						SecretName: render.NodeTLSSecretName,
 					},
 				},
 			},
@@ -355,7 +355,7 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.FelixTLSSecretName,
+						SecretName: render.NodeTLSSecretName,
 					},
 				},
 			},

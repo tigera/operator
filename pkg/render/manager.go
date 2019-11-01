@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -25,6 +26,16 @@ const (
 
 	ElasticsearchUserManager = "tigera-ee-manager"
 	DefaultKibanaURL         = "https://localhost:5601"
+)
+
+const (
+	// Use this annotation to enable the Policy Recommendation tech preview feature.
+	// "tech-preview.operator.tigera.io/policy-recommendation: Enabled"
+	techPreviewFeaturePolicyRecommendationAnnotation = "tech-preview.operator.tigera.io/policy-recommendation"
+
+	// The lower case of the value that we look for to enable a tech preview feature.
+	// The feature is disabled for all other values.
+	techPreviewEnabledValue = "enabled"
 )
 
 func Manager(
@@ -233,6 +244,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
+		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: c.policyRecommendationSupport()},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -655,4 +667,13 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 	}
 
 	return objs
+}
+
+func (c *managerComponent) policyRecommendationSupport() string {
+	supported := "false"
+	a := c.cr.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeaturePolicyRecommendationAnnotation]; ok && strings.ToLower(val) == techPreviewEnabledValue {
+		supported = "true"
+	}
+	return supported
 }

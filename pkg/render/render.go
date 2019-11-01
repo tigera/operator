@@ -29,7 +29,7 @@ var (
 	TyphaCAConfigMapName = "typha-ca"
 	TyphaCABundleName    = "caBundle"
 	TyphaTLSSecretName   = "typha-certs"
-	FelixTLSSecretName   = "felix-certs"
+	NodeTLSSecretName    = "node-certs"
 	TLSSecretCertName    = "cert.crt"
 	TLSSecretKeyName     = "key.key"
 	CommonName           = "common-name"
@@ -142,7 +142,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 	// Create TLS Secret for Felix using ca from above
 	tntls.NodeSecret, err = createOperatorTLSSecret(ca,
-		FelixTLSSecretName,
+		NodeTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
 		[]crypto.CertificateExtensionFunc{setClientAuth},

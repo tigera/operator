@@ -25,11 +25,11 @@ const (
 	VersionFluentd = "release-v2.6"
 
 	// Compliance images.
-	VersionComplianceController  = "relesae-v2.6"
-	VersionComplianceReporter    = "relesae-v2.6"
-	VersionComplianceServer      = "relesae-v2.6"
-	VersionComplianceSnapshotter = "relesae-v2.6"
-	VersionComplianceBenchmarker = "relesae-v2.6"
+	VersionComplianceController  = "release-v2.6"
+	VersionComplianceReporter    = "release-v2.6"
+	VersionComplianceServer      = "release-v2.6"
+	VersionComplianceSnapshotter = "release-v2.6"
+	VersionComplianceBenchmarker = "release-v2.6"
 
 	// Intrusion detection images.
 	VersionIntrusionDetectionController   = "release-v2.6"

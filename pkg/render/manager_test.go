@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/elasticsearch"
+	v1 "k8s.io/api/apps/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
@@ -71,6 +72,42 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+	})
+
+	It("should handle tech preview annotation and render manager", func() {
+		testCaseValues := []struct {
+			annotationValue   string
+			envValue          string
+			includeAnnotation bool
+		}{
+			{annotationValue: "Enabled", envValue: "true", includeAnnotation: true},
+			{annotationValue: "enabled", envValue: "true", includeAnnotation: true},
+			{annotationValue: "somethingelse", envValue: "false", includeAnnotation: true},
+			{annotationValue: "", envValue: "false", includeAnnotation: false},
+		}
+		i := 0
+		for _, tcValues := range testCaseValues {
+			if tcValues.includeAnnotation {
+				instance.ObjectMeta.Annotations = map[string]string{
+					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
+				}
+			}
+			component, err := render.Manager(instance, nil, "clusterTestName", nil, nil, notOpenshift, registry)
+			Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+			resources := component.Objects()
+
+			// Should render the correct resource based on test case.
+			Expect(len(resources)).To(Equal(12))
+			Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
+
+			d := resources[8].(*v1.Deployment)
+
+			Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
+			Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
+			Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal(tcValues.envValue))
 			i++
 		}
 	})

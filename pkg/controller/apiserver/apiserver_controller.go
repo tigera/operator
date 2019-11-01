@@ -65,6 +65,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
 	// TODO: Watch for dependent objects.
 
 	log.V(5).Info("Controller created and Watches setup")

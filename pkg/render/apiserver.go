@@ -437,6 +437,8 @@ rules:
 // apiServer creates a deployment containing the API and query servers.
 func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	var replicas int32 = 1
+	annotations := make(map[string]string)
+	annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -462,6 +464,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 						"apiserver": "true",
 						"k8s-app":   "tigera-apiserver",
 					},
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: map[string]string{

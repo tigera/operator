@@ -36,18 +36,21 @@ const (
 	TyphaDeploymentName           = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
+	typhaCAHashAnnotation         = "hash.operator.tigera.io/typha-ca"
+	typhaCertHashAnnotation       = "hash.operator.tigera.io/typha-cert"
 )
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cr *operator.Installation, p operator.Provider) Component {
+func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS) Component {
 	as := TyphaAutoscaler(cr)
-	return &typhaComponent{cr: cr, provider: p, autoscaler: as}
+	return &typhaComponent{cr: cr, provider: p, autoscaler: as, typhaNodeTLS: tnTLS}
 }
 
 type typhaComponent struct {
-	cr         *operator.Installation
-	provider   operator.Provider
-	autoscaler Component
+	cr           *operator.Installation
+	provider     operator.Provider
+	autoscaler   Component
+	typhaNodeTLS *TyphaNodeTLS
 }
 
 func (c *typhaComponent) Objects() []runtime.Object {
@@ -249,6 +252,11 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	var terminationGracePeriod int64 = 0
 	var revisionHistoryLimit int32 = 2
 
+	annotations := make(map[string]string)
+	annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"] = "true"
+	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
+	annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -268,9 +276,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Labels: map[string]string{
 						AppLabelName: TyphaK8sAppName,
 					},
-					Annotations: map[string]string{
-						"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
-					},
+					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:                  c.nodeSelector(),
@@ -360,14 +366,14 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 		image = constructImage(TyphaImageNameTigera, c.cr.Spec.Registry)
 	}
 	return v1.Container{
-		Name:           "calico-typha",
-		Image:          image,
-		Resources:      c.typhaResources(),
-		Env:            c.typhaEnvVars(),
-		VolumeMounts:   c.typhaVolumeMounts(),
-		Ports:          c.typhaPorts(),
-		LivenessProbe:  lp,
-		ReadinessProbe: rp,
+		Name:            "calico-typha",
+		Image:           image,
+		Resources:       c.typhaResources(),
+		Env:             c.typhaEnvVars(),
+		VolumeMounts:    c.typhaVolumeMounts(),
+		Ports:           c.typhaPorts(),
+		LivenessProbe:   lp,
+		ReadinessProbe:  rp,
 		SecurityContext: securityContext(),
 	}
 }
@@ -414,7 +420,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraTyphaEnv := []v1.EnvVar{
-			// When we add AWS integration then we need Security group stuff here
+		// When we add AWS integration then we need Security group stuff here
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}

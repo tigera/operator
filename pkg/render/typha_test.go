@@ -17,6 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -26,6 +27,7 @@ var _ = Describe("Typha rendering tests", func() {
 	var installation *operator.Installation
 	var registry string
 	var provider operator.Provider
+	var typhaNodeTLS *render.TyphaNodeTLS
 	BeforeEach(func() {
 		registry = "test.registry.com/org"
 		// Initialize a default installation to use. Each test can override this to its
@@ -37,10 +39,15 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 		provider = operator.ProviderNone
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			CAConfigMap: &v1.ConfigMap{},
+			TyphaSecret: &v1.Secret{},
+			NodeSecret:  &v1.Secret{},
+		}
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Typha(installation, provider)
+		component := render.Typha(installation, provider, typhaNodeTLS)
 		resources := component.Objects()
 		// 5 typha resources plus 8 autoscaler
 		Expect(len(resources)).To(Equal(13))

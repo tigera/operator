@@ -31,6 +31,7 @@ var _ = Describe("Rendering tests", func() {
 	var instance *operator.Installation
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
+	var typhaNodeTLS *render.TyphaNodeTLS
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -43,6 +44,7 @@ var _ = Describe("Rendering tests", func() {
 
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(logf.ZapLoggerTo(logWriter, true))
+		typhaNodeTLS = &render.TyphaNodeTLS{}
 	})
 	AfterEach(func() {
 		if CurrentGinkgoTestDescription().Failed {
@@ -63,7 +65,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		c, err := render.Calico(instance, nil, nil, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(44))
 	})
@@ -75,7 +77,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 ns (tigera-prometheus)
 		// - 11 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		c, err := render.Calico(instance, nil, nil, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal((44 + 1 + 1 + 11)))
 	})

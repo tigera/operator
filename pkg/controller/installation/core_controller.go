@@ -360,7 +360,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	caConfigMap, typhaSecrets, err := r.GetTyphaFelixTLSConfig()
+	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
 		r.status.SetDegraded("Error with Typha/Felix secrets", err.Error())
@@ -392,8 +392,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	calico, err := render.Calico(
 		instance,
 		pullSecrets,
-		caConfigMap,
-		typhaSecrets,
+		typhaNodeTLS,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
@@ -500,7 +499,7 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 // GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for
 // Typha and Felix configuration. It returns the validated resources or error
 // if there was one.
-func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*corev1.ConfigMap, []*corev1.Secret, error) {
+func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	errMsgs := []string{}
@@ -509,23 +508,21 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*corev1.ConfigMap, []*
 		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
 	}
 
-	secrets := []*corev1.Secret{}
-	felix, err := utils.ValidateCertPair(
+	node, err := utils.ValidateCertPair(
 		r.client,
-		render.FelixTLSSecretName,
+		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 	)
 	if err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix is invalid: %s", err))
-	} else if felix != nil {
-		secrets = append(secrets, felix)
-		if felix.Data != nil {
+	} else if node != nil {
+		if node.Data != nil {
 			// We need the CommonName, URISAN, or both to be set
-			_, okCN := felix.Data[render.CommonName]
-			_, okUS := felix.Data[render.URISAN]
+			_, okCN := node.Data[render.CommonName]
+			_, okUS := node.Data[render.URISAN]
 			if !(okCN || okUS) {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san: %v", felix))
+				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
 			}
 		}
 	}
@@ -539,33 +536,32 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*corev1.ConfigMap, []*
 	if err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha is invalid: %s", err))
 	} else if typha != nil {
-		secrets = append(secrets, typha)
 		if typha.Data != nil {
 			// We need the CommonName, URISAN, or both to be set
 			_, okCN := typha.Data[render.CommonName]
 			_, okUS := typha.Data[render.URISAN]
 			if !(okCN || okUS) {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha does not contain common-name or uri-san: %v", typha))
+				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha does not contain common-name or uri-san"))
 			}
 		}
 	}
 
-	// CA, typha, and felix are all not set
-	allNil := (ca == nil && typha == nil && felix == nil)
-	// CA, typha, and felix are all are set
-	allSet := (ca != nil && typha != nil && felix != nil)
-	// All CA, typha, and felix must be set or not set.
+	// CA, typha, and node are all not set
+	allNil := (ca == nil && typha == nil && node == nil)
+	// CA, typha, and node are all are set
+	allSet := (ca != nil && typha != nil && node != nil)
+	// All CA, typha, and node must be set or not set.
 	if !(allNil || allSet) {
-		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Felix CA and Secrets should all be set or none set: ca(%v) typha(%v) felix(%v)", ca, typha, felix))
+		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Node CA and Secrets should all be set or none set: ca(%t) typha(%t) node(%t)", ca != nil, typha != nil, node != nil))
 		errMsgs = append(errMsgs, "If not providing custom CA and certs, feel free to remove them from the operator namespace, they will be recreated")
 	}
 
 	// TODO: We could make sure both TLS Secrets were signed by the CA
 
 	if len(errMsgs) != 0 {
-		return nil, nil, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
 	}
-	return ca, secrets, nil
+	return &render.TyphaNodeTLS{CAConfigMap: ca, TyphaSecret: typha, NodeSecret: node}, nil
 }
 
 // validateTyphaCAConfigMap reads the Typha CA config map from the Operator

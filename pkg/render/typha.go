@@ -42,30 +42,27 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS) Component {
-	as := TyphaAutoscaler(cr)
-	return &typhaComponent{cr: cr, provider: p, autoscaler: as, typhaNodeTLS: tnTLS}
+	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS}
 }
 
 type typhaComponent struct {
 	cr           *operator.Installation
 	provider     operator.Provider
-	autoscaler   Component
 	typhaNodeTLS *TyphaNodeTLS
 }
 
 func (c *typhaComponent) Objects() []runtime.Object {
-	objs := []runtime.Object{
+	return []runtime.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
 		c.typhaDeployment(),
 		c.typhaService(),
 	}
-	return append(objs, c.autoscaler.Objects()...)
 }
 
 func (c *typhaComponent) Ready() bool {
-	return c.autoscaler.Ready()
+	return c.Ready()
 }
 
 // typhaServiceAccount creates the typha's service account.
@@ -255,7 +252,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	maxSurge := intstr.FromString("25%")
 
 	annotations := make(map[string]string)
-	annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"] = "true"
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
 

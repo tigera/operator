@@ -29,8 +29,6 @@ const (
 	TyphaImageNameCalico           = "calico/typha:" + components.VersionCalicoTypha
 	KubeControllersImageNameCalico = "calico/kube-controllers:" + components.VersionCalicoKubeControllers
 	FlexVolumeImageName            = "calico/pod2daemon-flexvol:" + components.VersionFlexVolume
-
-	HorizontalAutoScalerImageName = "google-containers/cluster-proportional-autoscaler-amd64:" + components.VersionCPHAutoscaler
 )
 
 // This section contains images used when installing Tigera Secure.
@@ -87,8 +85,6 @@ func constructImage(imageName string, registry string) string {
 		FlexVolumeImageName:
 
 		reg = CalicoRegistry
-	case HorizontalAutoScalerImageName:
-		reg = K8sGcrRegistry
 	case ECKElasticsearchImageName, ECKOperatorImageName:
 		reg = ECKRegistry
 	}

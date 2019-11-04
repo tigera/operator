@@ -26,7 +26,7 @@ const (
 
 	ElasticsearchUserManager = "tigera-ee-manager"
 	DefaultKibanaURL         = "https://localhost:5601"
-	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tlsSecret"
+	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tls-secret"
 )
 
 const (

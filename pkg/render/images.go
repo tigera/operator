@@ -8,11 +8,10 @@ import (
 
 // Default registries for Calico and Tigera.
 const (
-	CalicoRegistry           = "docker.io/calico/"
-	TigeraRegistry           = "gcr.io/unique-caldron-775/cnx/tigera/"
-	K8sGcrRegistry           = "gcr.io/google-containers/"
-	ECKOperatorRegistry      = "docker.elastic.co/eck/"
-	ECKElasticsearchRegistry = "docker.elastic.co/elasticsearch/"
+	CalicoRegistry = "docker.io/"
+	TigeraRegistry = "gcr.io/unique-caldron-775/cnx/"
+	K8sGcrRegistry = "gcr.io/"
+	ECKRegistry    = "docker.elastic.co/"
 )
 
 // This section contains images used for utility operator functions.
@@ -25,49 +24,50 @@ const (
 
 // This section contains images used when installing open-source Calico.
 const (
-	NodeImageNameCalico            = "node:" + components.VersionCalicoNode
-	CNIImageName                   = "cni:" + components.VersionCalicoCNI
-	TyphaImageNameCalico           = "typha:" + components.VersionCalicoTypha
-	KubeControllersImageNameCalico = "kube-controllers:" + components.VersionCalicoKubeControllers
-	FlexVolumeImageName            = "pod2daemon-flexvol:" + components.VersionFlexVolume
-	HorizontalAutoScalerImageName  = "cluster-proportional-autoscaler-amd64:" + components.VersionCPHAutoscaler
+	NodeImageNameCalico            = "calico/node:" + components.VersionCalicoNode
+	CNIImageName                   = "calico/cni:" + components.VersionCalicoCNI
+	TyphaImageNameCalico           = "calico/typha:" + components.VersionCalicoTypha
+	KubeControllersImageNameCalico = "calico/kube-controllers:" + components.VersionCalicoKubeControllers
+	FlexVolumeImageName            = "calico/pod2daemon-flexvol:" + components.VersionFlexVolume
+
+	HorizontalAutoScalerImageName = "google-containers/cluster-proportional-autoscaler-amd64:" + components.VersionCPHAutoscaler
 )
 
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	NodeImageNameTigera            = "cnx-node:" + components.VersionTigeraNode
-	TyphaImageNameTigera           = "typha:" + components.VersionTigeraTypha
-	KubeControllersImageNameTigera = "kube-controllers:" + components.VersionTigeraKubeControllers
+	NodeImageNameTigera            = "tigera/cnx-node:" + components.VersionTigeraNode
+	TyphaImageNameTigera           = "tigera/typha:" + components.VersionTigeraTypha
+	KubeControllersImageNameTigera = "tigera/kube-controllers:" + components.VersionTigeraKubeControllers
 
 	// API server images.
-	APIServerImageName   = "cnx-apiserver:" + components.VersionAPIServer
-	QueryServerImageName = "cnx-queryserver:" + components.VersionQueryServer
+	APIServerImageName   = "tigera/cnx-apiserver:" + components.VersionAPIServer
+	QueryServerImageName = "tigera/cnx-queryserver:" + components.VersionQueryServer
 
 	// Logging
-	FluentdImageName = "fluentd:" + components.VersionFluentd
+	FluentdImageName = "tigera/fluentd:" + components.VersionFluentd
 
 	// Compliance images.
-	ComplianceControllerImage  = "compliance-controller:" + components.VersionComplianceController
-	ComplianceReporterImage    = "compliance-reporter:" + components.VersionComplianceReporter
-	ComplianceServerImage      = "compliance-server:" + components.VersionComplianceServer
-	ComplianceSnapshotterImage = "compliance-snapshotter:" + components.VersionComplianceSnapshotter
-	ComplianceBenchmarkerImage = "compliance-benchmarker:" + components.VersionComplianceBenchmarker
+	ComplianceControllerImage  = "tigera/compliance-controller:" + components.VersionComplianceController
+	ComplianceReporterImage    = "tigera/compliance-reporter:" + components.VersionComplianceReporter
+	ComplianceServerImage      = "tigera/compliance-server:" + components.VersionComplianceServer
+	ComplianceSnapshotterImage = "tigera/compliance-snapshotter:" + components.VersionComplianceSnapshotter
+	ComplianceBenchmarkerImage = "tigera/compliance-benchmarker:" + components.VersionComplianceBenchmarker
 
 	// Intrusion detection images.
-	IntrusionDetectionControllerImageName   = "intrusion-detection-controller:" + components.VersionIntrusionDetectionController
-	IntrusionDetectionJobInstallerImageName = "intrusion-detection-job-installer:" + components.VersionIntrusionDetectionJobInstaller
+	IntrusionDetectionControllerImageName   = "tigera/intrusion-detection-controller:" + components.VersionIntrusionDetectionController
+	IntrusionDetectionJobInstallerImageName = "tigera/intrusion-detection-job-installer:" + components.VersionIntrusionDetectionJobInstaller
 
 	// Manager images.
-	ManagerImageName        = "cnx-manager:" + components.VersionManager
-	ManagerProxyImageName   = "voltron:" + components.VersionManagerProxy
-	ManagerEsProxyImageName = "es-proxy:" + components.VersionManagerEsProxy
+	ManagerImageName        = "tigera/cnx-manager:" + components.VersionManager
+	ManagerProxyImageName   = "tigera/voltron:" + components.VersionManagerProxy
+	ManagerEsProxyImageName = "tigera/eys-proxy:" + components.VersionManagerEsProxy
 
-	KibanaImageName = "kibana:" + components.VersionKibana
+	KibanaImageName = "tigera/kibana:" + components.VersionKibana
 
-	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
-	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch
-	EsCuratorImageName        = "es-curator:" + components.VersionEsCurator
+	ECKOperatorImageName      = "eck/eck-operator:" + components.VersionECKOperator
+	ECKElasticsearchImageName = "elasticsearch/elasticsearch:" + components.VersionECKElasticsearch
+	EsCuratorImageName        = "tigera/es-curator:" + components.VersionEsCurator
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.
@@ -89,10 +89,8 @@ func constructImage(imageName string, registry string) string {
 		reg = CalicoRegistry
 	case HorizontalAutoScalerImageName:
 		reg = K8sGcrRegistry
-	case ECKElasticsearchImageName:
-		reg = ECKElasticsearchRegistry
-	case ECKOperatorImageName:
-		reg = ECKOperatorRegistry
+	case ECKElasticsearchImageName, ECKOperatorImageName:
+		reg = ECKRegistry
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

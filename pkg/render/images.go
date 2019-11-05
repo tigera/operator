@@ -13,7 +13,6 @@ const (
 	K8sGcrRegistry           = "gcr.io/google-containers/"
 	ECKOperatorRegistry      = "docker.elastic.co/eck/"
 	ECKElasticsearchRegistry = "docker.elastic.co/elasticsearch/"
-	ECKKibanaRegistry        = "docker.elastic.co/kibana/"
 )
 
 // This section contains images used for utility operator functions.
@@ -68,7 +67,6 @@ const (
 
 	ECKOperatorImageName      = "eck-operator:" + components.VersionECKOperator
 	ECKElasticsearchImageName = "elasticsearch:" + components.VersionECKElasticsearch
-	ECKKibanaImageName        = "kibana:" + components.VersionECKKibana
 	EsCuratorImageName        = "es-curator:" + components.VersionEsCurator
 )
 

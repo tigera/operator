@@ -221,7 +221,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 
 	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
 		r.status.SetDegraded("License not found", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Query for the installation object.

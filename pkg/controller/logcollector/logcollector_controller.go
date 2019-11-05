@@ -190,7 +190,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 
 	if err = utils.CheckLicenseKey(context.Background(), r.client); err != nil {
 		r.status.SetDegraded("License not found", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.

@@ -3,10 +3,11 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -184,7 +185,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 
 	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
 		r.status.SetDegraded("License not found", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Query for the installation object.

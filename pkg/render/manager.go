@@ -63,7 +63,9 @@ func Manager(
 		tlsSecrets = []*corev1.Secret{tlsKeyPair}
 	}
 	copy := tlsKeyPair.DeepCopy()
-	copy.ObjectMeta.Namespace = ManagerNamespace
+	// Overwrite the ObjectMeta to ensure we do not keep the resourceVersion or any other information
+	// that should not be set on a new object.
+	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
 	tlsSecrets = append(tlsSecrets, copy)
 	return &managerComponent{
 		cr:          cr,

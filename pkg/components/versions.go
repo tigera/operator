@@ -7,7 +7,6 @@ const (
 	VersionCalicoTypha           = "v3.10.0"
 	VersionCalicoKubeControllers = "v3.10.0"
 	VersionFlexVolume            = "v3.10.0"
-	VersionCPHAutoscaler         = "1.7.1"
 )
 
 // This section contains images used when installing Tigera Secure.

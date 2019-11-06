@@ -17,7 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -49,8 +49,7 @@ var _ = Describe("Typha rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
 		component := render.Typha(installation, provider, typhaNodeTLS)
 		resources := component.Objects()
-		// 5 typha resources plus 8 autoscaler
-		Expect(len(resources)).To(Equal(13))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -66,15 +65,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
-			// Autoscaler resources
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
-			{name: "typha-horizontal-scaler", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "typha-horizontal-scaler", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "typha-horizontal-scaler", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-horizontal-scaler", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "typha-horizontal-scaler", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "typha-horizontal-scaler", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "calico-typha-horizontal-scaler", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 		}
 
 		i := 0

@@ -91,6 +91,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)
 
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/kube-controllers:release-v2.6"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:release-v2.6"))
 	})
 })

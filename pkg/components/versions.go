@@ -46,5 +46,5 @@ const (
 	VersionECKKibana        = "7.3.2"
 	VersionEsCurator        = "release-v2.6"
 
-	VersionKibana = "7.3"
+	VersionKibana = "release-v2.6"
 )

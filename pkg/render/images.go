@@ -61,7 +61,7 @@ const (
 	// Manager images.
 	ManagerImageName        = "tigera/cnx-manager:" + components.VersionManager
 	ManagerProxyImageName   = "tigera/voltron:" + components.VersionManagerProxy
-	ManagerEsProxyImageName = "tigera/eys-proxy:" + components.VersionManagerEsProxy
+	ManagerEsProxyImageName = "tigera/es-proxy:" + components.VersionManagerEsProxy
 
 	KibanaImageName = "tigera/kibana:" + components.VersionKibana
 

@@ -18,24 +18,23 @@ var (
 
 // These constants should be moved to `logstorage_types` in 2.6.1
 const (
-	// Elasticsearch by default sets a high watermark threshold at 90% for disk usage. We use
-	// this as the default threshold for rotating the indices in the Tigera Elasticsearch
-	// cluster. As soon as the total disk utilization exceeds this value, indices will be removed
-	// starting with the oldest. Picking a low value leads to low disk utilization, while a high
-	// value might result in unexpected behaviour.
-	// Default: 90
+	// As soon as the total disk utilization exceeds the max-total-storage-percent,
+	// indices will be removed starting with the oldest. Picking a low value leads
+	// to low disk utilization, while a high value might result in unexpected
+	// behaviour.
+	// Default: 80
 	// +optional
-	maxTotalStoragePercent int32 = 90
+	maxTotalStoragePercent int32 = 80
 
 	// TSEE will remove dns and flow log indices once the combined data exceeds this
-	// threshold. The default value (80% of the cluster size) is used because flow
+	// threshold. The default value (70% of the cluster size) is used because flow
 	// logs and dns logs often use the most disk space; this allows compliance and
 	// security indices to be retained longer. The oldest indices are removed first.
 	// Set this value to be lower than or equal to, the value for
 	// max-total-storage-pct.
-	// Default: 80
+	// Default: 70
 	// +optional
-	maxLogsStoragePercent int32 = 80
+	maxLogsStoragePercent int32 = 70
 )
 
 func ElasticCurator(logStorage operatorv1.LogStorage, esSecrets, pullSecrets []*corev1.Secret, registry, clusterName string) Component {

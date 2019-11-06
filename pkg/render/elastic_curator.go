@@ -70,7 +70,6 @@ func (ec *elasticCuratorComponent) Objects() []runtime.Object {
 }
 
 func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
-	var f = false
 	var elasticCuratorLivenessProbe = &corev1.Probe{
 		Handler: corev1.Handler{
 			Exec: &corev1.ExecAction{
@@ -103,14 +102,11 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
-									Name:          EsCuratorName,
-									Image:         constructImage(EsCuratorImageName, ec.registry),
-									Env:           ec.envVars(),
-									LivenessProbe: elasticCuratorLivenessProbe,
-									SecurityContext: &v1.SecurityContext{
-										RunAsNonRoot:             &f,
-										AllowPrivilegeEscalation: &f,
-									},
+									Name:            EsCuratorName,
+									Image:           constructImage(EsCuratorImageName, ec.registry),
+									Env:             ec.envVars(),
+									LivenessProbe:   elasticCuratorLivenessProbe,
+									SecurityContext: securityContext(),
 								}, ec.clusterName, ElasticsearchUserCurator),
 							},
 							ImagePullSecrets: getImagePullSecretReferenceList(ec.pullSecrets),

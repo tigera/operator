@@ -496,7 +496,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	isPrivileged := true
-	runAsNonRoot := true
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
@@ -510,7 +509,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		},
 		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged, RunAsNonRoot: &runAsNonRoot},
+		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{

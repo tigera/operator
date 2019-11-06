@@ -68,9 +68,11 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: provider,
 		status:               status.New(mgr.GetClient(), "calico"),
+		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
 		requiresTSEE:         tsee,
 	}
 	r.status.Run()
+	r.typhaAutoscaler.run()
 	return r
 }
 
@@ -169,6 +171,7 @@ type ReconcileInstallation struct {
 	watches              map[runtime.Object]struct{}
 	autoDetectedProvider operator.Provider
 	status               *status.StatusManager
+	typhaAutoscaler      *typhaAutoscaler
 	requiresTSEE         bool
 }
 

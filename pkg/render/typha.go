@@ -22,6 +22,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,30 +43,47 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS) Component {
-	as := TyphaAutoscaler(cr)
-	return &typhaComponent{cr: cr, provider: p, autoscaler: as, typhaNodeTLS: tnTLS}
+	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS}
 }
 
 type typhaComponent struct {
 	cr           *operator.Installation
 	provider     operator.Provider
-	autoscaler   Component
 	typhaNodeTLS *TyphaNodeTLS
 }
 
 func (c *typhaComponent) Objects() []runtime.Object {
-	objs := []runtime.Object{
+	return []runtime.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
 		c.typhaDeployment(),
 		c.typhaService(),
+		c.typhaPodDisruptionBudget(),
 	}
-	return append(objs, c.autoscaler.Objects()...)
+}
+
+func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1beta1.PodDisruptionBudget {
+	maxUnavailable := intstr.FromInt(1)
+	return &policyv1beta1.PodDisruptionBudget{
+		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TyphaDeploymentName,
+			Namespace: CalicoNamespace,
+		},
+		Spec: policyv1beta1.PodDisruptionBudgetSpec{
+			MaxUnavailable: &maxUnavailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					AppLabelName: TyphaK8sAppName,
+				},
+			},
+		},
+	}
 }
 
 func (c *typhaComponent) Ready() bool {
-	return c.autoscaler.Ready()
+	return true
 }
 
 // typhaServiceAccount creates the typha's service account.
@@ -255,7 +273,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	maxSurge := intstr.FromString("25%")
 
 	annotations := make(map[string]string)
-	annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"] = "true"
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
 
@@ -429,7 +446,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraTyphaEnv := []v1.EnvVar{
-		// When we add AWS integration then we need Security group stuff here
+			// When we add AWS integration then we need Security group stuff here
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}

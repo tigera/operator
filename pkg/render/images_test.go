@@ -27,9 +27,6 @@ var _ = Describe("No registry override", func() {
 	It("should render a tigera image correctly", func() {
 		Expect(constructImage(NodeImageNameTigera, "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:" + components.VersionTigeraNode))
 	})
-	It("should render google image correctly", func() {
-		Expect(constructImage(HorizontalAutoScalerImageName, "")).To(Equal("gcr.io/google-containers/cluster-proportional-autoscaler-amd64:" + components.VersionCPHAutoscaler))
-	})
 	It("should render an ECK image correctly", func() {
 		Expect(constructImage(ECKOperatorImageName, "")).To(Equal("docker.elastic.co/eck/eck-operator:" + components.VersionECKOperator))
 	})
@@ -41,9 +38,6 @@ var _ = Describe("registry override", func() {
 	})
 	It("should render a tigera image correctly", func() {
 		Expect(constructImage(NodeImageNameTigera, "quay.io/")).To(Equal("quay.io/tigera/cnx-node:" + components.VersionTigeraNode))
-	})
-	It("should render google image correctly", func() {
-		Expect(constructImage(HorizontalAutoScalerImageName, "quay.io/")).To(Equal("quay.io/google-containers/cluster-proportional-autoscaler-amd64:" + components.VersionCPHAutoscaler))
 	})
 	It("should render an ECK image correctly", func() {
 		Expect(constructImage(ECKOperatorImageName, "quay.io/")).To(Equal("quay.io/eck/eck-operator:" + components.VersionECKOperator))

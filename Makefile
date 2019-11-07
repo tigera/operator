@@ -219,7 +219,6 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
 
-
 build/init/bin/kubectl:
 	mkdir -p build/init/bin
 	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
@@ -228,7 +227,7 @@ build/init/bin/kubectl:
 image-init: build/init/bin/kubectl $(BUILD_INIT_IMAGE)
 $(BUILD_INIT_IMAGE): $(BUILD_INIT_IMAGE)-$(ARCH)
 $(BUILD_INIT_IMAGE)-$(ARCH):
-	docker build --pull -t $(BUILD_INIT_IMAGE):latest-$(ARCH) -f ./build/init/Dockerfile.$(ARCH) .
+	docker build --pull -t $(BUILD_INIT_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/init/Dockerfile.$(ARCH) ./build
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif

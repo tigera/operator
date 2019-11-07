@@ -12,38 +12,38 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.0-0.dev-175-g3f547b6"
-	VersionTigeraTypha           = "v2.6.0-0.dev-104-g6c51073"
-	VersionTigeraKubeControllers = "v2.6.0-0.dev-86-g506e244-dirty"
+	VersionTigeraNode            = "v2.6.0"
+	VersionTigeraTypha           = "v2.6.0"
+	VersionTigeraKubeControllers = "v2.6.0"
 
 	// API server images.
-	VersionAPIServer   = "v2.5.0-mcm0.1-49-g909a7f60"
-	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
+	VersionAPIServer   = "v2.6.0"
+	VersionQueryServer = "v2.6.0"
 
 	// Logging
-	VersionFluentd = "v2.6.0-0.dev-33-g382faf2"
+	VersionFluentd = "v2.6.0"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceReporter    = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceServer      = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceSnapshotter = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceBenchmarker = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceController  = "v2.6.0"
+	VersionComplianceReporter    = "v2.6.0"
+	VersionComplianceServer      = "v2.6.0"
+	VersionComplianceSnapshotter = "v2.6.0"
+	VersionComplianceBenchmarker = "v2.6.0"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.6.0-0.dev-53-g6045051"
-	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
+	VersionIntrusionDetectionController   = "v2.6.0"
+	VersionIntrusionDetectionJobInstaller = "v2.6.0"
 
 	// Manager images.
-	VersionManager        = "v2.5.0-347-gb01f72d0"
-	VersionManagerProxy   = "v2.5.0-mcm0.1-32-gdd59369"
-	VersionManagerEsProxy = "v2.6.0-0.dev-96-g38d646f"
+	VersionManager        = "v2.6.0"
+	VersionManagerProxy   = "v2.6.0"
+	VersionManagerEsProxy = "v2.6.0"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "v2.6.0-0.dev-25-gb04da05"
+	VersionEsCurator        = "v2.6.0"
 
-	VersionKibana = "7.3"
+	VersionKibana = "v2.6.0"
 )

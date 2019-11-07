@@ -650,7 +650,7 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "watch"},
+				Verbs:     []string{"get", "list"},
 			},
 		},
 	}

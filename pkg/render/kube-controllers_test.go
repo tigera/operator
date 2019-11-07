@@ -22,6 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 )
@@ -91,6 +92,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)
 
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:release-v2.6"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("test-reg/tigera/kube-controllers:%s", components.VersionTigeraKubeControllers)))
 	})
 })

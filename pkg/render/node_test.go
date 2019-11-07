@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -238,7 +239,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:release-v2.6"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/tigera/cnx-node:%s", components.VersionTigeraNode)))
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		optional := true
@@ -443,7 +444,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:release-v2.6"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/tigera/cnx-node:%s", components.VersionTigeraNode)))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
 

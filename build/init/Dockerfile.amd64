@@ -30,7 +30,7 @@ RUN mkdir /licenses
 COPY LICENSE /licenses
 
 # Install CentOS repo for packages not in ubi repo.
-COPY init/centos.repo /etc/yum.repos.d/
+COPY build/init/centos.repo /etc/yum.repos.d/
 
 RUN microdnf install \
     jq \
@@ -42,10 +42,10 @@ RUN microdnf install \
 RUN pip3 install awscli && \
     useradd --uid $USER_UID $USERNAME
 
-COPY init/bin/kubectl /usr/local/bin/kubectl
+COPY build/init/bin/kubectl /usr/local/bin/kubectl
 RUN chmod +x /usr/local/bin/kubectl
 
-COPY init/*.sh /
+COPY build/init/*.sh /
 RUN chmod +x /*.sh
 ENTRYPOINT ["/init.sh"]
 USER ${USER_UID}

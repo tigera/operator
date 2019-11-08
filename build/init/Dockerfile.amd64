@@ -14,12 +14,12 @@
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 ARG GIT_VERSION=unknown
-LABEL name="Tigera Operator-init" \
+LABEL name="Calico Operator-init" \
       vendor="Project Calico" \
       version=$GIT_VERSION \
       release="1" \
-      summary="Tigera Operator-init handles AWS security group setup for OpenShift clusters" \
-      description="Tigera operator-init handles AWS security group setup for OpenShift clusters" \
+      summary="Calico Operator-init handles AWS security group setup for OpenShift clusters" \
+      description="Calico Operator-init handles AWS security group setup for OpenShift clusters" \
       maintainer="Laurence Man <laurence@tigera.io>"
 
 ENV USER_UID=1000 \

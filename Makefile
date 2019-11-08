@@ -214,7 +214,7 @@ sub-image-%:
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) -f ./build/Dockerfile.$(ARCH) ./build
+	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) ./build
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif

@@ -32,7 +32,6 @@ COPY LICENSE /licenses
 # Install CentOS repo for packages not in ubi repo.
 COPY init/centos.repo /etc/yum.repos.d/
 
-RUN whoami
 RUN microdnf install \
     jq \
     # Needed for pip

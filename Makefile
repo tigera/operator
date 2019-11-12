@@ -214,11 +214,10 @@ sub-image-%:
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) -f ./build/Dockerfile.$(ARCH) ./build
+	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
-
 
 build/init/bin/kubectl:
 	mkdir -p build/init/bin
@@ -228,7 +227,7 @@ build/init/bin/kubectl:
 image-init: build/init/bin/kubectl $(BUILD_INIT_IMAGE)
 $(BUILD_INIT_IMAGE): $(BUILD_INIT_IMAGE)-$(ARCH)
 $(BUILD_INIT_IMAGE)-$(ARCH):
-	docker build --pull -t $(BUILD_INIT_IMAGE):latest-$(ARCH) -f ./build/init/Dockerfile.$(ARCH) .
+	docker build --pull -t $(BUILD_INIT_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/init/Dockerfile.$(ARCH) .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif

@@ -274,10 +274,10 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
+					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.GroupName,
-					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix,
-					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval)
+					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix)
 				if err != nil {
 					log.Error(err, "Error retrieving EKS Cloudwatch Logs configuration")
 					r.status.SetDegraded("Error retrieving EKS Cloudwatch Logs configuration", err.Error())
@@ -377,7 +377,7 @@ func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
 	}, nil
 }
 
-func getEksCloudwatchLogConfig(client client.Client, region, group, prefix, interval string) (*render.EksCloudwatchLogConfig, error) {
+func getEksCloudwatchLogConfig(client client.Client, interval int32, region, group, prefix string) (*render.EksCloudwatchLogConfig, error) {
 	if region == "" {
 		return nil, fmt.Errorf("Missing AWS region info")
 	}
@@ -390,8 +390,8 @@ func getEksCloudwatchLogConfig(client client.Client, region, group, prefix, inte
 		prefix = "kube-apiserver-audit-"
 	}
 
-	if interval == "" {
-		interval = "600"
+	if interval == 0 {
+		interval = 600
 	}
 
 	secret := &corev1.Secret{}

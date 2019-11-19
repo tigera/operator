@@ -74,9 +74,9 @@ type EksCloudwatchLogsSpec struct {
 	// Default: kube-apiserver-audit-
 	StreamPrefix string `json:"streamPrefix,omitempty"`
 
-	// Cloudwatch audit log fetching interval.
-	// Default: 600
-	FetchInterval string `json:"fetchInterval,omitempty"`
+	// Cloudwatch audit logs fetching interval in seconds.
+	// Default: 600 seconds
+	FetchInterval int32 `json:"fetchInterval,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of Tigera flow and DNS log collection

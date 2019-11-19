@@ -261,11 +261,13 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with EKS Cloudwatch Log", func() {
+		fetchInterval := int32(900)
 		eksConfig = &render.EksCloudwatchLogConfig{
-			AwsId:     []byte("aws-id"),
-			AwsKey:    []byte("aws-key"),
-			AwsRegion: "us-west-1",
-			GroupName: "dummy-eks-cluster-cloudwatch-log-group",
+			AwsId:         []byte("aws-id"),
+			AwsKey:        []byte("aws-key"),
+			AwsRegion:     "us-west-1",
+			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
+			FetchInterval: fetchInterval,
 		}
 		installation = &operatorv1.Installation{
 			Spec: operatorv1.InstallationSpec{
@@ -305,5 +307,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"}))
+
+		fetchIntervalVal := "900"
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fetchIntervalVal}))
 	})
 })

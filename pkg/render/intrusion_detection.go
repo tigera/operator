@@ -170,7 +170,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			Name:      "kibana-ca-cert-volume",
 			MountPath: "/etc/ssl/kibana/",
 		}},
-	        SecurityContext: securityContext(),
+		SecurityContext: securityContext(false),
 	}
 }
 
@@ -340,7 +340,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			},
 			InitialDelaySeconds: 5,
 		},
-		SecurityContext: securityContext(),
+		SecurityContext: securityContext(false),
 	}
 }
 

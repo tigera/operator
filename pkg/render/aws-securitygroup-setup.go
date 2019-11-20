@@ -96,7 +96,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 								Value: "/etc/kubernetes/kubeconfig",
 							},
 						},
-						SecurityContext: securityContext(),
+						SecurityContext: securityContext(true),
 					}},
 				},
 			},

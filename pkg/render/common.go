@@ -278,8 +278,7 @@ func OperatorNamespace() string {
 	return "tigera-operator"
 }
 
-func securityContext() *v1.SecurityContext {
-	runAsNonRoot := true
+func securityContext(runAsNonRoot bool) *v1.SecurityContext {
 	allowPriviledgeEscalation := false
 	return &v1.SecurityContext{
 		RunAsNonRoot:             &runAsNonRoot,

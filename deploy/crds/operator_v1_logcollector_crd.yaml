@@ -30,6 +30,35 @@ spec:
         spec:
           description: Specification of the desired state for Tigera log collection.
           properties:
+            additionalSources:
+              description: Configuration for importing audit logs from managed kubernetes
+                cluster log sources.
+              properties:
+                eksCloudwatchLog:
+                  description: If specified with EKS Provider in Installation, enables
+                    fetching EKS audit logs.
+                  properties:
+                    fetchInterval:
+                      description: 'Cloudwatch audit logs fetching interval in seconds.
+                        Default: 600'
+                      format: int32
+                      type: integer
+                    groupName:
+                      description: Cloudwatch log-group name containing EKS audit
+                        logs.
+                      type: string
+                    region:
+                      description: AWS Region EKS cluster is hosted in.
+                      type: string
+                    streamPrefix:
+                      description: 'Prefix of Cloudwatch log stream containing EKS
+                        audit logs in the log-group. Default: kube-apiserver-audit-'
+                      type: string
+                  required:
+                  - region
+                  - groupName
+                  type: object
+              type: object
             additionalStores:
               description: Configuration for exporting flow, audit, and DNS logs to
                 external storage.
@@ -67,32 +96,6 @@ spec:
                       type: integer
                   required:
                   - endpoint
-                  type: object
-              type: object
-            additionalSources:
-              description: Configuration for importing audit logs from managed
-                kubernetes cluster log sources.
-              properties:
-                eksCloudwatchLog:
-                  description: If specified, enables fetching audit logs from EKS
-                    cluster to support compliance reports.
-                  properties:
-                    region:
-                      description: AWS region EKS cluster is hosted in.
-                      type: string
-                    groupName:
-                      description: Name of the log-group containing audit logs when enabled in EKS.
-                      type: string
-                    streamPrefix:
-                      description: Cloudwatch audit log stream prefix, default 'kube-apiserver-audit-'.
-                      type: string
-                    fetchInterval:
-                      description: Log fetch interval expressed in seconds, default 600.
-                      format: int32
-                      type: integer
-                  required:
-                  - region
-                  - groupName
                   type: object
               type: object
           type: object

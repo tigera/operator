@@ -72,10 +72,12 @@ type EksCloudwatchLogsSpec struct {
 
 	// Prefix of Cloudwatch log stream containing EKS audit logs in the log-group.
 	// Default: kube-apiserver-audit-
+	// +optional
 	StreamPrefix string `json:"streamPrefix,omitempty"`
 
 	// Cloudwatch audit logs fetching interval in seconds.
-	// Default: 600 seconds
+	// Default: 600
+	// +optional
 	FetchInterval int32 `json:"fetchInterval,omitempty"`
 }
 

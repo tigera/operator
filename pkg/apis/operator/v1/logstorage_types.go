@@ -11,6 +11,8 @@ const (
 
 	ElasticsearchHashAnnotation = "hash.operator.tigera.io/elasticsearch"
 	KibanaHashAnnotation        = "hash.operator.tigera.io/kibana"
+
+	DefaultShards = 5
 )
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.
@@ -120,6 +122,14 @@ type LogStorageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []LogStorage `json:"items"`
+}
+
+func (ls LogStorage) Replicas() int {
+	return int(*ls.Spec.Indices.Replicas)
+}
+
+func (ls LogStorage) Shards() int {
+	return DefaultShards
 }
 
 func init() {

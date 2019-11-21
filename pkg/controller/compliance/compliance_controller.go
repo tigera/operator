@@ -242,6 +242,21 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// If either of the Elasticsearch or Kibana resources are recreated the old public certs will still exist in the
+	// tigera-operator namespace, so don't precede past this point unless LogStorage is ready (LogStorage is ready when
+	// both the Elasticsearch and Kibana resources are created and operational)
+	ls, err := utils.GetReadyLogStorage(context.Background(), r.client)
+	if ls == nil {
+		if err == nil || errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for Tigera LogStorage resource to be ready", "")
+			return reconcile.Result{}, nil
+		}
+
+		log.Error(err, "Failed to retrieve Tigera LogStorage resource")
+		r.status.SetDegraded("Failed to retrieve Tigera LogStorage resource", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	clusterName, err := utils.ClusterName(context.Background(), r.client)
 	if err != nil {
 		log.Error(err, "Failed to get the cluster name")
@@ -270,8 +285,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Compliance(
-		esSecrets, network.Spec.Registry, clusterName, pullSecrets, openshift)
+	component := render.Compliance(ls, esSecrets, network.Spec.Registry, clusterName, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

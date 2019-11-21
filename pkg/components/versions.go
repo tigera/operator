@@ -24,14 +24,14 @@ const (
 	VersionFluentd = "v2.6.0-0.dev-33-g382faf2"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceReporter    = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceServer      = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceSnapshotter = "v2.6.0-0.dev-42-g5bb7357"
-	VersionComplianceBenchmarker = "v2.6.0-0.dev-42-g5bb7357"
+	VersionComplianceController  = "v2.7.0-0.dev-22-gf5eb877"
+	VersionComplianceReporter    = "v2.7.0-0.dev-22-gf5eb877"
+	VersionComplianceServer      = "v2.7.0-0.dev-22-gf5eb877"
+	VersionComplianceSnapshotter = "v2.7.0-0.dev-22-gf5eb877"
+	VersionComplianceBenchmarker = "v2.7.0-0.dev-22-gf5eb877"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.6.0-0.dev-53-g6045051"
+	VersionIntrusionDetectionController   = "v2.7.0-0.dev-15-g44db458"
 	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
 
 	// Manager images.

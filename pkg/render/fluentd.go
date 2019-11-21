@@ -352,14 +352,15 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	if c.ls.Spec.Indices != nil && c.ls.Spec.Indices.Replicas != nil {
-		replicas := int(*c.ls.Spec.Indices.Replicas)
-		envs = append(envs,
-			corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(replicas)},
-			corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(replicas)},
-			corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(replicas)},
-		)
-	}
+	envs = append(envs,
+		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.ls.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.ls.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.ls.Replicas())},
+
+		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.ls.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.ls.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.ls.Shards())},
+	)
 
 	return envs
 }

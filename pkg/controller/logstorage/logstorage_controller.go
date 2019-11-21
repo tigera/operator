@@ -132,41 +132,6 @@ type ReconcileLogStorage struct {
 	provider operatorv1.Provider
 }
 
-func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
-	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	fillDefaults(instance)
-
-	return instance, nil
-}
-
-func fillDefaults(opr *operatorv1.LogStorage) {
-	if opr.Spec.Retention == nil {
-		opr.Spec.Retention = &operatorv1.Retention{}
-	}
-
-	if opr.Spec.Retention.Flows == nil {
-		var fr int32 = 8
-		opr.Spec.Retention.Flows = &fr
-	}
-	if opr.Spec.Retention.AuditReports == nil {
-		var arr int32 = 365
-		opr.Spec.Retention.AuditReports = &arr
-	}
-	if opr.Spec.Retention.Snapshots == nil {
-		var sr int32 = 365
-		opr.Spec.Retention.Snapshots = &sr
-	}
-	if opr.Spec.Retention.ComplianceReports == nil {
-		var crr int32 = 365
-		opr.Spec.Retention.ComplianceReports = &crr
-	}
-}
-
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
 // and what is in the LogStorage.Spec
 // Note:
@@ -179,7 +144,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 
 	// Fetch the LogStorage instance
-	ls, err := GetLogStorage(ctx, r.client)
+	ls, err := utils.GetLogStorage(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("LogStorage object not found")
@@ -192,6 +157,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	reqLogger.V(2).Info("Loaded config", "config", ls)
 	r.status.OnCRFound()
+
+	// Write back the LogStorage object to update any defaults that were set
+	if err = r.client.Update(ctx, ls); err != nil {
+		r.status.SetDegraded("Failed to update LogStorage with defaults", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.

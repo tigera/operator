@@ -48,7 +48,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		eksConfig = nil
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserLogCollector})
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserEksLogForwarder})
+		replicas := int32(0)
 		ls = &operatorv1.LogStorage{
+			Spec: operatorv1.LogStorageSpec{
+				Indices: &operatorv1.Indices{Replicas: &replicas},
+			},
 			Status: operatorv1.LogStorageStatus{
 				ElasticsearchHash: "randomhash",
 			},

@@ -18,6 +18,7 @@ import (
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"strconv"
 )
 
 const (
@@ -29,6 +30,16 @@ const (
 
 func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret string) corev1.Container {
 	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret))
+}
+
+func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
+	envVars := []corev1.EnvVar{
+		{Name: "ELASTIC_REPLICAS", Value: strconv.Itoa(replicas)},
+		{Name: "ELASTIC_SHARDS", Value: strconv.Itoa(shards)},
+	}
+	c.Env = append(c.Env, envVars...)
+
+	return c
 }
 
 func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUsername string) corev1.Container {

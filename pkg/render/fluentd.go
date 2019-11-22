@@ -90,7 +90,7 @@ type EksCloudwatchLogConfig struct {
 	AwsRegion     string
 	GroupName     string
 	StreamPrefix  string
-	FetchInterval string
+	FetchInterval int32
 }
 
 type fluentdComponent struct {
@@ -452,7 +452,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		// Cloudwatch config, credentials.
 		{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: c.eksConfig.GroupName},
 		{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: c.eksConfig.StreamPrefix},
-		{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: c.eksConfig.FetchInterval},
+		{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fmt.Sprintf("%d", c.eksConfig.FetchInterval)},
 		{Name: "AWS_REGION", Value: c.eksConfig.AwsRegion},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},

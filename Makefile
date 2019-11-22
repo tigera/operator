@@ -417,6 +417,7 @@ endif
 ## Generating code after API changes
 gen-files:
 	operator-sdk generate k8s
+	operator-sdk generate openapi
 
 gen-versions: $(BINDIR)/gen-versions
 ifndef OS_VERSIONS

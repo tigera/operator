@@ -72,11 +72,13 @@ type EksCloudwatchLogsSpec struct {
 
 	// Prefix of Cloudwatch log stream containing EKS audit logs in the log-group.
 	// Default: kube-apiserver-audit-
+	// +optional
 	StreamPrefix string `json:"streamPrefix,omitempty"`
 
-	// Cloudwatch audit log fetching interval.
+	// Cloudwatch audit logs fetching interval in seconds.
 	// Default: 600
-	FetchInterval string `json:"fetchInterval,omitempty"`
+	// +optional
+	FetchInterval int32 `json:"fetchInterval,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of Tigera flow and DNS log collection

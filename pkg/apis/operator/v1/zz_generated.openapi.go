@@ -481,11 +481,17 @@ func schema_pkg_apis_operator_v1_LogCollectorSpec(ref common.ReferenceCallback) 
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogStoreSpec"),
 						},
 					},
+					"additionalSources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Configuration for importing audit logs from managed kubernetes cluster log sources.",
+							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogSourceSpec"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogStoreSpec"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogSourceSpec", "github.com/tigera/operator/pkg/apis/operator/v1.AdditionalLogStoreSpec"},
 	}
 }
 

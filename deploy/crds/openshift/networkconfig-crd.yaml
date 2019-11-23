@@ -62,6 +62,36 @@ spec:
               items:
                 type: string
               type: array
+            externalIP:
+              description: 'externalIP defines configuration for controllers that affect
+                Service.ExternalIP'
+              autoAssignCIDRs:
+                description: 'autoAssignCIDRs is a list of CIDRs from which to automatically assign
+                  Service.ExternalIP. These are assigned when the service is of type
+                  LoadBalancer. In general, this is only useful for bare-metal clusters. In
+                  Openshift 3.x, this was misleadingly called "IngressIPs". Automatically
+                  assigned External IPs are not affected by any ExternalIPPolicy rules.
+                  Currently, only one entry may be provided.'
+                items:
+                  type: string
+                type: array
+              policy:
+                description: 'policy is a set of restrictions applied to the ExternalIP field. If nil,
+                  any value is allowed for an ExternalIP. If the empty/zero policy is
+                  supplied, then ExternalIP is not allowed to be set.'
+                allowedCIDRs:
+                  description: 'allowedCIDRs is the list of allowed CIDRs.'
+                  items:
+                    type: string
+                  type: array
+                rejectedCIDRs:
+                  description: 'rejectedCIDRs is the list of disallowed CIDRs. These take precedence over
+                    allowedCIDRs.'
+                  items:
+                    type: string
+                  type: array
+                type: object
+              type: object
           type: object
         status:
           description: status holds observed values from the cluster. They may not

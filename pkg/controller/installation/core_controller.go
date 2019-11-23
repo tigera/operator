@@ -446,6 +446,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
 		openshiftConfig.Status.NetworkType = "Calico"
+		openshiftConfig.Status.ExternalIP = openshiftConfig.Spec.ExternalIP
 		if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
 			// If specified in the spec, then use the value provided by the user.
 			// This is what the rendering code will have populated into the created resources.

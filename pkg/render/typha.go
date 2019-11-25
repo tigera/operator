@@ -17,8 +17,6 @@ package render
 import (
 	"fmt"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -27,6 +25,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 )
 
 const (
@@ -34,7 +36,6 @@ const (
 	TyphaPortName                 = "calico-typha"
 	TyphaK8sAppName               = "calico-typha"
 	TyphaServiceAccountName       = "calico-typha"
-	TyphaDeploymentName           = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
 	typhaCAHashAnnotation         = "hash.operator.tigera.io/typha-ca"
@@ -42,14 +43,15 @@ const (
 )
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS) Component {
-	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS}
+func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, up *upgrade.CoreUpgrade) Component {
+	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, upgrade: up}
 }
 
 type typhaComponent struct {
 	cr           *operator.Installation
 	provider     operator.Provider
 	typhaNodeTLS *TyphaNodeTLS
+	upgrade      *upgrade.CoreUpgrade
 }
 
 func (c *typhaComponent) Objects() []runtime.Object {
@@ -68,8 +70,8 @@ func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1beta1.PodDisruption
 	return &policyv1beta1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TyphaDeploymentName,
-			Namespace: CalicoNamespace,
+			Name:      common.TyphaDeploymentName,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: policyv1beta1.PodDisruptionBudgetSpec{
 			MaxUnavailable: &maxUnavailable,
@@ -92,7 +94,7 @@ func (c *typhaComponent) typhaServiceAccount() *v1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaServiceAccountName,
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 		},
 	}
 }
@@ -114,7 +116,7 @@ func (c *typhaComponent) typhaRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      TyphaServiceAccountName,
-				Namespace: CalicoNamespace,
+				Namespace: common.CalicoNamespace,
 			},
 		},
 	}
@@ -279,8 +281,8 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TyphaDeploymentName,
-			Namespace: CalicoNamespace,
+			Name:      common.TyphaDeploymentName,
+			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
 				AppLabelName: TyphaK8sAppName,
 			},
@@ -318,6 +320,9 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
+	if c.upgrade != nil {
+		c.upgrade.ModifyTyphaDeployment(&d)
+	}
 	return &d
 }
 
@@ -418,7 +423,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		{Name: "TYPHA_CONNECTIONREBALANCINGMODE", Value: "kubernetes"},
 		{Name: "TYPHA_DATASTORETYPE", Value: "kubernetes"},
 		{Name: "TYPHA_HEALTHENABLED", Value: "true"},
-		{Name: "TYPHA_K8SNAMESPACE", Value: CalicoNamespace},
+		{Name: "TYPHA_K8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "TYPHA_CAFILE", Value: "/typha-ca/caBundle"},
 		{Name: "TYPHA_SERVERCERTFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretCertName)},
 		{Name: "TYPHA_SERVERKEYFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretKeyName)},
@@ -445,7 +450,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraTyphaEnv := []v1.EnvVar{
-			// When we add AWS integration then we need Security group stuff here
+		// When we add AWS integration then we need Security group stuff here
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}
@@ -491,7 +496,7 @@ func (c *typhaComponent) typhaService() *v1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaServiceName,
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
 				AppLabelName: TyphaK8sAppName,
 			},

@@ -20,6 +20,8 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -40,8 +42,8 @@ const (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, up *upgrade.CoreUpgrade) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, upgrade: up}
 }
 
 type nodeComponent struct {
@@ -50,6 +52,7 @@ type nodeComponent struct {
 	netConfig     NetworkConfig
 	birdTemplates map[string]string
 	typhaNodeTLS  *TyphaNodeTLS
+	upgrade       *upgrade.CoreUpgrade
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
@@ -90,7 +93,7 @@ func (c *nodeComponent) nodeServiceAccount() *v1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 		},
 	}
 }
@@ -112,7 +115,7 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "calico-node",
-				Namespace: CalicoNamespace,
+				Namespace: common.CalicoNamespace,
 			},
 		},
 	}
@@ -327,7 +330,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cni-config",
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},
 		Data: map[string]string{
@@ -344,7 +347,7 @@ func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      BirdTemplatesConfigMapName,
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 		},
 		Data: map[string]string{},
 	}
@@ -373,7 +376,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 			{
 				Kind:      "ServiceAccount",
 				Name:      "calico-node",
-				Namespace: CalicoNamespace,
+				Namespace: common.CalicoNamespace,
 			},
 		},
 	}
@@ -393,8 +396,8 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: CalicoNamespace,
+			Name:      common.NodeDaemonSetName,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: apps.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
@@ -428,6 +431,9 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	}
 
 	setCriticalPod(&(ds.Spec.Template))
+	if c.upgrade != nil {
+		c.upgrade.ModifyNodeDaemonSet(&ds)
+	}
 	return &ds
 }
 
@@ -701,7 +707,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 			},
 		},
-		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: CalicoNamespace},
+		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
 		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
 		{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretCertName)},
@@ -922,7 +928,7 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
 		Spec: v1.ServiceSpec{

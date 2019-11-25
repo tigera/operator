@@ -6,7 +6,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -110,7 +110,7 @@ func (t *typhaAutoscaler) run() {
 
 // updateReplicas updates the Typha deployment to the expected replicas if the current replica count differs.
 func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
-	key := types.NamespacedName{Namespace: render.CalicoNamespace, Name: render.TyphaDeploymentName}
+	key := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.TyphaDeploymentName}
 	typha := &appsv1.Deployment{}
 	err := t.client.Get(context.Background(), key, typha)
 	if err != nil {

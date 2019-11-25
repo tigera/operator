@@ -19,10 +19,13 @@ import (
 	"fmt"
 
 	"github.com/openshift/library-go/pkg/crypto"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 )
 
 var (
@@ -62,6 +65,7 @@ func Calico(
 	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
+	up *upgrade.CoreUpgrade,
 ) (Renderer, error) {
 
 	tcms := []*corev1.ConfigMap{}
@@ -94,13 +98,13 @@ func Calico(
 
 	// Create copy to go into Calico Namespace
 	tcm := typhaNodeTLS.CAConfigMap.DeepCopy()
-	tcm.ObjectMeta = metav1.ObjectMeta{Name: typhaNodeTLS.CAConfigMap.Name, Namespace: CalicoNamespace}
+	tcm.ObjectMeta = metav1.ObjectMeta{Name: typhaNodeTLS.CAConfigMap.Name, Namespace: common.CalicoNamespace}
 	tcms = append(tcms, tcm)
 
 	ts := typhaNodeTLS.TyphaSecret.DeepCopy()
-	ts.ObjectMeta = metav1.ObjectMeta{Name: ts.Name, Namespace: CalicoNamespace}
+	ts.ObjectMeta = metav1.ObjectMeta{Name: ts.Name, Namespace: common.CalicoNamespace}
 	ns := typhaNodeTLS.NodeSecret.DeepCopy()
-	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: CalicoNamespace}
+	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
 	return calicoRenderer{
@@ -178,6 +182,7 @@ type calicoRenderer struct {
 	birdTemplates map[string]string
 	provider      operator.Provider
 	networkConfig NetworkConfig
+	upgrade       *upgrade.CoreUpgrade
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -187,8 +192,8 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Namespaces(r.installation, r.provider == operator.ProviderOpenShift, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
-	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS))
-	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS))
+	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.upgrade))
+	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.upgrade))
 	components = appendNotNil(components, KubeControllers(r.installation))
 	return components
 }

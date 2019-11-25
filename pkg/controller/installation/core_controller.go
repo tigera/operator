@@ -27,6 +27,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -141,6 +142,8 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch %s: %v", t, err)
 		}
 	}
+
+	upgrade.AddInstallationUpgradeWatches(&c)
 
 	return nil
 }
@@ -416,6 +419,22 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	var coreUpgrade *upgrade.CoreUpgrade = nil
+	needUpgrade, err := upgrade.IsCoreUpgradeNeeded(r.config)
+	if err != nil {
+		log.Error(err, "Error checking if upgrade is needed")
+		r.status.SetDegraded("Error checking if upgrade is needed", err.Error())
+		return reconcile.Result{}, err
+	}
+	if needUpgrade {
+		coreUpgrade, err = upgrade.GetCoreUpgrade(r.config)
+		if err != nil {
+			log.Error(err, "Error getting upgrade")
+			r.status.SetDegraded("Error getting upgrade", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -428,6 +447,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
+		coreUpgrade,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -491,6 +511,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			r.SetDegraded("Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))
 			return reconcile.Result{}, err
 		}
+	}
+
+	if coreUpgrade != nil {
+		err = coreUpgrade.Run()
+		if err != nil {
+			r.status.SetDegraded("Error upgrading from non-operator install", err.Error())
+		}
+		return reconcile.Result{RequeueAfter: coreUpgrade.RequeueDelay()}, nil
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.

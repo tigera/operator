@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/go-version v1.2.0
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.7.0
-	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
+	github.com/openshift/api v3.9.1-0.20190927182313-d4a64ec2cbd8+incompatible
 	github.com/openshift/library-go v0.0.0-20190924092619-a8c1174d4ee7
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	github.com/spf13/pflag v1.0.3

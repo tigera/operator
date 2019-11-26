@@ -455,7 +455,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// value, so might not perform the best but will work everywhere.
 			openshiftConfig.Status.ClusterNetworkMTU = 1410
 		}
-		if err = r.client.Update(ctx, openshiftConfig); err != nil {
+		patch := client.MergeFrom(openshiftConfig)
+		if err = r.client.Patch(ctx, openshiftConfig, patch); err != nil {
 			r.status.SetDegraded("Error updating openshift network status", err.Error())
 			return reconcile.Result{}, err
 		}

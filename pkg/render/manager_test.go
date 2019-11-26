@@ -19,6 +19,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	v1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
@@ -28,6 +30,11 @@ import (
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	var instance *operator.Manager
 	var registry string
+	oidcEnvVar := corev1.EnvVar{
+		Name:      "CNX_WEB_OIDC_AUTHORITY",
+		Value:     "",
+		ValueFrom: nil,
+	}
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -42,7 +49,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry)
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(12))
@@ -94,7 +101,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
 				}
 			}
-			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry)
+			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
 			Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 			resources := component.Objects()
 
@@ -110,5 +117,51 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal(tcValues.envValue))
 			i++
 		}
+	})
+
+	It("should render OIDC configmaps given OIDC configuration", func() {
+		instance.Spec.Auth.Type = operator.AuthTypeOIDC
+		oidcConfig := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ManagerOIDCConfig,
+				Namespace: render.OperatorNamespace(),
+			},
+		}
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, oidcConfig)
+		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+
+		// Should render the correct resource based on test case.
+		resources := component.Objects()
+		Expect(len(resources)).To(Equal(13))
+		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
+		d := resources[8].(*v1.Deployment)
+
+		Expect(d.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(oidcEnvVar))
+
+		// Make sure well-known and JWKS are accessible from manager.
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(render.ManagerOIDCWellknownURI))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(render.ManagerOIDCJwksURI))
+
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
+		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
+	})
+
+	It("should set OIDC Authority environment when auth-type is OIDC", func() {
+		instance.Spec.Auth.Type = operator.AuthTypeOIDC
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
+		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+
+		// Should render the correct resource based on test case.
+		resources := component.Objects()
+		d := resources[8].(*v1.Deployment)
+		// tigera-manager volumes/volumeMounts checks.
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
 })

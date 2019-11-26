@@ -27,7 +27,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/upgrade"
+	coreupgrade "github.com/tigera/operator/pkg/controller/upgrade/core"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -143,7 +143,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	upgrade.AddInstallationUpgradeWatches(&c)
+	coreupgrade.AddInstallationUpgradeWatches(&c)
 
 	return nil
 }
@@ -399,20 +399,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	var coreUpgrade *upgrade.CoreUpgrade = nil
-	needUpgrade, err := upgrade.IsCoreUpgradeNeeded(r.config)
+	needUpgrade, err := coreupgrade.IsCoreUpgradeNeeded(r.config)
 	if err != nil {
 		log.Error(err, "Error checking if upgrade is needed")
 		r.status.SetDegraded("Error checking if upgrade is needed", err.Error())
 		return reconcile.Result{}, err
-	}
-	if needUpgrade {
-		coreUpgrade, err = upgrade.GetCoreUpgrade(r.config)
-		if err != nil {
-			log.Error(err, "Error getting upgrade")
-			r.status.SetDegraded("Error getting upgrade", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	// Create a component handler to manage the rendered components.
@@ -427,7 +418,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
-		coreUpgrade,
+		needUpgrade,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -493,12 +484,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	if coreUpgrade != nil {
-		err = coreUpgrade.Run()
-		if err != nil {
-			r.status.SetDegraded("Error upgrading from non-operator install", err.Error())
+	if needUpgrade {
+		instance.Status.State = operator.StateUpgrading
+		if err = r.client.Status().Update(ctx, instance); err != nil {
+			return reconcile.Result{}, err
 		}
-		return reconcile.Result{RequeueAfter: coreUpgrade.RequeueDelay()}, nil
+		return reconcile.Result{RequeueAfter: coreupgrade.RequeueDelay(reqLogger)}, nil
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.

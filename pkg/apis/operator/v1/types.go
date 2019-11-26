@@ -214,12 +214,22 @@ type IPPool struct {
 	NodeSelector string `json:"nodeSelector,omitempty"`
 }
 
+type StateStatus string
+
+const (
+	StateUpgrading  StateStatus = "Upgrading"
+	StateInstalling StateStatus = "Deploying"
+	StateReady      StateStatus = "Ready"
+)
+
 // InstallationStatus defines the observed state of the Calico or Tigera Secure installation.
 // +k8s:openapi-gen=true
 type InstallationStatus struct {
 	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
 	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
+	// State provides user-readable status.
+	State StateStatus `json:"state,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

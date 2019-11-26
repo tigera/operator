@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -30,15 +31,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/status"
 )
 
 // This package provides the utilities to upgrade a Calico manifest installation
 // to an operator deployment.
-
-var upgradeLog = logf.Log.WithName("core_upgrade")
 
 const (
 	defaultTyphaAutoscalerSyncPeriod = 2 * time.Minute
@@ -68,10 +68,13 @@ var (
 )
 
 type CoreUpgrade struct {
-	client    *kubernetes.Clientset
-	informer  cache.Controller
-	indexer   cache.Indexer
-	stopCh    chan struct{}
+	client   *kubernetes.Clientset
+	informer cache.Controller
+	indexer  cache.Indexer
+	stopCh   chan struct{}
+	//latestProgress   int
+	//highestProgress  int
+	//statusConditions map[StatusConditionType]*operatorv1.TigeraStatusCondition
 	lock      sync.Mutex
 	nodeCount int
 }
@@ -113,9 +116,34 @@ func IsCoreUpgradeNeeded(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
+func AddInstallationUpgradeWatches(c *controller.Controller) error {
+	//c.Watch(&source.Kind{Type: &
+	//TODO:
+	return nil
+}
+
 func GetCoreUpgrade(cfg *rest.Config) (*CoreUpgrade, error) {
 	if upgrade == nil {
-		upgrade = new(CoreUpgrade)
+
+		upgrade = &CoreUpgrade{
+			//latestProgress:  0,
+			//highestProgress: 0,
+			//statusConditions: map[StatusConditionType]*operatorv1.TigeraStatusCondition{
+			//	operatorv1.ComponentAvailable: &operatorv1.TigeraStatusCondition{
+			//		Type:   operatorv1.ComponentAvailable,
+			//		Status: operatorv1.ConditionUnknown,
+			//	},
+			//	operatorv1.ComponentProgressing: &operatorv1.TigeraStatusCondition{
+			//		Type:   operatorv1.ComponentProgressing,
+			//		Status: operatorv1.ConditionUnknown,
+			//	},
+			//	operatorv1.ComponentDegraded: &operatorv1.TigeraStatusCondition{
+			//		Type:   operatorv1.ComponentDegraded,
+			//		Status: operatorv1.ConditionUnknown,
+			//	},
+			//},
+			nodeCount: 10,
+		}
 		var err error
 		upgrade.client, err = kubernetes.NewForConfig(cfg)
 		if err != nil {
@@ -141,16 +169,25 @@ func GetCoreUpgrade(cfg *rest.Config) (*CoreUpgrade, error) {
 	return upgrade, nil
 }
 
-func (u *CoreUpgrade) ModifyNodeDaemonSet(ds *appsv1.DaemonSet) {
+func ModifyNodeDaemonSet(ds *appsv1.DaemonSet) {
 	newNodeLabel = map[string]string{
 		nodeSelectorKey: "upgraded",
 	}
+	if ds.Spec.Template.Spec.NodeSelector == nil {
+		ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
+	}
 	for k, v := range newNodeLabel {
-		ds.Spec.Selector.MatchLabels[k] = v
+		ds.Spec.Template.Spec.NodeSelector[k] = v
 	}
 }
 
-func (u *CoreUpgrade) ModifyTyphaDeployment(d *appsv1.Deployment) {
+func ModifyTyphaDeployment(d *appsv1.Deployment) {
+	if d.Spec.Template.Spec.Affinity == nil {
+		d.Spec.Template.Spec.Affinity = &v1.Affinity{}
+	}
+	if d.Spec.Template.Spec.Affinity.PodAntiAffinity == nil {
+		d.Spec.Template.Spec.Affinity.PodAntiAffinity = &v1.PodAntiAffinity{}
+	}
 	d.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = []v1.PodAffinityTerm{
 		{
 			Namespaces: []string{"kube-system"},
@@ -159,39 +196,54 @@ func (u *CoreUpgrade) ModifyTyphaDeployment(d *appsv1.Deployment) {
 					"k8s-app": typhaDeploymentName,
 				},
 			},
+			TopologyKey: "kubernetes.io/hostname",
 		},
 	}
 }
 
-func (u *CoreUpgrade) RequeueDelay() time.Duration {
-	u.lock.Lock()
-	defer u.lock.Unlock()
-	return time.Duration(u.nodeCount*2) * time.Second
+func RequeueDelay(log logr.Logger) time.Duration {
+	if upgrade == nil {
+		log.V(1).Info("No upgrade available to get requeue delay")
+		return time.Second
+	}
+	upgrade.lock.Lock()
+	defer upgrade.lock.Unlock()
+	return time.Duration(upgrade.nodeCount*2) * time.Second
 }
 
-func (u *CoreUpgrade) Run() error {
-	return u.run()
-}
-
-func (u *CoreUpgrade) run() error {
+func (u *CoreUpgrade) Run(log logr.Logger, status *status.StatusManager) error {
+	if u.stopCh == nil {
+		return nil
+	}
 	if err := u.deleteKubeSystemKubeControllers(); err != nil {
+		setDegraded(log, status, "Failed deleting old calico-kube-controllers", err.Error())
 		return err
 	}
+	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
 	if err := u.waitForNewTyphaDeploymentReady(); err != nil {
+		setDegraded(log, status, "Failed to wait for new typha deployment to be ready", err.Error())
 		return err
 	}
+	log.V(1).Info("New Typha Deployment is ready")
 	for !u.informer.HasSynced() {
 		time.Sleep(100 * time.Millisecond)
 	}
-	if err := u.labelUnlabeledNodesForOldNode(); err != nil {
+	log.V(1).Info("Node informer is synced")
+	if err := u.labelNonUpgradedNodesForOldNode(); err != nil {
+		setDegraded(log, status, "Failed to label non-upgraded nodes", err.Error())
 		return err
 	}
+	log.V(1).Info("All non-upgraded nodes labeled for old node DaemonSet")
 	if err := u.addNodeSelectorToOldNodeDaemonSet(); err != nil {
+		setDegraded(log, status, "Failed to add nodeSelector to old node DaemonSet", err.Error())
 		return err
 	}
+	log.V(1).Info("Node selector added to old node DaemonSet")
 	if err := u.upgradeEachNode(); err != nil {
+		setDegraded(log, status, "Failed to upgrade all nodes", err.Error())
 		return err
 	}
+	log.V(1).Info("Nodes upgraded")
 
 	// TODO: Delete old node DaemonSet
 	// TODO: Delete old typha
@@ -199,6 +251,38 @@ func (u *CoreUpgrade) run() error {
 	close(u.stopCh)
 	return nil
 }
+
+func setDegraded(log logr.Logger, status *status.StatusManager, reason, msg string) {
+	log.V(1).Info(reason, "error", msg)
+	status.SetDegraded(reason, msg)
+}
+
+//func (u *CoreUpgrade) advanceProgress() {
+//	u.latestProgress++
+//	if u.latestProgress > u.highestProgress {
+//		u.highestProgress = u.latestProgress
+//	}
+//}
+//
+//func (u *CoreUpgrade) setProgress(msg string) {
+//	if u.latestProgress < u.highestProgress {
+//		return
+//	}
+//	st := u.statusConditions[operatorv1.ComponentProgressing]
+//	if st.Status != operatorv1.ConditionTrue || st.Reason != msg {
+//		st.Status = operatorv1.ConditionTrue
+//		st.Reason = msg
+//		st.LastTransitionTime = metav1.NewTime(time.Now())
+//	}
+//	st = u.statusConditions[operatorv1.ComponentDegraded]
+//	if st.Status != operatorv1.ConditionFalse {
+//		st.Status = operatorv1.ConditionFalse
+//		st.LastTransitionTime = metav1.NewTime(time.Now())
+//	}
+//}
+//
+//func (u *CoreUpgrade) setDegraded(reason, msg string) {
+//}
 
 func (u *CoreUpgrade) deleteKubeSystemKubeControllers() error {
 	dsl, err := u.client.AppsV1().Deployments("kube-system").List(metav1.ListOptions{})
@@ -235,7 +319,7 @@ func (u *CoreUpgrade) waitForNewTyphaDeploymentReady() error {
 	})
 }
 
-func (u *CoreUpgrade) labelUnlabeledNodesForOldNode() error {
+func (u *CoreUpgrade) labelNonUpgradedNodesForOldNode() error {
 	for _, obj := range u.indexer.List() {
 		node, ok := obj.(*v1.Node)
 		if !ok {

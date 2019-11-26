@@ -25,7 +25,6 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/upgrade"
 )
 
 var (
@@ -65,7 +64,7 @@ func Calico(
 	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
-	up *upgrade.CoreUpgrade,
+	up bool,
 ) (Renderer, error) {
 
 	tcms := []*corev1.ConfigMap{}
@@ -116,6 +115,7 @@ func Calico(
 		birdTemplates: bt,
 		provider:      p,
 		networkConfig: nc,
+		upgrade:       up,
 	}, nil
 }
 
@@ -182,7 +182,7 @@ type calicoRenderer struct {
 	birdTemplates map[string]string
 	provider      operator.Provider
 	networkConfig NetworkConfig
-	upgrade       *upgrade.CoreUpgrade
+	upgrade       bool
 }
 
 func (r calicoRenderer) Render() []Component {

@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
@@ -52,7 +53,7 @@ var _ = Describe("API server rendering tests", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(len(resources)).To(Equal(16))
+		Expect(len(resources)).To(Equal(18))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -76,6 +77,8 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		i := 0
@@ -199,12 +202,35 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(16))
+		Expect(len(resources)).To(Equal(18))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
+	})
+
+	It("should render needed resources for k8s kube-controller", func() {
+		component, err := render.APIServer("", nil, nil, openshift)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources := component.Objects()
+
+		Expect(len(resources)).To(Equal(18))
+
+		// Should render the correct resources.
+		cr := resources[16].(*rbacv1.ClusterRole)
+		Expect(len(cr.Rules)).To(Equal(1))
+		Expect(len(cr.Rules[0].Resources)).To(Equal(1))
+		Expect(cr.Rules[0].Resources[0]).To(Equal("tiers"))
+		Expect(len(cr.Rules[0].Verbs)).To(Equal(1))
+		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
+
+		crb := resources[17].(*rbacv1.ClusterRoleBinding)
+		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(crb.RoleRef.Name).To(Equal("tigera-tier-getter"))
+		Expect(len(crb.Subjects)).To(Equal(1))
+		Expect(crb.Subjects[0].Kind).To(Equal("User"))
+		Expect(crb.Subjects[0].Name).To(Equal("system:kube-controller-manager"))
 	})
 })
 

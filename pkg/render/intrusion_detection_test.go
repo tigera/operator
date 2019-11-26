@@ -30,7 +30,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserIntrusionDetectionJob})
 
 	It("should render all resources for a default configuration", func() {
+		replicas := int32(0)
 		ls := &operatorv1.LogStorage{
+			Spec: operatorv1.LogStorageSpec{
+				Indices: &operatorv1.Indices{Replicas: &replicas},
+			},
 			Status: operatorv1.LogStorageStatus{
 				ElasticsearchHash: "randomhash",
 			},

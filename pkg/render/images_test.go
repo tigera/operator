@@ -15,6 +15,7 @@
 package render
 
 import (
+	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/components"
@@ -25,7 +26,7 @@ var _ = Describe("No registry override", func() {
 		Expect(constructImage(NodeImageNameCalico, "")).To(Equal("docker.io/calico/node:" + components.VersionCalicoNode))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(constructImage(NodeImageNameTigera, "")).To(Equal("quay.io/tigera/cnx-node:" + components.VersionTigeraNode))
+		Expect(constructImage(NodeImageNameTigera, "")).To(Equal(fmt.Sprintf("%stigera/cnx-node:%s", TigeraRegistry, components.VersionTigeraNode)))
 	})
 	It("should render an ECK image correctly", func() {
 		Expect(constructImage(ECKOperatorImageName, "")).To(Equal("docker.elastic.co/eck/eck-operator:" + components.VersionECKOperator))

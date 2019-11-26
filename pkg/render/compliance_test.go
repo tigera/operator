@@ -17,6 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
@@ -34,7 +35,17 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Compliance(nil, registry, "clusterTestName", nil, notOpenshift)
+		replicas := int32(0)
+		ls := &operatorv1.LogStorage{
+			Spec: operatorv1.LogStorageSpec{
+				Indices: &operatorv1.Indices{Replicas: &replicas},
+			},
+			Status: operatorv1.LogStorageStatus{
+				ElasticsearchHash: "randomhash",
+			},
+		}
+
+		component := render.Compliance(ls, nil, registry, "clusterTestName", nil, notOpenshift)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(28))
 		ns := "tigera-compliance"

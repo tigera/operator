@@ -20,6 +20,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	ocsv1 "github.com/openshift/api/security/v1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -42,6 +43,7 @@ const (
 )
 
 func Compliance(
+	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
 	registry string,
 	clusterName string,
@@ -49,6 +51,7 @@ func Compliance(
 	openshift bool,
 ) Component {
 	return &complianceComponent{
+		ls:          ls,
 		esSecrets:   esSecrets,
 		registry:    registry,
 		clusterName: clusterName,
@@ -58,6 +61,7 @@ func Compliance(
 }
 
 type complianceComponent struct {
+	ls          *operatorv1.LogStorage
 	esSecrets   []*corev1.Secret
 	registry    string
 	clusterName string
@@ -265,10 +269,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:            "compliance-controller",
-							Image:           constructImage(ComplianceControllerImage, c.registry),
-							Env:             envVars,
-							LivenessProbe:   complianceLivenessProbe,
+							Name:          "compliance-controller",
+							Image:         constructImage(ComplianceControllerImage, c.registry),
+							Env:           envVars,
+							LivenessProbe: complianceLivenessProbe,
 						}, c.clusterName, ElasticsearchUserComplianceController),
 					},
 				}),
@@ -353,18 +357,20 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				},
 				ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 				Containers: []corev1.Container{
-					ElasticsearchContainerDecorate(corev1.Container{
-						Name:          "reporter",
-						Image:         constructImage(ComplianceReporterImage, c.registry),
-						Env:           envVars,
-						LivenessProbe: complianceLivenessProbe,
-						SecurityContext: &corev1.SecurityContext{
-							Privileged: &privileged,
-						},
-						VolumeMounts: []corev1.VolumeMount{
-							{MountPath: "/var/log/calico", Name: "var-log-calico"},
-						},
-					}, c.clusterName, ElasticsearchUserComplianceReporter),
+					ElasticsearchContainerDecorateIndexCreator(
+						ElasticsearchContainerDecorate(corev1.Container{
+							Name:          "reporter",
+							Image:         constructImage(ComplianceReporterImage, c.registry),
+							Env:           envVars,
+							LivenessProbe: complianceLivenessProbe,
+							SecurityContext: &corev1.SecurityContext{
+								Privileged: &privileged,
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{MountPath: "/var/log/calico", Name: "var-log-calico"},
+							},
+						}, c.clusterName, ElasticsearchUserComplianceReporter), c.ls.Replicas(), c.ls.Shards(),
+					),
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -491,9 +497,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorate(corev1.Container{
-							Name:            "compliance-server",
-							Image:           constructImage(ComplianceServerImage, c.registry),
-							Env:             envVars,
+							Name:  "compliance-server",
+							Image: constructImage(ComplianceServerImage, c.registry),
+							Env:   envVars,
 						}, c.clusterName, ElasticsearchUserComplianceServer),
 					},
 				}),
@@ -596,12 +602,14 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					},
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(corev1.Container{
-							Name:            "compliance-snapshotter",
-							Image:           constructImage(ComplianceSnapshotterImage, c.registry),
-							Env:             envVars,
-							LivenessProbe:   complianceLivenessProbe,
-						}, c.clusterName, ElasticsearchUserComplianceSnapshotter),
+						ElasticsearchContainerDecorateIndexCreator(
+							ElasticsearchContainerDecorate(corev1.Container{
+								Name:          "compliance-snapshotter",
+								Image:         constructImage(ComplianceSnapshotterImage, c.registry),
+								Env:           envVars,
+								LivenessProbe: complianceLivenessProbe,
+							}, c.clusterName, ElasticsearchUserComplianceSnapshotter), c.ls.Replicas(), c.ls.Shards(),
+						),
 					},
 				}),
 			},
@@ -657,7 +665,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{ FieldRef: &corev1.ObjectFieldSelector { FieldPath: "spec.nodeName" } }},
+		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 	}
 
 	volMounts := []corev1.VolumeMount{
@@ -729,13 +737,15 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 					},
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-benchmarker",
-							Image:         constructImage(ComplianceBenchmarkerImage, c.registry),
-							Env:           envVars,
-							VolumeMounts:  volMounts,
-							LivenessProbe: complianceLivenessProbe,
-						}, c.clusterName, ElasticsearchUserComplianceBenchmarker),
+						ElasticsearchContainerDecorateIndexCreator(
+							ElasticsearchContainerDecorate(corev1.Container{
+								Name:          "compliance-benchmarker",
+								Image:         constructImage(ComplianceBenchmarkerImage, c.registry),
+								Env:           envVars,
+								VolumeMounts:  volMounts,
+								LivenessProbe: complianceLivenessProbe,
+							}, c.clusterName, ElasticsearchUserComplianceBenchmarker), c.ls.Replicas(), c.ls.Shards(),
+						),
 					},
 					Volumes: vols,
 				}),

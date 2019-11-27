@@ -28,7 +28,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
-	coreupgrade "github.com/tigera/operator/pkg/controller/upgrade/core"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 )
 
 const (
@@ -321,7 +321,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	}
 	setCriticalPod(&(d.Spec.Template))
 	if c.upgrade {
-		coreupgrade.ModifyTyphaDeployment(&d)
+		upgrade.ModifyTyphaDeployment(&d)
 	}
 	return &d
 }

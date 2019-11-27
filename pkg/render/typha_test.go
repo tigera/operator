@@ -47,7 +47,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Typha(installation, provider, typhaNodeTLS)
+		component := render.Typha(installation, provider, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 

@@ -20,7 +20,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
-	coreupgrade "github.com/tigera/operator/pkg/controller/upgrade/core"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -119,7 +119,7 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 		},
 	}
 	if c.upgrade {
-		coreupgrade.ModifyNodeRoleBinding(crb)
+		upgrade.ModifyNodeRoleBinding(crb)
 	}
 	return crb
 }
@@ -419,7 +419,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 
 	setCriticalPod(&(ds.Spec.Template))
 	if c.upgrade {
-		coreupgrade.ModifyNodeDaemonSet(&ds)
+		upgrade.ModifyNodeDaemonSet(&ds)
 	}
 	return &ds
 }

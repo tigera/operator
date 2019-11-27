@@ -1,7 +1,9 @@
 package render
 
 import (
+	"encoding/base64"
 	"fmt"
+	"strconv"
 	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -38,6 +40,15 @@ const (
 	techPreviewEnabledValue = "enabled"
 )
 
+// Multicluster configuration constants
+const (
+	VoltronName                 = "tigera-voltron"
+	VoltronTunnelSecretName     = "voltron-tunnel"
+	voltronTunnelHashAnnotation = "hash.operator.tigera.io/voltron-tunnel"
+	defaultVoltronPort          = 9449
+	voltronPortName             = "tunnels"
+)
+
 func Manager(
 	cr *operator.Manager,
 	esSecrets []*corev1.Secret,
@@ -47,6 +58,8 @@ func Manager(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	registry string,
+	mcmSpec *operator.MulticlusterConfigSpec,
+	createVoltronTunnelSecret bool,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
@@ -67,27 +80,41 @@ func Manager(
 	// that should not be set on a new object.
 	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
 	tlsSecrets = append(tlsSecrets, copy)
+
+	// Extract the mcm configuration if a spec was found
+	management := mcmSpec.ClusterManagementType == "management"
+	voltronAddr := mcmSpec.ManagementClusterAddr
+	voltronPort := mcmSpec.ManagementClusterPort
+
 	return &managerComponent{
-		cr:            cr,
-		esSecrets:     esSecrets,
-		kibanaSecrets: kibanaSecrets,
-		clusterName:   clusterName,
-		tlsSecrets:    tlsSecrets,
-		pullSecrets:   pullSecrets,
-		openshift:     openshift,
-		registry:      registry,
+		cr:                        cr,
+		esSecrets:                 esSecrets,
+		kibanaSecrets:             kibanaSecrets,
+		clusterName:               clusterName,
+		tlsSecrets:                tlsSecrets,
+		pullSecrets:               pullSecrets,
+		openshift:                 openshift,
+		registry:                  registry,
+		management:                management,
+		voltronAddr:               voltronAddr,
+		voltronPort:               voltronPort,
+		createVoltronTunnelSecret: createVoltronTunnelSecret,
 	}, nil
 }
 
 type managerComponent struct {
-	cr            *operator.Manager
-	esSecrets     []*corev1.Secret
-	kibanaSecrets []*corev1.Secret
-	clusterName   string
-	tlsSecrets    []*corev1.Secret
-	pullSecrets   []*corev1.Secret
-	openshift     bool
-	registry      string
+	cr                        *operator.Manager
+	esSecrets                 []*corev1.Secret
+	kibanaSecrets             []*corev1.Secret
+	clusterName               string
+	tlsSecrets                []*corev1.Secret
+	pullSecrets               []*corev1.Secret
+	openshift                 bool
+	registry                  string
+	management                bool
+	voltronAddr               string
+	voltronPort               int
+	createVoltronTunnelSecret bool
 }
 
 func (c *managerComponent) Objects() []runtime.Object {
@@ -109,6 +136,13 @@ func (c *managerComponent) Objects() []runtime.Object {
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 	)
+
+	if c.management {
+		objs = append(objs, c.voltronTunnelService())
+		if c.createVoltronTunnelSecret {
+			objs = append(objs, c.voltronTunnelSecret()) //SAAS-471
+		}
+	}
 
 	// If we're running on openshift, we need to add in an SCC.
 	if c.openshift {
@@ -137,6 +171,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		// Add a hash of the Secret to ensure if it changes the manager will be
 		// redeployed.
 		annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
+	}
+	if c.management {
+		//annotations[voltronTunnelHashAnnotation] = AnnotationHash(c.pancake.Data) //TODO: figure this out.
 	}
 
 	d := &appsv1.Deployment{
@@ -189,6 +226,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
+	optional := true
 	return []v1.Volume{
 		{
 			Name: ManagerTLSSecretName,
@@ -203,6 +241,15 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
 					SecretName: KibanaPublicCertSecret,
+				},
+			},
+		},
+		{
+			Name: VoltronTunnelSecretName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: VoltronTunnelSecretName,
+					Optional:   &optional,
 				},
 			},
 		},
@@ -266,6 +313,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: c.policyRecommendationSupport()},
+		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -309,19 +357,27 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 // managerProxyContainer returns the container for the manager proxy container.
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
-		Name:  "tigera-voltron",
+		Name:  VoltronName,
 		Image: constructImage(ManagerProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
-			{Name: "VOLTRON_PORT", Value: "9443"},
+			{Name: "VOLTRON_PORT",
+				Value: strconv.Itoa(defaultVoltronPort)},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
 			{Name: "VOLTRON_LOGLEVEL", Value: "info"},
 			{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
 			{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 			{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT",
+				Value: strconv.FormatBool(c.management)},
+			{Name: "VOLTRON_PUBLIC_IP",
+				Value: c.voltronAddr},
+			{Name: "VOLTRON_TUNNEL_PORT",
+				Value: fmt.Sprintf("%v", c.voltronPort)},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
 			{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana"},
+			{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel/"},
 		},
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),
@@ -370,6 +426,51 @@ func (c *managerComponent) managerService() *v1.Service {
 					Port:       managerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(managerTargetPort),
+				},
+			},
+			Selector: map[string]string{
+				"k8s-app": "tigera-manager",
+			},
+		},
+	}
+}
+
+// managerService returns the service exposing the Tigera Secure web app.
+func (c *managerComponent) voltronTunnelSecret() *v1.Secret {
+
+	//TODO: Placeholder secret. SAAS-471
+	cert, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUQrVENDQXVHZ0F3SUJBZ0lVQmFXenB2ZzlVckVzaUF4SExEMllmWVFGcFFVd0RRWUpLb1pJaHZjTkFRRUwKQlFBd2dZc3hDekFKQmdOVkJBWVRBbFZUTVJNd0VRWURWUVFJREFwRFlXeHBabTl5Ym1saE1SWXdGQVlEVlFRSApEQTFUWVc0Z1JuSmhibU5wYzJOdk1SUXdFZ1lEVlFRS0RBdFVhV2RsY21Fc0lFbHVZekVYTUJVR0ExVUVBd3dPCmRHbG5aWEpoTFhadmJIUnliMjR4SURBZUJna3Foa2lHOXcwQkNRRVdFV052Ym5SaFkzUkFkR2xuWlhKaExtbHYKTUI0WERURTVNVEV4TXpBeU1URXlNRm9YRFRJd01URXhNakF5TVRFeU1Gb3dnWXN4Q3pBSkJnTlZCQVlUQWxWVApNUk13RVFZRFZRUUlEQXBEWVd4cFptOXlibWxoTVJZd0ZBWURWUVFIREExVFlXNGdSbkpoYm1OcGMyTnZNUlF3CkVnWURWUVFLREF0VWFXZGxjbUVzSUVsdVl6RVhNQlVHQTFVRUF3d09kR2xuWlhKaExYWnZiSFJ5YjI0eElEQWUKQmdrcWhraUc5dzBCQ1FFV0VXTnZiblJoWTNSQWRHbG5aWEpoTG1sdk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRgpBQU9DQVE4QU1JSUJDZ0tDQVFFQXNWNm1IdWdZeDBaQkN5U1VNQU1XWThESUxBbjlseGhBa0tyNStIa0ttQU1mCkRrMTkwVjNwdXNFUEg5TlovYnlBT08rUG9qakpnSTFuMzdJY09OQlRvVjdXVWR6Qk16eGpGZWwzSkJMdHo4bVYKb2YxVHMwVEFRZGI3R2xBYjNORTRHdmtCWno3Vkk2YWE1bnc4SGlWVlp1UjJNNHlOejJKek1OTUFzRnpDNk5tNQpRVU1UcnY0b3lkSTZ5cXQ0R0h3anlISVhBVWt0K3RzKy9RRjgxK1NXTkNGRWM2VTZlcjdsS013MFpwN21PWUpvCm4zWEpJWmJIMjJUcnFnNUtzTXZwVW1NSVd1d2VJZ053RGlJUDhZZ2NOZUc1YlA2eU5hc21PZ0hSbHN5a0M5MGYKaTFzenpSbTIyTlBiYjhENi9Vc1E5MHpoaUg4djRKVkFuT3BHdStrZnNRSURBUUFCbzFNd1VUQVNCZ05WSFJFRQpDekFKZ2dkMmIyeDBjbTl1TUIwR0ExVWREZ1FXQkJRdWhqRTVoUmo3dEEvak9FMmh3YlpucWJrL2RqQVBCZ05WCkhSTUJBZjhFQlRBREFRSC9NQXNHQTFVZER3UUVBd0lDNURBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQWdiVUEKWWlCRFhMUllkRXlVQ3c5RDl3b1hEVEdXcU8rZWQzRUFvNU1wLzRKSmgwSEY2eHhrV0ZaaUtMNGQrSkNOSWVMRgo0MTlhalFZWnFuWTN1cHV6TmY2YVhKaHc2SG52bEV4Z1l1aERJSm1wOWI5N2tDdzZaMFFDaTJiak9qTUlyVGgzClJEa1VuajZjMVZyNGJYZXNIc1JUbmNtdWdZRFRYdU44bUhRbDQ0RjE3NTkzTUJxMXlrSGQrUHJDMnVOa1pNOTgKTlJDZCtVWWcwSHM3MENLTHJXbHIvaStxWEJEYzhWOUxYaGl5OWkrNSs4RXZLVlVCSVVkb0g5UVE0NGh1VWQ5MQpIMzNvZVZYMWlRM09lZFRPOUlGMW5BVUp0NW1SVzRxU09xTys3UXhZUTJTdjRUdXRvc3FYNzQzRzZvWEhmV2hTCk1YeXZ5N1JTR2hUeWVJMFpCQT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K")
+	key, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBc1Y2bUh1Z1l4MFpCQ3lTVU1BTVdZOERJTEFuOWx4aEFrS3I1K0hrS21BTWZEazE5CjBWM3B1c0VQSDlOWi9ieUFPTytQb2pqSmdJMW4zN0ljT05CVG9WN1dVZHpCTXp4akZlbDNKQkx0ejhtVm9mMVQKczBUQVFkYjdHbEFiM05FNEd2a0JaejdWSTZhYTVudzhIaVZWWnVSMk00eU56Mkp6TU5NQXNGekM2Tm01UVVNVApydjRveWRJNnlxdDRHSHdqeUhJWEFVa3QrdHMrL1FGODErU1dOQ0ZFYzZVNmVyN2xLTXcwWnA3bU9ZSm9uM1hKCklaYkgyMlRycWc1S3NNdnBVbU1JV3V3ZUlnTndEaUlQOFlnY05lRzViUDZ5TmFzbU9nSFJsc3lrQzkwZmkxc3oKelJtMjJOUGJiOEQ2L1VzUTkwemhpSDh2NEpWQW5PcEd1K2tmc1FJREFRQUJBb0lCQUFFd0tCNjI0VXVjYmQwYwpQcDNmdDJ1dG8rbWZtNEpDbUZRZndSTG9CS2ttQkRROVVxVnZZcHhzcEtSSzd5UmkrZHpueGVlSlI5aERtam1HCllPZ0VoVHJrZnIwSHBJZXFWT09WcjhXZkZ0YTRlL2NjMGsyMkhTK1R1QlRpQ24yOUxRb0pOdmd4Rkk1cmxFZ00KOXY0Z3MrUy9qUWNsWHVIUHdBUEl0ZzE0WVpuYnNLSTB4SWtCS0x0MVRqL0NMWjY1LytHMkdjbUVtVjJtWUVBQQpjcjFUSXRQQk9IWlhMTWpXbEQ4UXNMSmNNYytCdkNtUVNyZU1BODNKMHRmSTRvUnlBWmgxQndVNDhRK3NUQ0grCm9GczFRQkNJMityejBPZzZRRUI3YjFSdTdRRVZIK08rcDAwNFB2aEZZUk13bzJHdDZnZmg4R2c4b2szY1AwcEwKWU9IOVFiMENnWUVBN0hVMTJjL29vY1ZKL2o3ZmltTmZLZCs0RklSK1VxbXl3UzhMb0dZdjFESXlmSmNBY1diRQpWa3ArUXFVb2tYT1JTVVRua0IvWHJvbnRHREkvT3RjQmhqRVhIekNsVnh2a0wzNFczS2p3aDBNcUVyRG5ZQ0E1CjFOVmUzY2c5VU1Rd0pwS0YrYkVXWElianBXQUVGVExrZER0cng2UzRNTHpLSjVNNjFkTjVXWmNDZ1lFQXdBZE0KV3o1UWxCSHNIKzlEMWRxbi9pamg5TGJocXNWYXN6dkVjZHgrYjlrVnVZb01neGZaUlFRKzYrVVk3YnNnak0rQQpwWkRGNUYzdWExQlFWL2ZQQjA1ckgwQjFRM1ZMR2VlbjNIM2pPMFQ4TXN5VEIycDlTTTB6cm4xYWxsWXQzUTZzCjlvbm9hdTRFYTJEMlM2ZlNxYTU4REYvMmY3bnNQOHJtSnplcHFmY0NnWUJuVzhqQlArODVIMHI3dHJIeUJRUHAKQXVDdEgwazBpdmNYR0tCbGFhV0loTFNxM3pxVFYwK0ZSS1N5THcxdm51dW44bFdpR3prbEV5Y3ZSMjk2SWRlSgp0OVdhamFJSVZLbkcxTC9iam9FdEx2K3FFZWZoamRTWm92Y0h6T3A0Ym5sNXN0eWJTM3d4ejhpY1ZqOFNvUjlaCmEwdnVoYUw1c3R4T3RqMm1qL3pnV3dLQmdGc2NXMTlEZnNueWd2MVg4ZkNxMFdCbkYyYWJ5eERTbU1sSHgxcGEKeXViWXNsVVpLZnlkT1NwazdGSFNublJWZ0FrdmZ4T1BVRVdkUjcxRkd3blIrem0xUEdCVW5nN0d2VDVxU3B2MApZdmRCTVFRTlNvbVBQaWhuckdqUzgwTTNXb1Z6TEIvQnFUUHJBTS9ON3E1UXowUlJGR3h1cjY5RWtOSm51N0hKCjJFZGJBb0dCQUpIR3BEa1Rwc1c1ZmJidEh2Y1hxcmVjdlFLM2RaNFBNNmRhWHFJeWZCVmxQNmVDeWJLZnBlMysKV1dacUNiZnlHYmhKakpNbm9CSk1mWUJxSGFwMTAzWkR5dk1XRzZodkFUdSswb3hVdkJuWTRKcGpqeGE4QVcySQpDd093WndBZjJwa3Nzd2psOE1tSmVQSmFOK0lTandvM2ZOUTIvbUtPZS9PcjJLUUlYVDZKCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==")
+
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronTunnelSecretName,
+			Namespace: ManagerNamespace,
+		},
+		Data: map[string][]byte{
+			"cert": []byte(cert),
+			"key":  []byte(key),
+		},
+	}
+}
+
+// managerService returns the service exposing the Tigera Secure web app.
+func (c *managerComponent) voltronTunnelService() *v1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeNodePort,
+			Ports: []corev1.ServicePort{
+				{
+					Port:     defaultVoltronPort,
+					NodePort: int32(c.voltronPort),
+					Protocol: corev1.ProtocolTCP,
+					Name:     voltronPortName,
 				},
 			},
 			Selector: map[string]string{

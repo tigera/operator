@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	"github.com/tigera/operator/pkg/elasticsearch"
@@ -19,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -29,6 +29,10 @@ import (
 )
 
 var log = logf.Log.WithName("controller_manager")
+
+const (
+	defaultClusterType = "standalone"
+)
 
 func init() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager,
@@ -73,7 +77,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create manager-controller: %v", err)
+		return fmt.Errorf("failed to create manager-controller: %v", err)
 	}
 
 	// Watch for changes to primary resource Manager
@@ -90,6 +94,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = utils.AddComplianceWatch(c)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch compliance resource: %v", err)
+	}
+
+	err = utils.AddMulticlusterConfigWatch(c)
+	if err != nil {
+		return fmt.Errorf("manager-controller failed to wtch compliance resource: %v", err)
 	}
 
 	for _, secretName := range []string{
@@ -119,7 +128,7 @@ type ReconcileManager struct {
 }
 
 // GetManager returns the default manager instance with defaults populated.
-func GetManager(ctx context.Context, cli client.Client, provider operatorv1.Provider) (*operatorv1.Manager, error) {
+func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, error) {
 	// Fetch the manager instance. We only support a single instance named "default".
 	instance := &operatorv1.Manager{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
@@ -138,6 +147,34 @@ func GetManager(ctx context.Context, cli client.Client, provider operatorv1.Prov
 	return instance, nil
 }
 
+// GetManager returns the default multicluster config with defaults populated.
+func getMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.MulticlusterConfig, error) {
+	// Fetch the multicluster config instance. We only support a single instance.
+	instance := &operatorv1.MulticlusterConfig{}
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate the CR
+	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterAddr == "" {
+		return nil, fmt.Errorf("managementClusterAddr is a required field when clusterManagementType='management'")
+	}
+	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterPort == 0 {
+		return nil, fmt.Errorf("ManagementClusterPort is a required field when clusterManagementType='management'")
+	}
+	if instance.Spec.ManagedClusterIdentityCert != "" {
+		log.Info("managedClusterIdentityCert will be ignored.")
+	}
+
+	// Populate the instance with defaults for any fields not provided by the user.
+	if instance.Spec.ClusterManagementType == "" {
+		instance.Spec.ClusterManagementType = defaultClusterType
+	}
+
+	return instance, nil
+}
+
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
 // and what is in the Manager.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
@@ -148,7 +185,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	ctx := context.Background()
 
 	// Fetch the Manager instance
-	instance, err := GetManager(ctx, r.client, r.provider)
+	instance, err := GetManager(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Manager object not found")
@@ -251,6 +288,30 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	// Check the multi cluster settings
+	mcmCfg, err := getMulticlusterConfig(ctx, r.client)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Continuing without multicluster configuration")
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded("Failed to get multicluster configuration", err.Error())
+		return reconcile.Result{}, err
+	}
+	// If clusterType is not management, clean up unnecessary resources
+	err = cleanUpMcm(mcmCfg, ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded("Failed to clean up multicluster configuration", err.Error())
+		return reconcile.Result{}, err
+	}
+	// If clusterType is management, copy over the tunnel secret if this is available.
+	secretProvided, err := copyTunnelSecret(mcmCfg, ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded("Failed to copy tunnel multicluster secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -264,6 +325,8 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		installation.Spec.Registry,
+		&mcmCfg.Spec,
+		!secretProvided,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")
@@ -286,4 +349,65 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// The user can provide a secret for setting up the tunnel. If it did, we copy it over to the manager namespace,
+// otherwise, we proceed and create a new secret. Returns true if a secret is provided by the user.
+func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) (bool, error) {
+	if config == nil || config.Spec.ClusterManagementType != "management" {
+		// nothing to copy
+		return false, nil
+	}
+	sec := &corev1.Secret{}
+	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, sec)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// nothing to copy
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+	sec.Namespace = render.ManagerNamespace
+	return true, cli.Create(ctx, sec)
+}
+
+// If a cluster is no longer of type management, there are resources that should be cleaned up
+func cleanUpMcm(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) error {
+	if config != nil && config.Spec.ClusterManagementType == "management" {
+		// nothing to clean up
+		return nil
+	}
+	// Remove the unnecessary service if there is one
+	svc := &corev1.Service{}
+	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronName, Namespace: render.ManagerNamespace}, svc)
+	found := true
+	if err != nil {
+		if errors.IsNotFound(err) {
+			found = false
+		} else {
+			return err
+		}
+	}
+	if found {
+		err = cli.Delete(ctx, svc)
+		if err != nil {
+			return err
+		}
+	}
+	// Remove unnecessary secret if there is one
+	sec := &corev1.Secret{}
+	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.ManagerNamespace}, sec)
+	found = true
+	if err != nil {
+		if errors.IsNotFound(err) {
+			found = false
+		} else {
+			return err
+		}
+	}
+	if found {
+		return cli.Delete(ctx, sec)
+	}
+	return nil
 }

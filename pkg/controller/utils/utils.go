@@ -113,6 +113,10 @@ func addNamespacedWatch(c controller.Controller, obj runtime.Object) error {
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
 
+func AddMulticlusterConfigWatch(c controller.Controller) error {
+	return c.Watch(&source.Kind{Type: &operatorv1.MulticlusterConfig{}}, &handler.EnqueueRequestForObject{})
+}
+
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance := &operatorv1.APIServer{}
 	err := client.Get(context.Background(), DefaultTSEEInstanceKey, instance)

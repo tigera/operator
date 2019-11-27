@@ -143,8 +143,6 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	upgrade.AddInstallationUpgradeWatches(&c)
-
 	return nil
 }
 
@@ -524,7 +522,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, err
 		}
 		if err := up.Run(reqLogger, r.status); err != nil {
-			// No need to set status since the function will set if needed.
+			// No need to set status/degraded since the function will set if needed.
 			return reconcile.Result{}, err
 		}
 		// Requeue so we can update our resources (without the upgrade changes)

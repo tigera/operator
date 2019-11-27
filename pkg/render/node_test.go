@@ -55,7 +55,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -228,7 +228,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -319,7 +319,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when running on openshift", func() {
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -437,7 +437,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -537,7 +537,7 @@ var _ = Describe("Node rendering tests", func() {
 		bt := map[string]string{
 			"template-1.yaml": "dataforTemplate1 that is not used here",
 		}
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt, typhaNodeTLS)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -630,7 +630,7 @@ var _ = Describe("Node rendering tests", func() {
 		func(pool operator.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration
 			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 			resources := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 

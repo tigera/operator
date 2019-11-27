@@ -64,7 +64,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		// - 1 PriorityClass
 		// - 14 custom resource definitions
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(37))
 	})
@@ -76,7 +76,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 ns (tigera-prometheus)
 		// - 11 TSEE crds
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal((37 + 1 + 1 + 12)))
 	})

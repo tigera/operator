@@ -27,7 +27,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/status"
-	coreupgrade "github.com/tigera/operator/pkg/controller/upgrade/core"
+	"github.com/tigera/operator/pkg/controller/upgrade"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -143,7 +143,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	coreupgrade.AddInstallationUpgradeWatches(&c)
+	upgrade.AddInstallationUpgradeWatches(&c)
 
 	return nil
 }
@@ -428,7 +428,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	needUpgrade, err := coreupgrade.IsCoreUpgradeNeeded(r.config)
+	needUpgrade, err := upgrade.IsCoreUpgradeNeeded(r.config)
 	if err != nil {
 		log.Error(err, "Error checking if upgrade is needed")
 		r.status.SetDegraded("Error checking if upgrade is needed", err.Error())
@@ -518,7 +518,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
-		up, err := coreupgrade.GetCoreUpgrade(r.config)
+		up, err := upgrade.GetCoreUpgrade(r.config)
 		if err != nil {
 			r.status.SetDegraded("Error setting up upgrade", err.Error())
 			return reconcile.Result{}, err
@@ -531,7 +531,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// Also needed since we updated the instance.
 		return reconcile.Result{Requeue: true}, nil
 	} else {
-		if err := coreupgrade.CleanupUpgrade(); err != nil {
+		if err := upgrade.CleanupUpgrade(); err != nil {
 			r.status.SetDegraded("Error cleaning up after upgrade", err.Error())
 			return reconcile.Result{}, err
 		}

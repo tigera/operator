@@ -331,6 +331,15 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	if instance.Status.State == "" {
+		instance.Status.State = operator.StateInstalling
+		if err = r.client.Status().Update(ctx, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		// Requeue to re-Get the installation after updating.
+		return reconcile.Result{Requeue: true}, nil
+	}
+
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
 		r.SetDegraded("Error validating CRD", err, reqLogger)
@@ -489,7 +498,23 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
-		return reconcile.Result{RequeueAfter: coreupgrade.RequeueDelay(reqLogger)}, nil
+		up, err := coreupgrade.GetCoreUpgrade(r.config)
+		if err != nil {
+			r.status.SetDegraded("Error setting up upgrade", err.Error())
+			return reconcile.Result{}, err
+		}
+		if err := up.Run(reqLogger, r.status); err != nil {
+			// No need to set status since the function will set if needed.
+			return reconcile.Result{}, err
+		}
+		// Requeue so we can update our resources (without the upgrade changes)
+		// Also needed since we updated the instance.
+		return reconcile.Result{Requeue: true}, nil
+	} else {
+		if err := coreupgrade.CleanupUpgrade(); err != nil {
+			r.status.SetDegraded("Error cleaning up after upgrade", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
@@ -502,6 +527,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Everything is available - update the CRD status.
+	instance.Status.State = operator.StateReady
 	instance.Status.Variant = instance.Spec.Variant
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

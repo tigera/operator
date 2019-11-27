@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -49,14 +50,14 @@ const (
 )
 
 var (
-	kubeSysNodeDaemonSetNames = map[string]bool{
-		nodeDaemonSetName: true,
+	kubeSysNodeDaemonSetNames = []string{
+		nodeDaemonSetName,
 	}
-	kubeSysKubeControllerDeploymentNames = map[string]bool{
-		"calico-kube-controllers": true,
+	kubeSysKubeControllerDeploymentNames = []string{
+		"calico-kube-controllers",
 	}
-	kubeSysTyphaDeploymentNames = map[string]bool{
-		typhaDeploymentName: true,
+	kubeSysTyphaDeploymentNames = []string{
+		typhaDeploymentName,
 	}
 	oldNodeLabel = map[string]string{
 		nodeSelectorKey: "pre-operator",
@@ -87,29 +88,23 @@ func IsCoreUpgradeNeeded(cfg *rest.Config) (bool, error) {
 		return false, fmt.Errorf("Unable to get kubernetes client to check for needed upgrade: %s", err)
 	}
 
-	dsl, err := c.AppsV1().DaemonSets("kube-system").List(metav1.ListOptions{})
-	if err != nil {
-		return false, fmt.Errorf("Unable to list daemonsets in kube-system: %s", err)
-	}
-	for _, ds := range dsl.Items {
-		_, ok := kubeSysNodeDaemonSetNames[ds.Name]
-		if ok {
+	for _, name := range kubeSysNodeDaemonSetNames {
+		_, err := c.AppsV1().DaemonSets("kube-system").Get(name, metav1.GetOptions{})
+		if err == nil {
 			return true, nil
+		}
+		if !apierrs.IsNotFound(err) {
+			return false, fmt.Errorf("Failed to get daemonset %s in kube-system: %s", name, err)
 		}
 	}
 
-	dl, err := c.AppsV1().Deployments("kube-system").List(metav1.ListOptions{})
-	if err != nil {
-		return false, fmt.Errorf("Unable to list deployments in kube-system: %s", err)
-	}
-	for _, ds := range dl.Items {
-		_, ok := kubeSysKubeControllerDeploymentNames[ds.Name]
-		if ok {
+	for _, name := range append(kubeSysKubeControllerDeploymentNames, kubeSysTyphaDeploymentNames...) {
+		_, err := c.AppsV1().Deployments("kube-system").Get(name, metav1.GetOptions{})
+		if err == nil {
 			return true, nil
 		}
-		_, ok = kubeSysTyphaDeploymentNames[ds.Name]
-		if ok {
-			return true, nil
+		if !apierrs.IsNotFound(err) {
+			return false, fmt.Errorf("Failed to get deployment %s in kube-system: %s", name, err)
 		}
 	}
 
@@ -181,6 +176,20 @@ func ModifyNodeDaemonSet(ds *appsv1.DaemonSet) {
 	}
 }
 
+// Ensure the running calico-node still has the access it needs since the node
+// role and binding are the same name, so when it is updated also include a binding
+// to the calico-node SA in kube-system.
+func ModifyNodeRoleBinding(crb *rbacv1.ClusterRoleBinding) {
+	if crb.Subjects == nil {
+		crb.Subjects = []rbacv1.Subject{}
+	}
+	crb.Subjects = append(crb.Subjects, rbacv1.Subject{
+		Kind:      "ServiceAccount",
+		Name:      "calico-node",
+		Namespace: "kube-system",
+	})
+}
+
 func ModifyTyphaDeployment(d *appsv1.Deployment) {
 	if d.Spec.Template.Spec.Affinity == nil {
 		d.Spec.Template.Spec.Affinity = &v1.Affinity{}
@@ -201,20 +210,7 @@ func ModifyTyphaDeployment(d *appsv1.Deployment) {
 	}
 }
 
-func RequeueDelay(log logr.Logger) time.Duration {
-	if upgrade == nil {
-		log.V(1).Info("No upgrade available to get requeue delay")
-		return time.Second
-	}
-	upgrade.lock.Lock()
-	defer upgrade.lock.Unlock()
-	return time.Duration(upgrade.nodeCount*2) * time.Second
-}
-
 func (u *CoreUpgrade) Run(log logr.Logger, status *status.StatusManager) error {
-	if u.stopCh == nil {
-		return nil
-	}
 	if err := u.deleteKubeSystemKubeControllers(); err != nil {
 		setDegraded(log, status, "Failed deleting old calico-kube-controllers", err.Error())
 		return err
@@ -239,16 +235,32 @@ func (u *CoreUpgrade) Run(log logr.Logger, status *status.StatusManager) error {
 		return err
 	}
 	log.V(1).Info("Node selector added to old node DaemonSet")
-	if err := u.upgradeEachNode(); err != nil {
+	if err := u.upgradeEachNode(log); err != nil {
 		setDegraded(log, status, "Failed to upgrade all nodes", err.Error())
 		return err
 	}
 	log.V(1).Info("Nodes upgraded")
+	if err := u.deleteKubeSystemCalicoNode(); err != nil {
+		setDegraded(log, status, "Failed to delete old node DaemonSet", err.Error())
+		return err
+	}
+	log.V(1).Info("Old node DaemonSet deleted")
+	if err := u.deleteKubeSystemTypha(); err != nil {
+		setDegraded(log, status, "Failed to delete old typha Deployment", err.Error())
+		return err
+	}
 
-	// TODO: Delete old node DaemonSet
-	// TODO: Delete old typha
+	return nil
+}
 
-	close(u.stopCh)
+func CleanupUpgrade() error {
+	if upgrade != nil {
+		if err := upgrade.removeNodeUpgradeLabelFromNodes(); err != nil {
+			return err
+		}
+		close(upgrade.stopCh)
+		upgrade = nil
+	}
 	return nil
 }
 
@@ -285,20 +297,30 @@ func setDegraded(log logr.Logger, status *status.StatusManager, reason, msg stri
 //}
 
 func (u *CoreUpgrade) deleteKubeSystemKubeControllers() error {
-	dsl, err := u.client.AppsV1().Deployments("kube-system").List(metav1.ListOptions{})
-	if err != nil {
-		if apierrs.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	for _, ds := range dsl.Items {
-		_, ok := kubeSysKubeControllerDeploymentNames[ds.Name]
-		if ok {
-			return u.client.AppsV1().Deployments("kube-system").Delete(ds.Name, &metav1.DeleteOptions{})
+	for _, name := range kubeSysKubeControllerDeploymentNames {
+		err := u.client.AppsV1().Deployments("kube-system").Delete(name, &metav1.DeleteOptions{})
+		if err != nil && !apierrs.IsNotFound(err) {
+			return err
 		}
 	}
-
+	return nil
+}
+func (u *CoreUpgrade) deleteKubeSystemTypha() error {
+	for _, name := range kubeSysTyphaDeploymentNames {
+		err := u.client.AppsV1().Deployments("kube-system").Delete(name, &metav1.DeleteOptions{})
+		if err != nil && !apierrs.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+func (u *CoreUpgrade) deleteKubeSystemCalicoNode() error {
+	for _, name := range kubeSysNodeDaemonSetNames {
+		err := u.client.AppsV1().DaemonSets("kube-system").Delete(name, &metav1.DeleteOptions{})
+		if err != nil && !apierrs.IsNotFound(err) {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -335,6 +357,20 @@ func (u *CoreUpgrade) labelNonUpgradedNodesForOldNode() error {
 	return nil
 }
 
+func (u *CoreUpgrade) removeNodeUpgradeLabelFromNodes() error {
+	for _, obj := range u.indexer.List() {
+		node, ok := obj.(*v1.Node)
+		if !ok {
+			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
+		}
+		if err := u.removeNodeLabels(node.Name, oldNodeLabel); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (u *CoreUpgrade) addNodeSelectorToOldNodeDaemonSet() error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		ds, err := u.client.AppsV1().DaemonSets("kube-system").Get("calico-node", metav1.GetOptions{})
@@ -364,17 +400,24 @@ func (u *CoreUpgrade) addNodeSelectorToOldNodeDaemonSet() error {
 	})
 }
 
-func (u *CoreUpgrade) upgradeEachNode() error {
+func (u *CoreUpgrade) upgradeEachNode(log logr.Logger) error {
 	nodes := u.getNodesToUpgrade()
 	for len(nodes) > 0 {
+		log.WithValues("count", len(nodes)).V(1).Info("nodes to upgrade")
 		for _, node := range nodes {
+			log.V(1).Info("Waiting for new calico pods to be healthy")
 			err := u.waitForNewCalicoPodsHealthy()
-			if err != nil {
+			if err == nil {
+				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
 				err = u.addNodeLabels(node.Name, newNodeLabel)
 				if err != nil {
 					return fmt.Errorf("Setting label on node %s failed; %s", node.Name, err)
 				}
+				log.V(1).Info("Waiting for new calico pod to start and be healthy")
 				u.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 2*time.Minute, calicoPodLabel)
+			} else {
+				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
+				time.Sleep(10 * time.Second)
 			}
 		}
 		// Fetch any new nodes that have been added during upgrade.

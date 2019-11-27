@@ -99,7 +99,7 @@ func (c *nodeComponent) nodeServiceAccount() *v1.ServiceAccount {
 
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
+	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "calico-node",
@@ -118,6 +118,10 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 			},
 		},
 	}
+	if c.upgrade {
+		coreupgrade.ModifyNodeRoleBinding(crb)
+	}
+	return crb
 }
 
 // nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
@@ -343,7 +347,7 @@ func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {
 // the cluster-admin role to calico-node, this is needed for calico-node to be
 // able to use hostNetwork in Docker Enterprise.
 func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
+	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "calico-cluster-admin",
@@ -362,6 +366,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 			},
 		},
 	}
+	return crb
 }
 
 // nodeDaemonset creates the node damonset.

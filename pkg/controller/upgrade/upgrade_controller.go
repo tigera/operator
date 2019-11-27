@@ -124,6 +124,14 @@ func (r *ReconcileUpgrade) Reconcile(request reconcile.Request) (reconcile.Resul
 	reqLogger.V(2).Info("Loaded config", "config", installation)
 
 	if installation.Status.State == operator.StateUpgrading {
+		needed, err := coreupgrade.IsCoreUpgradeNeeded(r.config)
+		if err != nil {
+			r.status.SetDegraded("Error checking if upgrade is still needed", err.Error())
+			return reconcile.Result{}, err
+		}
+		if !needed {
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		}
 		up, err := coreupgrade.GetCoreUpgrade(r.config)
 		if err != nil {
 			r.status.SetDegraded("Error setting up upgrade", err.Error())
@@ -145,6 +153,6 @@ func (r *ReconcileUpgrade) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// Created successfully - don't requeue
-	reqLogger.V(1).Info("Finished reconciling network installation")
+	reqLogger.V(1).Info("Finished reconciling upgrade")
 	return reconcile.Result{}, nil
 }

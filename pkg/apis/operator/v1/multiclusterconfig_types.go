@@ -20,11 +20,6 @@ type MulticlusterConfigSpec struct {
 	// Specify the port that the management cluster is listening on.
 	// +optional
 	ManagementClusterPort int `json:"managementClusterPort,omitempty"`
-
-	// This certificate is used to establish a secure connection between clusters. If this field is omitted, a
-	// self-signed certificate will be created when a managed cluster is added to a management cluster.
-	// +optional
-	ManagedClusterIdentityCert string `json:"managedClusterIdentityCert,omitempty"`
 }
 
 // MulticlusterConfigStatus defines the observed state of MulticlusterConfig

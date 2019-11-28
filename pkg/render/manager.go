@@ -45,7 +45,8 @@ const (
 	VoltronName                 = "tigera-voltron"
 	VoltronTunnelSecretName     = "voltron-tunnel"
 	voltronTunnelHashAnnotation = "hash.operator.tigera.io/voltron-tunnel"
-	defaultVoltronPort          = 9449
+	defaultVoltronPort          = 9443
+	defaultTunnelVoltronPort    = 9449
 	voltronPortName             = "tunnels"
 )
 
@@ -121,6 +122,17 @@ func (c *managerComponent) Objects() []runtime.Object {
 	objs := []runtime.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
+
+	var voltronAnnotation string
+	if c.management {
+		objs = append(objs, c.voltronTunnelService())
+		if c.createVoltronTunnelSecret {
+			voltronTunnelSecret := c.voltronTunnelSecret()
+			voltronAnnotation = AnnotationHash(voltronTunnelSecret.Data)
+			objs = append(objs, voltronTunnelSecret)
+		}
+	}
+
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
 	objs = append(objs,
 		c.managerServiceAccount(),
@@ -131,18 +143,11 @@ func (c *managerComponent) Objects() []runtime.Object {
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
-		c.managerDeployment(),
+		c.managerDeployment(voltronAnnotation),
 		c.managerService(),
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 	)
-
-	if c.management {
-		objs = append(objs, c.voltronTunnelService())
-		if c.createVoltronTunnelSecret {
-			objs = append(objs, c.voltronTunnelSecret()) //SAAS-471
-		}
-	}
 
 	// If we're running on openshift, we need to add in an SCC.
 	if c.openshift {
@@ -159,7 +164,7 @@ func (c *managerComponent) Ready() bool {
 }
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
-func (c *managerComponent) managerDeployment() *appsv1.Deployment {
+func (c *managerComponent) managerDeployment(voltronAnnotation string) *appsv1.Deployment {
 	var replicas int32 = 1
 	annotations := map[string]string{
 		// Mark this pod as a critical add-on; when enabled, the critical add-on scheduler
@@ -172,8 +177,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		// redeployed.
 		annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
 	}
-	if c.management {
-		//annotations[voltronTunnelHashAnnotation] = AnnotationHash(c.pancake.Data) //TODO: figure this out.
+	if c.management && voltronAnnotation != "" {
+		annotations[voltronTunnelHashAnnotation] = voltronAnnotation //TODO: figure this out.
 	}
 
 	d := &appsv1.Deployment{
@@ -360,19 +365,15 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		Name:  VoltronName,
 		Image: constructImage(ManagerProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
-			{Name: "VOLTRON_PORT",
-				Value: strconv.Itoa(defaultVoltronPort)},
+			{Name: "VOLTRON_PORT", Value: strconv.Itoa(defaultVoltronPort)},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
 			{Name: "VOLTRON_LOGLEVEL", Value: "info"},
 			{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
 			{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 			{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
-			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT",
-				Value: strconv.FormatBool(c.management)},
-			{Name: "VOLTRON_PUBLIC_IP",
-				Value: c.voltronAddr},
-			{Name: "VOLTRON_TUNNEL_PORT",
-				Value: fmt.Sprintf("%v", c.voltronPort)},
+			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
+			{Name: "VOLTRON_PUBLIC_IP", Value: fmt.Sprintf("%s:%d", c.voltronAddr, c.voltronPort)},
+			{Name: "VOLTRON_TUNNEL_PORT", Value: fmt.Sprintf("%d", defaultTunnelVoltronPort)},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
@@ -467,7 +468,7 @@ func (c *managerComponent) voltronTunnelService() *v1.Service {
 			Type: corev1.ServiceTypeNodePort,
 			Ports: []corev1.ServicePort{
 				{
-					Port:     defaultVoltronPort,
+					Port:     defaultTunnelVoltronPort,
 					NodePort: int32(c.voltronPort),
 					Protocol: corev1.ProtocolTCP,
 					Name:     voltronPortName,

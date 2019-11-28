@@ -35,11 +35,6 @@ spec:
               - management
               - managed
               type: string
-            managedClusterIdentityCert:
-              description: This certificate is used to establish a secure connection
-                between clusters. If this field is omitted, a self-signed certificate
-                will be created when a managed cluster is added to a management cluster.
-              type: string
             managementClusterAddr:
               description: Specify where the managed cluster can reach the management
                 cluster.

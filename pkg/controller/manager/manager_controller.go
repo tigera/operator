@@ -106,6 +106,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		render.ElasticsearchPublicCertSecret,
 		render.ElasticsearchUserManager,
 		render.KibanaPublicCertSecret,
+		render.VoltronTunnelSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the Secret resource: %v", err)
@@ -162,9 +163,6 @@ func getMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.
 	}
 	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterPort == 0 {
 		return nil, fmt.Errorf("ManagementClusterPort is a required field when clusterManagementType='management'")
-	}
-	if instance.Spec.ManagedClusterIdentityCert != "" {
-		log.Info("managedClusterIdentityCert will be ignored.")
 	}
 
 	// Populate the instance with defaults for any fields not provided by the user.
@@ -290,7 +288,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	// Check the multi cluster settings
 	mcmCfg, err := getMulticlusterConfig(ctx, r.client)
-
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Continuing without multicluster configuration")
@@ -299,16 +296,18 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("Failed to get multicluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
+
 	// If clusterType is not management, clean up unnecessary resources
 	err = cleanUpMcm(mcmCfg, ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded("Failed to clean up multicluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
+
 	// If clusterType is management, copy over the tunnel secret if this is available.
 	secretProvided, err := copyTunnelSecret(mcmCfg, ctx, r.client)
 	if err != nil {
-		r.status.SetDegraded("Failed to copy tunnel multicluster secret", err.Error())
+		r.status.SetDegraded("Failed to copy multicluster tunnel secret", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -358,8 +357,8 @@ func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context
 		// nothing to copy
 		return false, nil
 	}
-	sec := &corev1.Secret{}
-	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, sec)
+	operatorSec := &corev1.Secret{}
+	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, operatorSec)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// nothing to copy
@@ -368,8 +367,23 @@ func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context
 			return false, err
 		}
 	}
-	sec.Namespace = render.ManagerNamespace
-	return true, cli.Create(ctx, sec)
+
+	// Overwrite some metadata to ensure we do not keep the resourceVersion or any other information
+	operatorSec.ResourceVersion = ""
+	operatorSec.UID = ""
+	operatorSec.Namespace = render.ManagerNamespace
+
+	// If the secret already exists in the manager namespace, we update it. Otherwise, we create it.
+	managerSec := &corev1.Secret{}
+	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, managerSec)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return true, cli.Create(ctx, operatorSec)
+		} else {
+			return true, err
+		}
+	}
+	return true, cli.Update(ctx, operatorSec)
 }
 
 // If a cluster is no longer of type management, there are resources that should be cleaned up

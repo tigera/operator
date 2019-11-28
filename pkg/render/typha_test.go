@@ -17,7 +17,9 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -73,5 +75,25 @@ var _ = Describe("Typha rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
+	})
+
+	It("should include updates needed for the core upgrade", func() {
+		component := render.Typha(installation, provider, typhaNodeTLS, true)
+		resources := component.Objects()
+		Expect(len(resources)).To(Equal(6))
+
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		// The DaemonSet should have the correct configuration.
+		d := dResource.(*apps.Deployment)
+		paa := d.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		Expect(paa).To(ContainElement(v1.PodAffinityTerm{
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "calico-typha"},
+			},
+			Namespaces:  []string{"kube-system"},
+			TopologyKey: "kubernetes.io/hostname",
+		}))
 	})
 })

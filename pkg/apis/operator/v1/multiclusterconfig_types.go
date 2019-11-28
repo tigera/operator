@@ -8,6 +8,8 @@ import (
 // +k8s:openapi-gen=true
 type MulticlusterConfigSpec struct {
 
+	// If this field is omitted, "standalone" is assumed. For a scenario with multiple clusters, one "management"
+	// cluster can be configured to establish a secure connection with one or more "managed" clusters.
 	// Valid values for this field are: "standalone", "management", "managed"
 	// +optional
 	// +kubebuilder:validation:Enum=standalone,management,managed
@@ -35,7 +37,8 @@ type MulticlusterConfigStatus struct {
 // +genclient
 // +genclient:nonNamespaced
 
-// MulticlusterConfig is the Schema for the multiclusterconfigs API
+// MulticlusterConfig installs the components required for multicluster management. At most one instance
+// of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
 type MulticlusterConfig struct {
 	metav1.TypeMeta   `json:",inline"`

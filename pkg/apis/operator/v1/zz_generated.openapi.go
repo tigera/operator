@@ -33,6 +33,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/tigera/operator/pkg/apis/operator/v1.Manager":                  schema_pkg_apis_operator_v1_Manager(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.ManagerSpec":              schema_pkg_apis_operator_v1_ManagerSpec(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.ManagerStatus":            schema_pkg_apis_operator_v1_ManagerStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfig":       schema_pkg_apis_operator_v1_MulticlusterConfig(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfigSpec":   schema_pkg_apis_operator_v1_MulticlusterConfigSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfigStatus": schema_pkg_apis_operator_v1_MulticlusterConfigStatus(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.S3StoreSpec":              schema_pkg_apis_operator_v1_S3StoreSpec(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatus":             schema_pkg_apis_operator_v1_TigeraStatus(ref),
 		"github.com/tigera/operator/pkg/apis/operator/v1.TigeraStatusSpec":         schema_pkg_apis_operator_v1_TigeraStatusSpec(ref),
@@ -708,6 +711,103 @@ func schema_pkg_apis_operator_v1_ManagerStatus(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"github.com/tigera/operator/pkg/apis/operator/v1.Auth"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_MulticlusterConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MulticlusterConfig installs the components required for multicluster management. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfigSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfigStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfigSpec", "github.com/tigera/operator/pkg/apis/operator/v1.MulticlusterConfigStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_operator_v1_MulticlusterConfigSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MulticlusterConfigSpec defines the desired state of MulticlusterConfig",
+				Properties: map[string]spec.Schema{
+					"clusterManagementType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If this field is omitted, \"standalone\" is assumed. For a scenario with multiple clusters, one \"management\" cluster can be configured to establish a secure connection with one or more \"managed\" clusters. Valid values for this field are: \"standalone\", \"management\", \"managed\"",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"managementClusterAddr": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specify where the managed cluster can reach the management cluster.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"managementClusterPort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specify the port that the management cluster is listening on.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_pkg_apis_operator_v1_MulticlusterConfigStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MulticlusterConfigStatus defines the observed state of MulticlusterConfig",
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State provides user-readable status.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
 	}
 }
 

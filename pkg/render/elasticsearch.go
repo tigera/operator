@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -32,6 +34,7 @@ const (
 	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
+	KibanaBasePath         = "tigera-kibana"
 )
 
 func Elasticsearch(
@@ -432,8 +435,16 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 			},
 		},
 		Spec: kibanav1alpha1.KibanaSpec{
-			Version:   components.VersionECKKibana,
-			Image:     constructImage(KibanaImageName, es.registry),
+			Version: components.VersionECKKibana,
+			Image:   constructImage(KibanaImageName, es.registry),
+			Config: &cmneckalpha1.Config{
+				Data: map[string]interface{}{
+					"server": map[string]interface{}{
+						"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
+						"rewriteBasePath": true,
+					},
+				},
+			},
 			NodeCount: 1,
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
@@ -456,6 +467,21 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 				},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+					Containers: []corev1.Container{{
+						Name: "kibana",
+						ReadinessProbe: &corev1.Probe{
+							Handler: corev1.Handler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: fmt.Sprintf("/%s/login", KibanaBasePath),
+									Port: intstr.IntOrString{
+										IntVal: 5601,
+										StrVal: "5601",
+									},
+									Scheme: corev1.URISchemeHTTPS,
+								},
+							},
+						},
+					}},
 				},
 			},
 		},

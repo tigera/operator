@@ -25,7 +25,6 @@ const (
 	ManagerSecretCertName = "cert"
 
 	ElasticsearchUserManager = "tigera-ee-manager"
-	DefaultKibanaURL         = "https://localhost:5601"
 	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tls-secret"
 )
 
@@ -42,6 +41,7 @@ const (
 func Manager(
 	cr *operator.Manager,
 	esSecrets []*corev1.Secret,
+	kibanaSecrets []*corev1.Secret,
 	clusterName string,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -68,24 +68,26 @@ func Manager(
 	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
 	tlsSecrets = append(tlsSecrets, copy)
 	return &managerComponent{
-		cr:          cr,
-		esSecrets:   esSecrets,
-		clusterName: clusterName,
-		tlsSecrets:  tlsSecrets,
-		pullSecrets: pullSecrets,
-		openshift:   openshift,
-		registry:    registry,
+		cr:            cr,
+		esSecrets:     esSecrets,
+		kibanaSecrets: kibanaSecrets,
+		clusterName:   clusterName,
+		tlsSecrets:    tlsSecrets,
+		pullSecrets:   pullSecrets,
+		openshift:     openshift,
+		registry:      registry,
 	}, nil
 }
 
 type managerComponent struct {
-	cr          *operator.Manager
-	esSecrets   []*corev1.Secret
-	clusterName string
-	tlsSecrets  []*corev1.Secret
-	pullSecrets []*corev1.Secret
-	openshift   bool
-	registry    string
+	cr            *operator.Manager
+	esSecrets     []*corev1.Secret
+	kibanaSecrets []*corev1.Secret
+	clusterName   string
+	tlsSecrets    []*corev1.Secret
+	pullSecrets   []*corev1.Secret
+	openshift     bool
+	registry      string
 }
 
 func (c *managerComponent) Objects() []runtime.Object {
@@ -113,6 +115,7 @@ func (c *managerComponent) Objects() []runtime.Object {
 		objs = append(objs, c.securityContextConstraints())
 	}
 	objs = append(objs, copySecrets(ManagerNamespace, c.esSecrets...)...)
+	objs = append(objs, copySecrets(ManagerNamespace, c.kibanaSecrets...)...)
 
 	return objs
 }
@@ -195,6 +198,14 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 				},
 			},
 		},
+		{
+			Name: KibanaPublicCertSecret,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: KibanaPublicCertSecret,
+				},
+			},
+		},
 	}
 }
 
@@ -250,7 +261,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
-		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: DefaultKibanaURL},
+		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
@@ -301,15 +312,16 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		Name:  "tigera-voltron",
 		Image: constructImage(ManagerProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
-			{Name: "VOLTRON_PORT",
-				Value: "9443"},
-			{Name: "VOLTRON_COMPLIANCE_ENDPOINT",
-				Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
-			{Name: "VOLTRON_LOGLEVEL",
-				Value: "info"},
+			{Name: "VOLTRON_PORT", Value: "9443"},
+			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
+			{Name: "VOLTRON_LOGLEVEL", Value: "info"},
+			{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
+			{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
+			{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
+			{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana"},
 		},
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),

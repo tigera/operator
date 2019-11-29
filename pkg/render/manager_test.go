@@ -42,7 +42,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry)
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil, false)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(12))
@@ -94,7 +94,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
 				}
 			}
-			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry)
+			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil, false)
 			Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 			resources := component.Objects()
 

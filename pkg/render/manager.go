@@ -83,9 +83,14 @@ func Manager(
 	tlsSecrets = append(tlsSecrets, copy)
 
 	// Extract the mcm configuration if a spec was found
-	management := mcmSpec.ClusterManagementType == "management"
-	voltronAddr := mcmSpec.ManagementClusterAddr
-	voltronPort := mcmSpec.ManagementClusterPort
+	management := false
+	voltronAddr := ""
+	voltronPort := 0
+	if mcmSpec != nil {
+		management = mcmSpec.ClusterManagementType == "management"
+		voltronAddr = mcmSpec.ManagementClusterAddr
+		voltronPort = mcmSpec.ManagementClusterPort
+	}
 
 	return &managerComponent{
 		cr:                        cr,

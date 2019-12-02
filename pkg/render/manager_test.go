@@ -15,19 +15,27 @@
 package render_test
 
 import (
+	"crypto/tls"
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	v1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
+	const (
+		voltronPort = 30449
+		voltronAddr = "127.0.0.1"
+	)
 	var instance *operator.Manager
-	var registry string
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -41,11 +49,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 
+	mcmSpec := operator.MulticlusterConfigSpec{ClusterManagementType: "management", ManagementClusterAddr: voltronAddr, ManagementClusterPort: voltronPort}
+
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil, false)
-		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(12))
+		resources := renderObjects(instance, mcmSpec)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -63,10 +70,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
-			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.VoltronName, ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 		}
 
 		i := 0
@@ -94,15 +103,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
 				}
 			}
-			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil, false)
-			Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-			resources := component.Objects()
+			resources := renderObjects(instance, mcmSpec)
 
 			// Should render the correct resource based on test case.
-			Expect(len(resources)).To(Equal(12))
 			Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-			d := resources[8].(*v1.Deployment)
+			d := resources[13].(*v1.Deployment)
 
 			Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
@@ -111,4 +117,40 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			i++
 		}
 	})
+	It("should render multiclusterConfig spec properly", func() {
+		resources := renderObjects(instance, mcmSpec)
+		voltronSvc := resources[11].(*corev1.Service)
+		Expect(voltronSvc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
+		port := voltronSvc.Spec.Ports[0]
+
+		Expect(port.Port).To(Equal(int32(render.DefaultTunnelVoltronPort)))
+		Expect(port.NodePort).To(Equal(int32(voltronPort)))
+		Expect(port.Name).To(Equal(render.VoltronPortName))
+
+		// Use the x509 package to validate that the cert was signed with the privatekey
+		voltronSecret := resources[12].(*corev1.Secret)
+		cert := voltronSecret.Data["cert"]
+		key := voltronSecret.Data["key"]
+		_, err := tls.X509KeyPair(cert, key)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		manager := resources[13].(*v1.Deployment).Spec.Template.Spec.Containers[0]
+		Expect(manager.Name).To(Equal("tigera-manager"))
+		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
+
+		voltron := resources[13].(*v1.Deployment).Spec.Template.Spec.Containers[2]
+		Expect(voltron.Name).To(Equal("tigera-voltron"))
+		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
+		ExpectEnv(voltron.Env, "VOLTRON_TUNNEL_PORT", strconv.Itoa(render.DefaultTunnelVoltronPort))
+		ExpectEnv(voltron.Env, "VOLTRON_PORT", strconv.Itoa(render.DefaultVoltronPort))
+		ExpectEnv(voltron.Env, "VOLTRON_PUBLIC_IP", "127.0.0.1:30449")
+	})
 })
+
+func renderObjects(instance *operator.Manager, mcmSpec operator.MulticlusterConfigSpec) []runtime.Object {
+	component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, false, "", &mcmSpec, "")
+	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+	resources := component.Objects()
+	Expect(len(resources)).To(Equal(14))
+	return resources
+}

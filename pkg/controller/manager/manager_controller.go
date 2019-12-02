@@ -98,7 +98,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	err = utils.AddMulticlusterConfigWatch(c)
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to wtch compliance resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch MulticlusterConfig resource: %v", err)
 	}
 
 	for _, secretName := range []string{
@@ -305,10 +305,17 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// If clusterType is management, copy over the tunnel secret if this is available.
-	secretProvided, err := copyTunnelSecret(mcmCfg, ctx, r.client)
+	tunnelsecret, err := copyTunnelSecret(mcmCfg, ctx, r.client)
+
 	if err != nil {
 		r.status.SetDegraded("Failed to copy multicluster tunnel secret", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	// Calculate the hash that we add as an annotation to the deployment.
+	var voltronAnnotation string
+	if tunnelsecret != nil {
+		voltronAnnotation = render.AnnotationHash(tunnelsecret.Data)
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -325,7 +332,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.provider == operatorv1.ProviderOpenShift,
 		installation.Spec.Registry,
 		&mcmCfg.Spec,
-		!secretProvided,
+		voltronAnnotation,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")
@@ -351,39 +358,53 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 }
 
 // The user can provide a secret for setting up the tunnel. If it did, we copy it over to the manager namespace,
-// otherwise, we proceed and create a new secret. Returns true if a secret is provided by the user.
-func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) (bool, error) {
+// otherwise, we proceed and create a new secret. Returns the secret if applicable.
+func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) (*corev1.Secret, error) {
 	if config == nil || config.Spec.ClusterManagementType != "management" {
 		// nothing to copy
-		return false, nil
+		return nil, nil
 	}
 	operatorSec := &corev1.Secret{}
 	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, operatorSec)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// nothing to copy
-			return false, nil
-		} else {
-			return false, err
+		if !errors.IsNotFound(err) {
+			return nil, err
 		}
 	}
 
-	// Overwrite some metadata to ensure we do not keep the resourceVersion or any other information
-	operatorSec.ResourceVersion = ""
-	operatorSec.UID = ""
-	operatorSec.Namespace = render.ManagerNamespace
+	managerSec := &corev1.Secret{}
+	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.ManagerNamespace}, managerSec)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+	}
+
+	if operatorSec == nil {
+		if managerSec != nil {
+			return managerSec, nil
+		} else {
+			return nil, nil
+		}
+	}
+
+	if operatorSec != nil {
+		// Overwrite some metadata to ensure we do not keep the resourceVersion or any other information
+		operatorSec.ResourceVersion = ""
+		operatorSec.UID = ""
+		operatorSec.Namespace = render.ManagerNamespace
+	}
 
 	// If the secret already exists in the manager namespace, we update it. Otherwise, we create it.
-	managerSec := &corev1.Secret{}
-	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, managerSec)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return true, cli.Create(ctx, operatorSec)
+			return operatorSec, cli.Create(ctx, operatorSec)
 		} else {
-			return true, err
+			return managerSec, err
 		}
 	}
-	return true, cli.Update(ctx, operatorSec)
+	return managerSec, cli.Update(ctx, operatorSec)
 }
 
 // If a cluster is no longer of type management, there are resources that should be cleaned up

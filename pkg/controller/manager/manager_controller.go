@@ -159,7 +159,7 @@ func getMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.
 
 	// Validate the CR
 	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterAddr == "" {
-		return nil, fmt.Errorf("managementClusterAddr is a required field when clusterManagementType='management'")
+		return nil, fmt.Errorf("ManagementClusterAddr is a required field when clusterManagementType='management'")
 	}
 	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterPort == 0 {
 		return nil, fmt.Errorf("ManagementClusterPort is a required field when clusterManagementType='management'")
@@ -297,14 +297,14 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// If clusterType is not management, clean up unnecessary resources
+	// If clusterType is not management, clean up unnecessary resources.
 	err = cleanUpMcm(mcmCfg, ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded("Failed to clean up multicluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	// If clusterType is management, copy over the tunnel secret if this is available.
+	// If clusterType is management and the customer brings it's own cert, copy it over to the manager ns.
 	tunnelsecret, err := copyTunnelSecret(mcmCfg, ctx, r.client)
 
 	if err != nil {
@@ -357,54 +357,51 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	return reconcile.Result{}, nil
 }
 
-// The user can provide a secret for setting up the tunnel. If it did, we copy it over to the manager namespace,
+// The user can provide a secret for setting up the tunnel. If it does, we copy it over to the manager namespace,
 // otherwise, we proceed and create a new secret. Returns the secret if applicable.
 func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) (*corev1.Secret, error) {
 	if config == nil || config.Spec.ClusterManagementType != "management" {
 		// nothing to copy
 		return nil, nil
 	}
-	operatorSec := &corev1.Secret{}
-	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, operatorSec)
+	oprSec, oprSecFound, err := getTunnelSecret(ctx, cli, render.OperatorNamespace())
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, err
-		}
+		return nil, err
 	}
 
-	managerSec := &corev1.Secret{}
-	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.ManagerNamespace}, managerSec)
+	mgrSec, mgrSecFound, err := getTunnelSecret(ctx, cli, render.ManagerNamespace)
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, err
-		}
+		return nil, err
 	}
 
-	if operatorSec == nil {
-		if managerSec != nil {
-			return managerSec, nil
-		} else {
+	if !oprSecFound {
+		if !mgrSecFound {
+			// No secrets are found in either namespace, so there is nothing to do here.
 			return nil, nil
+		} else {
+			// There is a secret in the manager namespace, so we return it.
+			return mgrSec, nil
 		}
 	}
 
-	if operatorSec != nil {
-		// Overwrite some metadata to ensure we do not keep the resourceVersion or any other information
-		operatorSec.ResourceVersion = ""
-		operatorSec.UID = ""
-		operatorSec.Namespace = render.ManagerNamespace
+	// Copy over the secret data to the manager secret.
+	mgrSec.Data = oprSec.Data
+	if !mgrSecFound {
+		return mgrSec, cli.Create(ctx, mgrSec)
 	}
+	return mgrSec, cli.Update(ctx, mgrSec)
+}
 
-	// If the secret already exists in the manager namespace, we update it. Otherwise, we create it.
-
+func getTunnelSecret(ctx context.Context, cli client.Client, ns string) (*corev1.Secret, bool, error) {
+	secret := &corev1.Secret{}
+	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: ns}, secret)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return operatorSec, cli.Create(ctx, operatorSec)
-		} else {
-			return managerSec, err
+			return secret, false, nil
 		}
+		return nil, false, err
 	}
-	return managerSec, cli.Update(ctx, operatorSec)
+	return secret, true, nil
 }
 
 // If a cluster is no longer of type management, there are resources that should be cleaned up

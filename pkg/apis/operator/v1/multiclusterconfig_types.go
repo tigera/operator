@@ -10,21 +10,18 @@ type MulticlusterConfigSpec struct {
 
 	// If this field is omitted, "standalone" is assumed. For a scenario with multiple clusters, one "management"
 	// cluster can be configured to establish a secure connection with one or more "managed" clusters.
-	// Valid values for this field are: "standalone", "management", "managed"
+	// Valid values for this field are: "standalone", "management", "managed".
 	// +optional
 	// +kubebuilder:validation:Enum=standalone,management,managed
 	ClusterManagementType string `json:"clusterManagementType,omitempty"`
 
-	// Specify where the managed cluster can reach the management cluster.
+	// Specify where the managed cluster can reach the management cluster. Ex.: "10.128.0.10:30449". A managed cluster
+	// should be able to access this address.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
-
-	// Specify the port that the management cluster is listening on.
-	// +optional
-	ManagementClusterPort int `json:"managementClusterPort,omitempty"`
 }
 
-// MulticlusterConfigStatus defines the observed state of MulticlusterConfig
+// MulticlusterConfigStatus defines the observed state of MulticlusterConfig.
 // +k8s:openapi-gen=true
 type MulticlusterConfigStatus struct {
 
@@ -50,7 +47,7 @@ type MulticlusterConfig struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MulticlusterConfigList contains a list of MulticlusterConfig
+// MulticlusterConfigList contains a list of MulticlusterConfig.
 type MulticlusterConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

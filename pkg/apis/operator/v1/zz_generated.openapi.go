@@ -765,23 +765,16 @@ func schema_pkg_apis_operator_v1_MulticlusterConfigSpec(ref common.ReferenceCall
 				Properties: map[string]spec.Schema{
 					"clusterManagementType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If this field is omitted, \"standalone\" is assumed. For a scenario with multiple clusters, one \"management\" cluster can be configured to establish a secure connection with one or more \"managed\" clusters. Valid values for this field are: \"standalone\", \"management\", \"managed\"",
+							Description: "If this field is omitted, \"standalone\" is assumed. For a scenario with multiple clusters, one \"management\" cluster can be configured to establish a secure connection with one or more \"managed\" clusters. Valid values for this field are: \"standalone\", \"management\", \"managed\".",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"managementClusterAddr": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specify where the managed cluster can reach the management cluster.",
+							Description: "Specify where the managed cluster can reach the management cluster. Ex.: \"10.128.0.10:30449\". A managed cluster should be able to access this address.",
 							Type:        []string{"string"},
 							Format:      "",
-						},
-					},
-					"managementClusterPort": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specify the port that the management cluster is listening on.",
-							Type:        []string{"integer"},
-							Format:      "int32",
 						},
 					},
 				},
@@ -795,7 +788,7 @@ func schema_pkg_apis_operator_v1_MulticlusterConfigStatus(ref common.ReferenceCa
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MulticlusterConfigStatus defines the observed state of MulticlusterConfig",
+				Description: "MulticlusterConfigStatus defines the observed state of MulticlusterConfig.",
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{

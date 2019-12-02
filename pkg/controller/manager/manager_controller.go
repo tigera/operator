@@ -386,7 +386,10 @@ func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context
 
 	// Copy over the secret data to the manager secret.
 	mgrSec.Data = oprSec.Data
+
 	if !mgrSecFound {
+		mgrSec.Name = render.VoltronTunnelSecretName
+		mgrSec.Namespace = render.ManagerNamespace
 		return mgrSec, cli.Create(ctx, mgrSec)
 	}
 	return mgrSec, cli.Update(ctx, mgrSec)

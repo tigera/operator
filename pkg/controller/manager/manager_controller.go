@@ -260,6 +260,10 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("OIDC configuration not available, waiting to become available", err.Error())
 		return reconcile.Result{}, nil
 	}
+	if oidcConfig != nil && instance.Spec.Auth.Authority != "" {
+		r.status.SetDegraded("Both OIDC configuration and Authority cannot be set at the same time", "")
+		return reconcile.Result{}, nil
+	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)

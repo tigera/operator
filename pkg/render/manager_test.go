@@ -137,7 +137,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
 		d := resources[8].(*v1.Deployment)
 
-		Expect(d.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(oidcEnvVar))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 
 		// Make sure well-known and JWKS are accessible from manager.
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
@@ -153,6 +153,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
 		instance.Spec.Auth.Type = operator.AuthTypeOIDC
+
+		const authority = "https://foo.bar"
+		instance.Spec.Auth.Authority = authority
+		oidcEnvVar.Value = authority
+
 		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 

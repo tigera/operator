@@ -333,18 +333,10 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	switch c.cr.Spec.Auth.Type {
 	case operator.AuthTypeOIDC:
 		oidcEnvs := []corev1.EnvVar{
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.cr.Spec.Auth.Authority},
 			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cr.Spec.Auth.ClientID},
 		}
 		envs = append(envs, oidcEnvs...)
-		// If OIDC configuration is defined, provided configuration should be
-		// used via manager instead of reaching out to the OIDC IdP. Presence
-		// of Authority environment variable instructs OIDC client in manager
-		// to reach out to IdP specified in Authority value (e.g.
-		// accounts.google.com). Not setting the Authority value instructs OIDC
-		// client to use manager for populating OIDC configuration.
-		if c.oidcConfig == nil {
-			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.cr.Spec.Auth.Authority})
-		}
 	case operator.AuthTypeOAuth:
 		oauthEnvs := []corev1.EnvVar{
 			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: c.cr.Spec.Auth.Authority},

@@ -1,8 +1,9 @@
-// This file contains functions common to the controllers to help them interace with elasticsearch.
+// This file contains functions common to the controllers to help them interact with elasticsearch.
 package utils
 
 import (
 	"context"
+
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"

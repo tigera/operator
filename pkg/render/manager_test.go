@@ -31,10 +31,6 @@ import (
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
-	const (
-		voltronPort = 30449
-		voltronAddr = "127.0.0.1"
-	)
 	var instance *operator.Manager
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
@@ -49,10 +45,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 
-	mcmSpec := operator.MulticlusterConfigSpec{ClusterManagementType: "management", ManagementClusterAddr: voltronAddr, ManagementClusterPort: voltronPort}
-
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(instance, mcmSpec)
+		resources := renderObjects(instance)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -103,7 +97,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
 				}
 			}
-			resources := renderObjects(instance, mcmSpec)
+			resources := renderObjects(instance)
 
 			// Should render the correct resource based on test case.
 			Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
@@ -118,13 +112,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 	It("should render multiclusterConfig spec properly", func() {
-		resources := renderObjects(instance, mcmSpec)
+		resources := renderObjects(instance)
 		voltronSvc := resources[11].(*corev1.Service)
 		Expect(voltronSvc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
 		port := voltronSvc.Spec.Ports[0]
 
 		Expect(port.Port).To(Equal(int32(render.DefaultTunnelVoltronPort)))
-		Expect(port.NodePort).To(Equal(int32(voltronPort)))
 		Expect(port.Name).To(Equal(render.VoltronPortName))
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
@@ -143,12 +136,24 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 		ExpectEnv(voltron.Env, "VOLTRON_TUNNEL_PORT", strconv.Itoa(render.DefaultTunnelVoltronPort))
 		ExpectEnv(voltron.Env, "VOLTRON_PORT", strconv.Itoa(render.DefaultVoltronPort))
-		ExpectEnv(voltron.Env, "VOLTRON_PUBLIC_IP", "127.0.0.1:30449")
+		ExpectEnv(voltron.Env, "VOLTRON_PUBLIC_IP", "https://127.0.0.1:30449")
 	})
 })
 
-func renderObjects(instance *operator.Manager, mcmSpec operator.MulticlusterConfigSpec) []runtime.Object {
-	component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, false, "", &mcmSpec, "")
+func renderObjects(instance *operator.Manager) []runtime.Object {
+	uri := "https://127.0.0.1:30449"
+	component, err := render.Manager(instance,
+		nil,
+		nil,
+		"clusterTestName",
+		nil,
+		nil,
+		false,
+		"",
+		true,
+		uri,
+		"80",
+		"")
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources := component.Objects()
 	Expect(len(resources)).To(Equal(14))

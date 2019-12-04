@@ -157,14 +157,6 @@ func getMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.
 		return nil, err
 	}
 
-	// Validate the CR
-	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterAddr == "" {
-		return nil, fmt.Errorf("ManagementClusterAddr is a required field when clusterManagementType='management'")
-	}
-	if instance.Spec.ClusterManagementType == "management" && instance.Spec.ManagementClusterPort == 0 {
-		return nil, fmt.Errorf("ManagementClusterPort is a required field when clusterManagementType='management'")
-	}
-
 	// Populate the instance with defaults for any fields not provided by the user.
 	if instance.Spec.ClusterManagementType == "" {
 		instance.Spec.ClusterManagementType = defaultClusterType
@@ -297,15 +289,34 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	var management = false
+	var voltronAddr = ""
+	var voltronPort = ""
+	if mcmCfg != nil {
+		management = mcmCfg.Spec.ClusterManagementType == "management"
+		// Validate the inputs
+		if management {
+			uri, err := utils.GetManagementClusterURL(mcmCfg.Spec.ManagementClusterAddr)
+			if err != nil {
+				r.status.SetDegraded("Invalid multicluster configuration", err.Error())
+				return reconcile.Result{}, err
+			}
+			voltronAddr = utils.FormatManagementClusterURL(uri)
+			voltronPort = uri.Port()
+		}
+	}
+
 	// If clusterType is not management, clean up unnecessary resources.
-	err = cleanUpMcm(mcmCfg, ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded("Failed to clean up multicluster configuration", err.Error())
-		return reconcile.Result{}, err
+	if !management {
+		err = utils.CleanUpMcm(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded("Failed to clean up multicluster configuration", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// If clusterType is management and the customer brings it's own cert, copy it over to the manager ns.
-	tunnelsecret, err := copyTunnelSecret(mcmCfg, ctx, r.client)
+	tunnelsecret, err := utils.CopyTunnelSecret(mcmCfg, ctx, r.client)
 
 	if err != nil {
 		r.status.SetDegraded("Failed to copy multicluster tunnel secret", err.Error())
@@ -331,7 +342,9 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		installation.Spec.Registry,
-		&mcmCfg.Spec,
+		management,
+		voltronAddr,
+		voltronPort,
 		voltronAnnotation,
 	)
 	if err != nil {
@@ -355,94 +368,4 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	return reconcile.Result{}, nil
-}
-
-// The user can provide a secret for setting up the tunnel. If it does, we copy it over to the manager namespace,
-// otherwise, we proceed and create a new secret. Returns the secret if applicable.
-func copyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) (*corev1.Secret, error) {
-	if config == nil || config.Spec.ClusterManagementType != "management" {
-		// nothing to copy
-		return nil, nil
-	}
-	oprSec, oprSecFound, err := getTunnelSecret(ctx, cli, render.OperatorNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	mgrSec, mgrSecFound, err := getTunnelSecret(ctx, cli, render.ManagerNamespace)
-	if err != nil {
-		return nil, err
-	}
-
-	if !oprSecFound {
-		if !mgrSecFound {
-			// No secrets are found in either namespace, so there is nothing to do here.
-			return nil, nil
-		} else {
-			// There is a secret in the manager namespace, so we return it.
-			return mgrSec, nil
-		}
-	}
-
-	// Copy over the secret data to the manager secret.
-	mgrSec.Data = oprSec.Data
-
-	if !mgrSecFound {
-		mgrSec.Name = render.VoltronTunnelSecretName
-		mgrSec.Namespace = render.ManagerNamespace
-		return mgrSec, cli.Create(ctx, mgrSec)
-	}
-	return mgrSec, cli.Update(ctx, mgrSec)
-}
-
-func getTunnelSecret(ctx context.Context, cli client.Client, ns string) (*corev1.Secret, bool, error) {
-	secret := &corev1.Secret{}
-	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: ns}, secret)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return secret, false, nil
-		}
-		return nil, false, err
-	}
-	return secret, true, nil
-}
-
-// If a cluster is no longer of type management, there are resources that should be cleaned up
-func cleanUpMcm(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) error {
-	if config != nil && config.Spec.ClusterManagementType == "management" {
-		// nothing to clean up
-		return nil
-	}
-	// Remove the unnecessary service if there is one
-	svc := &corev1.Service{}
-	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronName, Namespace: render.ManagerNamespace}, svc)
-	found := true
-	if err != nil {
-		if errors.IsNotFound(err) {
-			found = false
-		} else {
-			return err
-		}
-	}
-	if found {
-		err = cli.Delete(ctx, svc)
-		if err != nil {
-			return err
-		}
-	}
-	// Remove unnecessary secret if there is one
-	sec := &corev1.Secret{}
-	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.ManagerNamespace}, sec)
-	found = true
-	if err != nil {
-		if errors.IsNotFound(err) {
-			found = false
-		} else {
-			return err
-		}
-	}
-	if found {
-		return cli.Delete(ctx, sec)
-	}
-	return nil
 }

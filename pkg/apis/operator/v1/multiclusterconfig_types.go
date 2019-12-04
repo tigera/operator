@@ -18,10 +18,6 @@ type MulticlusterConfigSpec struct {
 	// Specify where the managed cluster can reach the management cluster.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
-
-	// Specify the port that the management cluster is listening on.
-	// +optional
-	ManagementClusterPort int `json:"managementClusterPort,omitempty"`
 }
 
 // MulticlusterConfigStatus defines the observed state of MulticlusterConfig

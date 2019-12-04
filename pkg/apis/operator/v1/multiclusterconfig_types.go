@@ -10,12 +10,13 @@ type MulticlusterConfigSpec struct {
 
 	// If this field is omitted, "standalone" is assumed. For a scenario with multiple clusters, one "management"
 	// cluster can be configured to establish a secure connection with one or more "managed" clusters.
-	// Valid values for this field are: "standalone", "management", "managed"
+	// Valid values for this field are: "standalone", "management", "managed".
 	// +optional
 	// +kubebuilder:validation:Enum=standalone,management,managed
 	ClusterManagementType string `json:"clusterManagementType,omitempty"`
 
 	// Specify where the managed cluster can reach the management cluster.
+	// Valid values for this field are: tcp://1.2.3.4:56 or 1.2.3.4:56.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 }

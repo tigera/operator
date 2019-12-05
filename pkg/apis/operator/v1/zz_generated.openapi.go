@@ -765,7 +765,7 @@ func schema_pkg_apis_operator_v1_MulticlusterConfigSpec(ref common.ReferenceCall
 				Properties: map[string]spec.Schema{
 					"clusterManagementType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If this field is omitted, \"standalone\" is assumed. For a scenario with multiple clusters, one \"management\" cluster can be configured to establish a secure connection with one or more \"managed\" clusters. Valid values for this field are: \"standalone\", \"management\", \"managed\".",
+							Description: "If this field is omitted, \"standalone\" is assumed. For a scenario with multiple clusters, one \"management\" cluster can be configured to establish a secure connection with one or more \"managed\" clusters. Valid values for this field are: \"Standalone\", \"Management\", \"Managed\".",
 							Type:        []string{"string"},
 							Format:      "",
 						},

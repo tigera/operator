@@ -31,12 +31,12 @@ spec:
               description: 'If this field is omitted, "standalone" is assumed. For
                 a scenario with multiple clusters, one "management" cluster can be
                 configured to establish a secure connection with one or more "managed"
-                clusters. Valid values for this field are: "standalone", "management",
-                "managed".'
+                clusters. Valid values for this field are: "Standalone", "Management",
+                "Managed".'
               enum:
-              - standalone
-              - management
-              - managed
+              - Standalone
+              - Management
+              - Managed
               type: string
             managementClusterAddr:
               description: 'Specify where the managed cluster can reach the management

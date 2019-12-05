@@ -125,6 +125,8 @@ func (c *complianceComponent) Ready() bool {
 var complianceBoolTrue = true
 var complianceReplicas int32 = 1
 
+const complianceServerPort = 5443
+
 // complianceLivenssProbe is the liveness probe to use for compliance components.
 // They all use the same liveness configuration, so we just define it once here.
 var complianceLivenessProbe = &corev1.Probe{
@@ -448,7 +450,7 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 					Name:       "compliance-api",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(5443),
+					TargetPort: intstr.FromInt(complianceServerPort),
 				},
 			},
 			Selector: map[string]string{"k8s-app": "compliance-server"},
@@ -500,6 +502,30 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 							Name:  "compliance-server",
 							Image: constructImage(ComplianceServerImage, c.registry),
 							Env:   envVars,
+							LivenessProbe: &corev1.Probe{
+								Handler: corev1.Handler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/compliance/version",
+										Port:   intstr.FromInt(complianceServerPort),
+										Scheme: corev1.URISchemeHTTPS,
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								FailureThreshold:    5,
+							},
+							ReadinessProbe: &corev1.Probe{
+								Handler: corev1.Handler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/compliance/version",
+										Port:   intstr.FromInt(complianceServerPort),
+										Scheme: corev1.URISchemeHTTPS,
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								FailureThreshold:    5,
+							},
 						}, c.clusterName, ElasticsearchUserComplianceServer),
 					},
 				}),

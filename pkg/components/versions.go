@@ -12,38 +12,38 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.0"
-	VersionTigeraTypha           = "v2.6.0"
-	VersionTigeraKubeControllers = "v2.6.0"
+	VersionTigeraNode            = "release-v2.6"
+	VersionTigeraTypha           = "release-v2.6"
+	VersionTigeraKubeControllers = "release-v2.6"
 
 	// API server images.
-	VersionAPIServer   = "v2.6.0"
-	VersionQueryServer = "v2.6.0"
+	VersionAPIServer   = "release-v2.6"
+	VersionQueryServer = "release-v2.6"
 
 	// Logging
-	VersionFluentd = "v2.6.0"
+	VersionFluentd = "release-v2.6"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.6.0-4-gfc0dcca"
-	VersionComplianceReporter    = "v2.6.0-4-gfc0dcca"
-	VersionComplianceServer      = "v2.6.0-4-gfc0dcca"
-	VersionComplianceSnapshotter = "v2.6.0-4-gfc0dcca"
-	VersionComplianceBenchmarker = "v2.6.0-4-gfc0dcca"
+	VersionComplianceController  = "release-v2.6"
+	VersionComplianceReporter    = "release-v2.6"
+	VersionComplianceServer      = "release-v2.6"
+	VersionComplianceSnapshotter = "release-v2.6"
+	VersionComplianceBenchmarker = "release-v2.6"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.6.0-8-g0a578e6"
-	VersionIntrusionDetectionJobInstaller = "v2.6.0"
+	VersionIntrusionDetectionController   = "release-v2.6"
+	VersionIntrusionDetectionJobInstaller = "release-v2.6"
 
 	// Manager images.
-	VersionManager        = "v2.6.0"
-	VersionManagerProxy   = "v2.6.0-5-g65ffc3d"
-	VersionManagerEsProxy = "v2.6.0"
+	VersionManager        = "release-v2.6"
+	VersionManagerProxy   = "release-v2.6"
+	VersionManagerEsProxy = "release-v2.6"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "v2.6.0"
+	VersionEsCurator        = "release-v2.6"
 
-	VersionKibana = "v2.6.0"
+	VersionKibana = "release-v2.6"
 )

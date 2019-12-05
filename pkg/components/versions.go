@@ -32,7 +32,7 @@ const (
 
 	// Intrusion detection images.
 	VersionIntrusionDetectionController   = "v2.7.0-0.dev-15-g44db458"
-	VersionIntrusionDetectionJobInstaller = "v2.6.0-0.dev-53-g6045051"
+	VersionIntrusionDetectionJobInstaller = "v2.7.0-0.dev-17-gbf06bde"
 
 	// Manager images.
 	VersionManager        = "v2.5.0-347-gb01f72d0"

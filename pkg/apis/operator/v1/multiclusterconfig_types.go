@@ -8,8 +8,8 @@ import (
 // +k8s:openapi-gen=true
 type MulticlusterConfigSpec struct {
 
-	// If this field is omitted, "standalone" is assumed. For a scenario with multiple clusters, one "management"
-	// cluster can be configured to establish a secure connection with one or more "managed" clusters.
+	// If this field is omitted, "Standalone" is assumed. For a scenario with multiple clusters, one "Management"
+	// cluster can be configured to establish a secure connection with one or more "Managed" clusters.
 	// Valid values for this field are: "Standalone", "Management", "Managed".
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed

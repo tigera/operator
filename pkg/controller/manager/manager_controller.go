@@ -99,8 +99,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		render.KibanaPublicCertSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("manager-controller failed to watch the Secret resource: %v", err)
+			return fmt.Errorf("manager-controller failed to watch Secret resource %s: %v", secretName, err)
 		}
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %v", render.ManagerOIDCConfig, err)
 	}
 
 	return nil
@@ -251,6 +255,16 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	oidcConfig, err := getOIDCConfig(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded("OIDC configuration not available, waiting to become available", err.Error())
+		return reconcile.Result{}, nil
+	}
+	if oidcConfig != nil && instance.Spec.Auth.Authority != "" {
+		r.status.SetDegraded("Both OIDC configuration and Authority cannot be set at the same time", "")
+		return reconcile.Result{}, nil
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -264,6 +278,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		installation.Spec.Registry,
+		oidcConfig,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")
@@ -286,4 +301,20 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func getOIDCConfig(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+	oidcConfig := &corev1.ConfigMap{}
+	err := cli.Get(ctx, types.NamespacedName{
+		Name:      render.ManagerOIDCConfig,
+		Namespace: render.OperatorNamespace(),
+	}, oidcConfig)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		log.Info("Error reading OIDC configuration %s", render.ManagerOIDCConfig)
+		return nil, err
+	}
+	return oidcConfig, nil
 }

@@ -152,6 +152,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %v", err)
 	}
 
+	if err = utils.AddLogStorageWatch(c); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch LogStorage resource: %v", err)
+	}
+
 	for _, secretName := range []string{
 		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserComplianceBenchmarker,
 		render.ElasticsearchUserComplianceController, render.ElasticsearchUserComplianceReporter,

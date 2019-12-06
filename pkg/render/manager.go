@@ -17,15 +17,19 @@ import (
 )
 
 const (
-	managerPort           = 9443
-	managerTargetPort     = 9443
-	ManagerNamespace      = "tigera-manager"
-	ManagerTLSSecretName  = "manager-tls"
-	ManagerSecretKeyName  = "key"
-	ManagerSecretCertName = "cert"
+	managerPort             = 9443
+	managerTargetPort       = 9443
+	ManagerNamespace        = "tigera-manager"
+	ManagerTLSSecretName    = "manager-tls"
+	ManagerSecretKeyName    = "key"
+	ManagerSecretCertName   = "cert"
+	ManagerOIDCConfig       = "tigera-manager-oidc-config"
+	ManagerOIDCWellknownURI = "/usr/share/nginx/html/.well-known"
+	ManagerOIDCJwksURI      = "/usr/share/nginx/html/discovery"
 
 	ElasticsearchUserManager = "tigera-ee-manager"
 	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tls-secret"
+	oidcConfigHashAnnotation = "hash.operator.tigera.io/oidc-config"
 )
 
 const (
@@ -47,6 +51,7 @@ func Manager(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	registry string,
+	oidcConfig *corev1.ConfigMap,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
@@ -76,6 +81,7 @@ func Manager(
 		pullSecrets:   pullSecrets,
 		openshift:     openshift,
 		registry:      registry,
+		oidcConfig:    oidcConfig,
 	}, nil
 }
 
@@ -88,6 +94,7 @@ type managerComponent struct {
 	pullSecrets   []*corev1.Secret
 	openshift     bool
 	registry      string
+	oidcConfig    *corev1.ConfigMap
 }
 
 func (c *managerComponent) Objects() []runtime.Object {
@@ -116,6 +123,9 @@ func (c *managerComponent) Objects() []runtime.Object {
 	}
 	objs = append(objs, copySecrets(ManagerNamespace, c.esSecrets...)...)
 	objs = append(objs, copySecrets(ManagerNamespace, c.kibanaSecrets...)...)
+	if c.oidcConfig != nil {
+		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
+	}
 
 	return objs
 }
@@ -137,6 +147,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		// Add a hash of the Secret to ensure if it changes the manager will be
 		// redeployed.
 		annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
+	}
+	if c.oidcConfig != nil {
+		annotations[oidcConfigHashAnnotation] = AnnotationHash(c.oidcConfig.Data)
 	}
 
 	d := &appsv1.Deployment{
@@ -189,7 +202,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
-	return []v1.Volume{
+	v := []v1.Volume{
 		{
 			Name: ManagerTLSSecretName,
 			VolumeSource: v1.VolumeSource{
@@ -207,6 +220,24 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			},
 		},
 	}
+
+	if c.oidcConfig != nil {
+		defaultMode := int32(420)
+		v = append(v,
+			v1.Volume{
+				Name: ManagerOIDCConfig,
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: ManagerOIDCConfig,
+						},
+						DefaultMode: &defaultMode,
+					},
+				},
+			})
+	}
+
+	return v
 }
 
 // managerProbe returns the probe for the manager container.
@@ -274,13 +305,23 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
-	return corev1.Container{
+	tm := corev1.Container{
 		Name:            "tigera-manager",
 		Image:           constructImage(ManagerImageName, c.registry),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
 	}
+
+	if c.oidcConfig != nil {
+		// If OIDC configuration is defined, use manager to avail well-known and JWKS configuration.
+		tm.VolumeMounts = []corev1.VolumeMount{
+			{Name: ManagerOIDCConfig, MountPath: ManagerOIDCWellknownURI},
+			{Name: ManagerOIDCConfig, MountPath: ManagerOIDCJwksURI},
+		}
+	}
+
+	return tm
 }
 
 // managerOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.

@@ -46,4 +46,7 @@ const (
 	VersionEsCurator        = "v2.6.0-0.dev-25-gb04da05"
 
 	VersionKibana = "7.3"
+
+	// Multicluster tunnel image.
+	VersionGuardian = "master"
 )

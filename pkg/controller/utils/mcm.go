@@ -17,6 +17,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	defaultClusterType = "standalone"
+)
+
+// GetManager returns the default multicluster config with defaults populated.
+func GetMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.MulticlusterConfig, error) {
+	// Fetch the multicluster config instance. We only support a single instance.
+	instance := &operatorv1.MulticlusterConfig{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate the instance with defaults for any fields not provided by the user.
+	if instance.Spec.ClusterManagementType == "" {
+		instance.Spec.ClusterManagementType = defaultClusterType
+	}
+
+	return instance, nil
+}
+
 func GetManagementClusterURL(voltronAddr string) (*url.URL, error) {
 	if voltronAddr == "" {
 		return nil, fmt.Errorf("ManagementClusterAddr is a required field for clusters of type 'management'")

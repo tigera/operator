@@ -30,10 +30,6 @@ import (
 
 var log = logf.Log.WithName("controller_manager")
 
-const (
-	defaultClusterType = "standalone"
-)
-
 func init() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager,
 		Roles: []elasticsearch.Role{{
@@ -145,23 +141,6 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 			ClientID:  "",
 		}
 	}
-	return instance, nil
-}
-
-// GetManager returns the default multicluster config with defaults populated.
-func getMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.MulticlusterConfig, error) {
-	// Fetch the multicluster config instance. We only support a single instance.
-	instance := &operatorv1.MulticlusterConfig{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	// Populate the instance with defaults for any fields not provided by the user.
-	if instance.Spec.ClusterManagementType == "" {
-		instance.Spec.ClusterManagementType = defaultClusterType
-	}
-
 	return instance, nil
 }
 
@@ -279,7 +258,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// Check the multi cluster settings
-	mcmCfg, err := getMulticlusterConfig(ctx, r.client)
+	mcmCfg, err := utils.GetMulticlusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Continuing without multicluster configuration")

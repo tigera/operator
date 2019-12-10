@@ -17,7 +17,7 @@ const (
 	VersionTigeraKubeControllers = "v2.6.0-0.dev-86-g506e244-dirty"
 
 	// API server images.
-	VersionAPIServer   = "v2.5.0-mcm0.1-49-g909a7f60"
+	VersionAPIServer   = "v2.7.0-0.dev-16-g64e84f77"
 	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
 
 	// Logging

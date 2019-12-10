@@ -772,7 +772,7 @@ func schema_pkg_apis_operator_v1_MulticlusterConfigSpec(ref common.ReferenceCall
 					},
 					"managementClusterAddr": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specify where the managed cluster can reach the management cluster. Ex.: \"10.128.0.10:30449\". A managed cluster should be able to access this address.",
+							Description: "Specify where the managed cluster can reach the management cluster. Ex.: \"10.128.0.10:30449\". A managed cluster should be able to access this address. This field is not used in standalone clusters.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

@@ -13,13 +13,23 @@ type MulticlusterConfigSpec struct {
 	// Valid values for this field are: "Standalone", "Management", "Managed".
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
-	ClusterManagementType string `json:"clusterManagementType,omitempty"`
+	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
 
 	// Specify where the managed cluster can reach the management cluster. Ex.: "10.128.0.10:30449". A managed cluster
-	// should be able to access this address.
+	// should be able to access this address. This field is not used in standalone clusters.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 }
+
+// ClusterType represents the type of multicluster management to use. Valid options for this field are: "Standalone",
+// "Management", "Managed".
+type ClusterManagementType string
+
+const (
+	ClusterManagementTypeStandalone ClusterManagementType = "Standalone"
+	ClusterManagementTypeManagement ClusterManagementType = "Management"
+	ClusterManagementTypeManaged    ClusterManagementType = "Managed"
+)
 
 // MulticlusterConfigStatus defines the observed state of MulticlusterConfig.
 // +k8s:openapi-gen=true

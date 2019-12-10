@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package manager
+package tunnel_test
 
 import (
 	"testing"
@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/manager_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/manager Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/tunnel_controller_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/Tunnel Suite", []Reporter{junitReporter})
 }

@@ -134,9 +134,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		resources := component.Objects()
 
-		Expect(len(resources)).To(Equal(14))
+		Expect(len(resources)).To(Equal(15))
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
-		d := resources[13].(*v1.Deployment)
+		d := resources[14].(*v1.Deployment)
 
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 
@@ -147,9 +147,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerOIDCConfig))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(render.ManagerOIDCJwksURI))
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
-		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
+		Expect(d.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Volumes[3].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
@@ -164,9 +164,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		// Should render the correct resource based on test case.
 		resources := component.Objects()
-		d := resources[8].(*v1.Deployment)
+		d := resources[13].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})

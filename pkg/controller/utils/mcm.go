@@ -95,7 +95,7 @@ func CleanUpMcm(ctx context.Context, cli client.Client) error {
 // The user can provide a secret for setting up the tunnel. If it does, we copy it over to the manager namespace,
 // otherwise, we proceed and create a new secret. Returns the secret if applicable.
 func CopyTunnelSecret(config *operatorv1.MulticlusterConfig, ctx context.Context, cli client.Client) (*corev1.Secret, error) {
-	if config == nil || config.Spec.ClusterManagementType != "management" {
+	if config == nil || config.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManagement {
 		// nothing to copy
 		return nil, nil
 	}

@@ -30,10 +30,6 @@ import (
 
 var log = logf.Log.WithName("controller_manager")
 
-const (
-	defaultClusterType = "standalone"
-)
-
 func init() {
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager,
 		Roles: []elasticsearch.Role{{
@@ -163,7 +159,7 @@ func getMulticlusterConfig(ctx context.Context, cli client.Client) (*operatorv1.
 
 	// Populate the instance with defaults for any fields not provided by the user.
 	if instance.Spec.ClusterManagementType == "" {
-		instance.Spec.ClusterManagementType = defaultClusterType
+		instance.Spec.ClusterManagementType = operatorv1.ClusterManagementTypeStandalone
 	}
 
 	return instance, nil
@@ -307,7 +303,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	var voltronAddr = ""
 	var voltronPort = ""
 	if mcmCfg != nil {
-		management = mcmCfg.Spec.ClusterManagementType == "management"
+		management = mcmCfg.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement
 		// Validate the inputs
 		if management {
 			uri, err := utils.GetManagementClusterURL(mcmCfg.Spec.ManagementClusterAddr)

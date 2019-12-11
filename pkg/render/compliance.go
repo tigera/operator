@@ -1009,7 +1009,7 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 	return []v3.ReportTemplate{
 		{
 			Name: "all-tests.csv",
-			Template: `nodeName,testIndex,testDescription,status,scored,Remediation
+			Template: `nodeName,testIndex,testDescription,status,scored,remediation
 {{ range $i, $node := .CISBenchmark -}}
 {{- range $j, $section := $node.Results -}}
 {{- range $k, $result := $section.Results -}}
@@ -1020,7 +1020,7 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 		},
 		{
 			Name: "failed-tests.csv",
-			Template: `nodeName,testIndex,testDescription,status,scored,Remediation
+			Template: `nodeName,testIndex,testDescription,status,scored,remediation
 {{ range $i, $node := .CISBenchmark }}
 {{- range $j, $section := $node.Results }}
 {{- range $k, $result := $section.Results }}

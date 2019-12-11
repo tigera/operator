@@ -14,6 +14,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -59,35 +60,25 @@ func FormatManagementClusterURL(uri *url.URL) string {
 // If a cluster is no longer of type management, there are resources that should be cleaned up
 func CleanUpMcm(ctx context.Context, cli client.Client) error {
 	// Remove the unnecessary service if there is one
-	svc := &corev1.Service{}
-	err := cli.Get(ctx, client.ObjectKey{Name: render.VoltronName, Namespace: render.ManagerNamespace}, svc)
-	found := true
-	if err != nil {
-		if errors.IsNotFound(err) {
-			found = false
-		} else {
-			return err
-		}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.VoltronServiceName,
+			Namespace: render.ManagerNamespace,
+		},
 	}
-	if found {
-		err = cli.Delete(ctx, svc)
-		if err != nil {
-			return err
-		}
+	if err := cli.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
+		return err
 	}
+
 	// Remove unnecessary secret if there is one
-	sec := &corev1.Secret{}
-	err = cli.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.ManagerNamespace}, sec)
-	found = true
-	if err != nil {
-		if errors.IsNotFound(err) {
-			found = false
-		} else {
-			return err
-		}
+	sec := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.VoltronTunnelSecretName,
+			Namespace: render.ManagerNamespace,
+		},
 	}
-	if found {
-		return cli.Delete(ctx, sec)
+	if err := cli.Delete(ctx, sec); err != nil && !errors.IsNotFound(err) {
+		return err
 	}
 	return nil
 }

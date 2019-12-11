@@ -46,6 +46,7 @@ const (
 // Multicluster configuration constants
 const (
 	VoltronName                 = "tigera-voltron"
+	VoltronServiceName          = VoltronName
 	VoltronTunnelSecretName     = "voltron-tunnel"
 	voltronTunnelHashAnnotation = "hash.operator.tigera.io/voltron-tunnel"
 	DefaultVoltronPort          = 9443
@@ -88,15 +89,15 @@ func Manager(
 	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
 	tlsSecrets = append(tlsSecrets, copy)
 	return &managerComponent{
-		cr:            cr,
-		esSecrets:     esSecrets,
-		kibanaSecrets: kibanaSecrets,
-		clusterName:   clusterName,
-		tlsSecrets:    tlsSecrets,
-		pullSecrets:   pullSecrets,
-		openshift:     openshift,
-		registry:      registry,
-		oidcConfig:    oidcConfig,
+		cr:                          cr,
+		esSecrets:                   esSecrets,
+		kibanaSecrets:               kibanaSecrets,
+		clusterName:                 clusterName,
+		tlsSecrets:                  tlsSecrets,
+		pullSecrets:                 pullSecrets,
+		openshift:                   openshift,
+		registry:                    registry,
+		oidcConfig:                  oidcConfig,
 		management:                  management,
 		voltronAddr:                 voltronAddr,
 		voltronPort:                 voltronPort,
@@ -268,7 +269,6 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			},
 		},
 	}
-
 
 	if c.oidcConfig != nil {
 		defaultMode := int32(420)
@@ -497,7 +497,7 @@ func (c *managerComponent) voltronTunnelService() *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronName,
+			Name:      VoltronServiceName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: corev1.ServiceSpec{

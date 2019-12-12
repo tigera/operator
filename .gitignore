@@ -86,3 +86,4 @@ tags
 .go-pkg-cache
 report/*
 cscope.*
+.idea/

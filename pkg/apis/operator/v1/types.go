@@ -47,6 +47,13 @@ type InstallationSpec struct {
 	// CalicoNetwork specifies configuration options for Calico provided pod networking.
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
+
+	// If this field is omitted, "Standalone" is assumed. For a scenario with multiple clusters, one "Management"
+	// cluster can be configured to establish a secure connection with one or more "Managed" clusters.
+	// Valid values for this field are: "Standalone", "Management", "Managed".
+	// +optional
+	// +kubebuilder:validation:Enum=Standalone,Management,Managed
+	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options
@@ -68,6 +75,16 @@ type ProductVariant string
 var (
 	Calico                 ProductVariant = "Calico"
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
+)
+
+// ClusterManagementType represents the type of multicluster management to use. Valid options for this field are: "Standalone",
+// "Management", "Managed".
+type ClusterManagementType string
+
+const (
+	ClusterManagementTypeStandalone ClusterManagementType = "Standalone"
+	ClusterManagementTypeManagement ClusterManagementType = "Management"
+	ClusterManagementTypeManaged    ClusterManagementType = "Managed"
 )
 
 // CalicoNetwork specifies configuration options for Calico provided pod networking.

@@ -1021,37 +1021,61 @@ func (c *complianceComponent) complianceGlobalReportCISBenchmark() *v3.GlobalRep
 			},
 		},
 		Spec: v3.ReportTypeSpec{
-			DownloadTemplates: []v3.ReportTemplate{
-				{
-					Name: "all-tests.csv",
-					Template: `nodeName,testIndex,status,scored
-{{ range $i, $node := .CISBenchmark -}}
-{{- range $j, $section := $node.Results -}}
-{{- range $k, $result := $section.Results -}}
-{{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.Status }},{{ $result.Scored }}
-{{ end }}
-{{- end }}
-{{- end }}`,
-				},
-				{
-					Name: "failed-tests.csv",
-					Template: `nodeName,testIndex,status,scored
-{{ range $i, $node := .CISBenchmark }}
-{{- range $j, $section := $node.Results }}
-{{- range $k, $result := $section.Results }}
-{{- if eq $result.Status "FAIL" }}
-{{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.Status }},{{ $result.Scored }}
-{{ end }}
-{{- end }}
-{{- end }}
-{{- end }}`,
-				},
-			},
+			DownloadTemplates:       c.getCISDownloadReportTemplates(),
 			IncludeCISBenchmarkData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name:     "ui-summary.json",
 				Template: `{{ $n := len .CISBenchmark }}{"heading": "Kubernetes CIS Benchmark","type":"row","widgets": [{"heading": "Node Failure Summary","type":"cis-benchmark-nodes","summary": {"label": "Total","total":{{ $n }}},"data": [{"label": "HIGH","value":{{ .CISBenchmarkSummary.HighCount }},"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}% or more tests passing"}, {"label": "MED","value": {{ .CISBenchmarkSummary.MedCount }},"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing"}, {"label": "LOW","value": {{ .CISBenchmarkSummary.LowCount }},"desc": "Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing"}]}{{ if .CISBenchmark }}, {"heading": "Top Failed Tests","type": "cis-benchmark-tests","topFailedTests": {"tests": [{{ $tests := cisTopFailedTests . }}{{ $nTests := len $tests }}{{ range $i, $test := $tests }}{"index": "{{ $test.TestNumber }}","description": "{{ $test.TestDesc }}","failedCount": "{{ $test.Count }}"} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}{{ end }}]} }{{ end }}]}`,
 			},
+		},
+	}
+}
+
+func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplate {
+	return []v3.ReportTemplate{
+		{
+			Name: "all-tests.csv",
+			Template: `nodeName,testIndex,testDescription,status,scored,remediation
+{{ range $i, $node := .CISBenchmark -}}
+{{- range $j, $section := $node.Results -}}
+{{- range $k, $result := $section.Results -}}
+{{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.TestDesc }},{{ $result.Status }},{{ $result.Scored }},"{{ $result.TestInfo }}"
+{{ end }}
+{{- end }}
+{{- end }}`,
+		},
+		{
+			Name: "failed-tests.csv",
+			Template: `nodeName,testIndex,testDescription,status,scored,remediation
+{{ range $i, $node := .CISBenchmark }}
+{{- range $j, $section := $node.Results }}
+{{- range $k, $result := $section.Results }}
+{{- if eq $result.Status "FAIL" }}
+{{- $node.NodeName }},{{ $result.TestNumber }},{{ $result.TestDesc }},{{ $result.Status }},{{ $result.Scored }},"{{ $result.TestInfo }}"
+{{ end }}
+{{- end }}
+{{- end }}
+{{- end }}`,
+		},
+		{
+			Name: "node-summary.csv",
+			Template: `node,version,status,testsPassing,testsFailing,testsUnknown,testsTotal
+{{ range $_, $node := .CISBenchmark }}
+{{- $node.NodeName }},{{ $node.KubernetesVersion }},{{ $node.Summary.Status }},{{ $node.Summary.TotalPass }},{{ $node.Summary.TotalFail }},{{ $node.Summary.TotalInfo }},{{ $node.Summary.Total }}
+{{ end }}`,
+		},
+		{
+			Name: "total-summary.csv",
+			Template: `{{ $c := csv }}
+{{- $c := $c.AddColumn "startTime"          "{{ dateRfc3339 .StartTime }}" }}
+{{- $c := $c.AddColumn "endTime"            "{{ dateRfc3339 .EndTime }}" }}
+{{- $c := $c.AddColumn "type"               "{{ .CISBenchmarkSummary.Type }}" }}
+{{- $c := $c.AddColumn "hiPercentThreshold" "{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold  }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ end }}" }}
+{{- $c := $c.AddColumn "medPercentThreshold" "{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold  }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ end }}" }}
+{{- $c := $c.AddColumn "hiNodeCount"         "{{ .CISBenchmarkSummary.HighCount }}" }}
+{{- $c := $c.AddColumn "medNodeCount"        "{{ .CISBenchmarkSummary.MedCount }}" }}
+{{- $c := $c.AddColumn "lowNodeCount"        "{{ .CISBenchmarkSummary.LowCount }}" }}
+{{- $c.Render . }}`,
 		},
 	}
 }

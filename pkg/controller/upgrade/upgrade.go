@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -42,7 +41,7 @@ import (
 const (
 	defaultTyphaAutoscalerSyncPeriod = 2 * time.Minute
 	nodeSelectorKey                  = "projectcalico.org/node-upgrade"
-	oldNs                            = "kube-system"
+	nonOperatorNS                    = "kube-system"
 	typhaDeploymentName              = "calico-typha"
 	nodeDaemonSetName                = "calico-node"
 )
@@ -57,10 +56,10 @@ var (
 	kubeSysTyphaDeploymentNames = []string{
 		typhaDeploymentName,
 	}
-	oldNodeLabel = map[string]string{
+	preoperatorNodeLabel = map[string]string{
 		nodeSelectorKey: "pre-operator",
 	}
-	newNodeLabel = map[string]string{
+	upgradedNodeLabel = map[string]string{
 		nodeSelectorKey: "upgraded",
 	}
 	calicoPodLabel = map[string]string{"k8s-app": "calico-node"}
@@ -86,7 +85,7 @@ func IsCoreUpgradeNeeded(cfg *rest.Config) (bool, error) {
 	}
 
 	for _, name := range kubeSysNodeDaemonSetNames {
-		_, err := c.AppsV1().DaemonSets("kube-system").Get(name, metav1.GetOptions{})
+		_, err := c.AppsV1().DaemonSets(nonOperatorNS).Get(name, metav1.GetOptions{})
 		if err == nil {
 			return true, nil
 		}
@@ -96,7 +95,7 @@ func IsCoreUpgradeNeeded(cfg *rest.Config) (bool, error) {
 	}
 
 	for _, name := range append(kubeSysKubeControllerDeploymentNames, kubeSysTyphaDeploymentNames...) {
-		_, err := c.AppsV1().Deployments("kube-system").Get(name, metav1.GetOptions{})
+		_, err := c.AppsV1().Deployments(nonOperatorNS).Get(name, metav1.GetOptions{})
 		if err == nil {
 			return true, nil
 		}
@@ -133,6 +132,10 @@ func GetCoreUpgrade(cfg *rest.Config) (*CoreUpgrade, error) {
 		upgrade.stopCh = make(chan struct{})
 
 		go upgrade.informer.Run(upgrade.stopCh)
+
+		for !upgrade.informer.HasSynced() {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
 	return upgrade, nil
@@ -141,13 +144,10 @@ func GetCoreUpgrade(cfg *rest.Config) (*CoreUpgrade, error) {
 // ModifyNodeDaemonSet updates the ds DaemonSet passed in with a nodeSelector that
 // the upgrade process expects to be on the Node DaemonSet that is being upgraded to.
 func ModifyNodeDaemonSet(ds *appsv1.DaemonSet) {
-	newNodeLabel = map[string]string{
-		nodeSelectorKey: "upgraded",
-	}
 	if ds.Spec.Template.Spec.NodeSelector == nil {
 		ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 	}
-	for k, v := range newNodeLabel {
+	for k, v := range upgradedNodeLabel {
 		ds.Spec.Template.Spec.NodeSelector[k] = v
 	}
 }
@@ -164,7 +164,7 @@ func ModifyNodeRoleBinding(crb *rbacv1.ClusterRoleBinding) {
 	crb.Subjects = append(crb.Subjects, rbacv1.Subject{
 		Kind:      "ServiceAccount",
 		Name:      "calico-node",
-		Namespace: "kube-system",
+		Namespace: nonOperatorNS,
 	})
 }
 
@@ -180,7 +180,7 @@ func ModifyTyphaDeployment(d *appsv1.Deployment) {
 	}
 	d.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = []v1.PodAffinityTerm{
 		{
-			Namespaces: []string{"kube-system"},
+			Namespaces: []string{nonOperatorNS},
 			LabelSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"k8s-app": typhaDeploymentName,
@@ -195,57 +195,54 @@ func ModifyTyphaDeployment(d *appsv1.Deployment) {
 // calio-node pods on each node from the old pod to the new one, then clean up.
 func (u *CoreUpgrade) Run(log logr.Logger, status *status.StatusManager) error {
 	if err := u.deleteKubeSystemKubeControllers(); err != nil {
-		setDegraded(log, status, "Failed deleting old calico-kube-controllers", err.Error())
+		setDegraded(log, status, "Failed deleting kube-system calico-kube-controllers", err.Error())
 		return err
 	}
 	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
-	if err := u.waitForNewTyphaDeploymentReady(); err != nil {
-		setDegraded(log, status, "Failed to wait for new typha deployment to be ready", err.Error())
+	if err := u.waitForOperatorTyphaDeploymentReady(); err != nil {
+		setDegraded(log, status, "Failed to wait for operator typha deployment to be ready", err.Error())
 		return err
 	}
-	log.V(1).Info("New Typha Deployment is ready")
-	for !u.informer.HasSynced() {
-		time.Sleep(100 * time.Millisecond)
-	}
-	log.V(1).Info("Node informer is synced")
-	if err := u.labelNonUpgradedNodesForOldNode(); err != nil {
+	log.V(1).Info("Operator Typha Deployment is ready")
+	if err := u.labelNonUpgradedNodes(); err != nil {
 		setDegraded(log, status, "Failed to label non-upgraded nodes", err.Error())
 		return err
 	}
-	log.V(1).Info("All non-upgraded nodes labeled for old node DaemonSet")
-	if err := u.addNodeSelectorToOldNodeDaemonSet(); err != nil {
-		setDegraded(log, status, "Failed to add nodeSelector to old node DaemonSet", err.Error())
+	log.V(1).Info("All non-upgraded nodes labeled")
+	if err := u.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(); err != nil {
+		setDegraded(log, status, "The kube-system node DaemonSet is not ready with the updated nodeSelect", err.Error())
 		return err
 	}
-	log.V(1).Info("Node selector added to old node DaemonSet")
+	log.V(1).Info("Node selector added to kube-system node DaemonSet")
 	if err := u.upgradeEachNode(log); err != nil {
 		setDegraded(log, status, "Failed to upgrade all nodes", err.Error())
 		return err
 	}
 	log.V(1).Info("Nodes upgraded")
 	if err := u.deleteKubeSystemCalicoNode(); err != nil {
-		setDegraded(log, status, "Failed to delete old node DaemonSet", err.Error())
+		setDegraded(log, status, "Failed to delete kube-system node DaemonSet", err.Error())
 		return err
 	}
-	log.V(1).Info("Old node DaemonSet deleted")
+	log.V(1).Info("kube-system node DaemonSet deleted")
 	if err := u.deleteKubeSystemTypha(); err != nil {
-		setDegraded(log, status, "Failed to delete old typha Deployment", err.Error())
+		setDegraded(log, status, "Failed to delete kube-system typha Deployment", err.Error())
 		return err
 	}
 
 	return nil
 }
 
-// CleanupUpgrade will finalize an upgrade if the upgrade has been setup
-// (and not yet cleaned). This includes cleaning the upgrade labels from nodes
-// and stopping the node cache.
-func CleanupUpgrade() error {
+// ShutdownUpgrade will tear down the upgrade if it was started.
+func ShutdownUpgrade() {
 	if upgrade != nil {
-		if err := upgrade.removeNodeUpgradeLabelFromNodes(); err != nil {
-			return err
-		}
 		close(upgrade.stopCh)
 		upgrade = nil
+	}
+}
+
+func (u *CoreUpgrade) CleanupUpgrade() error {
+	if err := u.removeNodeUpgradeLabelFromNodes(); err != nil {
+		return fmt.Errorf("Error cleaning up node labels: %s", err)
 	}
 	return nil
 }
@@ -260,7 +257,7 @@ func setDegraded(log logr.Logger, status *status.StatusManager, reason, msg stri
 // in the kube-system namespace
 func (u *CoreUpgrade) deleteKubeSystemKubeControllers() error {
 	for _, name := range kubeSysKubeControllerDeploymentNames {
-		err := u.client.AppsV1().Deployments("kube-system").Delete(name, &metav1.DeleteOptions{})
+		err := u.client.AppsV1().Deployments(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
 		if err != nil && !apierrs.IsNotFound(err) {
 			return err
 		}
@@ -272,7 +269,7 @@ func (u *CoreUpgrade) deleteKubeSystemKubeControllers() error {
 // in the kube-system namespace
 func (u *CoreUpgrade) deleteKubeSystemTypha() error {
 	for _, name := range kubeSysTyphaDeploymentNames {
-		err := u.client.AppsV1().Deployments("kube-system").Delete(name, &metav1.DeleteOptions{})
+		err := u.client.AppsV1().Deployments(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
 		if err != nil && !apierrs.IsNotFound(err) {
 			return err
 		}
@@ -284,7 +281,7 @@ func (u *CoreUpgrade) deleteKubeSystemTypha() error {
 // in the kube-system namespace
 func (u *CoreUpgrade) deleteKubeSystemCalicoNode() error {
 	for _, name := range kubeSysNodeDaemonSetNames {
-		err := u.client.AppsV1().DaemonSets("kube-system").Delete(name, &metav1.DeleteOptions{})
+		err := u.client.AppsV1().DaemonSets(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
 		if err != nil && !apierrs.IsNotFound(err) {
 			return err
 		}
@@ -292,10 +289,10 @@ func (u *CoreUpgrade) deleteKubeSystemCalicoNode() error {
 	return nil
 }
 
-// waitForNewTyphaDeploymentReady waits until the 'new' typha deployment in
+// waitForOperatorTyphaDeploymentReady waits until the 'new' typha deployment in
 // the calico-system namespace is ready before continuing, it will wait up to
 // 1 minute before returning with an error.
-func (u *CoreUpgrade) waitForNewTyphaDeploymentReady() error {
+func (u *CoreUpgrade) waitForOperatorTyphaDeploymentReady() error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		d, err := u.client.AppsV1().Deployments(common.CalicoNamespace).Get(common.TyphaDeploymentName, metav1.GetOptions{})
 		if err != nil {
@@ -312,16 +309,16 @@ func (u *CoreUpgrade) waitForNewTyphaDeploymentReady() error {
 	})
 }
 
-// labelNonUpgradedNodesForOldNode ensures all nodes are labeled. If they do
+// labelNonUpgradedNodes ensures all nodes are labeled. If they do
 // not already have the upgraded value then the pre-upgrade value is set.
-func (u *CoreUpgrade) labelNonUpgradedNodesForOldNode() error {
+func (u *CoreUpgrade) labelNonUpgradedNodes() error {
 	for _, obj := range u.indexer.List() {
 		node, ok := obj.(*v1.Node)
 		if !ok {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
 		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != "upgraded" {
-			if err := u.addNodeLabels(node.Name, oldNodeLabel); err != nil {
+			if err := u.addNodeLabels(node.Name, preoperatorNodeLabel); err != nil {
 				return err
 			}
 		}
@@ -338,7 +335,7 @@ func (u *CoreUpgrade) removeNodeUpgradeLabelFromNodes() error {
 		if !ok {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
-		if err := u.removeNodeLabels(node.Name, oldNodeLabel); err != nil {
+		if err := u.removeNodeLabels(node.Name, preoperatorNodeLabel); err != nil {
 			return err
 		}
 	}
@@ -346,35 +343,36 @@ func (u *CoreUpgrade) removeNodeUpgradeLabelFromNodes() error {
 	return nil
 }
 
-// addNodeSelectorToOldNodeDaemonSet updates the calico-node DaemonSet in the
+// ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady updates the calico-node DaemonSet in the
 // kube-system namespace with a node selector that will prevent it from being
 // deployed to nodes that have been upgraded.
-func (u *CoreUpgrade) addNodeSelectorToOldNodeDaemonSet() error {
-	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		ds, err := u.client.AppsV1().DaemonSets("kube-system").Get("calico-node", metav1.GetOptions{})
+func (u *CoreUpgrade) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() error {
+	return wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
+		ds, err := u.client.AppsV1().DaemonSets(nonOperatorNS).Get("calico-node", metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
 		// Check if nodeSelector is already set
-		if _, ok := ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey]; ok {
-			// no update needed
-			return true, nil
+		if _, ok := ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey]; !ok {
+			ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey] = "pre-operator"
+
+			ds, err = u.client.AppsV1().DaemonSets(nonOperatorNS).Update(ds)
+			if err != nil {
+				if apierrs.IsConflict(err) {
+					// Retry on update conflicts.
+					return false, nil
+				}
+				return false, err
+			}
 		}
 
-		ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey] = "pre-operator"
-
-		_, err = u.client.AppsV1().DaemonSets("kube-system").Update(ds)
-		if err == nil {
-			// Successful update
-			return true, nil
-		}
-		if !apierrs.IsConflict(err) {
-			return false, err
+		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady {
+			return false, fmt.Errorf("All pods are not ready yet: %d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 		}
 
-		// Retry on update conflicts.
-		return false, nil
+		// Successful update
+		return true, nil
 	})
 }
 
@@ -387,11 +385,15 @@ func (u *CoreUpgrade) upgradeEachNode(log logr.Logger) error {
 	for len(nodes) > 0 {
 		log.WithValues("count", len(nodes)).V(1).Info("nodes to upgrade")
 		for _, node := range nodes {
+			// This is to ensure that our new pods are becoming healthy before continuing on.
+			// We only wait up to 2 minutes after switching a node to allow the new pod
+			// to come up. Also if the operator crashed we don't want to continue continue
+			// updating if the pods are not healthy.
 			log.V(1).Info("Waiting for new calico pods to be healthy")
-			err := u.waitForNewCalicoPodsHealthy()
+			err := u.waitForCalicoPodsHealthy()
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
-				err = u.addNodeLabels(node.Name, newNodeLabel)
+				err = u.addNodeLabels(node.Name, upgradedNodeLabel)
 				if err != nil {
 					return fmt.Errorf("Setting label on node %s failed; %s", node.Name, err)
 				}
@@ -420,31 +422,37 @@ func (u *CoreUpgrade) getNodesToUpgrade() []*v1.Node {
 	return nodes
 }
 
-// waitForNewCalicoPodsHealthy waits for the 'new' calico-node DaemonSet to have
-// all pods deployed to be ready before continuing.
-func (u *CoreUpgrade) waitForNewCalicoPodsHealthy() error {
-	w, err := u.client.AppsV1().DaemonSets(common.CalicoNamespace).Watch(metav1.ListOptions{})
+func (u *CoreUpgrade) waitForCalicoPodsHealthy() error {
+	return wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
+		ksD, ksR, err := u.getNumPodsDesiredAndReady(nonOperatorNS, nodeDaemonSetName)
+		if err != nil {
+			return false, err
+		}
+		csD, csR, err := u.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
+		if err != nil {
+			return false, err
+		}
+
+		// TODO: When we support configuring adjusting the rolling update unavailable,
+		// we should use that configuration here.
+		if (ksD + csD) == (ksR + csR) {
+			// no update needed
+			return true, nil
+
+		}
+
+		// Retry on update conflicts.
+		return false, nil
+	})
+}
+
+func (u *CoreUpgrade) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, error) {
+	ds, err := u.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
-	defer w.Stop()
-	for e := range w.ResultChan() {
-		switch e.Type {
-		case watch.Deleted:
-			return fmt.Errorf("While waiting for calico-node pods to become healthy the DaemonSet was deleted")
-		case watch.Error:
-			return fmt.Errorf("Error while waiting for calico-node pods to become healthy: %s", e.Object)
-		}
 
-		ds := e.Object.(*appsv1.DaemonSet)
-		if ds.Name == common.NodeDaemonSetName {
-			if ds.Status.NumberReady == ds.Status.DesiredNumberScheduled {
-				return nil
-			}
-		}
-
-	}
-	return fmt.Errorf("Reading result while waiting for pod health was unexpected")
+	return ds.Status.DesiredNumberScheduled, ds.Status.NumberReady, nil
 }
 
 // addNodeLabels adds the specified labels to the named node. Perform

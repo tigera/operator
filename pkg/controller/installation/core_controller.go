@@ -508,11 +508,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// Requeue so we can update our resources (without the upgrade changes)
 		// Also needed since we updated the instance.
 		return reconcile.Result{Requeue: true}, nil
-	} else {
-		if err := upgrade.CleanupUpgrade(); err != nil {
-			r.status.SetDegraded("Error cleaning up after upgrade", err.Error())
+	} else if instance.Status.State == operator.StateUpgrading {
+		up, err := upgrade.GetCoreUpgrade(r.config)
+		if err != nil {
+			r.status.SetDegraded("Error setting up upgrade", err.Error())
 			return reconcile.Result{}, err
 		}
+		if err := up.CleanupUpgrade(); err != nil {
+			r.status.SetDegraded("Error cleaning up the upgrade", err.Error())
+			return reconcile.Result{}, err
+		}
+		upgrade.ShutdownUpgrade()
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.

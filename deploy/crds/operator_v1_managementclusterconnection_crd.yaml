@@ -33,12 +33,6 @@ spec:
                 to access this address. This field is not used in standalone clusters.'
               type: string
           type: object
-        status:
-          properties:
-            state:
-              description: State provides user-readable status.
-              type: string
-          type: object
   version: v1
   versions:
   - name: v1

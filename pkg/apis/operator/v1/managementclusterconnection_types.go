@@ -14,15 +14,6 @@ type ManagementClusterConnectionSpec struct {
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 }
 
-// ManagementClusterConnectionStatus defines the observed state of ManagementClusterConnection.
-// +k8s:openapi-gen=true
-type ManagementClusterConnectionStatus struct {
-
-	// State provides user-readable status.
-	// +optional
-	State string `json:"state,omitempty"`
-}
-
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +genclient:nonNamespaced
@@ -34,8 +25,7 @@ type ManagementClusterConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ManagementClusterConnectionSpec   `json:"spec,omitempty"`
-	Status ManagementClusterConnectionStatus `json:"status,omitempty"`
+	Spec ManagementClusterConnectionSpec `json:"spec,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

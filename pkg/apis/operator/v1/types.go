@@ -216,7 +216,7 @@ type IPPool struct {
 type StateStatus string
 
 const (
-	StateUpgrading  StateStatus = "Upgrading"
+	StateMigrating  StateStatus = "Migrating"
 	StateInstalling StateStatus = "Deploying"
 	StateReady      StateStatus = "Ready"
 )

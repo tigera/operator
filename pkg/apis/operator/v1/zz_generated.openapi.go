@@ -639,7 +639,7 @@ func schema_pkg_apis_operator_v1_ManagementClusterConnection(ref common.Referenc
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ManagementClusterConnection installs the components required to establish a tunnel between two clusters. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Description: "ManagementClusterConnection represents a link between a managed cluster and a management cluster. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{

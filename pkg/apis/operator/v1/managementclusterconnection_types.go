@@ -18,7 +18,7 @@ type ManagementClusterConnectionSpec struct {
 // +genclient
 // +genclient:nonNamespaced
 
-// ManagementClusterConnection installs the components required to establish a tunnel between two clusters. At most one
+// ManagementClusterConnection represents a link between a managed cluster and a management cluster. At most one
 // instance of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
 type ManagementClusterConnection struct {

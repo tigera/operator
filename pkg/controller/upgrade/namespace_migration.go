@@ -35,12 +35,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 )
 
-// This package provides the utilities to upgrade a Calico manifest installation
+// This package provides the utilities to migrate from a Calico manifest installation
 // to an operator deployment.
 
 const (
 	defaultTyphaAutoscalerSyncPeriod = 2 * time.Minute
-	nodeSelectorKey                  = "projectcalico.org/node-upgrade"
+	nodeSelectorKey                  = "projectcalico.org/operator-node-migration"
 	nonOperatorNS                    = "kube-system"
 	typhaDeploymentName              = "calico-typha"
 	nodeDaemonSetName                = "calico-node"
@@ -59,29 +59,30 @@ var (
 	preoperatorNodeLabel = map[string]string{
 		nodeSelectorKey: "pre-operator",
 	}
-	upgradedNodeLabel = map[string]string{
-		nodeSelectorKey: "upgraded",
+	migratedSelectorValue = "migrated"
+	migratedNodeLabel     = map[string]string{
+		nodeSelectorKey: migratedSelectorValue,
 	}
 	calicoPodLabel = map[string]string{"k8s-app": "calico-node"}
 )
 
-type CoreUpgrade struct {
+type CoreMigration struct {
 	client   *kubernetes.Clientset
 	informer cache.Controller
 	indexer  cache.Indexer
 	stopCh   chan struct{}
 }
 
-var upgrade *CoreUpgrade = nil
+var migration *CoreMigration = nil
 
-// IsCoreUpgradeNeeded checks if any of the old components exist that indicate we need to upgrade
+// NeedsCoreNamespaceMigration checks if any of the old components exist that indicate we need to migrate
 // or at least still need to be removed. It returns true if any of the following exist in the
 // kube-system namespace:
 // calico-kube-controllers deployment, typha deployment, or calico-node deployment
-func IsCoreUpgradeNeeded(cfg *rest.Config) (bool, error) {
+func NeedsCoreNamespaceMigration(cfg *rest.Config) (bool, error) {
 	c, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return false, fmt.Errorf("Unable to get kubernetes client to check for needed upgrade: %s", err)
+		return false, fmt.Errorf("Unable to get kubernetes clientset: %s", err)
 	}
 
 	for _, name := range kubeSysNodeDaemonSetNames {
@@ -107,19 +108,19 @@ func IsCoreUpgradeNeeded(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
-// GetCoreUpgrade initializes a CoreUpgrade if needed and returns a handle to it.
-func GetCoreUpgrade(cfg *rest.Config) (*CoreUpgrade, error) {
-	if upgrade == nil {
+// GetCoreMigration initializes a CoreMigration if needed and returns a handle to it.
+func GetCoreMigration(cfg *rest.Config) (*CoreMigration, error) {
+	if migration == nil {
 
-		upgrade = &CoreUpgrade{}
+		migration = &CoreMigration{}
 		var err error
-		upgrade.client, err = kubernetes.NewForConfig(cfg)
+		migration.client, err = kubernetes.NewForConfig(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to get kubernetes client for Core Upgrade: %s", err)
+			return nil, fmt.Errorf("Unable to get kubernetes client for Core Migration: %s", err)
 		}
 
 		// Create a Node watcher.
-		listWatcher := cache.NewListWatchFromClient(upgrade.client.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+		listWatcher := cache.NewListWatchFromClient(migration.client.CoreV1().RESTClient(), "nodes", "", fields.Everything())
 
 		// Setup event handlers
 		handlers := cache.ResourceEventHandlerFuncs{
@@ -127,27 +128,27 @@ func GetCoreUpgrade(cfg *rest.Config) (*CoreUpgrade, error) {
 		}
 
 		// Informer handles managing the watch and signals us when nodes are added.
-		upgrade.indexer, upgrade.informer = cache.NewIndexerInformer(listWatcher, &v1.Node{}, 0, handlers, cache.Indexers{})
+		migration.indexer, migration.informer = cache.NewIndexerInformer(listWatcher, &v1.Node{}, 0, handlers, cache.Indexers{})
 
-		upgrade.stopCh = make(chan struct{})
+		migration.stopCh = make(chan struct{})
 
-		go upgrade.informer.Run(upgrade.stopCh)
+		go migration.informer.Run(migration.stopCh)
 
-		for !upgrade.informer.HasSynced() {
+		for !migration.informer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
-	return upgrade, nil
+	return migration, nil
 }
 
 // ModifyNodeDaemonSet updates the ds DaemonSet passed in with a nodeSelector that
-// the upgrade process expects to be on the Node DaemonSet that is being upgraded to.
+// the migration process expects to be on the Node DaemonSet that is being migrated to.
 func ModifyNodeDaemonSet(ds *appsv1.DaemonSet) {
 	if ds.Spec.Template.Spec.NodeSelector == nil {
 		ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 	}
-	for k, v := range upgradedNodeLabel {
+	for k, v := range migratedNodeLabel {
 		ds.Spec.Template.Spec.NodeSelector[k] = v
 	}
 }
@@ -168,7 +169,7 @@ func ModifyNodeRoleBinding(crb *rbacv1.ClusterRoleBinding) {
 	})
 }
 
-// ModifyTyphaDeployment updates the d Deployment pass in with a PodAntiAffinity
+// ModifyTyphaDeployment updates the Deployment pass in with a PodAntiAffinity
 // to ensure the new typha pods will not be scheduled to the same nodes as the
 // 'old' typha pods.
 func ModifyTyphaDeployment(d *appsv1.Deployment) {
@@ -193,38 +194,38 @@ func ModifyTyphaDeployment(d *appsv1.Deployment) {
 
 // Run will update old deployments and daemonsets, label nodes, migrate the
 // calio-node pods on each node from the old pod to the new one, then clean up.
-func (u *CoreUpgrade) Run(log logr.Logger, status *status.StatusManager) error {
-	if err := u.deleteKubeSystemKubeControllers(); err != nil {
+func (m *CoreMigration) Run(log logr.Logger, status *status.StatusManager) error {
+	if err := m.deleteKubeSystemKubeControllers(); err != nil {
 		setDegraded(log, status, "Failed deleting kube-system calico-kube-controllers", err.Error())
 		return err
 	}
 	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
-	if err := u.waitForOperatorTyphaDeploymentReady(); err != nil {
+	if err := m.waitForOperatorTyphaDeploymentReady(); err != nil {
 		setDegraded(log, status, "Failed to wait for operator typha deployment to be ready", err.Error())
 		return err
 	}
 	log.V(1).Info("Operator Typha Deployment is ready")
-	if err := u.labelNonUpgradedNodes(); err != nil {
-		setDegraded(log, status, "Failed to label non-upgraded nodes", err.Error())
+	if err := m.labelUnmigratedNodes(); err != nil {
+		setDegraded(log, status, "Failed to label unmigrated nodes", err.Error())
 		return err
 	}
-	log.V(1).Info("All non-upgraded nodes labeled")
-	if err := u.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(); err != nil {
+	log.V(1).Info("All unmigrated nodes labeled")
+	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(); err != nil {
 		setDegraded(log, status, "The kube-system node DaemonSet is not ready with the updated nodeSelect", err.Error())
 		return err
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
-	if err := u.upgradeEachNode(log); err != nil {
-		setDegraded(log, status, "Failed to upgrade all nodes", err.Error())
+	if err := m.migrateEachNode(log); err != nil {
+		setDegraded(log, status, "Failed to migrate all nodes", err.Error())
 		return err
 	}
-	log.V(1).Info("Nodes upgraded")
-	if err := u.deleteKubeSystemCalicoNode(); err != nil {
+	log.V(1).Info("Nodes migrated")
+	if err := m.deleteKubeSystemCalicoNode(); err != nil {
 		setDegraded(log, status, "Failed to delete kube-system node DaemonSet", err.Error())
 		return err
 	}
 	log.V(1).Info("kube-system node DaemonSet deleted")
-	if err := u.deleteKubeSystemTypha(); err != nil {
+	if err := m.deleteKubeSystemTypha(); err != nil {
 		setDegraded(log, status, "Failed to delete kube-system typha Deployment", err.Error())
 		return err
 	}
@@ -232,16 +233,16 @@ func (u *CoreUpgrade) Run(log logr.Logger, status *status.StatusManager) error {
 	return nil
 }
 
-// ShutdownUpgrade will tear down the upgrade if it was started.
-func ShutdownUpgrade() {
-	if upgrade != nil {
-		close(upgrade.stopCh)
-		upgrade = nil
+// ShutdownMigration will tear down the migration if it was started.
+func ShutdownMigration() {
+	if migration != nil {
+		close(migration.stopCh)
+		migration = nil
 	}
 }
 
-func (u *CoreUpgrade) CleanupUpgrade() error {
-	if err := u.removeNodeUpgradeLabelFromNodes(); err != nil {
+func (m *CoreMigration) CleanupMigration() error {
+	if err := m.removeNodeMigrationLabelFromNodes(); err != nil {
 		return fmt.Errorf("Error cleaning up node labels: %s", err)
 	}
 	return nil
@@ -255,9 +256,9 @@ func setDegraded(log logr.Logger, status *status.StatusManager, reason, msg stri
 
 // deleteKubeSystemKubeControllers deletes the calico-kube-controllers deployment
 // in the kube-system namespace
-func (u *CoreUpgrade) deleteKubeSystemKubeControllers() error {
+func (m *CoreMigration) deleteKubeSystemKubeControllers() error {
 	for _, name := range kubeSysKubeControllerDeploymentNames {
-		err := u.client.AppsV1().Deployments(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
+		err := m.client.AppsV1().Deployments(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
 		if err != nil && !apierrs.IsNotFound(err) {
 			return err
 		}
@@ -267,9 +268,9 @@ func (u *CoreUpgrade) deleteKubeSystemKubeControllers() error {
 
 // deleteKubeSystemTypha deletes the typha deployment
 // in the kube-system namespace
-func (u *CoreUpgrade) deleteKubeSystemTypha() error {
+func (m *CoreMigration) deleteKubeSystemTypha() error {
 	for _, name := range kubeSysTyphaDeploymentNames {
-		err := u.client.AppsV1().Deployments(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
+		err := m.client.AppsV1().Deployments(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
 		if err != nil && !apierrs.IsNotFound(err) {
 			return err
 		}
@@ -279,9 +280,9 @@ func (u *CoreUpgrade) deleteKubeSystemTypha() error {
 
 // deleteKubeSystemCalicoNode deletes the calico-node daemonset
 // in the kube-system namespace
-func (u *CoreUpgrade) deleteKubeSystemCalicoNode() error {
+func (m *CoreMigration) deleteKubeSystemCalicoNode() error {
 	for _, name := range kubeSysNodeDaemonSetNames {
-		err := u.client.AppsV1().DaemonSets(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
+		err := m.client.AppsV1().DaemonSets(nonOperatorNS).Delete(name, &metav1.DeleteOptions{})
 		if err != nil && !apierrs.IsNotFound(err) {
 			return err
 		}
@@ -292,9 +293,9 @@ func (u *CoreUpgrade) deleteKubeSystemCalicoNode() error {
 // waitForOperatorTyphaDeploymentReady waits until the 'new' typha deployment in
 // the calico-system namespace is ready before continuing, it will wait up to
 // 1 minute before returning with an error.
-func (u *CoreUpgrade) waitForOperatorTyphaDeploymentReady() error {
+func (m *CoreMigration) waitForOperatorTyphaDeploymentReady() error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		d, err := u.client.AppsV1().Deployments(common.CalicoNamespace).Get(common.TyphaDeploymentName, metav1.GetOptions{})
+		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(common.TyphaDeploymentName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -309,16 +310,16 @@ func (u *CoreUpgrade) waitForOperatorTyphaDeploymentReady() error {
 	})
 }
 
-// labelNonUpgradedNodes ensures all nodes are labeled. If they do
-// not already have the upgraded value then the pre-upgrade value is set.
-func (u *CoreUpgrade) labelNonUpgradedNodes() error {
-	for _, obj := range u.indexer.List() {
+// labelUnmigratedNodes ensures all nodes are labeled. If they do
+// not already have the migrated value then the pre-migrated value is set.
+func (m *CoreMigration) labelUnmigratedNodes() error {
+	for _, obj := range m.indexer.List() {
 		node, ok := obj.(*v1.Node)
 		if !ok {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
-		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != "upgraded" {
-			if err := u.addNodeLabels(node.Name, preoperatorNodeLabel); err != nil {
+		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != migratedSelectorValue {
+			if err := m.addNodeLabels(node.Name, preoperatorNodeLabel); err != nil {
 				return err
 			}
 		}
@@ -327,15 +328,15 @@ func (u *CoreUpgrade) labelNonUpgradedNodes() error {
 	return nil
 }
 
-// removeNodeUpgradeLabelFromNodes removes the label previously added to
-// controll the upgrade.
-func (u *CoreUpgrade) removeNodeUpgradeLabelFromNodes() error {
-	for _, obj := range u.indexer.List() {
+// removeNodeMigrationLabelFromNodes removes the label previously added to
+// controll the migration.
+func (m *CoreMigration) removeNodeMigrationLabelFromNodes() error {
+	for _, obj := range m.indexer.List() {
 		node, ok := obj.(*v1.Node)
 		if !ok {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
-		if err := u.removeNodeLabels(node.Name, preoperatorNodeLabel); err != nil {
+		if err := m.removeNodeLabels(node.Name, preoperatorNodeLabel); err != nil {
 			return err
 		}
 	}
@@ -345,10 +346,10 @@ func (u *CoreUpgrade) removeNodeUpgradeLabelFromNodes() error {
 
 // ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady updates the calico-node DaemonSet in the
 // kube-system namespace with a node selector that will prevent it from being
-// deployed to nodes that have been upgraded.
-func (u *CoreUpgrade) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() error {
+// deployed to nodes that have been migrated and waits for the daemonset to update.
+func (m *CoreMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() error {
 	return wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
-		ds, err := u.client.AppsV1().DaemonSets(nonOperatorNS).Get("calico-node", metav1.GetOptions{})
+		ds, err := m.client.AppsV1().DaemonSets(nonOperatorNS).Get("calico-node", metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -357,7 +358,7 @@ func (u *CoreUpgrade) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() erro
 		if _, ok := ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey]; !ok {
 			ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey] = "pre-operator"
 
-			ds, err = u.client.AppsV1().DaemonSets(nonOperatorNS).Update(ds)
+			ds, err = m.client.AppsV1().DaemonSets(nonOperatorNS).Update(ds)
 			if err != nil {
 				if apierrs.IsConflict(err) {
 					// Retry on update conflicts.
@@ -376,59 +377,59 @@ func (u *CoreUpgrade) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() erro
 	})
 }
 
-// upgradeEachNode ensures that the calico-node pods are ready and then update
+// migrateEachNode ensures that the calico-node pods are ready and then update
 // the label on one node at a time, ensuring pod becomes ready before starting
 // the cycle again. Once the nodes are updated we will get the list of nodes
-// that need to be upgraded in case there were more added.
-func (u *CoreUpgrade) upgradeEachNode(log logr.Logger) error {
-	nodes := u.getNodesToUpgrade()
+// that need to be migrated in case there were more added.
+func (m *CoreMigration) migrateEachNode(log logr.Logger) error {
+	nodes := m.getNodesToMigrate()
 	for len(nodes) > 0 {
-		log.WithValues("count", len(nodes)).V(1).Info("nodes to upgrade")
+		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")
 		for _, node := range nodes {
 			// This is to ensure that our new pods are becoming healthy before continuing on.
 			// We only wait up to 2 minutes after switching a node to allow the new pod
 			// to come up. Also if the operator crashed we don't want to continue continue
 			// updating if the pods are not healthy.
 			log.V(1).Info("Waiting for new calico pods to be healthy")
-			err := u.waitForCalicoPodsHealthy()
+			err := m.waitForCalicoPodsHealthy()
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
-				err = u.addNodeLabels(node.Name, upgradedNodeLabel)
+				err = m.addNodeLabels(node.Name, migratedNodeLabel)
 				if err != nil {
 					return fmt.Errorf("Setting label on node %s failed; %s", node.Name, err)
 				}
 				log.V(1).Info("Waiting for new calico pod to start and be healthy")
-				u.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 2*time.Minute, calicoPodLabel)
+				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 2*time.Minute, calicoPodLabel)
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
 			}
 		}
-		// Fetch any new nodes that have been added during upgrade.
-		nodes = u.getNodesToUpgrade()
+		// Fetch any new nodes that have been added during migration.
+		nodes = m.getNodesToMigrate()
 	}
 	return nil
 }
 
-// getNodesToUpgrade returns a list of all nodes that need to be upgraded.
-func (u *CoreUpgrade) getNodesToUpgrade() []*v1.Node {
+// getNodesToMigrate returns a list of all nodes that need to be migrated.
+func (m *CoreMigration) getNodesToMigrate() []*v1.Node {
 	nodes := []*v1.Node{}
-	for _, obj := range u.indexer.List() {
+	for _, obj := range m.indexer.List() {
 		node := obj.(*v1.Node)
-		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != "upgraded" {
+		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != migratedSelectorValue {
 			nodes = append(nodes, node)
 		}
 	}
 	return nodes
 }
 
-func (u *CoreUpgrade) waitForCalicoPodsHealthy() error {
+func (m *CoreMigration) waitForCalicoPodsHealthy() error {
 	return wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
-		ksD, ksR, err := u.getNumPodsDesiredAndReady(nonOperatorNS, nodeDaemonSetName)
+		ksD, ksR, err := m.getNumPodsDesiredAndReady(nonOperatorNS, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
-		csD, csR, err := u.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
+		csD, csR, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
@@ -446,8 +447,8 @@ func (u *CoreUpgrade) waitForCalicoPodsHealthy() error {
 	})
 }
 
-func (u *CoreUpgrade) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, error) {
-	ds, err := u.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
+func (m *CoreMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, error) {
+	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -458,9 +459,9 @@ func (u *CoreUpgrade) getNumPodsDesiredAndReady(namespace, daemonset string) (in
 // addNodeLabels adds the specified labels to the named node. Perform
 // Get/Check/Update so that it always working on latest version.
 // If node labels has been set already, do nothing.
-func (u *CoreUpgrade) addNodeLabels(nodeName string, labelMaps ...map[string]string) error {
+func (m *CoreMigration) addNodeLabels(nodeName string, labelMaps ...map[string]string) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		node, err := u.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -477,7 +478,7 @@ func (u *CoreUpgrade) addNodeLabels(nodeName string, labelMaps ...map[string]str
 		}
 
 		if needUpdate {
-			_, err := u.client.CoreV1().Nodes().Update(node)
+			_, err := m.client.CoreV1().Nodes().Update(node)
 			if err == nil {
 				return true, nil
 			}
@@ -496,9 +497,9 @@ func (u *CoreUpgrade) addNodeLabels(nodeName string, labelMaps ...map[string]str
 
 // Remove node labels to node. Perform Get/Check/Update so that it always working on latest version.
 // If node labels do not exist, do nothing.
-func (u *CoreUpgrade) removeNodeLabels(nodeName string, labelMaps ...map[string]string) error {
+func (m *CoreMigration) removeNodeLabels(nodeName string, labelMaps ...map[string]string) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		node, err := u.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -514,7 +515,7 @@ func (u *CoreUpgrade) removeNodeLabels(nodeName string, labelMaps ...map[string]
 		}
 
 		if needUpdate {
-			_, err := u.client.CoreV1().Nodes().Update(node)
+			_, err := m.client.CoreV1().Nodes().Update(node)
 			if err == nil {
 				return true, nil
 			}
@@ -533,9 +534,9 @@ func (u *CoreUpgrade) removeNodeLabels(nodeName string, labelMaps ...map[string]
 
 // waitCalicoPodReadyForNode waits for the calico-node pod in the calico-system
 // namespace to become ready on a node.
-func (u *CoreUpgrade) waitCalicoPodReadyForNode(nodeName string, interval, timeout time.Duration, label map[string]string) error {
+func (m *CoreMigration) waitCalicoPodReadyForNode(nodeName string, interval, timeout time.Duration, label map[string]string) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		podList, err := u.client.CoreV1().Pods(common.CalicoNamespace).List(
+		podList, err := m.client.CoreV1().Pods(common.CalicoNamespace).List(
 			metav1.ListOptions{
 				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
 				LabelSelector: labels.SelectorFromSet(label).String(),

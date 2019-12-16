@@ -406,10 +406,10 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	needUpgrade, err := upgrade.IsCoreUpgradeNeeded(r.config)
+	needNsMigration, err := upgrade.NeedsCoreNamespaceMigration(r.config)
 	if err != nil {
-		log.Error(err, "Error checking if upgrade is needed")
-		r.status.SetDegraded("Error checking if upgrade is needed", err.Error())
+		log.Error(err, "Error checking if namespace migration is needed")
+		r.status.SetDegraded("Error checking if namespace migration is needed", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -425,7 +425,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
-		needUpgrade,
+		needNsMigration,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -491,34 +491,34 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	if needUpgrade {
-		instance.Status.State = operator.StateUpgrading
+	if needNsMigration {
+		instance.Status.State = operator.StateMigrating
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
-		up, err := upgrade.GetCoreUpgrade(r.config)
+		up, err := upgrade.GetCoreMigration(r.config)
 		if err != nil {
-			r.status.SetDegraded("Error setting up upgrade", err.Error())
+			r.status.SetDegraded("Error setting up namespace migration", err.Error())
 			return reconcile.Result{}, err
 		}
 		if err := up.Run(reqLogger, r.status); err != nil {
 			// No need to set status/degraded since the function will set if needed.
 			return reconcile.Result{}, err
 		}
-		// Requeue so we can update our resources (without the upgrade changes)
+		// Requeue so we can update our resources (without the migration changes)
 		// Also needed since we updated the instance.
 		return reconcile.Result{Requeue: true}, nil
-	} else if instance.Status.State == operator.StateUpgrading {
-		up, err := upgrade.GetCoreUpgrade(r.config)
+	} else if instance.Status.State == operator.StateMigrating {
+		up, err := upgrade.GetCoreMigration(r.config)
 		if err != nil {
-			r.status.SetDegraded("Error setting up upgrade", err.Error())
+			r.status.SetDegraded("Error preparing to clean up migration", err.Error())
 			return reconcile.Result{}, err
 		}
-		if err := up.CleanupUpgrade(); err != nil {
-			r.status.SetDegraded("Error cleaning up the upgrade", err.Error())
+		if err := up.CleanupMigration(); err != nil {
+			r.status.SetDegraded("Error cleaning up the migration", err.Error())
 			return reconcile.Result{}, err
 		}
-		upgrade.ShutdownUpgrade()
+		upgrade.ShutdownMigration()
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.

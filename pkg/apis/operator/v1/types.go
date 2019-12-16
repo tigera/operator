@@ -48,9 +48,10 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
-	// If this field is omitted, "Standalone" is assumed. For a scenario with multiple clusters, one "Management"
-	// cluster can be configured to establish a secure connection with one or more "Managed" clusters.
-	// Valid values for this field are: "Standalone", "Management", "Managed".
+	// How the cluster is managed. Valid values for this field are: "Standalone", "Management", "Managed".
+	// Standalone clusters are fully self-contained installations of Calico Enterprise. Management clusters provide
+	// a single view to manage any number of Managed clusters, which are a lighter weight installation.
+	// Default: Standalone
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`

@@ -323,7 +323,7 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 					},
 					"clusterManagementType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If this field is omitted, \"Standalone\" is assumed. For a scenario with multiple clusters, one \"Management\" cluster can be configured to establish a secure connection with one or more \"Managed\" clusters. Valid values for this field are: \"Standalone\", \"Management\", \"Managed\".",
+							Description: "How the cluster is managed. Valid values for this field are: \"Standalone\", \"Management\", \"Managed\". Standalone clusters are fully self-contained installations of Calico Enterprise. Management clusters provide a single view to manage any number of Managed clusters, which are a lighter weight installation. Default: Standalone",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -681,7 +681,7 @@ func schema_pkg_apis_operator_v1_ManagementClusterConnectionSpec(ref common.Refe
 				Properties: map[string]spec.Schema{
 					"managementClusterAddr": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specify where the managed cluster can reach the management cluster. Ex.: \"10.128.0.10:30449\". A managed cluster should be able to access this address. This field is not used in standalone clusters.",
+							Description: "Specify where the managed cluster can reach the management cluster. Ex.: \"10.128.0.10:30449\". A managed cluster should be able to access this address. This field is used by managed clusters only.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

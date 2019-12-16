@@ -9,7 +9,7 @@ import (
 type ManagementClusterConnectionSpec struct {
 
 	// Specify where the managed cluster can reach the management cluster. Ex.: "10.128.0.10:30449". A managed cluster
-	// should be able to access this address. This field is not used in standalone clusters.
+	// should be able to access this address. This field is used by managed clusters only.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 }

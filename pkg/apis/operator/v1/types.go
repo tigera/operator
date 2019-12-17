@@ -81,6 +81,40 @@ type CalicoNetworkSpec struct {
 	// Default: 1410
 	// +optional
 	MTU *int32 `json:"mtu,omitempty"`
+
+	// NodeAddressAutodetectionV4 specifies an approach to automatically detect node IPv4 addresses. If not specified,
+	// will use default auto-detection settings to acquire an IPv4 address for each node.
+	// +optional
+	NodeAddressAutodetectionV4 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV4,omitempty"`
+
+	// NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv4 addresses. If not specified,
+	// IPv6 addresses will not be auto-detected.
+	// +optional
+	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
+}
+
+// NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option
+// can be used. If no detection option is specified, then IP auto detection will be disabled for this address family and IPs
+// must be specified directly on the Node resource.
+type NodeAddressAutodetection struct {
+	// FirstFound uses default interface matching parameters to select an interface, performing best-effort
+	// filtering based on well-known interface names.
+	// +optional
+	FirstFound *bool `json:"firstFound,omitempty"`
+
+	// Interface enables IP auto-detection based on interfaces that match the given regex.
+	// +optional
+	Interface string `json:"interface,omitempty"`
+
+	// SkipInterface enables IP auto-detection based on interfaces that do not match
+	// the given regex.
+	// +optional
+	SkipInterface string `json:"skipInterface,omitempty"`
+
+	// CanReach enables IP auto-detection based on which source address on the node is used to reach the
+	// specified IP or domain.
+	// +optional
+	CanReach string `json:"canReach,omitempty"`
 }
 
 // EncapsulationType is the type of encapsulation to use on an IP pool. Valid

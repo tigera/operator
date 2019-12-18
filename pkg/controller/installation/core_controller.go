@@ -270,6 +270,14 @@ func fillDefaults(instance *operator.Installation) error {
 				pool.NodeSelector = operator.NodeSelectorDefault
 			}
 		}
+
+		// Default IPv4 address detection to "first found" if not specified.
+		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+			t := true
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = operator.NodeAddressAutodetection{
+				FirstFound: &t,
+			}
+		}
 	}
 	return nil
 }

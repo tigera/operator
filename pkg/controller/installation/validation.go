@@ -62,6 +62,42 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
 			}
 		}
+
+		// Check that at most one form of IP auto-detection is configured per-family.
+		if instance.Spec.CalicoNetwork.nodeAddressAutodetectionV4 != nil {
+			err = validateNodeAddressDetection(instance.Spec.CalicoNetwork.nodeAddressAutodetectionV4)
+			if err != nil {
+				return err
+			}
+
+		}
+		if instance.Spec.CalicoNetwork.nodeAddressAutodetectionV6 != nil {
+			err = validateNodeAddressDetection(instance.Spec.CalicoNetwork.nodeAddressAutodetectionV6)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error {
+	numEnabled := 0
+	if len(v4AutoDetection.Interface) != 0 {
+		numEnabled++
+	}
+	if len(v4AutoDetection.SkipInterface) != 0 {
+		numEnalbed++
+	}
+	if len(v4AutoDetection.CanReach) != 0 {
+		numEnalbed++
+	}
+	if v4AutoDetection.FirstFound != nil && v4AutoDetection.FirstFound {
+		numEnabled++
+	}
+
+	if numEnabled > 1 {
+		return fmt.Errorf("no more than one node address autodetection method can be specified per-family")
 	}
 	return nil
 }

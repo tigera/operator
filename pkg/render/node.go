@@ -725,7 +725,28 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
 
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
+		// Env based on IPv4 auto-detection configuration.
+		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
+		if v4method != "" {
+			// IPv4 Auto-detection is enabled.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4method})
+		} else {
+			// IPv4 Auto-detection is disabled.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
+		}
+
+		// Env based on IPv6 auto-detection configuration.
+		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
+		if v6method != "" {
+			// IPv6 Auto-detection is enabled.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6method})
+		} else {
+			// IPv6 Auto-detection is disabled.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
+		}
+
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
@@ -747,6 +768,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			default:
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
 			}
+
 			// Default for NAT Outgoing is enabled so it is only necessary to
 			// set when it is being disabled.
 			if pool.NATOutgoing == operator.NATOutgoingDisabled {
@@ -852,4 +874,25 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			},
 		},
 	}
+}
+
+// getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node
+// startup processing. It returns an empty string if IP auto detection should not be enabled.
+func (c *nodeComponent) getAutodetectionMethod() string {
+	if c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {
+		ad := c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4
+		if len(ad.Interface) != 0 {
+			return fmt.Sprintf("interface=%s", ad.Interface)
+		}
+		if len(ad.SkipInterface) != 0 {
+			return fmt.Sprintf("skip-interface=%s", ad.SkipInterface)
+		}
+		if len(ad.CanReach) != 0 {
+			return fmt.Sprintf("can-reach=%s", ad.CanReach)
+		}
+		if v4AutoDetection.FirstFound != nil && v4AutoDetection.FirstFound {
+			return "first-found"
+		}
+	}
+	return ""
 }

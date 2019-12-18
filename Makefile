@@ -290,7 +290,7 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=$(KUBECONFIG) kubectl create ns tigera-operator
+	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
 
 ## Destroy local docker-in-docker cluster
 cluster-destroy: k3d

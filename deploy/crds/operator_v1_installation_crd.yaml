@@ -76,6 +76,17 @@ spec:
                   format: int32
                   type: integer
               type: object
+            clusterManagementType:
+              description: 'How the cluster is managed. Valid values for this field
+                are: "Standalone", "Management", "Managed". Standalone clusters are
+                fully self-contained installations of Calico Enterprise. Management
+                clusters provide a single view to manage any number of Managed clusters,
+                which are a lighter weight installation. Default: Standalone'
+              enum:
+              - Standalone
+              - Management
+              - Managed
+              type: string
             imagePullSecrets:
               description: ImagePullSecrets is an array of references to container
                 registry pull secrets to use. These are applied to all images to be

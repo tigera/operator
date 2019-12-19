@@ -1,0 +1,40 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: managementclusterconnections.operator.tigera.io
+spec:
+  group: operator.tigera.io
+  names:
+    kind: ManagementClusterConnection
+    listKind: ManagementClusterConnectionList
+    plural: managementclusterconnections
+    singular: managementclusterconnection
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            managementClusterAddr:
+              description: 'Specify where the managed cluster can reach the management
+                cluster. Ex.: "10.128.0.10:30449". A managed cluster should be able
+                to access this address. This field is used by managed clusters only.'
+              type: string
+          type: object
+  version: v1
+  versions:
+  - name: v1
+    served: true
+    storage: true

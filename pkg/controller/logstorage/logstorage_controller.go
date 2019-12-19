@@ -3,6 +3,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	"time"
 
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
@@ -31,6 +32,10 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logstorage")
+
+const (
+	finalizer = "tigera.io/eck-cleanup"
+)
 
 func init() {
 	esusers.AddUser(elasticsearch.User{
@@ -147,7 +152,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	ls, err := utils.GetLogStorage(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.Info("LogStorage object not found")
+			r.status.SetDegraded("LogStorage resource not found", "")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
@@ -157,6 +162,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	reqLogger.V(2).Info("Loaded config", "config", ls)
 	r.status.OnCRFound()
+
+	if ls.DeletionTimestamp != nil {
+		return r.finalizeDeletion(ctx, ls)
+	}
+
+	if !stringsutil.StringInSlice(finalizer, ls.GetFinalizers()) {
+		ls.SetFinalizers(append(ls.GetFinalizers(), finalizer))
+	}
 
 	// Write back the LogStorage object to update any defaults that were set
 	if err = r.client.Update(ctx, ls); err != nil {
@@ -354,8 +367,7 @@ func (r *ReconcileLogStorage) updateStatus(ctx context.Context, reqLogger logr.L
 }
 
 func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, *esalpha1.Elasticsearch, error) {
-	es := &esalpha1.Elasticsearch{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, es); err != nil {
+	if es, err := r.getElasticsearch(ctx); err != nil {
 		return false, nil, err
 	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
 		return true, es, nil
@@ -365,12 +377,62 @@ func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, *
 }
 
 func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, *kibanaalpha1.Kibana, error) {
-	kb := &kibanaalpha1.Kibana{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kb); err != nil {
+	if kb, err := r.getKibana(ctx); err != nil {
 		return false, nil, err
 	} else if kb.Status.AssociationStatus == cmneckalpha1.AssociationEstablished {
 		return true, kb, nil
 	}
 
 	return false, nil, nil
+}
+
+func elasticsearchKey() client.ObjectKey {
+	return client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
+}
+
+func kibanaKey() client.ObjectKey {
+	return client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
+}
+
+func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esalpha1.Elasticsearch, error) {
+	es := esalpha1.Elasticsearch{}
+	return &es, r.client.Get(ctx, elasticsearchKey(), &es)
+}
+
+func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kibana, error) {
+	kb := kibanaalpha1.Kibana{}
+	return &kb, r.client.Get(ctx, kibanaKey(), &kb)
+}
+
+// finalizeDeletion makes sure that both kibana and elasticsearch are deleted before removing the finalizers on the LogStorage
+// resource. This needs to happen because the eck operator will be deleted when the LogStorage resource is deleted, but
+// the eck operator is needed to delete elasticsearch and kibana
+func (r *ReconcileLogStorage) finalizeDeletion(ctx context.Context, ls *operatorv1.LogStorage) (reconcile.Result, error) {
+	// remove elasticsearch
+	if es, err := r.getElasticsearch(ctx); err == nil {
+		if err := r.client.Delete(ctx, es); err != nil {
+			r.status.SetDegraded("Failed to delete elasticsearch", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else if !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+
+	// remove kibana
+	if kb, err := r.getKibana(ctx); err == nil {
+		if err := r.client.Delete(ctx, kb); err != nil {
+			r.status.SetDegraded("Failed to delete kibana", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else if !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+
+	// remove the finalizer now that elasticsearch and kibana have been deleted
+	ls.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, ls.GetFinalizers()))
+	if err := r.client.Update(ctx, ls); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
 }

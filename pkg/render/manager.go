@@ -46,7 +46,7 @@ func Manager(
 	cr *operator.Manager,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
-	clusterName string,
+	esClusterConfig *ElasticsearchClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -73,28 +73,28 @@ func Manager(
 	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
 	tlsSecrets = append(tlsSecrets, copy)
 	return &managerComponent{
-		cr:            cr,
-		esSecrets:     esSecrets,
-		kibanaSecrets: kibanaSecrets,
-		clusterName:   clusterName,
-		tlsSecrets:    tlsSecrets,
-		pullSecrets:   pullSecrets,
-		openshift:     openshift,
-		registry:      registry,
-		oidcConfig:    oidcConfig,
+		cr:              cr,
+		esSecrets:       esSecrets,
+		kibanaSecrets:   kibanaSecrets,
+		esClusterConfig: esClusterConfig,
+		tlsSecrets:      tlsSecrets,
+		pullSecrets:     pullSecrets,
+		openshift:       openshift,
+		registry:        registry,
+		oidcConfig:      oidcConfig,
 	}, nil
 }
 
 type managerComponent struct {
-	cr            *operator.Manager
-	esSecrets     []*corev1.Secret
-	kibanaSecrets []*corev1.Secret
-	clusterName   string
-	tlsSecrets    []*corev1.Secret
-	pullSecrets   []*corev1.Secret
-	openshift     bool
-	registry      string
-	oidcConfig    *corev1.ConfigMap
+	cr              *operator.Manager
+	esSecrets       []*corev1.Secret
+	kibanaSecrets   []*corev1.Secret
+	esClusterConfig *ElasticsearchClusterConfig
+	tlsSecrets      []*corev1.Secret
+	pullSecrets     []*corev1.Secret
+	openshift       bool
+	registry        string
+	oidcConfig      *corev1.ConfigMap
 }
 
 func (c *managerComponent) Objects() []runtime.Object {
@@ -188,8 +188,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					Tolerations:        c.managerTolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(c.managerContainer(), c.clusterName, ElasticsearchUserManager),
-						ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.clusterName, ElasticsearchUserManager),
+						ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserManager),
+						ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserManager),
 						c.managerProxyContainer(),
 					},
 					Volumes: c.managerVolumes(),

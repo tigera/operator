@@ -16,11 +16,8 @@ package render
 
 import (
 	"fmt"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	ocsv1 "github.com/openshift/api/security/v1"
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -43,30 +40,27 @@ const (
 )
 
 func Compliance(
-	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
 	registry string,
-	clusterName string,
+	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 ) Component {
 	return &complianceComponent{
-		ls:          ls,
-		esSecrets:   esSecrets,
-		registry:    registry,
-		clusterName: clusterName,
-		pullSecrets: pullSecrets,
-		openshift:   openshift,
+		esSecrets:       esSecrets,
+		registry:        registry,
+		esClusterConfig: esClusterConfig,
+		pullSecrets:     pullSecrets,
+		openshift:       openshift,
 	}
 }
 
 type complianceComponent struct {
-	ls          *operatorv1.LogStorage
-	esSecrets   []*corev1.Secret
-	registry    string
-	clusterName string
-	pullSecrets []*corev1.Secret
-	openshift   bool
+	esSecrets       []*corev1.Secret
+	registry        string
+	esClusterConfig *ElasticsearchClusterConfig
+	pullSecrets     []*corev1.Secret
+	openshift       bool
 }
 
 func (c *complianceComponent) Objects() []runtime.Object {
@@ -234,7 +228,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 	}
 
-	return &appsv1.Deployment{
+	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-controller",
@@ -275,12 +269,12 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							Image:         constructImage(ComplianceControllerImage, c.registry),
 							Env:           envVars,
 							LivenessProbe: complianceLivenessProbe,
-						}, c.clusterName, ElasticsearchUserComplianceController),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceController),
 					},
 				}),
 			},
 		},
-	}
+	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
 }
 
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
@@ -371,7 +365,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
 							},
-						}, c.clusterName, ElasticsearchUserComplianceReporter), c.ls.Replicas(), c.ls.Shards(),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceReporter), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 					),
 				},
 				Volumes: []corev1.Volume{
@@ -464,7 +458,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
 
-	return &appsv1.Deployment{
+	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-server",
@@ -526,12 +520,12 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 								PeriodSeconds:       10,
 								FailureThreshold:    5,
 							},
-						}, c.clusterName, ElasticsearchUserComplianceServer),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceServer),
 					},
 				}),
 			},
 		},
-	}
+	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
 }
 
 func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.ServiceAccount {
@@ -594,7 +588,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 	}
 
-	return &appsv1.Deployment{
+	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-snapshotter",
@@ -634,13 +628,13 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 								Image:         constructImage(ComplianceSnapshotterImage, c.registry),
 								Env:           envVars,
 								LivenessProbe: complianceLivenessProbe,
-							}, c.clusterName, ElasticsearchUserComplianceSnapshotter), c.ls.Replicas(), c.ls.Shards(),
+							}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceSnapshotter), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 						),
 					},
 				}),
 			},
 		},
-	}
+	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
 }
 
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
@@ -725,7 +719,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		},
 	}
 
-	return &appsv1.DaemonSet{
+	return ElasticsearchDecorateAnnotations(&appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",
@@ -770,14 +764,14 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 								Env:           envVars,
 								VolumeMounts:  volMounts,
 								LivenessProbe: complianceLivenessProbe,
-							}, c.clusterName, ElasticsearchUserComplianceBenchmarker), c.ls.Replicas(), c.ls.Shards(),
+							}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceBenchmarker), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 						),
 					},
 					Volumes: vols,
 				}),
 			},
 		},
-	}
+	}, c.esClusterConfig, c.esSecrets).(*appsv1.DaemonSet)
 }
 
 func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() *ocsv1.SecurityContextConstraints {

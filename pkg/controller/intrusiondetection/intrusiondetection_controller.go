@@ -118,10 +118,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
 	}
 
-	if err = utils.AddLogStorageWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch LogStorage resource: %v", err)
-	}
-
 	for _, secretName := range []string{
 		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserIntrusionDetection,
 		render.ElasticsearchUserIntrusionDetectionJob, render.KibanaPublicCertSecret,
@@ -129,6 +125,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 		}
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
 	return nil
@@ -207,25 +207,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// If either of the Elasticsearch or Kibana resources are recreated the old public certs will still exist in the
-	// tigera-operator namespace, so don't precede past this point unless LogStorage is ready (LogStorage is ready when
-	// both the Elasticsearch and Kibana resources are created and operational)
-	ls, err := utils.GetReadyLogStorage(context.Background(), r.client)
-	if ls == nil {
-		if err == nil || errors.IsNotFound(err) {
-			r.status.SetDegraded("Waiting for Tigera LogStorage resource to be ready", "")
+	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
+			r.status.SetDegraded("Elasticsearch cluster configuration is not available, waiting for it to become available", err.Error())
 			return reconcile.Result{}, nil
 		}
-
-		log.Error(err, "Failed to retrieve Tigera LogStorage resource")
-		r.status.SetDegraded("Failed to retrieve Tigera LogStorage resource", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	clusterName, err := utils.ClusterName(context.Background(), r.client)
-	if err != nil {
-		log.Error(err, "Failed to get the cluster name")
-		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		log.Error(err, "Failed to get the elasticsearch cluster configuration")
+		r.status.SetDegraded("Failed to get the elasticsearch cluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -256,11 +246,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	component := render.IntrusionDetection(
-		ls,
 		esSecrets,
 		kibanaPublicCertSecret,
 		network.Spec.Registry,
-		clusterName,
+		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 	)

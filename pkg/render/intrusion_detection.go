@@ -15,7 +15,6 @@
 package render
 
 import (
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -34,31 +33,28 @@ const (
 )
 
 func IntrusionDetection(
-	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
 	registry string,
-	clusterName string,
+	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 ) Component {
 	return &intrusionDetectionComponent{
-		ls:               ls,
 		esSecrets:        esSecrets,
 		kibanaCertSecret: kibanaCertSecret,
 		registry:         registry,
-		clusterName:      clusterName,
+		esClusterConfig:  esClusterConfig,
 		pullSecrets:      pullSecrets,
 		openshift:        openshift,
 	}
 }
 
 type intrusionDetectionComponent struct {
-	ls               *operatorv1.LogStorage
 	esSecrets        []*corev1.Secret
 	kibanaCertSecret *corev1.Secret
 	registry         string
-	clusterName      string
+	esClusterConfig  *ElasticsearchClusterConfig
 	pullSecrets      []*corev1.Secret
 	openshift        bool
 }
@@ -85,7 +81,7 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
-	return &batchv1.Job{
+	return ElasticsearchDecorateAnnotations(&batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-es-job-installer",
@@ -99,16 +95,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						operatorv1.ElasticsearchHashAnnotation: c.ls.Status.ElasticsearchHash,
-					},
 					Labels: map[string]string{"job-name": "intrusion-detection-es-job-installer"},
 				},
 				Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{
 					RestartPolicy:    v1.RestartPolicyOnFailure,
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []v1.Container{
-						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.clusterName, ElasticsearchUserIntrusionDetectionJob),
+						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserIntrusionDetectionJob),
 					},
 					Volumes: []corev1.Volume{{
 						Name: "kibana-ca-cert-volume",
@@ -124,7 +117,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				}),
 			},
 		},
-	}
+	}, c.esClusterConfig, c.esSecrets).(*batchv1.Job)
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
@@ -282,7 +275,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
 
-	d := &appsv1.Deployment{
+	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
@@ -309,14 +302,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorateIndexCreator(
-							ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.clusterName, ElasticsearchUserIntrusionDetection),
-							c.ls.Replicas(), c.ls.Shards()),
+							ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserIntrusionDetection),
+							c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
 					},
 				}),
 			},
 		},
-	}
-	return d
+	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
@@ -326,7 +318,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",
-				Value: c.clusterName,
+				Value: c.esClusterConfig.ClusterName(),
 			},
 		},
 		// Needed for permissions to write to the audit log

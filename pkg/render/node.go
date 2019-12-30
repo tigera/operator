@@ -774,13 +774,19 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
+	iptablesBackend := "auto"
+
 	// Configure provider specific environment variables here.
 	switch c.provider {
 	case operator.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
-		// Use iptables in nftables mode.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"})
+		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+			// TODO: Remove this once the private node/felix is updated to support the auto
+			// option.
+			// Use iptables in nftables mode.
+			iptablesBackend = "NFT"
+		}
 	case operator.ProviderEKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
@@ -793,6 +799,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.ProviderAKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
+	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: iptablesBackend})
 	return nodeEnv
 }
 

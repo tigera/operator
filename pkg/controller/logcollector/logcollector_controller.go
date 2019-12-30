@@ -99,10 +99,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
-	if err = utils.AddLogStorageWatch(c); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch LogStorage resource: %v", err)
-	}
-
 	esUser, err := esusers.GetUser(render.ElasticsearchUserLogCollector)
 	if err != nil {
 		// this error indicates a programming error, where we are trying to get an Elasticsearch user that hasn't been
@@ -118,8 +114,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.FluentdFilterConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", render.FluentdFilterConfigMapName, err)
+	for _, configMapName := range []string{render.FluentdFilterConfigMapName, render.ElasticsearchConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, configMapName, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
+		}
 	}
 
 	return nil
@@ -206,16 +204,15 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.V(2).Info("Retrieving LogStorage resource")
-	ls, err := utils.GetReadyLogStorage(context.Background(), r.client)
-	if ls == nil {
-		if err == nil || errors.IsNotFound(err) {
-			r.status.SetDegraded("Waiting for Tigera LogStorage resource to be ready", "")
+	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
+			r.status.SetDegraded("Elasticsearch cluster configuration is not available, waiting for it to become available", err.Error())
 			return reconcile.Result{}, nil
 		}
-
-		log.Error(err, "Failed to retrieve Tigera LogStorage resource")
-		r.status.SetDegraded("Failed to retrieve Tigera LogStorage resource", err.Error())
+		log.Error(err, "Failed to get the elasticsearch cluster configuration")
+		r.status.SetDegraded("Failed to get the elasticsearch cluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -223,13 +220,6 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	clusterName, err := utils.ClusterName(context.Background(), r.client)
-	if err != nil {
-		log.Error(err, "Failed to get the cluster name")
-		r.status.SetDegraded("Failed to get the cluster name", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -293,9 +283,8 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired objects from the CRD and create or update them.
 	component := render.Fluentd(
 		instance,
-		ls,
 		esSecrets,
-		clusterName,
+		esClusterConfig,
 		s3Credential,
 		filters,
 		eksConfig,

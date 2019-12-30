@@ -22,11 +22,29 @@ import (
 )
 
 const (
-	ElasticsearchDefaultCertDir   = "/etc/ssl/elastic/"
-	ElasticsearchDefaultCertPath  = ElasticsearchDefaultCertDir + "ca.pem"
-	TigeraElasticsearchCertSecret = "tigera-secure-elasticsearch-cert"
-	ElasticsearchPublicCertSecret = "tigera-secure-es-http-certs-public"
+	ElasticsearchDefaultCertDir      = "/etc/ssl/elastic/"
+	ElasticsearchDefaultCertPath     = ElasticsearchDefaultCertDir + "ca.pem"
+	TigeraElasticsearchCertSecret    = "tigera-secure-elasticsearch-cert"
+	ElasticsearchPublicCertSecret    = "tigera-secure-es-http-certs-public"
+	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
 )
+
+type Annotatable interface {
+	SetAnnotations(map[string]string)
+	GetAnnotations() map[string]string
+}
+
+func ElasticsearchDecorateAnnotations(obj Annotatable, config *ElasticsearchClusterConfig, secrets []*corev1.Secret) Annotatable {
+	annots := obj.GetAnnotations()
+	if annots == nil {
+		annots = map[string]string{}
+	}
+	annots[elasticsearchConfigMapAnnotation] = config.Annotation()
+	annots[elasticsearchSecretsAnnotation] = secretsAnnotationHash(secrets...)
+	obj.SetAnnotations(annots)
+
+	return obj
+}
 
 func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret string) corev1.Container {
 	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret))

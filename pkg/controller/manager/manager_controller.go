@@ -107,6 +107,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %v", render.ManagerOIDCConfig, err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -230,17 +234,15 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
-		reqLogger.Error(err, "Failed to read Kibana public cert secret")
-		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	clusterName, err := utils.ClusterName(ctx, r.client)
+	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
 	if err != nil {
-		log.Error(err, "Failed to get the cluster name")
-		r.status.SetDegraded("Failed to get the cluster name", err.Error())
+		if errors.IsNotFound(err) {
+			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
+			r.status.SetDegraded("Elasticsearch cluster configuration is not available, waiting for it to become available", err.Error())
+			return reconcile.Result{}, nil
+		}
+		log.Error(err, "Failed to get the elasticsearch cluster configuration")
+		r.status.SetDegraded("Failed to get the elasticsearch cluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -252,6 +254,13 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	kibanaPublicCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+		reqLogger.Error(err, "Failed to read Kibana public cert secret")
+		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -273,7 +282,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		instance,
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
-		clusterName,
+		esClusterConfig,
 		tlsSecret,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,

@@ -62,10 +62,6 @@ func AddComplianceWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
 }
 
-func AddLogStorageWatch(c controller.Controller) error {
-	return c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
-}
-
 func AddSecretsWatch(c controller.Controller, name, namespace string) error {
 	s := &v1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},

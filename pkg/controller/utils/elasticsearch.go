@@ -10,10 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	DefaultClusterName = "cluster"
-)
-
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
 func ElasticsearchSecrets(ctx context.Context, esUsernames []string, cli client.Client) ([]*corev1.Secret, error) {
 	var esUserSecrets []*corev1.Secret
@@ -46,7 +42,13 @@ func ElasticsearchSecrets(ctx context.Context, esUsernames []string, cli client.
 	return append(esUserSecrets, esCertSecret), nil
 }
 
-func ClusterName(ctx context.Context, cli client.Client) (string, error) {
-	// TODO grab the cluster name from a secret instead of using the default
-	return DefaultClusterName, nil
+// GetElasticsearchClusterConfig retrieves the config map containing the elasticsearch configuration values, such as the
+// the cluster name and replica count.
+func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*render.ElasticsearchClusterConfig, error) {
+	configMap := &corev1.ConfigMap{}
+	if err := cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchConfigMapName, Namespace: render.OperatorNamespace()}, configMap); err != nil {
+		return nil, err
+	}
+
+	return render.NewElasticsearchClusterConfigFromConfigMap(configMap)
 }

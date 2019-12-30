@@ -34,7 +34,8 @@ import (
 var log = logf.Log.WithName("controller_logstorage")
 
 const (
-	finalizer = "tigera.io/eck-cleanup"
+	finalizer                  = "tigera.io/eck-cleanup"
+	defaultElasticsearchShards = 5
 )
 
 func init() {
@@ -137,6 +138,50 @@ type ReconcileLogStorage struct {
 	provider operatorv1.Provider
 }
 
+func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
+	instance := &operatorv1.LogStorage{}
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	fillDefaults(instance)
+
+	return instance, nil
+}
+
+func fillDefaults(opr *operatorv1.LogStorage) {
+	if opr.Spec.Retention == nil {
+		opr.Spec.Retention = &operatorv1.Retention{}
+	}
+
+	if opr.Spec.Retention.Flows == nil {
+		var fr int32 = 8
+		opr.Spec.Retention.Flows = &fr
+	}
+	if opr.Spec.Retention.AuditReports == nil {
+		var arr int32 = 365
+		opr.Spec.Retention.AuditReports = &arr
+	}
+	if opr.Spec.Retention.Snapshots == nil {
+		var sr int32 = 365
+		opr.Spec.Retention.Snapshots = &sr
+	}
+	if opr.Spec.Retention.ComplianceReports == nil {
+		var crr int32 = 365
+		opr.Spec.Retention.ComplianceReports = &crr
+	}
+
+	if opr.Spec.Indices == nil {
+		opr.Spec.Indices = &operatorv1.Indices{}
+	}
+
+	if opr.Spec.Indices.Replicas == nil {
+		var replicas int32 = render.DefaultElasticsearchReplicas
+		opr.Spec.Indices.Replicas = &replicas
+	}
+}
+
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
 // and what is in the LogStorage.Spec
 // Note:
@@ -149,7 +194,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 
 	// Fetch the LogStorage instance
-	ls, err := utils.GetLogStorage(ctx, r.client)
+	ls, err := GetLogStorage(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("LogStorage resource not found", "")
@@ -237,19 +282,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
-	clusterName, err := utils.ClusterName(context.Background(), r.client)
-	if err != nil {
-		log.Error(err, "Failed to get the cluster name")
-		r.status.SetDegraded("Failed to get the cluster name", err.Error())
-		return reconcile.Result{}, err
-	}
 
-	reqLogger.V(2).Info("Creating Elasticsearch components")
+	esClusterConfig := render.NewElasticsearchClusterConfig("cluster", ls.Replicas(), defaultElasticsearchShards)
 
 	reqLogger.V(2).Info("Creating Elasticsearch components")
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	component, err := render.Elasticsearch(
 		ls,
+		esClusterConfig,
 		esCertSecret,
 		kibanaCertSecret,
 		createWebhookSecret,
@@ -268,8 +308,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	reqLogger.V(2).Info("Checking if Elasticsearch is operational")
-	isReady, es, err := r.isElasticsearchReady(ctx)
-	if err != nil {
+	if isReady, err := r.isElasticsearchReady(ctx); err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error figuring out if elasticsearch is operational", err)
 		return reconcile.Result{}, err
 	} else if !isReady {
@@ -278,8 +317,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	reqLogger.V(2).Info("Checking if Kibana is operational")
-	isReady, kb, err := r.isKibanaReady(ctx)
-	if err != nil {
+	if isReady, err := r.isKibanaReady(ctx); err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Failed to figure out if Kibana is operational", err)
 		return reconcile.Result{}, err
 	} else if !isReady {
@@ -322,7 +360,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network.Spec.Registry, clusterName)
+	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network.Spec.Registry, render.DefaultElasticsearchClusterName)
 	if err := hdler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
@@ -333,8 +371,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 	reqLogger.V(2).Info("Elasticsearch users and secrets created for components needing Elasticsearch access")
-	ls.Status.ElasticsearchHash = render.AnnotationHash(es.GetCreationTimestamp())
-	ls.Status.KibanaHash = render.AnnotationHash(kb.GetCreationTimestamp())
 	if err := r.updateStatus(ctx, reqLogger, ls, operatorv1.LogStorageStatusReady); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -366,24 +402,24 @@ func (r *ReconcileLogStorage) updateStatus(ctx context.Context, reqLogger logr.L
 	return nil
 }
 
-func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, *esalpha1.Elasticsearch, error) {
+func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, error) {
 	if es, err := r.getElasticsearch(ctx); err != nil {
-		return false, nil, err
+		return false, err
 	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
-		return true, es, nil
+		return true, nil
 	}
 
-	return false, nil, nil
+	return false, nil
 }
 
-func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, *kibanaalpha1.Kibana, error) {
+func (r *ReconcileLogStorage) isKibanaReady(ctx context.Context) (bool, error) {
 	if kb, err := r.getKibana(ctx); err != nil {
-		return false, nil, err
+		return false, err
 	} else if kb.Status.AssociationStatus == cmneckalpha1.AssociationEstablished {
-		return true, kb, nil
+		return true, nil
 	}
 
-	return false, nil, nil
+	return false, nil
 }
 
 func elasticsearchKey() client.ObjectKey {

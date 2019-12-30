@@ -26,6 +26,7 @@ const (
 	ElasticsearchHTTPURL       = "tigera-secure-es-http.tigera-elasticsearch.svc"
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 	ElasticsearchName          = "tigera-secure"
+	ElasticsearchConfigMapName = "tigera-secure-elasticsearch"
 
 	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc"
 	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
@@ -35,10 +36,14 @@ const (
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath         = "tigera-kibana"
+
+	DefaultElasticsearchClusterName = "cluster"
+	DefaultElasticsearchReplicas    = 0
 )
 
 func Elasticsearch(
 	logStorage *operatorv1.LogStorage,
+	clusterConfig *ElasticsearchClusterConfig,
 	esCertSecret *corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
 	createWebhookSecret bool,
@@ -78,6 +83,7 @@ func Elasticsearch(
 	kibanaCertSecrets = append(kibanaCertSecrets, copySecrets(KibanaNamespace, kibanaCertSecret)...)
 	return &elasticsearchComponent{
 		logStorage:          logStorage,
+		clusterConfig:       clusterConfig,
 		esCertSecrets:       esCertSecrets,
 		kibanaCertSecrets:   kibanaCertSecrets,
 		createWebhookSecret: createWebhookSecret,
@@ -89,6 +95,7 @@ func Elasticsearch(
 
 type elasticsearchComponent struct {
 	logStorage          *operatorv1.LogStorage
+	clusterConfig       *ElasticsearchClusterConfig
 	esCertSecrets       []runtime.Object
 	kibanaCertSecrets   []runtime.Object
 	createWebhookSecret bool
@@ -104,6 +111,7 @@ func (es *elasticsearchComponent) Objects() []runtime.Object {
 
 	objs = append(objs, copySecrets(ElasticsearchNamespace, es.pullSecrets...)...)
 	objs = append(objs, es.esCertSecrets...)
+	objs = append(objs, es.clusterConfig.ConfigMap())
 
 	objs = append(objs, es.elasticsearchCluster())
 	objs = append(objs, es.kibana()...)

@@ -35,7 +35,6 @@ const (
 	S3FluentdSecretName                      = "log-collector-s3-credentials"
 	S3KeyIdName                              = "key-id"
 	S3KeySecretName                          = "key-secret"
-	logStorageHashAnnotation                 = "hash.operator.tigera.io/log-storage"
 	elasticsearchSecretsAnnotation           = "hash.operator.tigera.io/elasticsearch-secrets"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
@@ -61,9 +60,8 @@ type S3Credential struct {
 
 func Fluentd(
 	lc *operatorv1.LogCollector,
-	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
-	cluster string,
+	esClusterConfig *ElasticsearchClusterConfig,
 	s3C *S3Credential,
 	f *FluentdFilters,
 	eksConfig *EksCloudwatchLogConfig,
@@ -72,15 +70,14 @@ func Fluentd(
 	installation *operatorv1.Installation,
 ) Component {
 	return &fluentdComponent{
-		lc:           lc,
-		ls:           ls,
-		esSecrets:    esSecrets,
-		cluster:      cluster,
-		s3Credential: s3C,
-		filters:      f,
-		eksConfig:    eksConfig,
-		pullSecrets:  pullSecrets,
-		installation: installation,
+		lc:              lc,
+		esSecrets:       esSecrets,
+		esClusterConfig: esClusterConfig,
+		s3Credential:    s3C,
+		filters:         f,
+		eksConfig:       eksConfig,
+		pullSecrets:     pullSecrets,
+		installation:    installation,
 	}
 }
 
@@ -94,15 +91,14 @@ type EksCloudwatchLogConfig struct {
 }
 
 type fluentdComponent struct {
-	lc           *operatorv1.LogCollector
-	ls           *operatorv1.LogStorage
-	esSecrets    []*corev1.Secret
-	cluster      string
-	s3Credential *S3Credential
-	filters      *FluentdFilters
-	eksConfig    *EksCloudwatchLogConfig
-	pullSecrets  []*corev1.Secret
-	installation *operatorv1.Installation
+	lc              *operatorv1.LogCollector
+	esSecrets       []*corev1.Secret
+	esClusterConfig *ElasticsearchClusterConfig
+	s3Credential    *S3Credential
+	filters         *FluentdFilters
+	eksConfig       *EksCloudwatchLogConfig
+	pullSecrets     []*corev1.Secret
+	installation    *operatorv1.Installation
 }
 
 func (c *fluentdComponent) Objects() []runtime.Object {
@@ -173,13 +169,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)
 
-	// Add Hashes of ConfigMap and Secrets as annotations so if either change
-	// it will trigger a rolling update.
-	annots := map[string]string{
-		logStorageHashAnnotation:       c.ls.Status.ElasticsearchHash,
-		elasticsearchSecretsAnnotation: secretsAnnotationHash(c.esSecrets...),
-	}
-
+	annots := map[string]string{}
 	if c.s3Credential != nil {
 		annots[s3CredentialHashAnnotation] = AnnotationHash(c.s3Credential)
 	}
@@ -187,7 +177,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		annots[filterHashAnnotation] = AnnotationHash(c.filters)
 	}
 
-	ds := appsv1.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "fluentd-node",
@@ -219,8 +209,10 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 	}
 
+	ds = ElasticsearchDecorateAnnotations(ds, c.esClusterConfig, c.esSecrets).(*appsv1.DaemonSet)
+
 	setCriticalPod(&(ds.Spec.Template))
-	return &ds
+	return ds
 }
 
 // logCollectorTolerations creates the node's tolerations.
@@ -270,7 +262,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		VolumeMounts:    volumeMounts,
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
-	}, c.cluster, ElasticsearchUserLogCollector)
+	}, c.esClusterConfig.ClusterName(), ElasticsearchUserLogCollector)
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
@@ -353,13 +345,13 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	}
 
 	envs = append(envs,
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.ls.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.ls.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.ls.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
 
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.ls.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.ls.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.ls.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
 	)
 
 	return envs
@@ -501,13 +493,13 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						Command:      []string{"/bin/eks-log-forwarder-startup"},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
-					}, c.cluster, ElasticsearchUserEksLogForwarder)},
+					}, c.esClusterConfig.ClusterName(), ElasticsearchUserEksLogForwarder)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName,
 						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry),
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
-					}, c.cluster, ElasticsearchUserEksLogForwarder)},
+					}, c.esClusterConfig.ClusterName(), ElasticsearchUserEksLogForwarder)},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},

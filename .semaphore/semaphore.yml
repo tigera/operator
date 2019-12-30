@@ -1,0 +1,39 @@
+version: v1.0
+name: Initial Pipeline
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+blocks:
+  - name: Build
+    task:
+      jobs:
+        - name: Build
+          commands:
+            - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
+            - make ci
+            - >-
+              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then make cd CONFIRM=true;
+              fi
+            - >-
+              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then make
+              maybe-build-release; fi
+      secrets:
+        - name: private-repo
+        - name: quay-robot-semaphore_v2
+      prologue:
+        commands:
+          - checkout
+          - chmod 0600 ~/.keys/*
+          - ssh-add ~/.keys/*
+          - >-
+            if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then unset QUAY_USERNAME
+            QUAY_TOKEN; docker logout; docker logout quay.io; else docker login
+            -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io; fi
+          - cache restore go-pkg-cache
+          - cache restore go-mod-cache
+      epilogue:
+        on_pass:
+          commands:
+            - cache store go-pkg-cache .go-pkg-cache
+            - 'cache store go-mod-cache ${HOME}/go/pkg/mod/cache'

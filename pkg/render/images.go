@@ -64,6 +64,9 @@ const (
 	ECKOperatorImageName      = "eck/eck-operator:" + components.VersionECKOperator
 	ECKElasticsearchImageName = "elasticsearch/elasticsearch:" + components.VersionECKElasticsearch
 	EsCuratorImageName        = "tigera/es-curator:" + components.VersionEsCurator
+
+	// Multicluster tunnel image.
+	GuardianImageName = "tigera/guardian:" + components.VersionGuardian
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.

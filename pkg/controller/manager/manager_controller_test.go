@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+
 	"github.com/tigera/operator/pkg/apis"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -38,7 +39,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(context.Background(), instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(context.Background(), c, operatorv1.ProviderNone)
+		instance, err = GetManager(context.Background(), c)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

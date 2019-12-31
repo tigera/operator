@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	"github.com/tigera/operator/pkg/elasticsearch"
@@ -19,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -73,7 +73,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create manager-controller: %v", err)
+		return fmt.Errorf("failed to create manager-controller: %v", err)
 	}
 
 	// Watch for changes to primary resource Manager
@@ -97,6 +97,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		render.ElasticsearchPublicCertSecret,
 		render.ElasticsearchUserManager,
 		render.KibanaPublicCertSecret,
+		render.VoltronTunnelSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Secret resource %s: %v", secretName, err)
@@ -109,6 +110,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	if err = utils.AddNetworkWatch(c); err != nil {
+		return fmt.Errorf("manager-controller failed to watch Network resource: %v", err)
 	}
 
 	return nil
@@ -127,7 +132,7 @@ type ReconcileManager struct {
 }
 
 // GetManager returns the default manager instance with defaults populated.
-func GetManager(ctx context.Context, cli client.Client, provider operatorv1.Provider) (*operatorv1.Manager, error) {
+func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, error) {
 	// Fetch the manager instance. We only support a single instance named "default".
 	instance := &operatorv1.Manager{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
@@ -156,7 +161,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	ctx := context.Background()
 
 	// Fetch the Manager instance
-	instance, err := GetManager(ctx, r.client, r.provider)
+	instance, err := GetManager(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Manager object not found")
@@ -274,6 +279,23 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
+	var management = installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement
+	var tunnelSecret *corev1.Secret
+	if management {
+
+		// If clusterType is management and the customer brings its own cert, copy it over to the manager ns.
+		tunnelSecret = &corev1.Secret{}
+		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				tunnelSecret = nil
+			} else {
+				r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
+				return reconcile.Result{}, nil
+			}
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -288,6 +310,8 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.provider == operatorv1.ProviderOpenShift,
 		installation.Spec.Registry,
 		oidcConfig,
+		management,
+		tunnelSecret,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

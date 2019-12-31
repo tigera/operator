@@ -64,15 +64,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 
 		// Check that at most one form of IP auto-detection is configured per-family.
-		if instance.Spec.CalicoNetwork.nodeAddressAutodetectionV4 != nil {
-			err = validateNodeAddressDetection(instance.Spec.CalicoNetwork.nodeAddressAutodetectionV4)
+		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {
+			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
 			if err != nil {
 				return err
 			}
 
 		}
-		if instance.Spec.CalicoNetwork.nodeAddressAutodetectionV6 != nil {
-			err = validateNodeAddressDetection(instance.Spec.CalicoNetwork.nodeAddressAutodetectionV6)
+		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 != nil {
+			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
 			if err != nil {
 				return err
 			}
@@ -83,16 +83,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error {
 	numEnabled := 0
-	if len(v4AutoDetection.Interface) != 0 {
+	if len(ad.Interface) != 0 {
 		numEnabled++
 	}
-	if len(v4AutoDetection.SkipInterface) != 0 {
-		numEnalbed++
+	if len(ad.SkipInterface) != 0 {
+		numEnabled++
 	}
-	if len(v4AutoDetection.CanReach) != 0 {
-		numEnalbed++
+	if len(ad.CanReach) != 0 {
+		numEnabled++
 	}
-	if v4AutoDetection.FirstFound != nil && v4AutoDetection.FirstFound {
+	if ad.FirstFound != nil && *ad.FirstFound {
 		numEnabled++
 	}
 

@@ -36,7 +36,7 @@ const (
 
 	// Manager images.
 	VersionManager        = "v2.5.0-347-gb01f72d0"
-	VersionManagerProxy   = "v2.7.0-0.dev-19-gb692ec5"
+	VersionManagerProxy   = "v2.7.0-0.dev-21-g9e5b660"
 	VersionManagerEsProxy = "v2.6.0-0.dev-96-g38d646f"
 
 	// ECK Elasticsearch images
@@ -48,5 +48,5 @@ const (
 	VersionKibana = "7.3"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "v2.7.0-0.dev-19-gb692ec5"
+	VersionGuardian = "v2.7.0-0.dev-21-g9e5b660"
 )

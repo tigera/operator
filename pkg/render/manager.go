@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -42,6 +43,15 @@ const (
 	techPreviewEnabledValue = "enabled"
 )
 
+// ManagementClusterConnection configuration constants
+const (
+	VoltronName                 = "tigera-voltron"
+	VoltronTunnelSecretName     = "tigera-management-cluster-connection"
+	voltronTunnelHashAnnotation = "hash.operator.tigera.io/voltron-tunnel"
+	defaultVoltronPort          = "9443"
+	defaultTunnelVoltronPort    = "9449"
+)
+
 func Manager(
 	cr *operator.Manager,
 	esSecrets []*corev1.Secret,
@@ -52,6 +62,8 @@ func Manager(
 	openshift bool,
 	registry string,
 	oidcConfig *corev1.ConfigMap,
+	management bool,
+	tunnelSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
@@ -72,6 +84,16 @@ func Manager(
 	// that should not be set on a new object.
 	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
 	tlsSecrets = append(tlsSecrets, copy)
+
+	var tunnelSecrets []*corev1.Secret
+	if management {
+		// If there is no secret, we should create one.
+		if tunnelSecret == nil {
+			tunnelSecrets = []*corev1.Secret{voltronTunnelSecret()}
+		} else {
+			tunnelSecrets = []*corev1.Secret{tunnelSecret}
+		}
+	}
 	return &managerComponent{
 		cr:              cr,
 		esSecrets:       esSecrets,
@@ -82,6 +104,8 @@ func Manager(
 		openshift:       openshift,
 		registry:        registry,
 		oidcConfig:      oidcConfig,
+		management:      management,
+		tunnelSecrets:   tunnelSecrets,
 	}, nil
 }
 
@@ -95,6 +119,10 @@ type managerComponent struct {
 	openshift       bool
 	registry        string
 	oidcConfig      *corev1.ConfigMap
+	// If true, this is a management cluster.
+	management bool
+	// The tunnel secret if present in the operator namespace
+	tunnelSecrets []*corev1.Secret
 }
 
 func (c *managerComponent) Objects() []runtime.Object {
@@ -111,7 +139,6 @@ func (c *managerComponent) Objects() []runtime.Object {
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
-		c.managerDeployment(),
 		c.managerService(),
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
@@ -123,9 +150,11 @@ func (c *managerComponent) Objects() []runtime.Object {
 	}
 	objs = append(objs, copySecrets(ManagerNamespace, c.esSecrets...)...)
 	objs = append(objs, copySecrets(ManagerNamespace, c.kibanaSecrets...)...)
+	objs = append(objs, copySecrets(ManagerNamespace, c.tunnelSecrets...)...)
 	if c.oidcConfig != nil {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
 	}
+	objs = append(objs, c.managerDeployment())
 
 	return objs
 }
@@ -142,6 +171,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		// reserves resources for critical add-on pods so that they can be rescheduled after
 		// a failure.  This annotation works in tandem with the toleration below.
 		"scheduler.alpha.kubernetes.io/critical-pod": "",
+	}
+	if c.management {
+		annotations[voltronTunnelHashAnnotation] = AnnotationHash(c.tunnelSecrets[0].Data)
 	}
 	if len(c.tlsSecrets) > 0 {
 		// Add a hash of the Secret to ensure if it changes the manager will be
@@ -202,6 +234,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
+	optional := true
 	v := []v1.Volume{
 		{
 			Name: ManagerTLSSecretName,
@@ -216,6 +249,15 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
 					SecretName: KibanaPublicCertSecret,
+				},
+			},
+		},
+		{
+			Name: VoltronTunnelSecretName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: VoltronTunnelSecretName,
+					Optional:   &optional,
 				},
 			},
 		},
@@ -297,6 +339,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: c.policyRecommendationSupport()},
+		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -350,19 +393,22 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 // managerProxyContainer returns the container for the manager proxy container.
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
-		Name:  "tigera-voltron",
-		Image: constructImage(ManagerProxyImageName, c.registry),
+		Name:  VoltronName,
+		Image: "gcr.io/tigera-dev/cnx/tigera/voltron:f676b92cef8c",
 		Env: []corev1.EnvVar{
-			{Name: "VOLTRON_PORT", Value: "9443"},
+			{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
 			{Name: "VOLTRON_LOGLEVEL", Value: "info"},
 			{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
 			{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 			{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
+			{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
 			{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana"},
+			{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel/"},
 		},
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),
@@ -416,6 +462,22 @@ func (c *managerComponent) managerService() *v1.Service {
 			Selector: map[string]string{
 				"k8s-app": "tigera-manager",
 			},
+		},
+	}
+}
+
+// managerService returns the service exposing the Tigera Secure web app.
+func voltronTunnelSecret() *v1.Secret {
+	key, cert := ceateSelfSignedVoltronSecret()
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronTunnelSecretName,
+			Namespace: ManagerNamespace,
+		},
+		Data: map[string][]byte{
+			"cert": []byte(cert),
+			"key":  []byte(key),
 		},
 	}
 }

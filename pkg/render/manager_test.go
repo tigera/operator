@@ -15,12 +15,19 @@
 package render_test
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
@@ -29,13 +36,11 @@ import (
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	var instance *operator.Manager
-	var registry string
 	oidcEnvVar := corev1.EnvVar{
 		Name:      "CNX_WEB_OIDC_AUTHORITY",
 		Value:     "",
 		ValueFrom: nil,
 	}
-	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
 	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -50,10 +55,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Manager(instance, nil, nil, esConfigMap, nil, nil, notOpenshift, registry, nil)
-		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(12))
+		resources := renderObjects(instance, nil)
+		Expect(len(resources)).To(Equal(13))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -71,10 +74,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
-			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 		}
 
 		i := 0
@@ -102,15 +106,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
 				}
 			}
-			component, err := render.Manager(instance, nil, nil, esConfigMap, nil, nil, notOpenshift, registry, nil)
-			Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-			resources := component.Objects()
+			resources := renderObjects(instance, nil)
+			Expect(len(resources)).To(Equal(13))
 
 			// Should render the correct resource based on test case.
-			Expect(len(resources)).To(Equal(12))
 			Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-			d := resources[8].(*v1.Deployment)
+			d := resources[12].(*v1.Deployment)
 
 			Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
@@ -129,14 +131,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Namespace: render.OperatorNamespace(),
 			},
 		}
-		component, err := render.Manager(instance, nil, nil, esConfigMap, nil, nil, notOpenshift, registry, oidcConfig)
-		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-
 		// Should render the correct resource based on test case.
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(13))
+		resources := renderObjects(instance, oidcConfig)
+		Expect(len(resources)).To(Equal(14))
+
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
-		d := resources[8].(*v1.Deployment)
+		d := resources[13].(*v1.Deployment)
 
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 
@@ -147,9 +147,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerOIDCConfig))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(render.ManagerOIDCJwksURI))
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
-		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
+		Expect(d.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Volumes[3].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
@@ -159,15 +159,87 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		instance.Spec.Auth.Authority = authority
 		oidcEnvVar.Value = authority
 
-		component, err := render.Manager(instance, nil, nil, esConfigMap, nil, nil, notOpenshift, registry, nil)
-		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-
 		// Should render the correct resource based on test case.
-		resources := component.Objects()
-		d := resources[8].(*v1.Deployment)
+		resources := renderObjects(instance, nil)
+		Expect(len(resources)).To(Equal(13))
+		d := resources[12].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
+
+	It("should render multicluster settings properly", func() {
+		resources := renderObjects(instance, nil)
+		Expect(len(resources)).To(Equal(13))
+
+		By("creating a valid self-signed cert")
+		// Use the x509 package to validate that the cert was signed with the privatekey
+		voltronSecret := resources[11].(*corev1.Secret)
+		validateSecret(voltronSecret)
+
+		By("configuring the manager deployment")
+		manager := resources[12].(*v1.Deployment).Spec.Template.Spec.Containers[0]
+		Expect(manager.Name).To(Equal("tigera-manager"))
+		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
+
+		voltron := resources[12].(*v1.Deployment).Spec.Template.Spec.Containers[2]
+		Expect(voltron.Name).To(Equal("tigera-voltron"))
+		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
+	})
 })
+
+func validateSecret(voltronSecret *corev1.Secret) {
+	var newCert *x509.Certificate
+
+	cert := voltronSecret.Data["cert"]
+	key := voltronSecret.Data["key"]
+	_, err := tls.X509KeyPair(cert, key)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	roots := x509.NewCertPool()
+	ok := roots.AppendCertsFromPEM([]byte(cert))
+	Expect(ok).To(BeTrue())
+
+	block, _ := pem.Decode([]byte(cert))
+	Expect(err).ShouldNot(HaveOccurred())
+	Expect(block).To(Not(BeNil()))
+
+	newCert, err = x509.ParseCertificate(block.Bytes)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	opts := x509.VerifyOptions{
+		DNSName: render.VoltronDnsName,
+		Roots:   roots,
+	}
+
+	_, err = newCert.Verify(opts)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	opts = x509.VerifyOptions{
+		DNSName:     render.VoltronDnsName,
+		Roots:       x509.NewCertPool(),
+		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
+	}
+	_, err = newCert.Verify(opts)
+	Expect(err).Should(HaveOccurred())
+
+}
+
+func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []runtime.Object {
+	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
+	component, err := render.Manager(instance,
+		nil,
+		nil,
+		esConfigMap,
+		nil,
+		nil,
+		false,
+		"",
+		oidcConfig,
+		true,
+		nil)
+	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+	resources := component.Objects()
+	return resources
+}

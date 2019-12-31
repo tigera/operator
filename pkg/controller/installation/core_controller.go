@@ -32,6 +32,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 
+	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -274,7 +275,7 @@ func fillDefaults(instance *operator.Installation) error {
 		// Default IPv4 address detection to "first found" if not specified.
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
 			t := true
-			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = operator.NodeAddressAutodetection{
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
 				FirstFound: &t,
 			}
 		}
@@ -321,7 +322,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
@@ -329,14 +330,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
-		r.status.SetDegraded("Error validating CRD", err.Error())
+		r.SetDegraded("Error validating CRD", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	if err = r.client.Update(ctx, instance); err != nil {
-		r.status.SetDegraded("Failed to write defaults", err.Error())
+		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -350,9 +351,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
 		} else if err != nil {
-			r.status.SetDegraded("Error discovering Tigera Secure availability", err.Error())
+			r.SetDegraded("Error discovering Tigera Secure availability", err, reqLogger)
 		} else {
-			r.status.SetDegraded("Cannot deploy Tigera Secure", "Missing Tigera Secure custom resource definitions")
+			r.SetDegraded("Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
 		}
 
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
@@ -367,21 +368,21 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
-		r.status.SetDegraded("Error with Typha/Felix secrets", err.Error())
+		r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving confd templates")
-		r.status.SetDegraded("Error retrieving confd templates", err.Error())
+		r.SetDegraded("Error retrieving confd templates", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -390,7 +391,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
 		if err != nil {
 			log.Error(err, "Error checking if OpenShift is on AWS")
-			r.status.SetDegraded("Error checking if OpenShift is on AWS", err.Error())
+			r.SetDegraded("Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -410,7 +411,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
-		r.status.SetDegraded("Error with rendering Calico resources", err.Error())
+		r.SetDegraded("Error with rendering Calico resources", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -431,7 +432,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	for _, component := range components {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -445,12 +446,15 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openshiftConfig := &configv1.Network{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
+		l := reqLogger.WithValues("OpenshiftNetworkConfig", openshiftConfig)
 		if err != nil {
-			r.status.SetDegraded("Unable to update OpenShift Network config: failed to read OpenShift network configuration", err.Error())
+			r.SetDegraded("Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, l)
 			return reconcile.Result{}, err
 		}
+		configOg := openshiftConfig.DeepCopy()
+		statusExists := (openshiftConfig.Status.ClusterNetwork != nil)
 		// If configured to run in openshift, update the config status with the current state.
-		reqLogger.V(1).Info("Updating OpenShift cluster network status")
+		l.V(1).Info("Updating OpenShift cluster network status")
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
 		openshiftConfig.Status.NetworkType = "Calico"
@@ -463,10 +467,19 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// value, so might not perform the best but will work everywhere.
 			openshiftConfig.Status.ClusterNetworkMTU = 1410
 		}
-		patch := client.MergeFrom(openshiftConfig)
-		if err = r.client.Patch(ctx, openshiftConfig, patch); err != nil {
-			r.status.SetDegraded("Error updating openshift network status", err.Error())
-			return reconcile.Result{}, err
+
+		if statusExists {
+			patch := client.MergeFrom(configOg)
+			x := l.WithValues("patch", patch)
+			if err = r.client.Patch(ctx, openshiftConfig, patch); err != nil {
+				r.SetDegraded("Error patching openshift network status", err, x)
+				return reconcile.Result{}, err
+			}
+		} else {
+			if err = r.client.Status().Update(ctx, openshiftConfig); err != nil {
+				r.SetDegraded("Error updating openshift network status", err, l)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -506,6 +519,11 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	}
 
 	return config
+}
+
+func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {
+	log.Error(err, reason)
+	r.status.SetDegraded(reason, err.Error())
 }
 
 // GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for

@@ -20,6 +20,7 @@ const (
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
+	GuardianServiceName            = "tigera-guardian"
 	GuardianConfigMapName          = "tigera-guardian-config"
 	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
@@ -56,6 +57,7 @@ func (c *GuardianComponent) Objects() []runtime.Object {
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
+		c.service(),
 		c.configMap(),
 		copySecrets(GuardianNamespace, c.tunnelSecret)[0],
 	}
@@ -63,6 +65,28 @@ func (c *GuardianComponent) Objects() []runtime.Object {
 
 func (c *GuardianComponent) Ready() bool {
 	return true
+}
+
+func (c *GuardianComponent) service() *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianServiceName,
+			Namespace: GuardianNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"k8s-app": "tigera-guardian",
+			},
+			Ports: []corev1.ServicePort{{
+				Port: 9200,
+				TargetPort: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 8080,
+				},
+				Protocol: "TCP",
+			}},
+		},
+	}
 }
 
 func (c *GuardianComponent) serviceAccount() runtime.Object {

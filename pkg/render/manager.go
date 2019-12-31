@@ -394,7 +394,7 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  VoltronName,
-		Image: "gcr.io/tigera-dev/cnx/tigera/voltron:f676b92cef8c",
+		Image: constructImage(ManagerProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},

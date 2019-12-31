@@ -224,7 +224,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
-			Image: "gcr.io/tigera-dev/cnx/tigera/guardian:e221804933c9",
+			Image: constructImage(GuardianImageName, c.registry),
 			Env: []corev1.EnvVar{
 				{
 					Name:      "GUARDIAN_PORT",

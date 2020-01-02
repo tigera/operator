@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"

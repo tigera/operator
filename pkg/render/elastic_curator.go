@@ -64,8 +64,7 @@ func (ec *elasticCuratorComponent) Objects() []runtime.Object {
 		ec.cronJob(),
 	}
 	objs = append(objs, copyImagePullSecrets(ec.pullSecrets, ElasticsearchNamespace)...)
-	return append(objs, copySecrets(ElasticsearchNamespace, ec.esSecrets...)...)
-
+	return append(objs, secretsToRuntimeObjects(copySecrets(ElasticsearchNamespace, ec.esSecrets...)...)...)
 }
 
 func (ec elasticCuratorComponent) cronJob() *batch.CronJob {

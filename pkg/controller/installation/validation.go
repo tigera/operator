@@ -63,7 +63,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
-		// Check that at most one form of IP auto-detection is configured per-family.
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {
 			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
 			if err != nil {
@@ -81,6 +80,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	return nil
 }
 
+// validateNodeAddressDetection checks that at most one form of IP auto-detection is configured per-family.
 func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error {
 	numEnabled := 0
 	if len(ad.Interface) != 0 {

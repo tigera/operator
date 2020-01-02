@@ -274,7 +274,7 @@ func fillDefaults(instance *operator.Installation) error {
 		// Default IPv4 address detection to "first found" if not specified.
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
 			t := true
-			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = operator.NodeAddressAutodetection{
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
 				FirstFound: &t,
 			}
 		}

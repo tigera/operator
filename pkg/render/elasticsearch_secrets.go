@@ -38,17 +38,8 @@ func ElasticsearchSecrets(updatedESUserSecrets []*corev1.Secret, esPublicCertSec
 
 func (es elasticsearchSecrets) Objects() []runtime.Object {
 	var objs []runtime.Object
-	objs = append(objs, convertSecretsToRuntime(es.updatedESUserSecrets)...)
-	objs = append(objs, copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)
-	return objs
-}
-
-func convertSecretsToRuntime(secrets []*corev1.Secret) []runtime.Object {
-	var objs []runtime.Object
-	for _, secret := range secrets {
-		objs = append(objs, secret)
-	}
-
+	objs = append(objs, secretsToRuntimeObject(es.updatedESUserSecrets...)...)
+	objs = append(objs, secretsToRuntimeObject(copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)...)
 	return objs
 }
 

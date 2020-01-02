@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -107,7 +108,7 @@ func (c *complianceComponent) Objects() []runtime.Object {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	}
 
-	complianceObjs = append(complianceObjs, copySecrets(ComplianceNamespace, c.esSecrets...)...)
+	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(copySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
 	return complianceObjs
 }

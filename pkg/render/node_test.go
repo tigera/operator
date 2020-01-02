@@ -136,6 +136,7 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 
@@ -301,6 +302,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
@@ -415,7 +417,7 @@ var _ = Describe("Node rendering tests", func() {
 			}},
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))

@@ -70,7 +70,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			{
 				// Nodes are watched to monitor for deletions.
 				APIGroups: []string{""},
-				Resources: []string{"nodes", "endpoints", "services"},
+				Resources: []string{"nodes", "endpoints", "services", "configmaps", "secrets"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
@@ -87,8 +87,13 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			},
 			{
 				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
+				Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets", "managedclusters"},
 				Verbs:     []string{"get", "list", "create", "update", "delete"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"*"},
 			},
 			{
 				// Needs access to update clusterinformations.

@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
@@ -79,8 +80,8 @@ func Elasticsearch(
 		kibanaCertSecrets = []runtime.Object{kibanaCertSecret}
 	}
 
-	esCertSecrets = append(esCertSecrets, copySecrets(ElasticsearchNamespace, esCertSecret)...)
-	kibanaCertSecrets = append(kibanaCertSecrets, copySecrets(KibanaNamespace, kibanaCertSecret)...)
+	esCertSecrets = append(esCertSecrets, secretsToRuntimeObject(copySecrets(ElasticsearchNamespace, esCertSecret)...)...)
+	kibanaCertSecrets = append(kibanaCertSecrets, secretsToRuntimeObject(copySecrets(KibanaNamespace, kibanaCertSecret)...)...)
 	return &elasticsearchComponent{
 		logStorage:          logStorage,
 		clusterConfig:       clusterConfig,
@@ -109,7 +110,7 @@ func (es *elasticsearchComponent) Objects() []runtime.Object {
 	objs = append(objs, es.eckOperator()...)
 	objs = append(objs, createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift))
 
-	objs = append(objs, copySecrets(ElasticsearchNamespace, es.pullSecrets...)...)
+	objs = append(objs, secretsToRuntimeObject(copySecrets(ElasticsearchNamespace, es.pullSecrets...)...)...)
 	objs = append(objs, es.esCertSecrets...)
 	objs = append(objs, es.clusterConfig.ConfigMap())
 
@@ -214,7 +215,7 @@ func (es elasticsearchComponent) eckOperator() []runtime.Object {
 		objs = append(objs, es.eckOperatorClusterAdminClusterRoleBinding())
 	}
 
-	objs = append(objs, copySecrets(ECKOperatorNamespace, es.pullSecrets...)...)
+	objs = append(objs, secretsToRuntimeObject(copySecrets(ECKOperatorNamespace, es.pullSecrets...)...)...)
 	if es.createWebhookSecret {
 		objs = append(objs, es.eckOperatorWebhookSecret())
 	}
@@ -424,7 +425,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 // Create resources needed to run a Kibana cluster (namespace, Kibana resource, secrets...)
 func (es elasticsearchComponent) kibana() []runtime.Object {
 	objs := []runtime.Object{createNamespace(KibanaNamespace, false)}
-	objs = append(objs, copySecrets(KibanaNamespace, es.pullSecrets...)...)
+	objs = append(objs, secretsToRuntimeObject(copySecrets(KibanaNamespace, es.pullSecrets...)...)...)
 	objs = append(objs, es.kibanaCertSecrets...)
 	objs = append(objs, es.kibanaCR())
 	return objs

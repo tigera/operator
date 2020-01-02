@@ -54,6 +54,7 @@ var _ = Describe("Defaulting logic tests", func() {
 
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
+		var ff bool = true
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -74,6 +75,10 @@ var _ = Describe("Defaulting logic tests", func() {
 						NodeSelector:  "has(thiskey)",
 					}},
 					MTU: &mtu,
+					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{
+						FirstFound: &ff,
+					},
+					NodeAddressAutodetectionV6: nil,
 				},
 			},
 		}

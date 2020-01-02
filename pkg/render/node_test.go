@@ -38,9 +38,13 @@ var _ = Describe("Node rendering tests", func() {
 	var typhaNodeTLS *render.TyphaNodeTLS
 
 	BeforeEach(func() {
+		ff := true
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CalicoNetwork: &operator.CalicoNetworkSpec{IPPools: []operator.IPPool{{CIDR: "192.168.1.0/16"}}},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
+				},
 			},
 		}
 		typhaNodeTLS = &render.TyphaNodeTLS{
@@ -94,6 +98,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "FELIX_IPINIPMTU", Value: "1440"},
@@ -239,7 +245,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.6.0-0.dev-175-g3f547b6"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(render.TigeraRegistry + "tigera/cnx-node:v2.6.0-0.dev-175-g3f547b6"))
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		optional := true
@@ -250,6 +256,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
@@ -372,6 +380,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
@@ -445,7 +455,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:v2.6.0-0.dev-175-g3f547b6"))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(render.TigeraRegistry + "tigera/cnx-node:v2.6.0-0.dev-175-g3f547b6"))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
 
@@ -457,6 +467,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
@@ -564,6 +576,55 @@ var _ = Describe("Node rendering tests", func() {
 				SubPath:   "template-1.yaml",
 			}))
 	})
+
+	Describe("test IP auto detection", func() {
+		It("should support canReach", func() {
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "can-reach=1.1.1.1")
+		})
+
+		It("should support interface regex", func() {
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "interface=eth*")
+		})
+
+		It("should support skip-interface regex", func() {
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "skip-interface=eth*")
+		})
+
+	})
+
 	DescribeTable("test IP Pool configuration",
 		func(pool operator.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration

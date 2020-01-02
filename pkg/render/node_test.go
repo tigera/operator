@@ -574,6 +574,55 @@ var _ = Describe("Node rendering tests", func() {
 				SubPath:   "template-1.yaml",
 			}))
 	})
+
+	Describe("test IP auto detection", func() {
+		It("should support canReach", func() {
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "can-reach=1.1.1.1")
+		})
+
+		It("should support interface regex", func() {
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "interface=eth*")
+		})
+
+		It("should support skip-interface regex", func() {
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			resources := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "skip-interface=eth*")
+		})
+
+	})
+
 	DescribeTable("test IP Pool configuration",
 		func(pool operator.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration

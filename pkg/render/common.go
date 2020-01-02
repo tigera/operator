@@ -220,8 +220,8 @@ func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object 
 	return secrets
 }
 
-func copySecrets(ns string, oSecrets ...*v1.Secret) []runtime.Object {
-	var secrets []runtime.Object
+func copySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {
+	var secrets []*v1.Secret
 	for _, s := range oSecrets {
 		x := s.DeepCopy()
 		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
@@ -285,4 +285,12 @@ func securityContext() *v1.SecurityContext {
 		RunAsNonRoot:             &runAsNonRoot,
 		AllowPrivilegeEscalation: &allowPriviledgeEscalation,
 	}
+}
+
+func secretsToRuntimeObject(secrets ...*v1.Secret) []runtime.Object {
+	objs := make([]runtime.Object, len(secrets))
+	for i, secret := range secrets {
+		objs[i] = secret
+	}
+	return objs
 }

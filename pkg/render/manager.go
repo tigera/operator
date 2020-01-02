@@ -87,12 +87,13 @@ func Manager(
 
 	var tunnelSecrets []*corev1.Secret
 	if management {
-		// If there is no secret, we should create one.
+		// If there is no secret create one and add it to the operator namespace.
 		if tunnelSecret == nil {
-			tunnelSecrets = []*corev1.Secret{voltronTunnelSecret()}
-		} else {
-			tunnelSecrets = []*corev1.Secret{tunnelSecret}
+			tunnelSecret = voltronTunnelSecret()
+			tunnelSecrets = append(tunnelSecrets, tunnelSecret)
 		}
+
+		tunnelSecrets = append(tunnelSecrets, copySecrets(ManagerNamespace, tunnelSecret)...)
 	}
 	return &managerComponent{
 		cr:              cr,
@@ -148,9 +149,9 @@ func (c *managerComponent) Objects() []runtime.Object {
 	if c.openshift {
 		objs = append(objs, c.securityContextConstraints())
 	}
-	objs = append(objs, copySecrets(ManagerNamespace, c.esSecrets...)...)
-	objs = append(objs, copySecrets(ManagerNamespace, c.kibanaSecrets...)...)
-	objs = append(objs, copySecrets(ManagerNamespace, c.tunnelSecrets...)...)
+	objs = append(objs, secretsToRuntimeObject(copySecrets(ManagerNamespace, c.esSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObject(copySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObject(c.tunnelSecrets...)...)
 	if c.oidcConfig != nil {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
 	}
@@ -473,7 +474,7 @@ func voltronTunnelSecret() *v1.Secret {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      VoltronTunnelSecretName,
-			Namespace: ManagerNamespace,
+			Namespace: OperatorNamespace(),
 		},
 		Data: map[string][]byte{
 			"cert": []byte(cert),

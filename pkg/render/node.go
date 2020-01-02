@@ -727,10 +727,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
-		if v4method != "" {
+		if v4Method != "" {
 			// IPv4 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4method})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
 		} else {
 			// IPv4 Auto-detection is disabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
@@ -738,10 +738,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// Env based on IPv6 auto-detection configuration.
 		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
-		if v6method != "" {
+		if v6Method != "" {
 			// IPv6 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6method})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
 		} else {
 			// IPv6 Auto-detection is disabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
@@ -878,9 +878,8 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node
 // startup processing. It returns an empty string if IP auto detection should not be enabled.
-func (c *nodeComponent) getAutodetectionMethod() string {
-	if c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {
-		ad := c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4
+func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
+	if ad != nil {
 		if len(ad.Interface) != 0 {
 			return fmt.Sprintf("interface=%s", ad.Interface)
 		}
@@ -890,7 +889,7 @@ func (c *nodeComponent) getAutodetectionMethod() string {
 		if len(ad.CanReach) != 0 {
 			return fmt.Sprintf("can-reach=%s", ad.CanReach)
 		}
-		if v4AutoDetection.FirstFound != nil && v4AutoDetection.FirstFound {
+		if ad.FirstFound != nil && *ad.FirstFound {
 			return "first-found"
 		}
 	}

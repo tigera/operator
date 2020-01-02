@@ -13,11 +13,13 @@ blocks:
             - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
             - make ci
             - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then make cd CONFIRM=true;
+              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then 
+                make cd CONFIRM=true;
               fi
             - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then make
-              maybe-build-release; fi
+              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then
+                make maybe-build-release;
+              fi
       secrets:
         - name: private-repo
         - name: quay-robot-semaphore_v2
@@ -27,9 +29,11 @@ blocks:
           - chmod 0600 ~/.keys/*
           - ssh-add ~/.keys/*
           - >-
-            if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then unset QUAY_USERNAME
-            QUAY_TOKEN; docker logout; docker logout quay.io; else docker login
-            -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io; fi
+            if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then
+              unset QUAY_USERNAME QUAY_TOKEN; docker logout; docker logout quay.io;
+            else
+              docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+            fi
           - cache restore go-pkg-cache
           - cache restore go-mod-cache
       epilogue:

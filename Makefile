@@ -266,10 +266,12 @@ run-uts:
 cluster-create: k3d
 	# First make sure any previous cluster is deleted
 	-./k3d delete --name "operator-test-cluster"
+	# Do not deploy the metrics-server so it does not prevent cleanup during UTs
 	./k3d create \
 		--workers 2 \
-		--worker-arg="--no-flannel" \
+		--agent-arg="--no-flannel" \
 		--server-arg="--no-flannel" \
+		--server-arg="--no-deploy=metrics-server" \
 		--name "operator-test-cluster"
 	timeout 10 sh -c "while ! ./k3d get-kubeconfig --name='operator-test-cluster'; do echo 'Waiting for cluster'; sleep 1; done"
 	cp ~/.config/k3d/operator-test-cluster/kubeconfig.yaml .
@@ -299,8 +301,7 @@ cluster-destroy: k3d
 	rm -f ./kubeconfig.yaml
 
 k3d:
-	# TODO: Use a real release of k3d. For now, just use this build which turns off flannel.
-	wget https://github.com/caseydavenport/k3d/releases/download/no-flannel/k3d
+	wget https://github.com/rancher/k3d/releases/download/v1.4.0/k3d-linux-amd64 -O k3d
 	chmod +x ./k3d
 
 kubectl:

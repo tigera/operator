@@ -82,6 +82,8 @@ func writeVersions(osVersions, eeVersions Components) error {
 	defer f.Close()
 
 	var ss = []string{
+		"// This file is auto generated sometimes so if you are changing or updating",
+		"// it then you should consider updating hack/gen-versions/main.go also.",
 		"package components",
 		"",
 		"// This section contains images used when installing open-source Calico.",
@@ -129,6 +131,9 @@ func writeVersions(osVersions, eeVersions Components) error {
 		`	VersionECKKibana = "` + eeVersions.get("eck-kibana") + `"`,
 		`	VersionKibana = "` + eeVersions.get("kibana") + `"`,
 		`	VersionEsCurator = "` + eeVersions.get("es-curator") + `"`,
+		"",
+		"	// Multicluster tunnel image.",
+		`	VersionGuardian = "` + eeVersions.get("guardian") + `"`,
 		")",
 	}
 

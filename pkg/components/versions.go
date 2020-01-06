@@ -37,7 +37,7 @@ const (
 	// Manager images.
 	VersionManager        = "v2.5.0-347-gb01f72d0"
 	VersionManagerProxy   = "v2.7.0-0.dev-21-g9e5b660"
-	VersionManagerEsProxy = "v2.6.0-0.dev-96-g38d646f"
+	VersionManagerEsProxy = "v2.7.0-0.dev-22-g2e2f167"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"

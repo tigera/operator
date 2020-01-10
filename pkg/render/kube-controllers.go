@@ -102,6 +102,21 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
+				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+				Resources: []string{"elasticsearches"},
+				Verbs:     []string{"watch", "get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps", "secrets"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
 				// Needs access to update clusterinformations.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"clusterinformations"},

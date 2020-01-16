@@ -759,7 +759,7 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			// List and download the reports in the Tigera Secure manager.
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalreports"},
+				Resources: []string{"globalreporttypes"},
 				Verbs:     []string{"get"},
 			},
 			// Access to cluster information containing Calico and EE versions from the UI.

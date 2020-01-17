@@ -653,7 +653,7 @@ func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			// Access to flow logs, audit logs, and statistics
 			{
 				APIGroups: []string{"lma.tigera.io"},
-				Resources: []string{"index"},
+				Resources: []string{"*"},
 				ResourceNames: []string{
 					"flows", "audit*", "events", "dns",
 				},
@@ -739,7 +739,7 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			// Access to flow logs, audit logs, and statistics
 			{
 				APIGroups: []string{"lma.tigera.io"},
-				Resources: []string{"index"},
+				Resources: []string{"*"},
 				ResourceNames: []string{
 					"flows", "audit*", "events", "dns",
 				},

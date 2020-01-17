@@ -56,7 +56,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(14))
+		Expect(len(resources)).To(Equal(22))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -108,7 +108,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				}
 			}
 			resources := renderObjects(instance, nil)
-			Expect(len(resources)).To(Equal(14))
+			Expect(len(resources)).To(Equal(22))
 
 			// Should render the correct resource based on test case.
 			Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
@@ -134,7 +134,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 		// Should render the correct resource based on test case.
 		resources := renderObjects(instance, oidcConfig)
-		Expect(len(resources)).To(Equal(15))
+		Expect(len(resources)).To(Equal(23))
 
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
 		d := resources[14].(*v1.Deployment)
@@ -162,7 +162,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		// Should render the correct resource based on test case.
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(14))
+		Expect(len(resources)).To(Equal(22))
 		d := resources[13].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
@@ -172,7 +172,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should render multicluster settings properly", func() {
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(14))
+		Expect(len(resources)).To(Equal(22))
 
 		By("creating a valid self-signed cert")
 		// Use the x509 package to validate that the cert was signed with the privatekey

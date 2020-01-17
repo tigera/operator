@@ -15,7 +15,7 @@ require (
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/pflag v1.0.3
-	github.com/tigera/api v0.0.0-20190901180503-1995fe80fcfb
+	github.com/tigera/api v0.0.0-20200117173712-e68aa19cde26
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apiextensions-apiserver v0.0.0-20190409022649-727a075fdec8

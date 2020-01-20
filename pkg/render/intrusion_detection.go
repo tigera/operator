@@ -159,7 +159,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			},
 			{
 				Name:  "KB_CA_CERT",
-				Value: KibanaDefaultCertPath},
+				Value: KibanaDefaultCertPath
+			},
 			{
 				Name:  "CLUSTER_NAME",
 				Value: c.esClusterConfig.ClusterName(),

@@ -157,7 +157,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 				Name:      "PASSWORD",
 				ValueFrom: envVarSourceFromSecret(secretName, "password", false),
 			},
-			{Name: "KB_CA_CERT", Value: KibanaDefaultCertPath},
+			{
+				Name:  "KB_CA_CERT",
+				Value: KibanaDefaultCertPath},
+			{
+				Name:  "CLUSTER_NAME",
+				Value: c.esClusterConfig.ClusterName(),
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{{
 			Name:      "kibana-ca-cert-volume",

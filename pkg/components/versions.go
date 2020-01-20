@@ -17,7 +17,7 @@ const (
 	VersionTigeraKubeControllers = "v2.6.0-0.dev-86-g506e244-dirty"
 
 	// API server images.
-	VersionAPIServer   = "v2.7.0-0.dev-16-g64e84f77"
+	VersionAPIServer   = "v2.7.0-0.dev-28-g95b7ffeb"
 	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
 
 	// Logging
@@ -36,7 +36,7 @@ const (
 
 	// Manager images.
 	VersionManager        = "v2.5.0-347-gb01f72d0"
-	VersionManagerProxy   = "v2.7.0-0.dev-21-g9e5b660"
+	VersionManagerProxy   = "v2.7.0-0.dev-26-g8e6c4f3"
 	VersionManagerEsProxy = "v2.7.0-0.dev-22-g2e2f167"
 
 	// ECK Elasticsearch images
@@ -48,5 +48,5 @@ const (
 	VersionKibana = "7.3"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "v2.7.0-0.dev-21-g9e5b660"
+	VersionGuardian = "v2.7.0-0.dev-26-g8e6c4f3"
 )

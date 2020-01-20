@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -156,6 +158,7 @@ func (c *managerComponent) Objects() []runtime.Object {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
 	}
 	objs = append(objs, c.managerDeployment())
+	objs = append(objs, c.globalAlertTemplates()...)
 
 	return objs
 }
@@ -812,4 +815,149 @@ func (c *managerComponent) policyRecommendationSupport() string {
 		supported = "true"
 	}
 	return supported
+}
+
+func (c *managerComponent) globalAlertTemplates() []runtime.Object {
+	return []runtime.Object{
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.pod",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[audit] [privileged access] change detected for pod ${objectRef.namespace}/${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=pods",
+				AggregateBy: []string{"objectRef.name", "objectRef.namespace"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.globalnetworkpolicy",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=globalnetworkpolicies",
+				AggregateBy: []string{"objectRef.name", "objectRef.resource"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.globalnetworkset",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=globalnetworksets",
+				AggregateBy: []string{"objectRef.resource", "objectRef.name"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.serviceaccount",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[audit] [privileged access] change detected for serviceaccount ${objectRef.namespace}/${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'='serviceaccounts'",
+				AggregateBy: []string{"objectRef.namespace", "objectRef.name"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.cloudapi",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[flows] [cloud API] cloud metadata API accessed by ${source_namespace}/${source_name_aggr}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "(dest_name_aggr='metadata-api' OR dest_ip='169.254.169.254' OR dest_name_aggr='kse.kubernetes') AND proto='tcp' AND action='allow' AND reporter=src AND (source_namespace='default')",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.ssh",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[flows] ssh flow in default namespace detected from ${source_namespace}/${source_name_aggr}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "proto='tcp' AND action='allow' AND dest_port='22' AND (source_namespace='default' OR dest_namespace='default') AND reporter=src",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.lateral.access",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor is accessed",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "'source_labels.labels'='app=monitor' AND proto=tcp AND action=allow AND reporter=dst",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.lateral.originate",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor initiated connection",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "'source_labels.labels'='app=monitor' AND proto=tcp AND action=allow AND reporter=src AND NOT dest_name_aggr='metadata-api' AND NOT dest_name_aggr='pub' AND NOT dest_name_aggr='kse.kubernetes'",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+	}
 }

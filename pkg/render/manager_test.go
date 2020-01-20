@@ -89,38 +89,19 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 
-	It("should handle tech preview annotation and render manager", func() {
-		testCaseValues := []struct {
-			annotationValue   string
-			envValue          string
-			includeAnnotation bool
-		}{
-			{annotationValue: "Enabled", envValue: "true", includeAnnotation: true},
-			{annotationValue: "enabled", envValue: "true", includeAnnotation: true},
-			{annotationValue: "somethingelse", envValue: "false", includeAnnotation: true},
-			{annotationValue: "", envValue: "false", includeAnnotation: false},
-		}
-		i := 0
-		for _, tcValues := range testCaseValues {
-			if tcValues.includeAnnotation {
-				instance.ObjectMeta.Annotations = map[string]string{
-					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
-				}
-			}
-			resources := renderObjects(instance, nil)
-			Expect(len(resources)).To(Equal(22))
+	It("should ensure cnx policy recommendation support is always set to true", func() {
+		resources := renderObjects(instance, nil)
+		Expect(len(resources)).To(Equal(22))
 
-			// Should render the correct resource based on test case.
-			Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
+		// Should render the correct resource based on test case.
+		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-			d := resources[13].(*v1.Deployment)
+		d := resources[13].(*v1.Deployment)
 
-			Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
-			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
-			Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
-			Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal(tcValues.envValue))
-			i++
-		}
+		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
+		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
+		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
 	})
 
 	It("should render OIDC configmaps given OIDC configuration", func() {

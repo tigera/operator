@@ -15,7 +15,8 @@ require (
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/pflag v1.0.3
-	github.com/tigera/api v0.0.0-20190901180503-1995fe80fcfb
+
+	github.com/tigera/api v0.0.0-20200117234535-b3d9372ce711
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apiextensions-apiserver v0.0.0-20190409022649-727a075fdec8
@@ -24,6 +25,7 @@ require (
 	k8s.io/kube-aggregator v0.0.0-20190404125450-f5e124c822d6
 	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf
 	sigs.k8s.io/controller-runtime v0.2.1
+
 )
 
 // Pinned to kubernetes-1.14.1

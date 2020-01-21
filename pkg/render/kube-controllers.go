@@ -15,6 +15,8 @@
 package render
 
 import (
+	"strings"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apps "k8s.io/api/apps/v1"
 
@@ -173,11 +175,16 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
+	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "node,service"})
-	} else {
-		env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "node"})
+		enabledControllers = append(enabledControllers, "service")
+
+		if c.cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+			enabledControllers = append(enabledControllers, "managedcluster")
+		}
 	}
+
+	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	// Pick which image to use based on variant.
 	image := constructImage(KubeControllersImageNameCalico, c.cr.Spec.Registry)

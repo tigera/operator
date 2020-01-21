@@ -21,42 +21,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var log = logf.Log.WithName("controller_logcollector")
-
-func init() {
-	log.V(2).Info("registering Elasticsearch users for creation")
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserLogCollector,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserLogCollector,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_*"},
-					Privileges: []string{"create_index", "write"},
-				}},
-			},
-		}},
-	})
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserEksLogForwarder,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserEksLogForwarder,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_audit_kube.*"},
-					Privileges: []string{"create_index", "read", "write"},
-				}},
-			},
-		}},
-	})
-}
 
 // Add creates a new LogCollector Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -99,16 +67,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
-	esUser, err := esusers.GetUser(render.ElasticsearchUserLogCollector)
-	if err != nil {
-		// this error indicates a programming error, where we are trying to get an Elasticsearch user that hasn't been
-		// registered with esusers.AddUser, and if this is the case the Elasticsearch user secret will never exist.
-		return err
-	}
-
 	for _, secretName := range []string{
-		esUser.SecretName(), render.ElasticsearchPublicCertSecret,
-		render.S3FluentdSecretName, render.EksLogForwarderSecret} {
+		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
+		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
@@ -223,7 +184,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserLogCollector, render.ElasticsearchUserEksLogForwarder}, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")

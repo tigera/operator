@@ -109,7 +109,7 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 										RunAsNonRoot:             &f,
 										AllowPrivilegeEscalation: &f,
 									},
-								}, ec.clusterName, ElasticsearchUserCurator),
+								}, ec.clusterName, ElasticsearchCuratorUserSecret),
 							},
 							ImagePullSecrets: getImagePullSecretReferenceList(ec.pullSecrets),
 							RestartPolicy:    v1.RestartPolicyOnFailure,

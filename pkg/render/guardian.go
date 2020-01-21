@@ -247,8 +247,9 @@ func (c *GuardianComponent) volumes() []v1.Volume {
 func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
-			Name:  GuardianDeploymentName,
-			Image: constructImage(GuardianImageName, c.registry),
+			Name:            GuardianDeploymentName,
+			Image:           "gcr.io/tigera-dev/experimental/brianmcmahon/tigera/guardian:latest",
+			ImagePullPolicy: "Always",
 			Env: []corev1.EnvVar{
 				{
 					Name:      "GUARDIAN_PORT",

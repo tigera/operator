@@ -62,12 +62,14 @@ func AddComplianceWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
 }
 
-func AddSecretsWatch(c controller.Controller, name, namespace string) error {
+type MetaMatch func(metav1.ObjectMeta) bool
+
+func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
 	s := &v1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return addNamespacedWatch(c, s)
+	return addNamespacedWatch(c, s, metaMatches...)
 }
 
 func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
@@ -88,7 +90,7 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 // addWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.
-func addNamespacedWatch(c controller.Controller, obj runtime.Object) error {
+func addNamespacedWatch(c controller.Controller, obj runtime.Object, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	if objMeta.GetNamespace() == "" {
 		return fmt.Errorf("No namespace provided for namespaced watch")

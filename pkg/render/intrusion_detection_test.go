@@ -17,17 +17,12 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
-	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserIntrusionDetection})
-	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserIntrusionDetectionJob})
-
 	It("should render all resources for a default configuration", func() {
 		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
 

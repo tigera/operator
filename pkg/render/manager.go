@@ -3,7 +3,6 @@ package render
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -33,16 +32,6 @@ const (
 	ElasticsearchUserManager = "tigera-ee-manager"
 	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tls-secret"
 	oidcConfigHashAnnotation = "hash.operator.tigera.io/oidc-config"
-)
-
-const (
-	// Use this annotation to enable the Policy Recommendation tech preview feature.
-	// "tech-preview.operator.tigera.io/policy-recommendation: Enabled"
-	techPreviewFeaturePolicyRecommendationAnnotation = "tech-preview.operator.tigera.io/policy-recommendation"
-
-	// The lower case of the value that we look for to enable a tech preview feature.
-	// The feature is disabled for all other values.
-	techPreviewEnabledValue = "enabled"
 )
 
 // ManagementClusterConnection configuration constants
@@ -342,7 +331,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
-		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: c.policyRecommendationSupport()},
+		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
 	}
 
@@ -806,15 +795,6 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 	}
 
 	return objs
-}
-
-func (c *managerComponent) policyRecommendationSupport() string {
-	supported := "false"
-	a := c.cr.GetObjectMeta().GetAnnotations()
-	if val, ok := a[techPreviewFeaturePolicyRecommendationAnnotation]; ok && strings.ToLower(val) == techPreviewEnabledValue {
-		supported = "true"
-	}
-	return supported
 }
 
 func (c *managerComponent) globalAlertTemplates() []runtime.Object {

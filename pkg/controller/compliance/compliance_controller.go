@@ -258,11 +258,17 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{
+	secretsToWatch := []string{
 		render.ElasticsearchUserComplianceBenchmarker, render.ElasticsearchUserComplianceController,
 		render.ElasticsearchUserComplianceReporter, render.ElasticsearchUserComplianceSnapshotter,
-		render.ElasticsearchUserComplianceServer,
-	}, r.client)
+	}
+
+	// Compliance server is only for Standalone or Management clusters
+	if network.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+		secretsToWatch = append(secretsToWatch, render.ElasticsearchUserComplianceServer)
+	}
+
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), secretsToWatch, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
@@ -279,7 +285,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Compliance(esSecrets, network.Spec.Registry, esClusterConfig, pullSecrets, openshift)
+	component := render.Compliance(esSecrets, network, esClusterConfig, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

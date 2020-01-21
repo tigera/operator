@@ -17,15 +17,14 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/elasticsearch"
 	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("compliance rendering tests", func() {
-	var registry string
 	BeforeEach(func() {
-		registry = "testregistry.com/"
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceBenchmarker})
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceController})
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceReporter})
@@ -33,69 +32,126 @@ var _ = Describe("compliance rendering tests", func() {
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceServer})
 	})
 
-	It("should render all resources for a default configuration", func() {
-		component := render.Compliance(nil, registry, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(28))
-		ns := "tigera-compliance"
-		rbac := "rbac.authorization.k8s.io"
-		idx := 0
+	Context("Standalone cluster", func() {
+		It("should render all resources for a default configuration", func() {
+			component := render.Compliance(nil, &operatorv1.Installation{
+				Spec: operatorv1.InstallationSpec{
+					KubernetesProvider:    operatorv1.ProviderNone,
+					Registry:              "testregistry.com/",
+					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
+				},
+			}, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			resources := component.Objects()
 
-		// Should render the correct resources.
-		ExpectResource(resources[idx], ns, "", "", "v1", "Namespace")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", ns, "", "v1", "ServiceAccount")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1", "Role")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", "", rbac, "v1", "ClusterRole")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", ns, rbac, "v1", "RoleBinding")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding")
-		idx++
-		ExpectResource(resources[idx], "compliance-controller", ns, "apps", "v1", "Deployment")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-reporter", ns, "", "v1", "ServiceAccount")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-reporter", "", rbac, "v1", "ClusterRole")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding")
-		idx++
-		ExpectResource(resources[idx], "tigera.io.report", ns, "", "v1", "PodTemplate")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-server", ns, "", "v1", "ServiceAccount")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-server", "", rbac, "v1", "ClusterRole")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding")
-		idx++
-		ExpectResource(resources[idx], "compliance", ns, "", "v1", "Service")
-		idx++
-		ExpectResource(resources[idx], "compliance-server", ns, "apps", "v1", "Deployment")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-snapshotter", ns, "", "v1", "ServiceAccount")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding")
-		idx++
-		ExpectResource(resources[idx], "compliance-snapshotter", ns, "apps", "v1", "Deployment")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", ns, "", "v1", "ServiceAccount")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole")
-		idx++
-		ExpectResource(resources[idx], "tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding")
-		idx++
-		ExpectResource(resources[idx], "compliance-benchmarker", ns, "apps", "v1", "DaemonSet")
-		idx++
-		ExpectGlobalReportType(resources[idx], "inventory")
-		idx++
-		ExpectGlobalReportType(resources[idx], "network-access")
-		idx++
-		ExpectGlobalReportType(resources[idx], "policy-audit")
-		idx++
-		ExpectGlobalReportType(resources[idx], "cis-benchmark")
+			ns := "tigera-compliance"
+			rbac := "rbac.authorization.k8s.io"
+
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{ns, "", "", "v1", "Namespace"},
+				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-controller", ns, rbac, "v1", "RoleBinding"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-controller", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-reporter", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"tigera.io.report", ns, "", "v1", "PodTemplate"},
+				{"tigera-compliance-snapshotter", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-snapshotter", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-benchmarker", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-benchmarker", ns, "apps", "v1", "DaemonSet"},
+				{"inventory", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance", ns, "", "v1", "Service"},
+				{"compliance-server", ns, "apps", "v1", "Deployment"},
+			}
+
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+
+			for i, expectedRes := range expectedResources {
+				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			ExpectGlobalReportType(resources[19], "inventory")
+			ExpectGlobalReportType(resources[20], "network-access")
+			ExpectGlobalReportType(resources[21], "policy-audit")
+			ExpectGlobalReportType(resources[22], "cis-benchmark")
+		})
+	})
+
+	Context("ManagedCluster", func() {
+		It("should render all resources for a default configuration", func() {
+			component := render.Compliance(nil, &operatorv1.Installation{
+				Spec: operatorv1.InstallationSpec{
+					KubernetesProvider:    operatorv1.ProviderNone,
+					Registry:              "testregistry.com/",
+					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
+				},
+			}, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			resources := component.Objects()
+
+			ns := "tigera-compliance"
+			rbac := "rbac.authorization.k8s.io"
+
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{ns, "", "", "v1", "Namespace"},
+				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-controller", ns, rbac, "v1", "RoleBinding"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-controller", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-reporter", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"tigera.io.report", ns, "", "v1", "PodTemplate"},
+				{"tigera-compliance-snapshotter", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-snapshotter", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-benchmarker", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-benchmarker", ns, "apps", "v1", "DaemonSet"},
+				{"inventory", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+			}
+
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+
+			for i, expectedRes := range expectedResources {
+				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			ExpectGlobalReportType(resources[19], "inventory")
+			ExpectGlobalReportType(resources[20], "network-access")
+			ExpectGlobalReportType(resources[21], "policy-audit")
+			ExpectGlobalReportType(resources[22], "cis-benchmark")
+		})
 	})
 })

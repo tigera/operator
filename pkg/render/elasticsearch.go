@@ -148,12 +148,75 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 		},
 	}
 
-	// We only allow the user to overwrite the resource requirements for the pvc
+	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
 		pvcTemplate.Spec.Resources = *es.logStorage.Spec.Nodes.ResourceRequirements
 	}
 
 	return pvcTemplate
+}
+
+// generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
+func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
+	// Setup default configuration for ES container
+	esContainer := corev1.Container{
+		Name: "elasticsearch",
+		// Important note: Following Elastic ECK docs, the recommended practice is to set
+		// request and limit for memory to the same value:
+		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+		//
+		// Default values for memory request and limit taken from ECK docs:
+		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-default-behavior
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("2Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("2Gi"),
+			},
+		},
+		Env: []corev1.EnvVar{
+			// Important note: Following Elastic ECK docs, the recommendation is to set
+			// the Java heap size to half the size of RAM allocated to the Pod:
+			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+			//
+			// Default values for Java Heap min and max taken from ECK docs:
+			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
+			{Name: "ES_JAVA_OPTS", Value: "-Xms1g -Xmx1g"},
+		},
+	}
+
+	// If the user has provided resource requirements, then use the user overrides instead
+	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
+		esContainer.Resources = *es.logStorage.Spec.Nodes.ResourceRequirements
+
+		// Now extract the memory request value to compute the recommended heap size for ES container
+		memoryQuantity := esContainer.Resources.Requests.Memory()
+		memoryValInt64, ok := memoryQuantity.AsInt64()
+
+		// Handle edge case when fast conversion to Int64 not available
+		if !ok {
+			memoryValInt64 = memoryQuantity.AsDec().UnscaledBig().Int64()
+		}
+		recommendedHeapSize := memoryValInt64 / 2
+		esContainer.Env = []corev1.EnvVar{
+			{
+				Name:  "ES_JAVA_OPTS",
+				Value: fmt.Sprintf("-Xms%dg -Xmx%dg", recommendedHeapSize, recommendedHeapSize),
+			},
+		}
+	}
+
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers:       []corev1.Container{esContainer},
+			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+		},
+	}
+
+	return podTemplate
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
@@ -190,11 +253,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 						},
 					},
 					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{es.pvcTemplate()},
-					PodTemplate: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-						},
-					},
+					PodTemplate:          es.podTemplate(),
 				},
 			},
 		},

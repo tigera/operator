@@ -184,6 +184,14 @@ func tigeraSecureCRDs() []runtime.Object {
 		{
 			scope: apiextensions.ClusterScoped,
 			names: apiextensions.CustomResourceDefinitionNames{
+				Plural:   "globalalerttemplates",
+				Singular: "globalalerttemplate",
+				Kind:     "GlobalAlertTemplate",
+			},
+		},
+		{
+			scope: apiextensions.ClusterScoped,
+			names: apiextensions.CustomResourceDefinitionNames{
 				Plural:   "globalreports",
 				Singular: "globalreport",
 				Kind:     "GlobalReport",

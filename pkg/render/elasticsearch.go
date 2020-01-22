@@ -2,12 +2,14 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
+	inf "gopkg.in/inf.v0"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -148,12 +150,116 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 		},
 	}
 
-	// We only allow the user to overwrite the resource requirements for the pvc
+	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
 		pvcTemplate.Spec.Resources = *es.logStorage.Spec.Nodes.ResourceRequirements
 	}
 
 	return pvcTemplate
+}
+
+// Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
+func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
+	// Setup default configuration for ES container
+	esContainer := corev1.Container{
+		Name: "elasticsearch",
+		// Important note: Following Elastic ECK docs, the recommended practice is to set
+		// request and limit for memory to the same value:
+		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+		//
+		// Default values for memory request and limit taken from ECK docs:
+		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-default-behavior
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("2Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("2Gi"),
+			},
+		},
+		Env: []corev1.EnvVar{
+			// Important note: Following Elastic ECK docs, the recommendation is to set
+			// the Java heap size to half the size of RAM allocated to the Pod:
+			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+			//
+			// Default values for Java Heap min and max taken from ECK docs:
+			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
+			{Name: "ES_JAVA_OPTS", Value: "-Xms1G -Xmx1G"},
+		},
+	}
+
+	// If the user has provided resource requirements, then use the user overrides instead
+	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
+		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
+		esContainer.Resources = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    *userOverrides.Limits.Cpu(),
+				"memory": *userOverrides.Limits.Memory(),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    *userOverrides.Requests.Cpu(),
+				"memory": *userOverrides.Requests.Memory(),
+			},
+		}
+
+		// Now extract the memory request value to compute the recommended heap size for ES container
+		recommendedHeapSize := memoryQuantityToJVMHeapSize(esContainer.Resources.Requests.Memory())
+
+		esContainer.Env = []corev1.EnvVar{
+			{
+				Name:  "ES_JAVA_OPTS",
+				Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
+			},
+		}
+	}
+
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers:       []corev1.Container{esContainer},
+			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+		},
+	}
+
+	return podTemplate
+}
+
+// Determine the recommended JVM heap size as a string (with appropriate unit suffix) based on
+// the given resource.Quantity.
+//
+// Important note: Following Elastic ECK docs, the recommendation is to set the Java heap size
+// to half the size of RAM allocated to the Pod:
+// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
+	// Get the raw number, e.g. a Quantity of "2Gi" becomes 2147483648, whereas "2G" becomes 2000000000
+	rawMemQuantity := q.AsDec()
+
+	// Next we want to cut the raw number by half; we'll do this using the same inf.Dec type that
+	// resource.Quantity uses internally
+	divisor := inf.NewDec(2, 0)
+	quotient := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
+
+	// Note: Depending on the value of the new raw number, the new Quantity will be formatted differently.
+	// E.g.
+	// A raw number of 2000000000 for the new Quantity, when converted to string, will just be "2000000000"
+	// but something like "2684354560" for the new Quantity, when converted to string, will be "2560Mi"
+	//
+	// This is technically acceptable because JVM arguments for Xms and -Xmx accept raw numbers:
+	// https://docs.oracle.com/javase/8/docs/technotes/tools/windows/java.html
+	// E.g. below are all acceptable formats for JVM memory arguments
+	// 		-Xmx83886080
+	// 		-Xmx81920k
+	// 		-Xmx80m
+	newRawMemQuantity := quotient.UnscaledBig().Int64()
+	recommendedQuantity := resource.NewQuantity(newRawMemQuantity, resource.BinarySI)
+
+	// Extract the string representation with correct unit suffix. In order to translate string to a
+	// format that JVM understands, we need to remove the trailing "i".
+	// i.e. "2Gi" becomes "2G"
+	recommendedHeapSize := strings.TrimSuffix(recommendedQuantity.String(), "i")
+
+	return recommendedHeapSize
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
@@ -190,11 +296,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 						},
 					},
 					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{es.pvcTemplate()},
-					PodTemplate: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-						},
-					},
+					PodTemplate:          es.podTemplate(),
 				},
 			},
 		},

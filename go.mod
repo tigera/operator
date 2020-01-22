@@ -17,6 +17,7 @@ require (
 	github.com/spf13/pflag v1.0.3
 
 	github.com/tigera/api v0.0.0-20200117234535-b3d9372ce711
+	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apiextensions-apiserver v0.0.0-20190409022649-727a075fdec8

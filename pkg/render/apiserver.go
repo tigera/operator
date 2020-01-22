@@ -288,6 +288,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 					"globalnetworksets",
 					"networksets",
 					"globalalerts",
+					"globalalerttemplates",
 					"globalthreatfeeds",
 					"globalreporttypes",
 					"globalreports",
@@ -655,7 +656,7 @@ func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-tier-getter",
+			Name: "tigera-tier-getter",
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
@@ -664,8 +665,8 @@ func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
 		},
 		Subjects: []rbacv1.Subject{
 			{
-				Kind:      "User",
-				Name:      "system:kube-controller-manager",
+				Kind:     "User",
+				Name:     "system:kube-controller-manager",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},

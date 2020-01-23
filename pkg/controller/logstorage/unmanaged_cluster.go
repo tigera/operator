@@ -14,8 +14,6 @@ import (
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -29,22 +27,6 @@ const (
 	finalizer                  = "tigera.io/eck-cleanup"
 	defaultElasticsearchShards = 5
 )
-
-func init() {
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserCurator,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserCurator,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_*"},
-					Privileges: []string{"all"},
-				}},
-			},
-		}},
-	})
-}
 
 // reconileUnManaged creates Elasticsearch and Kibana based off the configuration in the LogStorage CR.
 func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *operatorv1.Installation, reqLogger logr.Logger) (reconcile.Result, error) {
@@ -188,18 +170,12 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		return reconcile.Result{}, err
 	}
 
-	updatedESUserSecrets, err := updatedElasticsearchUserSecrets(ctx, esPublicCertSecret, r.client)
-	if err != nil {
-		r.setDegraded(ctx, reqLogger, ls, "Error creating Elasticsearch credentials", err)
-		return reconcile.Result{}, err
-	}
-
-	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(updatedESUserSecrets, esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
+	if err := hdler.CreateOrUpdate(ctx, render.ElasticsearchSecrets(esPublicCertSecret, kibanaPublicCertSecret), r.status); err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error creating / update resource", err)
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchUserCurator}, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")

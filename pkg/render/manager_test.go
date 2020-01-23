@@ -23,14 +23,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/openshift/library-go/pkg/crypto"
-	"github.com/tigera/operator/pkg/elasticsearch"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -41,7 +39,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Value:     "",
 		ValueFrom: nil,
 	}
-	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager})
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.

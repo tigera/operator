@@ -4,7 +4,6 @@ package utils
 import (
 	"context"
 
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -12,16 +11,12 @@ import (
 )
 
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
-func ElasticsearchSecrets(ctx context.Context, esUsernames []string, cli client.Client) ([]*corev1.Secret, error) {
+func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli client.Client) ([]*corev1.Secret, error) {
 	var esUserSecrets []*corev1.Secret
-	for _, esUsername := range esUsernames {
-		esUser, err := esusers.GetUser(esUsername)
-		if err != nil {
-			return nil, err
-		}
+	for _, userSecretName := range userSecretNames {
 		esUserSecret := &corev1.Secret{}
-		err = cli.Get(ctx, types.NamespacedName{
-			Name:      esUser.SecretName(),
+		err := cli.Get(ctx, types.NamespacedName{
+			Name:      userSecretName,
 			Namespace: render.OperatorNamespace(),
 		}, esUserSecret)
 		if err != nil {

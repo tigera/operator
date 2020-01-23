@@ -258,17 +258,34 @@ func fillDefaults(instance *operator.Installation) error {
 				{CIDR: "192.168.0.0/16"},
 			}
 		}
-		if len(instance.Spec.CalicoNetwork.IPPools) == 1 {
-			// Ensure all fields are set on pool
-			pool := &instance.Spec.CalicoNetwork.IPPools[0]
-			if pool.Encapsulation == "" {
-				pool.Encapsulation = operator.EncapsulationDefault
+		var v6pool, v4pool operator.IPPool
+
+		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
+			addr, _, err := net.ParseCIDR(pool.CIDR)
+			if err == nil {
+				if addr.To4() == nil {
+					v6pool = pool
+				} else {
+					v4pool = pool
+				}
 			}
-			if pool.NATOutgoing == "" {
-				pool.NATOutgoing = operator.NATOutgoingDefault
+		}
+
+		if len(v4pool.CIDR) != 0 {
+			if v4pool.Encapsulation == "" {
+				v4pool.Encapsulation = operator.EncapsulationDefault
 			}
-			if pool.NodeSelector == "" {
-				pool.NodeSelector = operator.NodeSelectorDefault
+			if v4pool.NATOutgoing == "" {
+				v4pool.NATOutgoing = operator.NATOutgoingDefault
+			}
+			if v4pool.NodeSelector == "" {
+				v4pool.NodeSelector = operator.NodeSelectorDefault
+			}
+		}
+
+		if len(v6pool.CIDR) != 0 {
+			if v6pool.NodeSelector == "" {
+				v6pool.NodeSelector = operator.NodeSelectorDefault
 			}
 		}
 
@@ -671,13 +688,14 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 			return nil
 		}
 
-		pool := i.Spec.CalicoNetwork.IPPools[0]
-		within := false
-		for _, osCIDR := range o.Spec.ClusterNetwork {
-			within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)
-		}
-		if !within {
-			return fmt.Errorf("The specified IPPool is not within the OpenShift ClusterNetwork")
+		for _, pool := range i.Spec.CalicoNetwork.IPPools {
+			within := false
+			for _, osCIDR := range o.Spec.ClusterNetwork {
+				within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)
+			}
+			if !within {
+				return fmt.Errorf("IPPool %v is not within the OpenShift ClusterNetwork", pool.CIDR)
+			}
 		}
 	}
 	return nil

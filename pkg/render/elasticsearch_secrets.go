@@ -20,17 +20,15 @@ import (
 )
 
 // elasticsearchSecrets is a Component that contains the secrets that need to be created in the tigera operator namespace
-// after Elasticsearch and Kibana are running. At this time these secrets contain elasticsearch users credentials and
-// tls certificate information.
+// after Elasticsearch and Kibana are running. At this time these are the secrets containing certificate information
+// for both Elasticsearch and Kibana.
 type elasticsearchSecrets struct {
-	updatedESUserSecrets   []*corev1.Secret
 	esPublicCertSecret     *corev1.Secret
 	kibanaPublicCertSecret *corev1.Secret
 }
 
-func ElasticsearchSecrets(updatedESUserSecrets []*corev1.Secret, esPublicCertSecret *corev1.Secret, kibanaPublicCertSecret *corev1.Secret) Component {
+func ElasticsearchSecrets(esPublicCertSecret *corev1.Secret, kibanaPublicCertSecret *corev1.Secret) Component {
 	return &elasticsearchSecrets{
-		updatedESUserSecrets:   updatedESUserSecrets,
 		esPublicCertSecret:     esPublicCertSecret,
 		kibanaPublicCertSecret: kibanaPublicCertSecret,
 	}
@@ -38,7 +36,6 @@ func ElasticsearchSecrets(updatedESUserSecrets []*corev1.Secret, esPublicCertSec
 
 func (es elasticsearchSecrets) Objects() []runtime.Object {
 	var objs []runtime.Object
-	objs = append(objs, secretsToRuntimeObjects(es.updatedESUserSecrets...)...)
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)...)
 	return objs
 }

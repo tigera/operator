@@ -29,9 +29,9 @@ const (
 	ManagerOIDCWellknownURI = "/usr/share/nginx/html/.well-known"
 	ManagerOIDCJwksURI      = "/usr/share/nginx/html/discovery"
 
-	ElasticsearchUserManager = "tigera-ee-manager"
-	tlsSecretHashAnnotation  = "hash.operator.tigera.io/tls-secret"
-	oidcConfigHashAnnotation = "hash.operator.tigera.io/oidc-config"
+	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
+	tlsSecretHashAnnotation        = "hash.operator.tigera.io/tls-secret"
+	oidcConfigHashAnnotation       = "hash.operator.tigera.io/oidc-config"
 )
 
 // ManagementClusterConnection configuration constants
@@ -213,8 +213,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					Tolerations:        c.managerTolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserManager),
-						ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserManager),
+						ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret),
+						ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret),
 						c.managerProxyContainer(),
 					},
 					Volumes: c.managerVolumes(),

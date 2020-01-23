@@ -15,10 +15,10 @@
 package render
 
 import (
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
+	"strconv"
+
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	"strconv"
 )
 
 const (
@@ -60,14 +60,8 @@ func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, sh
 	return c
 }
 
-func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUsername string) corev1.Container {
-	esUser, err := esusers.GetUser(esUsername)
-	if err != nil {
-		// The esUser should be validated before we call ElasticsearchContainerDecorateENVVars
-		panic(err)
-	}
+func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName string) corev1.Container {
 	esScheme, esHost, esPort, _ := ParseEndpoint(ElasticsearchHTTPSEndpoint)
-	secretName := esUser.SecretName()
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},
@@ -77,15 +71,15 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserna
 		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
 		{
 			Name:      "ELASTIC_USER",
-			ValueFrom: envVarSourceFromSecret(secretName, "username", false),
+			ValueFrom: envVarSourceFromSecret(esUserSecretName, "username", false),
 		},
 		{
 			Name:      "ELASTIC_USERNAME", // some pods require this name instead of ELASTIC_USER
-			ValueFrom: envVarSourceFromSecret(secretName, "username", false),
+			ValueFrom: envVarSourceFromSecret(esUserSecretName, "username", false),
 		},
 		{
 			Name:      "ELASTIC_PASSWORD",
-			ValueFrom: envVarSourceFromSecret(secretName, "password", false),
+			ValueFrom: envVarSourceFromSecret(esUserSecretName, "password", false),
 		},
 		{Name: "ELASTIC_CA", Value: ElasticsearchDefaultCertPath},
 		{Name: "ES_CA_CERT", Value: ElasticsearchDefaultCertPath},

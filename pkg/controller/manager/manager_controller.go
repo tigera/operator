@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
-
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -29,21 +26,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_manager")
-
-func init() {
-	esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserManager,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserManager,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_*", ".kibana"},
-					Privileges: []string{"read"},
-				}},
-			},
-		}},
-	})
-}
 
 // Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -95,7 +77,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, secretName := range []string{
 		render.ManagerTLSSecretName,
 		render.ElasticsearchPublicCertSecret,
-		render.ElasticsearchUserManager,
+		render.ElasticsearchManagerUserSecret,
 		render.KibanaPublicCertSecret,
 		render.VoltronTunnelSecretName,
 	} {
@@ -251,7 +233,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchUserManager}, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchManagerUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")

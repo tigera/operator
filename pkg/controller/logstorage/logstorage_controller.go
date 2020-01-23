@@ -7,6 +7,9 @@ import (
 	"os"
 	"regexp"
 
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	"github.com/go-logr/logr"
@@ -14,8 +17,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,8 +33,9 @@ import (
 var log = logf.Log.WithName("controller_logstorage")
 
 const (
-	defaultResolveConfPath = "/etc/resolv.conf"
-	defaultLocalDNS        = "svc.cluster.local"
+	defaultResolveConfPath             = "/etc/resolv.conf"
+	defaultLocalDNS                    = "svc.cluster.local"
+	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -130,15 +134,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 
-	esUsers := esusers.GetUsers()
-	var secretsToWatch []string
-	for _, user := range esUsers {
-		secretsToWatch = append(secretsToWatch, user.SecretName())
+	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
+	// the utils folder where the other watch logic is.
+	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			_, hasLabel := e.Meta.GetLabels()[tigeraElasticsearchUserSecretLabel]
+			return e.Meta.GetNamespace() == render.OperatorNamespace() && hasLabel
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			_, hasLabel := e.MetaNew.GetLabels()[tigeraElasticsearchUserSecretLabel]
+			return e.MetaNew.GetNamespace() == render.OperatorNamespace() && hasLabel
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			_, hasLabel := e.Meta.GetLabels()[tigeraElasticsearchUserSecretLabel]
+			return e.Meta.GetNamespace() == render.OperatorNamespace() && hasLabel
+		},
+	})
+	if err != nil {
+		return err
 	}
-	secretsToWatch = append(secretsToWatch, render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret, render.ECKWebhookSecretName)
 
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
-	for _, secretName := range secretsToWatch {
+	for _, secretName := range []string{render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret, render.ECKWebhookSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
 		}

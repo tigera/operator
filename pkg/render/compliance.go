@@ -33,12 +33,12 @@ const (
 )
 
 const (
-	ElasticsearchUserComplianceBenchmarker = "tigera-ee-compliance-benchmarker"
-	ElasticsearchUserComplianceController  = "tigera-ee-compliance-controller"
-	ElasticsearchUserComplianceReporter    = "tigera-ee-compliance-reporter"
-	ElasticsearchUserComplianceSnapshotter = "tigera-ee-compliance-snapshotter"
-	ElasticsearchUserComplianceServer      = "tigera-ee-compliance-server"
-	ElasticsearchUserCurator               = "tigera-ee-curator"
+	ElasticsearchComplianceBenchmarkerUserSecret = "tigera-ee-compliance-benchmarker-elasticsearch-access"
+	ElasticsearchComplianceControllerUserSecret  = "tigera-ee-compliance-controller-elasticsearch-access"
+	ElasticsearchComplianceReporterUserSecret    = "tigera-ee-compliance-reporter-elasticsearch-access"
+	ElasticsearchComplianceSnapshotterUserSecret = "tigera-ee-compliance-snapshotter-elasticsearch-access"
+	ElasticsearchComplianceServerUserSecret      = "tigera-ee-compliance-server-elasticsearch-access"
+	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
 )
 
 func Compliance(
@@ -276,7 +276,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							Image:         constructImage(ComplianceControllerImage, c.installation.Spec.Registry),
 							Env:           envVars,
 							LivenessProbe: complianceLivenessProbe,
-						}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceController),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret),
 					},
 				}),
 			},
@@ -372,7 +372,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
 							},
-						}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceReporter), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 					),
 				},
 				Volumes: []corev1.Volume{
@@ -527,7 +527,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 								PeriodSeconds:       10,
 								FailureThreshold:    5,
 							},
-						}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceServer),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 					},
 				}),
 			},
@@ -635,7 +635,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 								Image:         constructImage(ComplianceSnapshotterImage, c.installation.Spec.Registry),
 								Env:           envVars,
 								LivenessProbe: complianceLivenessProbe,
-							}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceSnapshotter), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+							}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 						),
 					},
 				}),
@@ -771,7 +771,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 								Env:           envVars,
 								VolumeMounts:  volMounts,
 								LivenessProbe: complianceLivenessProbe,
-							}, c.esClusterConfig.ClusterName(), ElasticsearchUserComplianceBenchmarker), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+							}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 						),
 					},
 					Volumes: vols,

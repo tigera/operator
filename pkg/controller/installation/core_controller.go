@@ -258,9 +258,9 @@ func fillDefaults(instance *operator.Installation) error {
 				{CIDR: "192.168.0.0/16"},
 			}
 		}
-		var v6pool, v4pool IPPool
+		var v6pool, v4pool operator.IPPool
 
-		for _, pool := range c.cr.Spec.CalicoNetwork.IPPools {
+		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
 			addr, _, err := net.ParseCIDR(pool.CIDR)
 			if err == nil {
 				if addr.To4() == nil {
@@ -280,6 +280,12 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 			if v4pool.NodeSelector == "" {
 				v4pool.NodeSelector = operator.NodeSelectorDefault
+			}
+		}
+
+		if len(v6pool.CIDR) != 0 {
+			if v6pool.NodeSelector == "" {
+				v6pool.NodeSelector = operator.NodeSelectorDefault
 			}
 		}
 

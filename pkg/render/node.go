@@ -752,7 +752,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 
-		var v6pool, v4pool IPPool
+		var v6pool, v4pool operator.IPPool
 
 		for _, pool := range c.cr.Spec.CalicoNetwork.IPPools {
 			addr, _, err := net.ParseCIDR(pool.CIDR)
@@ -800,7 +800,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			}
 		}
 
-		if len(v4pool) == 0 && len(v6pool) == 0 {
+		if len(v4pool.CIDR) == 0 && len(v6pool.CIDR) == 0 {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 		}
 	}

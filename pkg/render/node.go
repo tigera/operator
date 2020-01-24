@@ -724,11 +724,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
-
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
+
 		if len(c.cr.Spec.CalicoNetwork.IPPools) == 1 {
 			pool := c.cr.Spec.CalicoNetwork.IPPools[0]
 			// set the networking backend
@@ -754,6 +754,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			}
 			if pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: pool.NodeSelector})
+			}
+
+			if pool.BlockSize != nil {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *pool.BlockSize)})
 			}
 		} else if len(c.cr.Spec.CalicoNetwork.IPPools) == 0 {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})

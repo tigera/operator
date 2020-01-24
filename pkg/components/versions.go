@@ -12,32 +12,32 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.0-0.dev-175-g3f547b6"
-	VersionTigeraTypha           = "v2.6.0-0.dev-104-g6c51073"
-	VersionTigeraKubeControllers = "v2.7.0-0.dev-68-g35bdce0-dirty"
+	VersionTigeraNode            = "v2.7.0-0.dev-182-g50b30eb"
+	VersionTigeraTypha           = "v2.7.0-0.dev-70-g781aa81"
+	VersionTigeraKubeControllers = "v2.7.0-0.dev-69-g1af2df3"
 
 	// API server images.
-	VersionAPIServer   = "v2.7.0-0.dev-28-g95b7ffeb"
-	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
+	VersionAPIServer   = "v2.7.0-0.dev-30-g440bdf40"
+	VersionQueryServer = "v2.7.0-0.dev-23-g94e9908"
 
 	// Logging
-	VersionFluentd = "v2.6.0-0.dev-33-g382faf2"
+	VersionFluentd = "v2.7.0-0.dev-4-gb1486b3"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceReporter    = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceServer      = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceSnapshotter = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceBenchmarker = "v2.7.0-0.dev-22-gf5eb877"
+	VersionComplianceController  = "v2.7.0-0.dev-30-ge695e07"
+	VersionComplianceReporter    = "v2.7.0-0.dev-30-ge695e07"
+	VersionComplianceServer      = "v2.7.0-0.dev-30-ge695e07"
+	VersionComplianceSnapshotter = "v2.7.0-0.dev-30-ge695e07"
+	VersionComplianceBenchmarker = "v2.7.0-0.dev-30-ge695e07"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.7.0-0.dev-15-g44db458"
+	VersionIntrusionDetectionController   = "v2.7.0-0.dev-26-g979dece"
 	VersionIntrusionDetectionJobInstaller = "v2.7.0-0.dev-26-g979dece"
 
 	// Manager images.
-	VersionManager        = "v2.5.0-347-gb01f72d0"
+	VersionManager        = "v2.7.0-0.dev-174-g35f293c0"
 	VersionManagerProxy   = "v2.7.0-0.dev-30-g75b3524"
-	VersionManagerEsProxy = "v2.7.0-0.dev-22-g2e2f167"
+	VersionManagerEsProxy = "v2.7.0-0.dev-31-g610afc1"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"

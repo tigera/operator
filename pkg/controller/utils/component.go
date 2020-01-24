@@ -169,7 +169,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		}
 	}
 
-	cmpLog.Info("Done reconciling component")
+	cmpLog.V(1).Info("Done reconciling component")
 	return nil
 }
 

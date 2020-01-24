@@ -292,6 +292,10 @@ func fillDefaults(instance *operator.Installation) error {
 					FirstFound: &t,
 				}
 			}
+			if pool.BlockSize == nil {
+				var twentySix int32 = 26
+				pool.BlockSize = &twentySix
+			}
 		}
 
 		if v6pool != nil {

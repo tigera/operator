@@ -68,7 +68,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if v4pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+
+			if pool.BlockSize != nil && *pool.BlockSize > 32 || *pool.BlockSize < 20 {
+				return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
 			}
 		}
 
@@ -94,8 +98,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					v6pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
 			}
 
-			if v6pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+			if pool.NodeSelector == "" {
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+
+			if pool.BlockSize != nil && *pool.BlockSize > 128 || *pool.BlockSize < 116 {
+				return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
 			}
 		}
 

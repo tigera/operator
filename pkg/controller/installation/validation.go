@@ -68,7 +68,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if v4pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+
+			if v4pool.BlockSize != nil && (*v4pool.BlockSize > 32 || *v4pool.BlockSize < 20) {
+				return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
 			}
 		}
 
@@ -78,7 +82,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
 			}
 
-			// Encapsulation is not supported for IPv6 pools.
 			if v6pool.Encapsulation != operatorv1.EncapsulationNone {
 				return fmt.Errorf("Encapsulation is not supported in IPv6 pools, but it is set for %s", v6pool.CIDR)
 			}
@@ -95,7 +98,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if v6pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+
+			if v6pool.BlockSize != nil && (*v6pool.BlockSize > 128 || *v6pool.BlockSize < 116) {
+				return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
 			}
 		}
 

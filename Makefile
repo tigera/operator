@@ -261,23 +261,16 @@ run-uts:
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) && \
 	ginkgo -r --skipPackage -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
-## Create a local docker-in-docker cluster.
-cluster-create: k3d
+## Create a local kind dual stack cluster.
+KUBECONFIG?=./kubeconfig.yaml
+cluster-create: kubectl
 	# First make sure any previous cluster is deleted
-	-./k3d delete --name "operator-test-cluster"
-	# Do not deploy the metrics-server so it does not prevent cleanup during UTs
-	./k3d create \
-		--workers 2 \
-		--agent-arg="--no-flannel" \
-		--server-arg="--no-flannel" \
-		--server-arg="--no-deploy=metrics-server" \
-		--name "operator-test-cluster"
-	timeout 10 sh -c "while ! ./k3d get-kubeconfig --name='operator-test-cluster'; do echo 'Waiting for cluster'; sleep 1; done"
-	cp ~/.config/k3d/operator-test-cluster/kubeconfig.yaml .
+	make cluster-destroy
+	./deploy/scripts/create_kind_cluster.sh
+	cp ~/.kube/kind-config-kind $(KUBECONFIG)
 	$(MAKE) deploy-crds
 	$(MAKE) create-tigera-operator-namespace
 
-KUBECONFIG?=./kubeconfig.yaml
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		./kubectl apply -f deploy/crds/operator_v1_manager_crd.yaml && \
@@ -295,17 +288,13 @@ deploy-crds: kubectl
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
 
-## Destroy local docker-in-docker cluster
-cluster-destroy: k3d
-	./k3d delete --name "operator-test-cluster"
-	rm -f ./kubeconfig.yaml
-
-k3d:
-	wget https://github.com/rancher/k3d/releases/download/v1.4.0/k3d-linux-amd64 -O k3d
-	chmod +x ./k3d
+## Destroy local kind cluster
+cluster-destroy:
+	./deploy/scripts/delete_kind_cluster.sh
+	rm -f $(KUBECONFIG)
 
 kubectl:
-	curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+	curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
 	chmod +x ./kubectl
 
 

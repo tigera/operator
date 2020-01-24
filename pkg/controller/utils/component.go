@@ -133,7 +133,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		status.SetDeployments(deployments)
 		status.SetStatefulSets(statefulsets)
 	}
-	cmpLog.Info("Done reconciling component")
+	cmpLog.V(1).Info("Done reconciling component")
 	return nil
 }
 

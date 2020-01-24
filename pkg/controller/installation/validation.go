@@ -53,6 +53,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					valid = true
 				}
 			}
+			valid = true
 			if !valid {
 				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s", pool.NATOutgoing,
 					strings.Join(operatorv1.NATOutgoingTypesString, ","))
@@ -60,6 +61,18 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 			if pool.NodeSelector == "" {
 				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+			}
+			if pool.BlockSize != nil {
+				if *pool.BlockSize > 32 || *pool.BlockSize < 20 {
+					return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
+
+				}
+
+				// Verify that the CIDR contains the blocksize.
+				ones, _ := cidr.Mask.Size()
+				if int32(ones) > *pool.BlockSize {
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+				}
 			}
 		}
 

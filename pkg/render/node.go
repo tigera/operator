@@ -752,8 +752,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 		if len(c.cr.Spec.CalicoNetwork.IPPools) == 1 {
 			pool := c.cr.Spec.CalicoNetwork.IPPools[0]
-			// set the networking backend
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: pool.CIDR})
+			nodeEnv = append(nodeEnv, v1.EnvVar{NAME: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%s", *pool.BlockSize)})
+
 			switch pool.Encapsulation {
 			case operator.EncapsulationIPIPCrossSubnet:
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})

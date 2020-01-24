@@ -285,12 +285,16 @@ func fillDefaults(instance *operator.Installation) error {
 			if v4pool.NodeSelector == "" {
 				v4pool.NodeSelector = operator.NodeSelectorDefault
 			}
-			// Default IPv4 address detection to "first found" if not specified.
 			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+				// Default IPv4 address detection to "first found" if not specified.
 				t := true
 				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
 					FirstFound: &t,
 				}
+			}
+			if v4pool.BlockSize == nil {
+				var twentySix int32 = 26
+				v4pool.BlockSize = &twentySix
 			}
 		}
 
@@ -301,12 +305,16 @@ func fillDefaults(instance *operator.Installation) error {
 			if v6pool.NodeSelector == "" {
 				v6pool.NodeSelector = operator.NodeSelectorDefault
 			}
-			// Default IPv6 address detection to "first found" if not specified.
 			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+				// Default IPv6 address detection to "first found" if not specified.
 				t := true
 				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
 					FirstFound: &t,
 				}
+			}
+			if v4pool.BlockSize == nil {
+				var oneTwentyTwo int32 = 122
+				v6pool.BlockSize = &oneTwentyTwo
 			}
 		}
 	}
@@ -329,7 +337,7 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 	if cr.Spec.KubernetesProvider == operator.ProviderNone {
 		cr.Spec.KubernetesProvider = provider
 	}
-	log.WithValues("provider", cr.Spec.KubernetesProvider).Info("Determined provider")
+	log.WithValues("provider", cr.Spec.KubernetesProvider).V(1).Info("Determined provider")
 	return nil
 }
 

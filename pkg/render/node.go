@@ -758,6 +758,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 
 		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork)
 		v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork)
@@ -773,45 +776,32 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
 		}
 
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-
 		if v4pool != nil {
-			// set the networking backend
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR",
-				Value: v4pool.CIDR})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%s", v4pool.BlockSize)})
 
 			switch v4pool.Encapsulation {
 			case operator.EncapsulationIPIPCrossSubnet:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
-					Value: "CrossSubnet"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
 			case operator.EncapsulationIPIP:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
-					Value: "Always"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
 			case operator.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN",
-					Value: "Always"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
 			case operator.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN",
-					Value: "CrossSubnet"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
 			case operator.EncapsulationNone:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
-					Value: "Never"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
 			default:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
-					Value: "Always"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
 			}
 
 			// Default for NAT Outgoing is enabled so it is only necessary to
 			// set when it is being disabled.
 			if v4pool.NATOutgoing == operator.NATOutgoingDisabled {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING",
-					Value: "false"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
 			}
 			if v4pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR",
-					Value: v4pool.NodeSelector})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
 			}
 		} else {
 			// If there's also no IPv6 pool, set NO_DEFAULT_POOLS to "true".
@@ -840,6 +830,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		if v6pool != nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%s", v6pool.BlockSize)})
+
 			if v6pool.NATOutgoing == operator.NATOutgoingDisabled {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING",
 					Value: "false"})

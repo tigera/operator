@@ -504,7 +504,7 @@ func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "get", "watch"},
+				Verbs:     []string{"list", "get", "watch", "update"},
 			},
 		},
 	}

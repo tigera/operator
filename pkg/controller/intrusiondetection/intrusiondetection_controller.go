@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -14,8 +12,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -27,52 +27,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_intrusiondetection")
-
-func init() {
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserIntrusionDetection,
-		Roles: []elasticsearch.Role{
-			{
-				Name: render.ElasticsearchUserIntrusionDetection,
-				Definition: &elasticsearch.RoleDefinition{
-					Cluster: []string{"monitor", "manage_index_templates"},
-					Indices: []elasticsearch.RoleIndex{
-						{
-							Names:      []string{"tigera_secure_ee_*"},
-							Privileges: []string{"read"},
-						},
-						{
-							Names:      []string{".tigera.ipset.*", "tigera_secure_ee_events.*", ".tigera.domainnameset.*"},
-							Privileges: []string{"all"},
-						},
-					},
-				},
-			},
-			{
-				Name: "watcher_admin",
-			}},
-	})
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserIntrusionDetectionJob,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserIntrusionDetectionJob,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"manage_ml", "manage_watcher", "manage"},
-				Indices: []elasticsearch.RoleIndex{
-					{
-						Names:      []string{"tigera_secure_ee_*"},
-						Privileges: []string{"read", "write"},
-					},
-				},
-				Applications: []elasticsearch.Application{{
-					Application: "kibana-.kibana",
-					Privileges:  []string{"all"},
-					Resources:   []string{"*"},
-				}},
-			},
-		}},
-	})
-}
 
 // Add creates a new IntrusionDetection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -110,6 +64,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %v", err)
 	}
 
+	err = c.Watch(&source.Kind{Type: &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
+		Namespace: render.IntrusionDetectionNamespace,
+		Name:      render.IntrusionDetectionInstallerJobName,
+	}}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch installer job: %v", err)
+	}
+
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
 	}
@@ -119,8 +81,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserIntrusionDetection,
-		render.ElasticsearchUserIntrusionDetectionJob, render.KibanaPublicCertSecret,
+		render.ElasticsearchPublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
+		render.ElasticsearchIntrusionDetectionJobUserSecret, render.KibanaPublicCertSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -220,7 +182,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{
-		render.ElasticsearchUserIntrusionDetection, render.ElasticsearchUserIntrusionDetectionJob,
+		render.ElasticsearchIntrusionDetectionUserSecret, render.ElasticsearchIntrusionDetectionJobUserSecret,
 	},
 		r.client)
 	if err != nil {

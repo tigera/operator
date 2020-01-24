@@ -40,8 +40,8 @@ const (
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentdDefaultFlush                      = "5s"
-	ElasticsearchUserLogCollector            = "tigera-fluentd"
-	ElasticsearchUserEksLogForwarder         = "tigera-eks-log-forwarder"
+	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
+	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
 	EksLogForwarderAwsId                     = "aws-id"
 	EksLogForwarderAwsKey                    = "aws-key"
@@ -262,7 +262,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		VolumeMounts:    volumeMounts,
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
-	}, c.esClusterConfig.ClusterName(), ElasticsearchUserLogCollector)
+	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret)
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
@@ -493,13 +493,13 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						Command:      []string{"/bin/eks-log-forwarder-startup"},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
-					}, c.esClusterConfig.ClusterName(), ElasticsearchUserEksLogForwarder)},
+					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName,
 						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry),
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
-					}, c.esClusterConfig.ClusterName(), ElasticsearchUserEksLogForwarder)},
+					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},

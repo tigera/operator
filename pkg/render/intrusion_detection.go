@@ -15,7 +15,6 @@
 package render
 
 import (
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,8 +27,10 @@ import (
 const (
 	IntrusionDetectionNamespace = "tigera-intrusion-detection"
 
-	ElasticsearchUserIntrusionDetection    = "tigera-ee-intrusion-detection"
-	ElasticsearchUserIntrusionDetectionJob = "tigera-ee-installer"
+	ElasticsearchIntrusionDetectionUserSecret    = "tigera-ee-intrusion-detection-elasticsearch-access"
+	ElasticsearchIntrusionDetectionJobUserSecret = "tigera-ee-installer-elasticsearch-access"
+
+	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 )
 
 func IntrusionDetection(
@@ -84,24 +85,24 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 	return ElasticsearchDecorateAnnotations(&batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-es-job-installer",
+			Name:      IntrusionDetectionInstallerJobName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"job-name": "intrusion-detection-es-job-installer",
+					"job-name": IntrusionDetectionInstallerJobName,
 				},
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"job-name": "intrusion-detection-es-job-installer"},
+					Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 				},
 				Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{
 					RestartPolicy:    v1.RestartPolicyOnFailure,
 					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []v1.Container{
-						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserIntrusionDetectionJob),
+						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionJobUserSecret),
 					},
 					Volumes: []corev1.Volume{{
 						Name: "kibana-ca-cert-volume",
@@ -121,14 +122,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	esUser, err := esusers.GetUser(ElasticsearchUserIntrusionDetectionJob)
-	if err != nil {
-		// The esUser should exist at this point and if it doesn't it's a programming error
-		panic(err)
-	}
-	secretName := esUser.SecretName()
 	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTPSEndpoint)
-
+	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
 		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
@@ -309,7 +304,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 					ImagePullSecrets:   ps,
 					Containers: []corev1.Container{
 						ElasticsearchContainerDecorateIndexCreator(
-							ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchUserIntrusionDetection),
+							ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret),
 							c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
 					},
 				}),

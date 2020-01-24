@@ -9,8 +9,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,88 +23,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_compliance")
-
-func init() {
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserComplianceBenchmarker,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserComplianceBenchmarker,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_benchmark_results.*"},
-					Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
-				}},
-			},
-		}},
-	})
-	esusers.AddUser(
-		elasticsearch.User{Username: render.ElasticsearchUserComplianceController,
-			Roles: []elasticsearch.Role{{
-				Name: render.ElasticsearchUserComplianceController,
-				Definition: &elasticsearch.RoleDefinition{
-					Cluster: []string{"monitor", "manage_index_templates"},
-					Indices: []elasticsearch.RoleIndex{{
-						Names:      []string{"tigera_secure_ee_compliance_reports.*"},
-						Privileges: []string{"read"},
-					}},
-				},
-			}},
-		})
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserComplianceReporter,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserComplianceReporter,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{
-					{
-						Names:      []string{"tigera_secure_ee_audit_*"},
-						Privileges: []string{"read"},
-					},
-					{
-						Names:      []string{"tigera_secure_ee_snapshots.*"},
-						Privileges: []string{"read"},
-					},
-					{
-						Names:      []string{"tigera_secure_ee_benchmark_results.*"},
-						Privileges: []string{"read"},
-					},
-					{
-						Names:      []string{"tigera_secure_ee_compliance_reports.*"},
-						Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
-					},
-				},
-			},
-		}},
-	})
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserComplianceSnapshotter,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserComplianceSnapshotter,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_snapshots.*"},
-					Privileges: []string{"create_index", "write", "view_index_metadata", "read"},
-				}},
-			},
-		}},
-	})
-	esusers.AddUser(elasticsearch.User{
-		Username: render.ElasticsearchUserComplianceServer,
-		Roles: []elasticsearch.Role{{
-			Name: render.ElasticsearchUserComplianceServer,
-			Definition: &elasticsearch.RoleDefinition{
-				Cluster: []string{"monitor", "manage_index_templates"},
-				Indices: []elasticsearch.RoleIndex{{
-					Names:      []string{"tigera_secure_ee_compliance_reports.*"},
-					Privileges: []string{"read"},
-				}},
-			},
-		}},
-	})
-}
 
 // Add creates a new Compliance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -153,9 +69,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchPublicCertSecret, render.ElasticsearchUserComplianceBenchmarker,
-		render.ElasticsearchUserComplianceController, render.ElasticsearchUserComplianceReporter,
-		render.ElasticsearchUserComplianceSnapshotter, render.ElasticsearchUserComplianceServer} {
+		render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+		render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
+		render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("compliance-controller failed to watch the Secret resource: %v", err)
 		}
@@ -259,13 +175,13 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	secretsToWatch := []string{
-		render.ElasticsearchUserComplianceBenchmarker, render.ElasticsearchUserComplianceController,
-		render.ElasticsearchUserComplianceReporter, render.ElasticsearchUserComplianceSnapshotter,
+		render.ElasticsearchComplianceBenchmarkerUserSecret, render.ElasticsearchComplianceControllerUserSecret,
+		render.ElasticsearchComplianceReporterUserSecret, render.ElasticsearchComplianceSnapshotterUserSecret,
 	}
 
 	// Compliance server is only for Standalone or Management clusters
 	if network.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		secretsToWatch = append(secretsToWatch, render.ElasticsearchUserComplianceServer)
+		secretsToWatch = append(secretsToWatch, render.ElasticsearchComplianceServerUserSecret)
 	}
 
 	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), secretsToWatch, r.client)

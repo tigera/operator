@@ -17,21 +17,12 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/elasticsearch"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("compliance rendering tests", func() {
-	BeforeEach(func() {
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceBenchmarker})
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceController})
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceReporter})
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceSnapshotter})
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceServer})
-	})
-
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component := render.Compliance(nil, &operatorv1.Installation{

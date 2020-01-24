@@ -17,12 +17,10 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/elasticsearch"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	esusers "github.com/tigera/operator/pkg/elasticsearch/users"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -45,8 +43,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		s3Creds = nil
 		filters = nil
 		eksConfig = nil
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserLogCollector})
-		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserEksLogForwarder})
 
 		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
 	})

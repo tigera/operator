@@ -152,7 +152,15 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 
 	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
-		pvcTemplate.Spec.Resources = *es.logStorage.Spec.Nodes.ResourceRequirements
+		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
+
+		// If the user provided overrides does not contain a storage quantity, then we still need to
+		// set a default
+		if _, ok := userOverrides.Requests["storage"]; !ok {
+			userOverrides.Requests["storage"] = resource.MustParse("10Gi")
+		}
+
+		pvcTemplate.Spec.Resources = userOverrides
 	}
 
 	return pvcTemplate
@@ -228,34 +236,58 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 // Determine the recommended JVM heap size as a string (with appropriate unit suffix) based on
 // the given resource.Quantity.
 //
+// Numeric calculations use the API of the inf.Dec type that resource.Quantity uses internally
+// to perform arithmetic with rounding,
+//
 // Important note: Following Elastic ECK docs, the recommendation is to set the Java heap size
 // to half the size of RAM allocated to the Pod:
 // https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
 func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
-	// Get the raw number, e.g. a Quantity of "2Gi" becomes 2147483648, whereas "2G" becomes 2000000000
+	// Get the Quantity's raw number with any scale factor applied (based any unit when it was parsed)
+	// e.g.
+	// "2Gi" is parsed as a Quantity with value 2147483648, scale factor 0, and returns 2147483648
+	// "2G" is parsed as a Quantity with value 2, scale factor 9, and returns 2000000000
+	// "1000" is parsed as a Quantity with value 1000, scale factor 0, and returns 1000
 	rawMemQuantity := q.AsDec()
 
-	// Next we want to cut the raw number by half; we'll do this using the same inf.Dec type that
-	// resource.Quantity uses internally
+	// Next cut the raw number by half (following Elastic recommendation)
 	divisor := inf.NewDec(2, 0)
-	quotient := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
+	halvedQuantity := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
 
-	// Note: Depending on the value of the new raw number, the new Quantity will be formatted differently.
-	// E.g.
-	// A raw number of 2000000000 for the new Quantity, when converted to string, will just be "2000000000"
-	// but something like "2684354560" for the new Quantity, when converted to string, will be "2560Mi"
-	//
-	// This is technically acceptable because JVM arguments -Xms and -Xmx accept raw numbers.
-	// "... you can use no suffix, or use the suffix k or K for kilobytes (KB), m or M for megabytes (MB),
-	//  g or G for gigabytes (GB). For example, to set the size to 8 GB, you can specify either 8g, 8192m,
-	//  8388608k, or 8589934592 as the argument."
+	// The remaining operations below perform validation and possible modification of the
+	// Quantity number in order to conform to Java standards for JVM arguments -Xms and -Xmx
+	// (for min and max memory limits).
 	// Source: https://docs.oracle.com/javase/8/docs/technotes/tools/windows/java.html
-	newRawMemQuantity := quotient.UnscaledBig().Int64()
+
+	// As part of JVM requirements, ensure that the memory quantity is a multiple of 1024. Round down to
+	// the nearest multiple of 1024.
+	divisor = inf.NewDec(1024, 0)
+	factor := new(inf.Dec).QuoRound(halvedQuantity, divisor, 0, inf.RoundFloor)
+	roundedToNearest := new(inf.Dec).Mul(factor, divisor)
+
+	newRawMemQuantity := roundedToNearest.UnscaledBig().Int64()
+	// Edge case: Ensure a minimum value of at least 2 Mi (megabytes); this could plausibly happens if
+	// the user mistakenly uses the wrong format (e.g. using 1Mi instead of 1Gi)
+	minLimit := inf.NewDec(2097152, 0)
+	if roundedToNearest.Cmp(minLimit) < 0 {
+		newRawMemQuantity = minLimit.UnscaledBig().Int64()
+	}
+
+	// Note: Because we roumd to the nearest mulitple of 1024 above and then use BinarySI format below,
+	// we will always get a binary unit (e.g. Ki, Mi, Gi). However, depending on what the raw number is
+	// the Quantity internal formatter might not use the most intuitive unit.
+	//
+	// E.g. For a raw number 1000000000, we explicitly round to 999999488 to get to the nearest 1024 multiple.
+	// We then create a new Quantity, which will format its value to "976562Ki".
+	// One might expect Quantity to use "Mi" instead of "Ki". However, doing so would result in rounding
+	// (which Quantity does not do).
+	//
+	// Whereas a raw number 2684354560 requires no explicit rounding from us (since it's already a
+	// multiple of 1024). Then the new Quantity will format it to "2560Mi".
 	recommendedQuantity := resource.NewQuantity(newRawMemQuantity, resource.BinarySI)
 
 	// Extract the string representation with correct unit suffix. In order to translate string to a
-	// format that JVM understands, we need to remove the trailing "i".
-	// i.e. "2Gi" becomes "2G"
+	// format that JVM understands, we need to remove the trailing "i" (e.g. "2Gi" becomes "2G")
 	recommendedHeapSize := strings.TrimSuffix(recommendedQuantity.String(), "i")
 
 	return recommendedHeapSize

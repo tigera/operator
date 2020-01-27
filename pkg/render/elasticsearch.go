@@ -2,12 +2,14 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
 	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
+	inf "gopkg.in/inf.v0"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -148,12 +150,147 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 		},
 	}
 
-	// We only allow the user to overwrite the resource requirements for the pvc
+	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
-		pvcTemplate.Spec.Resources = *es.logStorage.Spec.Nodes.ResourceRequirements
+		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
+
+		// If the user provided overrides does not contain a storage quantity, then we still need to
+		// set a default
+		if _, ok := userOverrides.Requests["storage"]; !ok {
+			userOverrides.Requests["storage"] = resource.MustParse("10Gi")
+		}
+
+		pvcTemplate.Spec.Resources = userOverrides
 	}
 
 	return pvcTemplate
+}
+
+// Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
+func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
+	// Setup default configuration for ES container
+	esContainer := corev1.Container{
+		Name: "elasticsearch",
+		// Important note: Following Elastic ECK docs, the recommended practice is to set
+		// request and limit for memory to the same value:
+		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+		//
+		// Default values for memory request and limit taken from ECK docs:
+		// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-default-behavior
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("2Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("2Gi"),
+			},
+		},
+		Env: []corev1.EnvVar{
+			// Important note: Following Elastic ECK docs, the recommendation is to set
+			// the Java heap size to half the size of RAM allocated to the Pod:
+			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+			//
+			// Default values for Java Heap min and max taken from ECK docs:
+			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
+			{Name: "ES_JAVA_OPTS", Value: "-Xms1G -Xmx1G"},
+		},
+	}
+
+	// If the user has provided resource requirements, then use the user overrides instead
+	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
+		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
+		esContainer.Resources = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    *userOverrides.Limits.Cpu(),
+				"memory": *userOverrides.Limits.Memory(),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    *userOverrides.Requests.Cpu(),
+				"memory": *userOverrides.Requests.Memory(),
+			},
+		}
+
+		// Now extract the memory request value to compute the recommended heap size for ES container
+		recommendedHeapSize := memoryQuantityToJVMHeapSize(esContainer.Resources.Requests.Memory())
+
+		esContainer.Env = []corev1.EnvVar{
+			{
+				Name:  "ES_JAVA_OPTS",
+				Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
+			},
+		}
+	}
+
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers:       []corev1.Container{esContainer},
+			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+		},
+	}
+
+	return podTemplate
+}
+
+// Determine the recommended JVM heap size as a string (with appropriate unit suffix) based on
+// the given resource.Quantity.
+//
+// Numeric calculations use the API of the inf.Dec type that resource.Quantity uses internally
+// to perform arithmetic with rounding,
+//
+// Important note: Following Elastic ECK docs, the recommendation is to set the Java heap size
+// to half the size of RAM allocated to the Pod:
+// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
+	// Get the Quantity's raw number with any scale factor applied (based any unit when it was parsed)
+	// e.g.
+	// "2Gi" is parsed as a Quantity with value 2147483648, scale factor 0, and returns 2147483648
+	// "2G" is parsed as a Quantity with value 2, scale factor 9, and returns 2000000000
+	// "1000" is parsed as a Quantity with value 1000, scale factor 0, and returns 1000
+	rawMemQuantity := q.AsDec()
+
+	// Next cut the raw number by half (following Elastic recommendation)
+	divisor := inf.NewDec(2, 0)
+	halvedQuantity := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
+
+	// The remaining operations below perform validation and possible modification of the
+	// Quantity number in order to conform to Java standards for JVM arguments -Xms and -Xmx
+	// (for min and max memory limits).
+	// Source: https://docs.oracle.com/javase/8/docs/technotes/tools/windows/java.html
+
+	// As part of JVM requirements, ensure that the memory quantity is a multiple of 1024. Round down to
+	// the nearest multiple of 1024.
+	divisor = inf.NewDec(1024, 0)
+	factor := new(inf.Dec).QuoRound(halvedQuantity, divisor, 0, inf.RoundFloor)
+	roundedToNearest := new(inf.Dec).Mul(factor, divisor)
+
+	newRawMemQuantity := roundedToNearest.UnscaledBig().Int64()
+	// Edge case: Ensure a minimum value of at least 2 Mi (megabytes); this could plausibly happens if
+	// the user mistakenly uses the wrong format (e.g. using 1Mi instead of 1Gi)
+	minLimit := inf.NewDec(2097152, 0)
+	if roundedToNearest.Cmp(minLimit) < 0 {
+		newRawMemQuantity = minLimit.UnscaledBig().Int64()
+	}
+
+	// Note: Because we roumd to the nearest mulitple of 1024 above and then use BinarySI format below,
+	// we will always get a binary unit (e.g. Ki, Mi, Gi). However, depending on what the raw number is
+	// the Quantity internal formatter might not use the most intuitive unit.
+	//
+	// E.g. For a raw number 1000000000, we explicitly round to 999999488 to get to the nearest 1024 multiple.
+	// We then create a new Quantity, which will format its value to "976562Ki".
+	// One might expect Quantity to use "Mi" instead of "Ki". However, doing so would result in rounding
+	// (which Quantity does not do).
+	//
+	// Whereas a raw number 2684354560 requires no explicit rounding from us (since it's already a
+	// multiple of 1024). Then the new Quantity will format it to "2560Mi".
+	recommendedQuantity := resource.NewQuantity(newRawMemQuantity, resource.BinarySI)
+
+	// Extract the string representation with correct unit suffix. In order to translate string to a
+	// format that JVM understands, we need to remove the trailing "i" (e.g. "2Gi" becomes "2G")
+	recommendedHeapSize := strings.TrimSuffix(recommendedQuantity.String(), "i")
+
+	return recommendedHeapSize
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
@@ -190,11 +327,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 						},
 					},
 					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{es.pvcTemplate()},
-					PodTemplate: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-						},
-					},
+					PodTemplate:          es.podTemplate(),
 				},
 			},
 		},

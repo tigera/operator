@@ -74,15 +74,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch compliance resource: %v", err)
 	}
 
-	for _, secretName := range []string{
-		render.ManagerTLSSecretName,
-		render.ElasticsearchPublicCertSecret,
-		render.ElasticsearchManagerUserSecret,
-		render.KibanaPublicCertSecret,
-		render.VoltronTunnelSecretName,
-	} {
-		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("manager-controller failed to watch Secret resource %s: %v", secretName, err)
+	// Watch the given secrets in each both the manager and operator namespaces
+	for _, namespace := range []string{render.OperatorNamespace(), render.ManagerNamespace} {
+		for _, secretName := range []string{
+			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
+			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
+			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
+		} {
+			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
+				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+			}
 		}
 	}
 
@@ -251,6 +252,13 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	complianceServerCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ComplianceServerCertSecret, Namespace: render.OperatorNamespace()}, complianceServerCertSecret); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	oidcConfig, err := getOIDCConfig(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded("OIDC configuration not available, waiting to become available", err.Error())
@@ -286,6 +294,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		instance,
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
+		complianceServerCertSecret,
 		esClusterConfig,
 		tlsSecret,
 		pullSecrets,

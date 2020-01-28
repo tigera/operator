@@ -39,30 +39,54 @@ const (
 	ElasticsearchComplianceSnapshotterUserSecret = "tigera-ee-compliance-snapshotter-elasticsearch-access"
 	ElasticsearchComplianceServerUserSecret      = "tigera-ee-compliance-server-elasticsearch-access"
 	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
+
+	ComplianceServerCertSecret = "tigera-compliance-server-tls"
+
+	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/s3-credentials"
 )
 
 func Compliance(
 	esSecrets []*corev1.Secret,
 	installation *operatorv1.Installation,
+	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 ) Component {
+	var complianceServerCertSecrets []*corev1.Secret
+	if complianceServerCertSecret == nil {
+		var err error
+		complianceServerCertSecret, err = createOperatorTLSSecret(nil,
+			ComplianceServerCertSecret,
+			"tls.key",
+			"tls.crt",
+			nil, "compliance.tigera-compliance.svc",
+		)
+		if err != nil {
+			panic(err)
+		}
+		complianceServerCertSecrets = []*corev1.Secret{complianceServerCertSecret}
+	}
+
+	complianceServerCertSecrets = append(complianceServerCertSecrets, copySecrets(ComplianceNamespace, complianceServerCertSecret)...)
+
 	return &complianceComponent{
-		esSecrets:       esSecrets,
-		installation:    installation,
-		esClusterConfig: esClusterConfig,
-		pullSecrets:     pullSecrets,
-		openshift:       openshift,
+		esSecrets:                   esSecrets,
+		installation:                installation,
+		esClusterConfig:             esClusterConfig,
+		pullSecrets:                 pullSecrets,
+		complianceServerCertSecrets: complianceServerCertSecrets,
+		openshift:                   openshift,
 	}
 }
 
 type complianceComponent struct {
-	esSecrets       []*corev1.Secret
-	installation    *operatorv1.Installation
-	esClusterConfig *ElasticsearchClusterConfig
-	pullSecrets     []*corev1.Secret
-	openshift       bool
+	esSecrets                   []*corev1.Secret
+	installation                *operatorv1.Installation
+	esClusterConfig             *ElasticsearchClusterConfig
+	pullSecrets                 []*corev1.Secret
+	complianceServerCertSecrets []*corev1.Secret
+	openshift                   bool
 }
 
 func (c *complianceComponent) Objects() []runtime.Object {
@@ -108,6 +132,7 @@ func (c *complianceComponent) Objects() []runtime.Object {
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
 		)
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
 	}
 
 	if c.openshift {
@@ -464,7 +489,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
-
+	defaultMode := int32(420)
 	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -486,6 +511,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					Namespace: ComplianceNamespace,
 					Labels: map[string]string{
 						"k8s-app": "compliance-server",
+					},
+					Annotations: map[string]string{
+						complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
 					},
 				},
 				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
@@ -527,8 +555,32 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 								PeriodSeconds:       10,
 								FailureThreshold:    5,
 							},
+							VolumeMounts: []corev1.VolumeMount{{
+								Name:      "cert",
+								MountPath: "/code/apiserver.local.config/certificates",
+								ReadOnly:  true,
+							}},
 						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 					},
+					Volumes: []corev1.Volume{{
+						Name: "cert",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								DefaultMode: &defaultMode,
+								SecretName:  ComplianceServerCertSecret,
+								Items: []corev1.KeyToPath{
+									{
+										Key:  "tls.crt",
+										Path: "apiserver.crt",
+									},
+									{
+										Key:  "tls.key",
+										Path: "apiserver.key",
+									},
+								},
+							},
+						},
+					}},
 				}),
 			},
 		},

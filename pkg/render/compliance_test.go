@@ -25,13 +25,14 @@ import (
 var _ = Describe("compliance rendering tests", func() {
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component := render.Compliance(nil, &operatorv1.Installation{
+			component, err := render.Compliance(nil, &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
 					KubernetesProvider:    operatorv1.ProviderNone,
 					Registry:              "testregistry.com/",
 					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
 				},
-			}, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			Expect(err).ShouldNot(HaveOccurred())
 			resources := component.Objects()
 
 			ns := "tigera-compliance"
@@ -67,6 +68,8 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
+				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
@@ -89,13 +92,14 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("ManagedCluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component := render.Compliance(nil, &operatorv1.Installation{
+			component, err := render.Compliance(nil, &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
 					KubernetesProvider:    operatorv1.ProviderNone,
 					Registry:              "testregistry.com/",
 					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
 				},
-			}, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			Expect(err).ShouldNot(HaveOccurred())
 			resources := component.Objects()
 
 			ns := "tigera-compliance"

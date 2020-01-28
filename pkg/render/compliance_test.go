@@ -31,7 +31,7 @@ var _ = Describe("compliance rendering tests", func() {
 					Registry:              "testregistry.com/",
 					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
 				},
-			}, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
 			resources := component.Objects()
 
 			ns := "tigera-compliance"
@@ -67,6 +67,8 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
+				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
@@ -95,7 +97,7 @@ var _ = Describe("compliance rendering tests", func() {
 					Registry:              "testregistry.com/",
 					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
 				},
-			}, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
 			resources := component.Objects()
 
 			ns := "tigera-compliance"

@@ -20,9 +20,12 @@ import (
 	"encoding/pem"
 	"time"
 
+	"github.com/tigera/operator/pkg/components"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/openshift/library-go/pkg/crypto"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,6 +87,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
+
+		deployment := resources[13].(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:" + components.VersionManager))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy:" + components.VersionManagerEsProxy))
+		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron:" + components.VersionManagerProxy))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {

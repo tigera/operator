@@ -14,16 +14,19 @@ require (
 	github.com/openshift/library-go v0.0.0-20190924092619-a8c1174d4ee7
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	github.com/pkg/errors v0.8.1
-	github.com/spf13/pflag v1.0.3
+	github.com/spf13/pflag v1.0.5
 
 	github.com/tigera/api v0.0.0-20200117234535-b3d9372ce711
 	gopkg.in/yaml.v2 v2.2.2
-	k8s.io/api v0.0.0-20190612125737-db0771252981
+	k8s.io/api v0.17.2
 	k8s.io/apiextensions-apiserver v0.0.0-20190409022649-727a075fdec8
-	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
+	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
+	k8s.io/cluster-bootstrap v0.17.2 // indirect
+	k8s.io/component-base v0.17.2 // indirect
 	k8s.io/kube-aggregator v0.0.0-20190404125450-f5e124c822d6
 	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf
+	k8s.io/kubernetes v1.14.2
 	sigs.k8s.io/controller-runtime v0.2.1
 )
 

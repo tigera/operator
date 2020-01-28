@@ -258,18 +258,8 @@ func fillDefaults(instance *operator.Installation) error {
 				{CIDR: "192.168.0.0/16"},
 			}
 		}
-		var v6pool, v4pool operator.IPPool
-
-		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
-			addr, _, err := net.ParseCIDR(pool.CIDR)
-			if err == nil {
-				if addr.To4() == nil {
-					v6pool = pool
-				} else {
-					v4pool = pool
-				}
-			}
-		}
+		v4pool := GetIPv4Pool(instance)
+		v6pool := GetIPv6Pool(instance)
 
 		if len(v4pool.CIDR) != 0 {
 			if v4pool.Encapsulation == "" {
@@ -723,4 +713,32 @@ func cidrWithinCidr(cidr, pool string) bool {
 		return true
 	}
 	return false
+}
+
+// GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
+func GetIPv4Pool(i *operator.Installation) *operator.IPPool {
+	for _, pool := range i.Spec.CalicoNetwork.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil {
+			if addr.To4() != nil {
+				return &pool
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
+func GetIPv6Pool(i *operator.Installation) *operator.IPPool {
+	for _, pool := range i.Spec.CalicoNetwork.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil {
+			if addr.To4() == nil {
+				return &pool
+			}
+		}
+	}
+
+	return nil
 }

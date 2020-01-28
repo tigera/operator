@@ -53,7 +53,6 @@ var _ = Describe("Rendering tests", func() {
 			{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
-			{name: render.GuardianConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))

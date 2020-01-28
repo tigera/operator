@@ -47,6 +47,7 @@ func Manager(
 	cr *operator.Manager,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
+	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -87,30 +88,32 @@ func Manager(
 		tunnelSecrets = append(tunnelSecrets, copySecrets(ManagerNamespace, tunnelSecret)...)
 	}
 	return &managerComponent{
-		cr:              cr,
-		esSecrets:       esSecrets,
-		kibanaSecrets:   kibanaSecrets,
-		esClusterConfig: esClusterConfig,
-		tlsSecrets:      tlsSecrets,
-		pullSecrets:     pullSecrets,
-		openshift:       openshift,
-		registry:        registry,
-		oidcConfig:      oidcConfig,
-		management:      management,
-		tunnelSecrets:   tunnelSecrets,
+		cr:                         cr,
+		esSecrets:                  esSecrets,
+		kibanaSecrets:              kibanaSecrets,
+		complianceServerCertSecret: complianceServerCertSecret,
+		esClusterConfig:            esClusterConfig,
+		tlsSecrets:                 tlsSecrets,
+		pullSecrets:                pullSecrets,
+		openshift:                  openshift,
+		registry:                   registry,
+		oidcConfig:                 oidcConfig,
+		management:                 management,
+		tunnelSecrets:              tunnelSecrets,
 	}, nil
 }
 
 type managerComponent struct {
-	cr              *operator.Manager
-	esSecrets       []*corev1.Secret
-	kibanaSecrets   []*corev1.Secret
-	esClusterConfig *ElasticsearchClusterConfig
-	tlsSecrets      []*corev1.Secret
-	pullSecrets     []*corev1.Secret
-	openshift       bool
-	registry        string
-	oidcConfig      *corev1.ConfigMap
+	cr                         *operator.Manager
+	esSecrets                  []*corev1.Secret
+	kibanaSecrets              []*corev1.Secret
+	complianceServerCertSecret *corev1.Secret
+	esClusterConfig            *ElasticsearchClusterConfig
+	tlsSecrets                 []*corev1.Secret
+	pullSecrets                []*corev1.Secret
+	openshift                  bool
+	registry                   string
+	oidcConfig                 *corev1.ConfigMap
 	// If true, this is a management cluster.
 	management bool
 	// The tunnel secret if present in the operator namespace
@@ -142,6 +145,7 @@ func (c *managerComponent) Objects() []runtime.Object {
 	}
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObjects(copySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	objs = append(objs, secretsToRuntimeObjects(c.tunnelSecrets...)...)
 	if c.oidcConfig != nil {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
@@ -164,6 +168,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		// reserves resources for critical add-on pods so that they can be rescheduled after
 		// a failure.  This annotation works in tandem with the toleration below.
 		"scheduler.alpha.kubernetes.io/critical-pod": "",
+		complianceServerTLSHashAnnotation:            AnnotationHash(c.complianceServerCertSecret.Data),
 	}
 	if c.management {
 		annotations[voltronTunnelHashAnnotation] = AnnotationHash(c.tunnelSecrets[0].Data)
@@ -251,6 +256,18 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 				Secret: &v1.SecretVolumeSource{
 					SecretName: VoltronTunnelSecretName,
 					Optional:   &optional,
+				},
+			},
+		},
+		{
+			Name: ComplianceServerCertSecret,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					Items: []v1.KeyToPath{{
+						Key:  "tls.crt",
+						Path: "tls.crt",
+					}},
+					SecretName: ComplianceServerCertSecret,
 				},
 			},
 		},
@@ -401,6 +418,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
 			{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana"},
+			{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance"},
 			{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel/"},
 		},
 		LivenessProbe:   c.managerProxyProbe(),

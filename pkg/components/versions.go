@@ -12,32 +12,32 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.7.0-0.dev-182-g50b30eb"
-	VersionTigeraTypha           = "v2.7.0-0.dev-70-g781aa81"
+	VersionTigeraNode            = "v2.7.0-0.dev-187-gdf31593"
+	VersionTigeraTypha           = "v2.7.0-0.dev-74-g67bc0b1"
 	VersionTigeraKubeControllers = "v2.7.0-0.dev-94-g1d26407"
 
 	// API server images.
-	VersionAPIServer   = "v2.7.0-0.dev-30-g440bdf40"
-	VersionQueryServer = "v2.7.0-0.dev-23-g94e9908"
+	VersionAPIServer   = "v2.7.0-0.dev-32-gb094281f"
+	VersionQueryServer = "v2.7.0-0.dev-26-g232a725"
 
 	// Logging
 	VersionFluentd = "v2.7.0-0.dev-4-gb1486b3"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.7.0-0.dev-30-ge695e07"
-	VersionComplianceReporter    = "v2.7.0-0.dev-30-ge695e07"
-	VersionComplianceServer      = "v2.7.0-0.dev-30-ge695e07"
-	VersionComplianceSnapshotter = "v2.7.0-0.dev-30-ge695e07"
-	VersionComplianceBenchmarker = "v2.7.0-0.dev-30-ge695e07"
+	VersionComplianceController  = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceReporter    = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceServer      = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceSnapshotter = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceBenchmarker = "v2.7.0-0.dev-38-g23b93c3"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.7.0-0.dev-26-g979dece"
-	VersionIntrusionDetectionJobInstaller = "v2.7.0-0.dev-26-g979dece"
+	VersionIntrusionDetectionController   = "v2.7.0-0.dev-27-gd7ce71b"
+	VersionIntrusionDetectionJobInstaller = "v2.7.0-0.dev-27-gd7ce71b"
 
 	// Manager images.
-	VersionManager        = "v2.7.0-0.dev-174-g35f293c0"
+	VersionManager        = "v2.7.0-0.dev-234-g952d0a82"
 	VersionManagerProxy   = "v2.7.0-0.dev-32-gdfdbc7d"
-	VersionManagerEsProxy = "v2.7.0-0.dev-31-g610afc1"
+	VersionManagerEsProxy = "v2.7.0-0.dev-37-gf22e27b"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"

@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -68,12 +71,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %v", err)
 	}
 
-	for _, secretName := range []string{
-		render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
-		render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
-		render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret} {
-		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("compliance-controller failed to watch the Secret resource: %v", err)
+	// Watch the given secrets in each both the compliance and operator namespaces
+	for _, namespace := range []string{render.OperatorNamespace(), render.ComplianceNamespace} {
+		for _, secretName := range []string{
+			render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
+			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
+			render.ComplianceServerCertSecret} {
+			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
+				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+			}
 		}
 	}
 
@@ -162,6 +169,17 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	complianceServerCertSecret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ComplianceServerCertSecret, Namespace: render.OperatorNamespace()}, complianceServerCertSecret); err != nil {
+		if errors.IsNotFound(err) {
+			complianceServerCertSecret = nil
+		} else {
+			log.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -201,7 +219,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Compliance(esSecrets, network, esClusterConfig, pullSecrets, openshift)
+	component := render.Compliance(esSecrets, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

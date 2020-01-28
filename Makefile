@@ -325,7 +325,12 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean images test $(BINDIR)/gen-versions
+ci: clean images test gen-versions
+	# check if user modified versions.go directly instead of going through template
+	git diff-index HEAD -- ./pkg/components/versions.go || \
+	echo "A commit in this PR modified ./pkg/components/versions.go directly. \
+	Please instead modify ./hack/gen-versions/versions.go.tpl or the version data in \
+	./config/"
 
 ## Deploys images to registry
 cd:
@@ -409,20 +414,22 @@ gen-files:
 	operator-sdk generate k8s
 	operator-sdk generate openapi
 
+OS_VERSIONS?=config/calico_versions.yml
+EE_VERSIONS?=config/enterprise_versions.yml
 gen-versions: $(BINDIR)/gen-versions
-ifndef OS_VERSIONS
-	$(error OS_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)
-endif
-ifndef EE_VERSIONS
-	$(error EE_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)
-endif
-	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS)
+	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS) > pkg/components/versions.go
 
-$(BINDIR)/gen-versions:
+$(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) && \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
+
+gen-versions-test:
+	mkdir -p $(BINDIR)
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) && \
+	go test ./hack/gen-versions'
 
 .PHONY: help
 ## Display this help text

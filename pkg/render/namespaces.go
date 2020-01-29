@@ -15,14 +15,15 @@
 package render
 
 import (
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
 )
 
 const (
-	CalicoNamespace           = "calico-system"
 	TigeraPrometheusNamespace = "tigera-prometheus"
 )
 
@@ -42,10 +43,10 @@ type namespaceComponent struct {
 
 func (c *namespaceComponent) Objects() []runtime.Object {
 	ns := []runtime.Object{
-		createNamespace(CalicoNamespace, c.openshift),
+		createNamespace(common.CalicoNamespace, c.openshift),
 	}
 	if len(c.pullSecrets) > 0 {
-		ns = append(ns, copyImagePullSecrets(c.pullSecrets, CalicoNamespace)...)
+		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {

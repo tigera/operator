@@ -18,6 +18,13 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - 'list'
+  - 'watch'
+- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets
@@ -111,3 +118,56 @@ rules:
   - licensekeys
   verbs:
   - get
+
+- apiGroups:
+    - monitoring.coreos.com
+  resources:
+    - servicemonitors
+  verbs:
+    - get
+    - create
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - '*'
+  # Permissions below this point are required for TSEE only.
+- apiGroups:
+    - apiregistration.k8s.io
+  resources:
+    - apiservices
+  verbs:
+    - '*'
+- apiGroups:
+    - "batch"
+  resources:
+    - jobs
+    - cronjobs
+  verbs:
+    - '*'
+- apiGroups:
+    - projectcalico.org
+  resources:
+    - globalreporttypes
+    - licensekeys
+  verbs:
+    - '*'
+- apiGroups:
+    - elasticsearch.k8s.elastic.co
+  resources:
+    - elasticsearches
+  verbs:
+    - '*'
+- apiGroups:
+    - storage.k8s.io
+  resources:
+    - storageclasses
+  verbs:
+    - '*'
+- apiGroups:
+    - kibana.k8s.elastic.co
+  resources:
+    - kibanas
+  verbs:
+    - '*'

@@ -261,13 +261,14 @@ run-uts:
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) && \
 	ginkgo -r --skipPackage -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
+WORKER_COUNT?=2
 ## Create a local docker-in-docker cluster.
 cluster-create: k3d
 	# First make sure any previous cluster is deleted
 	-./k3d delete --name "operator-test-cluster"
 	# Do not deploy the metrics-server so it does not prevent cleanup during UTs
 	./k3d create \
-		--workers 2 \
+		--workers $(WORKER_COUNT) \
 		--agent-arg="--no-flannel" \
 		--server-arg="--no-flannel" \
 		--server-arg="--no-deploy=metrics-server" \

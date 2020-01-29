@@ -21,7 +21,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/upgrade"
+	"github.com/tigera/operator/pkg/controller/migration"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -42,17 +42,17 @@ const (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, up bool) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, upgrade: up}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, migrate bool) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, migrationNeeded: migrate}
 }
 
 type nodeComponent struct {
-	cr            *operator.Installation
-	provider      operator.Provider
-	netConfig     NetworkConfig
-	birdTemplates map[string]string
-	typhaNodeTLS  *TyphaNodeTLS
-	upgrade       bool
+	cr              *operator.Installation
+	provider        operator.Provider
+	netConfig       NetworkConfig
+	birdTemplates   map[string]string
+	typhaNodeTLS    *TyphaNodeTLS
+	migrationNeeded bool
 }
 
 func (c *nodeComponent) Objects() []runtime.Object {
@@ -119,8 +119,8 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 			},
 		},
 	}
-	if c.upgrade {
-		upgrade.ModifyNodeRoleBinding(crb)
+	if c.migrationNeeded {
+		migration.AddBindingForKubeSystemNode(crb)
 	}
 	return crb
 }
@@ -436,8 +436,8 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	}
 
 	setCriticalPod(&(ds.Spec.Template))
-	if c.upgrade {
-		upgrade.ModifyNodeDaemonSet(&ds)
+	if c.migrationNeeded {
+		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}
 	return &ds
 }

@@ -77,7 +77,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 	})
 
-	It("should include updates needed for the core upgrade", func() {
+	It("should include updates needed for migration of core components from kube-system namespace", func() {
 		component := render.Typha(installation, provider, typhaNodeTLS, true)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))

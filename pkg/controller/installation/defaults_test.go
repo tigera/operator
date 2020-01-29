@@ -30,8 +30,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		v4pool := GetIPv4Pool(instance)
+		Expect(v4pool).ToNot(BeEmpty())
+		Expect(v4pool.CIDR).To(Equal("192.168.0.0/16"))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -40,8 +41,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		v4pool := GetIPv4Pool(instance)
+		Expect(v4pool).ToNot(BeEmpty())
+		Expect(v4pool.CIDR).To(Equal("192.168.0.0/16"))
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -100,12 +102,13 @@ var _ = Describe("Defaulting logic tests", func() {
 	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",
 		func(i *operator.Installation, on *osconfigv1.Network) {
 			Expect(mergeAndFillDefaults(i, on)).To(BeNil())
-			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) == 1 {
+			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
 				pool := i.Spec.CalicoNetwork.IPPools[0]
-				Expect(pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", pool)
-				Expect(pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", pool)
-				Expect(pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", pool)
-				Expect(pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", pool)
+				v4pool := GetIPv4Pool(instance)
+				Expect(v4pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", pool)
+				Expect(v4pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", v4pool)
+				Expect(v4pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", v4pool)
+				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", pool)
 			}
 		},
 

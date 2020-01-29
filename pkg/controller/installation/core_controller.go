@@ -26,8 +26,8 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/upgrade"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -58,11 +58,19 @@ var openshiftNetworkConfig = "cluster"
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
-	return add(mgr, newReconciler(mgr, provider, tsee))
+	ri, err := newReconciler(mgr, provider, tsee)
+	if err != nil {
+		return fmt.Errorf("failed to create Core Reconciler: %v", err)
+	}
+	return add(mgr, ri)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *ReconcileInstallation {
+func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (*ReconcileInstallation, error) {
+	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
+	}
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
@@ -71,11 +79,12 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *
 		autoDetectedProvider: provider,
 		status:               status.New(mgr.GetClient(), "calico"),
 		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
+		namespaceMigration:   nm,
 		requiresTSEE:         tsee,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()
-	return r
+	return r, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -174,6 +183,7 @@ type ReconcileInstallation struct {
 	autoDetectedProvider operator.Provider
 	status               *status.StatusManager
 	typhaAutoscaler      *typhaAutoscaler
+	namespaceMigration   *migration.CoreNamespaceMigration
 	requiresTSEE         bool
 }
 
@@ -329,15 +339,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	if instance.Status.State == "" {
-		instance.Status.State = operator.StateInstalling
-		if err = r.client.Status().Update(ctx, instance); err != nil {
-			return reconcile.Result{}, err
-		}
-		// Requeue to re-Get the installation after updating.
-		return reconcile.Result{Requeue: true}, nil
-	}
-
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
 		r.SetDegraded("Error validating CRD", err, reqLogger)
@@ -406,7 +407,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	needNsMigration, err := upgrade.NeedsCoreNamespaceMigration(r.config)
+	// Determine if we need to migration resources from the kube-system namespace. If
+	// we do then we'll render the Calico components with additional node selectors to
+	// prevent scheduling, later we will run a migration that migrates nodes one by one
+	// to mimic a 'normal' rolling update.
+	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration()
 	if err != nil {
 		log.Error(err, "Error checking if namespace migration is needed")
 		r.status.SetDegraded("Error checking if namespace migration is needed", err.Error())
@@ -491,34 +496,21 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	// Run this after we have rendered our components so the new (operator created)
+	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
-		instance.Status.State = operator.StateMigrating
-		if err = r.client.Status().Update(ctx, instance); err != nil {
-			return reconcile.Result{}, err
-		}
-		up, err := upgrade.GetCoreMigration(r.config)
-		if err != nil {
-			r.status.SetDegraded("Error setting up namespace migration", err.Error())
-			return reconcile.Result{}, err
-		}
-		if err := up.Run(reqLogger, r.status); err != nil {
+		if err := r.namespaceMigration.Run(reqLogger, r.status); err != nil {
 			// No need to set status/degraded since the function will set if needed.
 			return reconcile.Result{}, err
 		}
 		// Requeue so we can update our resources (without the migration changes)
 		// Also needed since we updated the instance.
 		return reconcile.Result{Requeue: true}, nil
-	} else if instance.Status.State == operator.StateMigrating {
-		up, err := upgrade.GetCoreMigration(r.config)
-		if err != nil {
-			r.status.SetDegraded("Error preparing to clean up migration", err.Error())
-			return reconcile.Result{}, err
-		}
-		if err := up.CleanupMigration(); err != nil {
+	} else if r.namespaceMigration.NeedCleanup() {
+		if err := r.namespaceMigration.CleanupMigration(); err != nil {
 			r.status.SetDegraded("Error cleaning up the migration", err.Error())
 			return reconcile.Result{}, err
 		}
-		upgrade.ShutdownMigration()
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
@@ -530,8 +522,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Everything is available - update the CRD status.
-	instance.Status.State = operator.StateReady
 	instance.Status.Variant = instance.Spec.Variant
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

@@ -28,7 +28,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/upgrade"
+	"github.com/tigera/operator/pkg/controller/migration"
 )
 
 const (
@@ -43,15 +43,15 @@ const (
 )
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, up bool) Component {
-	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, upgrade: up}
+func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, migrationNeeded bool) Component {
+	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, namespaceMigration: migrationNeeded}
 }
 
 type typhaComponent struct {
-	cr           *operator.Installation
-	provider     operator.Provider
-	typhaNodeTLS *TyphaNodeTLS
-	upgrade      bool
+	cr                 *operator.Installation
+	provider           operator.Provider
+	typhaNodeTLS       *TyphaNodeTLS
+	namespaceMigration bool
 }
 
 func (c *typhaComponent) Objects() []runtime.Object {
@@ -320,8 +320,8 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
-	if c.upgrade {
-		upgrade.ModifyTyphaDeployment(&d)
+	if c.namespaceMigration {
+		migration.SetTyphaAntiAffinity(&d)
 	}
 	return &d
 }

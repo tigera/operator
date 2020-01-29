@@ -809,6 +809,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			// Use iptables in nftables mode.
 			iptablesBackend = "NFT"
 		}
+
+		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/openshift-dns"})
+		}
 	case operator.ProviderEKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
@@ -858,7 +863,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-// nodeMetricsServices creates a Service which exposes the calico/node metrics
+// nodeMetricsService creates a Service which exposes the calico/node metrics
 // reporting endpoint.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
 	return &v1.Service{

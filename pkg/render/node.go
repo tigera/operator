@@ -726,6 +726,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
 
+		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork)
+		v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork)
+
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
 		if v4Method != "" {
@@ -751,19 +754,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-
-		var v6pool, v4pool operator.IPPool
-
-		for _, pool := range c.cr.Spec.CalicoNetwork.IPPools {
-			addr, _, err := net.ParseCIDR(pool.CIDR)
-			if err == nil {
-				if addr.To4() == nil {
-					v6pool = pool
-				} else {
-					v4pool = pool
-				}
-			}
-		}
 
 		if len(v4pool.CIDR) != 0 {
 			// set the networking backend
@@ -924,4 +914,32 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 		}
 	}
 	return ""
+}
+
+// GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
+func GetIPv4Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
+	for _, pool := range cn.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil {
+			if addr.To4() != nil {
+				return &pool
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
+func GetIPv6Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
+	for _, pool := range cn.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil {
+			if addr.To4() == nil {
+				return &pool
+			}
+		}
+	}
+
+	return nil
 }

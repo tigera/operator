@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -29,7 +30,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		return nil
 	}
 
-	if v4pool := GetIPv4Pool(instance); v4pool != nil {
+	if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork); v4pool != nil {
 		_, _, err := net.ParseCIDR(v4pool.CIDR)
 		if err != nil {
 			return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
@@ -62,7 +63,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	if v6pool := GetIPv6Pool(instance); v6pool != nil {
+	if v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork); v6pool != nil {
 		_, _, err := net.ParseCIDR(v6pool.CIDR)
 		if err != nil {
 			return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)

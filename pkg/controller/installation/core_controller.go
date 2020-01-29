@@ -261,7 +261,7 @@ func fillDefaults(instance *operator.Installation) error {
 		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 
-		if len(v4pool.CIDR) != 0 {
+		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
 				v4pool.Encapsulation = operator.EncapsulationDefault
 			}
@@ -273,7 +273,10 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		if len(v6pool.CIDR) != 0 {
+		if v6pool != nil {
+			if v6pool.NATOutgoing == "" {
+				v6pool.NATOutgoing = operator.NATOutgoingDefaultv6
+			}
 			if v6pool.NodeSelector == "" {
 				v6pool.NodeSelector = operator.NodeSelectorDefault
 			}
@@ -667,10 +670,11 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		if len(o.Spec.ClusterNetwork) == 0 {
 			return nil
 		}
-		i.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			operator.IPPool{
-				CIDR: o.Spec.ClusterNetwork[0].CIDR,
-			},
+		for _, osCIDR := range o.Spec.ClusterNetwork {
+			i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
+				operator.IPPool{
+					CIDR: osCIDR.CIDR,
+				})
 		}
 	} else {
 		// Empty IPPools list so nothing to do.
@@ -679,9 +683,6 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		}
 
 		for _, pool := range i.Spec.CalicoNetwork.IPPools {
-			if len(pool.CIDR) == 0 {
-				continue
-			}
 			within := false
 			for _, osCIDR := range o.Spec.ClusterNetwork {
 				within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)

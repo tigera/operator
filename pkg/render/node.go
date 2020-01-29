@@ -280,6 +280,14 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		mtu = *c.cr.Spec.CalicoNetwork.MTU
 	}
 
+	var assign_ipv6 string
+
+	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork); v6pool != nil {
+		assign_ipv6 = "true"
+	} else {
+		assign_ipv6 = "false"
+	}
+
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -291,6 +299,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "nodename_file_optional": %v,
       "ipam": {
           "type": "calico-ipam"
+	  "assign_ipv6" : %s,
       },
       "policy": {
           "type": "k8s"
@@ -305,7 +314,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"portMappings": true}
     }
   ]
-}`, mtu, c.netConfig.NodenameFileOptional)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv6)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -731,7 +740,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
-		if v4Method != "" {
+		if v4Method != "" || v4pool != nil {
 			// IPv4 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
@@ -742,7 +751,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// Env based on IPv6 auto-detection and ippool configuration.
 		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
-		if v6Method != "" || len(v6pool.CIDR) != 0 {
+		if v6Method != "" || v6pool != nil {
 			// IPv6 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
@@ -755,7 +764,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 
-		if len(v4pool.CIDR) != 0 {
+		if v4pool != nil {
 			// set the networking backend
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
 			switch v4pool.Encapsulation {
@@ -783,14 +792,20 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			}
 		}
 
-		if len(v6pool.CIDR) != 0 {
+		if v6pool != nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
+			if v6pool.NATOutgoing == operator.NATOutgoingDisabled {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "false"})
+			}
 			if v6pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
 			}
+			if v4pool == nil {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
+			}
 		}
 
-		if len(v4pool.CIDR) == 0 && len(v6pool.CIDR) == 0 {
+		if v4pool == nil && v6pool == nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 		}
 	}

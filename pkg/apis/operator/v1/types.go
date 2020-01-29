@@ -171,9 +171,10 @@ func (et EncapsulationType) String() string {
 type NATOutgoingType string
 
 const (
-	NATOutgoingEnabled  NATOutgoingType = "Enabled"
-	NATOutgoingDisabled NATOutgoingType = "Disabled"
-	NATOutgoingDefault  NATOutgoingType = "Enabled"
+	NATOutgoingEnabled   NATOutgoingType = "Enabled"
+	NATOutgoingDisabled  NATOutgoingType = "Disabled"
+	NATOutgoingDefault   NATOutgoingType = "Enabled"
+	NATOutgoingDefaultv6 NATOutgoingType = "Disabled"
 )
 
 var NATOutgoingTypes []NATOutgoingType = []NATOutgoingType{

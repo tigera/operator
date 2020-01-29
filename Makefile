@@ -269,7 +269,7 @@ cluster-create: k3d
 	# Do not deploy the metrics-server so it does not prevent cleanup during UTs
 	./k3d create \
 		--workers $(WORKER_COUNT) \
-		--worker-arg="--no-flannel" \
+		--agent-arg="--no-flannel" \
 		--server-arg="--no-flannel" \
 		--server-arg="--no-deploy=metrics-server" \
 		--name "operator-test-cluster"

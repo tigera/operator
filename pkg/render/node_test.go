@@ -581,7 +581,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support canReach", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 			resources := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -596,7 +596,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support interface regex", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 			resources := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -611,7 +611,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support skip-interface regex", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 			resources := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -652,8 +652,8 @@ var _ = Describe("Node rendering tests", func() {
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*apps.DaemonSet)
 		ns := ds.Spec.Template.Spec.NodeSelector
-		Expect(ns).To(HaveKey("projectcalico.org/node-upgrade"))
-		Expect(ns["projectcalico.org/node-upgrade"]).To(Equal("upgraded"))
+		Expect(ns).To(HaveKey("projectcalico.org/operator-node-migration"))
+		Expect(ns["projectcalico.org/operator-node-migration"]).To(Equal("migrated"))
 	})
 
 	DescribeTable("test IP Pool configuration",

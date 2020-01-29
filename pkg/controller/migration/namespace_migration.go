@@ -295,7 +295,7 @@ func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode() error {
 // the calico-system namespace is ready before continuing, it will wait up to
 // 1 minute before returning with an error.
 func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady() error {
-	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(common.TyphaDeploymentName, metav1.GetOptions{})
 		if err != nil {
 			return false, err

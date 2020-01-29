@@ -14,7 +14,7 @@ const (
 	// Overrides for Calico.
 	VersionTigeraNode            = "v2.7.0-0.dev-188-gc5255d3"
 	VersionTigeraTypha           = "v2.7.0-0.dev-74-g67bc0b1"
-	VersionTigeraKubeControllers = "v2.7.0-0.dev-94-g1d26407"
+	VersionTigeraKubeControllers = "v2.7.0-0.dev-98-gd147cd9"
 
 	// API server images.
 	VersionAPIServer   = "v2.7.0-0.dev-32-gb094281f"
@@ -36,7 +36,7 @@ const (
 
 	// Manager images.
 	VersionManager        = "v2.7.0-0.dev-234-g952d0a82"
-	VersionManagerProxy   = "v2.7.0-0.dev-32-gdfdbc7d"
+	VersionManagerProxy   = "v2.7.0-0.dev-34-g4eac4a3"
 	VersionManagerEsProxy = "v2.7.0-0.dev-37-gf22e27b"
 
 	// ECK Elasticsearch images
@@ -48,5 +48,5 @@ const (
 	VersionKibana = "7.3"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "v2.7.0-0.dev-32-gdfdbc7d"
+	VersionGuardian = "v2.7.0-0.dev-34-g4eac4a3"
 )

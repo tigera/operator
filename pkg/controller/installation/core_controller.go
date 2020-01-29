@@ -679,6 +679,9 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		}
 
 		for _, pool := range i.Spec.CalicoNetwork.IPPools {
+			if len(pool.CIDR) == 0 {
+				continue
+			}
 			within := false
 			for _, osCIDR := range o.Spec.ClusterNetwork {
 				within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)

@@ -58,7 +58,6 @@ func (c *GuardianComponent) Objects() []runtime.Object {
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		c.configMap(),
 		copySecrets(GuardianNamespace, c.tunnelSecret)[0],
 	}
 }
@@ -93,43 +92,6 @@ func (c *GuardianComponent) serviceAccount() runtime.Object {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace},
-	}
-}
-
-func (c *GuardianComponent) configMap() runtime.Object {
-	return &v1.ConfigMap{
-		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: GuardianConfigMapName, Namespace: GuardianNamespace},
-		Data: map[string]string{
-			// Server port for Guardian
-			"tigera-guardian.port": "9443",
-			// Logging level
-			"tigera-guardian.log-level": "INFO",
-			// Proxy targets
-			"tigera-guardian.proxy-targets": `[
-				{
-					"path": "/api/",
-					"url": "https://kubernetes.default",
-					"tokenPath": "/var/run/secrets/kubernetes.io/serviceaccount/token",
-					"caBundlePath": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-				},
-				{
-					"path": "/apis/",
-					"url": "https://kubernetes.default",
-					"tokenPath": "/var/run/secrets/kubernetes.io/serviceaccount/token",
-					"caBundlePath": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-				},
-				{
-					"path": "/tigera-elasticsearch/",
-					"url": "https://tigera-manager.tigera-manager.svc:9443"
-				},
-				{
-					"path": "/compliance/",
-					"url": "https://compliance.tigera-compliance.svc"
-				}]`,
-			// This tells Guardian how to reach Voltron
-			"tigera-guardian.voltron-url": c.url,
-		},
 	}
 }
 
@@ -247,26 +209,12 @@ func (c *GuardianComponent) volumes() []v1.Volume {
 func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
-			Name:            GuardianDeploymentName,
-			Image:           "gcr.io/tigera-dev/experimental/brianmcmahon/tigera/guardian:latest",
-			ImagePullPolicy: "Always",
+			Name:  GuardianDeploymentName,
+			Image: constructImage(GuardianImageName, c.registry),
 			Env: []corev1.EnvVar{
-				{
-					Name:      "GUARDIAN_PORT",
-					ValueFrom: envVarSourceFromConfigmap(GuardianConfigMapName, "tigera-guardian.port"),
-				},
-				{
-					Name:      "GUARDIAN_LOGLEVEL",
-					ValueFrom: envVarSourceFromConfigmap(GuardianConfigMapName, "tigera-guardian.log-level"),
-				},
-				{
-					Name:      "GUARDIAN_PROXY_TARGETS",
-					ValueFrom: envVarSourceFromConfigmap(GuardianConfigMapName, "tigera-guardian.proxy-targets"),
-				},
-				{
-					Name:      "GUARDIAN_VOLTRON_URL",
-					ValueFrom: envVarSourceFromConfigmap(GuardianConfigMapName, "tigera-guardian.voltron-url"),
-				},
+				{Name: "GUARDIAN_PORT", Value: "9443"},
+				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
+				{Name: "GUARDIAN_VOLTRON_URL", Value: c.url},
 			},
 			VolumeMounts: []corev1.VolumeMount{{
 				Name:      GuardianVolumeName,

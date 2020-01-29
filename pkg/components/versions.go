@@ -12,32 +12,32 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.0-0.dev-175-g3f547b6"
-	VersionTigeraTypha           = "v2.6.0-0.dev-104-g6c51073"
-	VersionTigeraKubeControllers = "v2.7.0-0.dev-68-g35bdce0-dirty"
+	VersionTigeraNode            = "v2.7.0-0.dev-188-gc5255d3"
+	VersionTigeraTypha           = "v2.7.0-0.dev-74-g67bc0b1"
+	VersionTigeraKubeControllers = "v2.7.0-0.dev-94-g1d26407"
 
 	// API server images.
-	VersionAPIServer   = "v2.7.0-0.dev-28-g95b7ffeb"
-	VersionQueryServer = "v2.6.0-0.dev-12-gca85666"
+	VersionAPIServer   = "v2.7.0-0.dev-32-gb094281f"
+	VersionQueryServer = "v2.7.0-0.dev-26-g232a725"
 
 	// Logging
-	VersionFluentd = "v2.6.0-0.dev-33-g382faf2"
+	VersionFluentd = "v2.7.0-0.dev-4-gb1486b3"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceReporter    = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceServer      = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceSnapshotter = "v2.7.0-0.dev-22-gf5eb877"
-	VersionComplianceBenchmarker = "v2.7.0-0.dev-22-gf5eb877"
+	VersionComplianceController  = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceReporter    = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceServer      = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceSnapshotter = "v2.7.0-0.dev-38-g23b93c3"
+	VersionComplianceBenchmarker = "v2.7.0-0.dev-38-g23b93c3"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.7.0-0.dev-15-g44db458"
-	VersionIntrusionDetectionJobInstaller = "v2.7.0-0.dev-26-g979dece"
+	VersionIntrusionDetectionController   = "v2.7.0-0.dev-27-gd7ce71b"
+	VersionIntrusionDetectionJobInstaller = "v2.7.0-0.dev-27-gd7ce71b"
 
 	// Manager images.
-	VersionManager        = "v2.5.0-347-gb01f72d0"
-	VersionManagerProxy   = "v2.7.0-0.dev-30-g75b3524"
-	VersionManagerEsProxy = "v2.7.0-0.dev-22-g2e2f167"
+	VersionManager        = "v2.7.0-0.dev-234-g952d0a82"
+	VersionManagerProxy   = "v2.7.0-0.dev-32-gdfdbc7d"
+	VersionManagerEsProxy = "v2.7.0-0.dev-37-gf22e27b"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
@@ -48,5 +48,5 @@ const (
 	VersionKibana = "7.3"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "v2.7.0-0.dev-30-g75b3524"
+	VersionGuardian = "v2.7.0-0.dev-32-gdfdbc7d"
 )

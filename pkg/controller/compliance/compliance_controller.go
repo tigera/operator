@@ -68,12 +68,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %v", err)
 	}
 
-	for _, secretName := range []string{
-		render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
-		render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
-		render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret} {
-		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("compliance-controller failed to watch the Secret resource: %v", err)
+	// Watch the given secrets in each both the compliance and operator namespaces
+	for _, namespace := range []string{render.OperatorNamespace(), render.ComplianceNamespace} {
+		for _, secretName := range []string{
+			render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
+			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
+			render.ComplianceServerCertSecret} {
+			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
+				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+			}
 		}
 	}
 
@@ -195,13 +199,30 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
+		render.ComplianceServerCertSecret,
+		render.ComplianceServerCertName,
+		render.ComplianceServerKeyName,
+	)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Compliance(esSecrets, network, esClusterConfig, pullSecrets, openshift)
+	component, err := render.Compliance(esSecrets, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift)
+	if err != nil {
+		log.Error(err, "error rendering Compliance")
+		r.status.SetDegraded("Error rendering Compliance", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

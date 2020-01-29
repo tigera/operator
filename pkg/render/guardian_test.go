@@ -3,10 +3,12 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -31,14 +33,13 @@ var _ = Describe("Rendering tests", func() {
 			addr,
 			[]*corev1.Secret{},
 			false,
-			"my-reg",
+			"my-reg/",
 			secret,
 		)
 		resources = g.Objects()
 	})
 
 	It("should render all resources for a managed cluster", func() {
-
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -52,13 +53,15 @@ var _ = Describe("Rendering tests", func() {
 			{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
-			{name: render.GuardianConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+
+		deployment := resources[4].(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.VersionGuardian))
 	})
 
 })

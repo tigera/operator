@@ -270,6 +270,10 @@ func fillDefaults(instance *operator.Installation) error {
 			if pool.NodeSelector == "" {
 				pool.NodeSelector = operator.NodeSelectorDefault
 			}
+			if pool.BlockSize == nil {
+				var twentySix int32 = 26
+				pool.BlockSize = &twentySix
+			}
 		}
 
 		// Default IPv4 address detection to "first found" if not specified.

@@ -59,7 +59,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+
+			if pool.BlockSize != nil && *pool.BlockSize > 32 || *pool.BlockSize < 20 {
+				return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
 			}
 		}
 

@@ -59,7 +59,7 @@ var (
 )
 
 type CoreNamespaceMigration struct {
-	client            *kubernetes.Clientset
+	client            kubernetes.Interface
 	informer          cache.Controller
 	indexer           cache.Indexer
 	stopCh            chan struct{}
@@ -355,6 +355,9 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 			return false, err
 		}
 
+		if ds.Spec.Template.Spec.NodeSelector == nil {
+			ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
+		}
 		// Check if nodeSelector is already set
 		if _, ok := ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey]; !ok {
 			ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey] = nodeSelectorValuePre
@@ -376,6 +379,20 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		// Successful update
 		return true, nil
 	})
+}
+
+func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet, namespace, key, value string) error {
+	// Check if nodeSelector is already set
+	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
+		ds.Spec.Template.Spec.NodeSelector[key] = value
+
+		var err error
+		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Update(ds)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrateEachNode ensures that the calico-node pods are ready and then update
@@ -471,6 +488,10 @@ func (m *CoreNamespaceMigration) addNodeLabels(nodeName string, labelMaps ...map
 		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
+		}
+
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
 		}
 
 		needUpdate := false

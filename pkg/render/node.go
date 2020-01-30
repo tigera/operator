@@ -305,9 +305,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "mtu": %d,
       "nodename_file_optional": %v,
       "ipam": {
-          "type": "calico-ipam"
-	  "assign_ipv4" : %s,
-	  "assign_ipv6" : %s,
+          "type": "calico-ipam",
+	  "assign_ipv4" : "%s",
+	  "assign_ipv6" : "%s"
       },
       "policy": {
           "type": "k8s"
@@ -688,7 +688,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{
 			Name: "NODENAME",
@@ -763,9 +762,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			// IPv6 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
 		} else {
 			// IPv6 Auto-detection is disabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 		}
 
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})

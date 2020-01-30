@@ -933,11 +933,11 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 
 // GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
 func GetIPv4Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
-	for _, pool := range cn.IPPools {
+	for ii, pool := range cn.IPPools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil {
 			if addr.To4() != nil {
-				return &pool
+				return &cn.IPPools[ii]
 			}
 		}
 	}
@@ -947,11 +947,11 @@ func GetIPv4Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
 
 // GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
 func GetIPv6Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
-	for _, pool := range cn.IPPools {
+	for ii, pool := range cn.IPPools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil {
 			if addr.To4() == nil {
-				return &pool
+				return &cn.IPPools[ii]
 			}
 		}
 	}

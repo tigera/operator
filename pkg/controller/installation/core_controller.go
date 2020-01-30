@@ -248,6 +248,8 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	var v4pool, v6pool *operator.IPPool
+
 	// If Calico networking is in use, then default some fields.
 	if instance.Spec.CalicoNetwork != nil {
 		// Default IP pools, only if it is nil.
@@ -255,11 +257,12 @@ func fillDefaults(instance *operator.Installation) error {
 		// should be created.
 		if instance.Spec.CalicoNetwork.IPPools == nil {
 			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-				{CIDR: "192.168.0.0/16"},
+				operator.IPPool{CIDR: "192.168.0.0/16"},
 			}
 		}
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+
+		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
@@ -290,6 +293,7 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 	}
+
 	return nil
 }
 

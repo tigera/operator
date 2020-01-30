@@ -99,6 +99,5 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		// in the render package.
 		Expect(err).NotTo(HaveOccurred())
 		Expect(dpl.Labels["k8s-app"]).To(Equal(render.GuardianName))
-
 	})
 })

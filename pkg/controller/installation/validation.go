@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,45 +20,78 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.CalicoNetwork != nil {
-		if len(instance.Spec.CalicoNetwork.IPPools) > 1 {
-			return fmt.Errorf("With CalicoNetwork only one IPPool is allowed")
+		nPools := len(instance.Spec.CalicoNetwork.IPPools)
+		if nPools > 2 {
+			return fmt.Errorf("Only one IPPool per version is allowed.")
 		}
-		if len(instance.Spec.CalicoNetwork.IPPools) == 1 {
-			pool := instance.Spec.CalicoNetwork.IPPools[0]
-			_, _, err := net.ParseCIDR(pool.CIDR)
+
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+
+		if nPools == 2 && (v4pool == nil || v6pool == nil) {
+			return fmt.Errorf("Only one IPPool per version is allowed.")
+		}
+
+		if v4pool != nil {
+			_, _, err := net.ParseCIDR(v4pool.CIDR)
 			if err != nil {
-				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", pool.CIDR, err)
+				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
 			}
 
 			valid := false
 			for _, t := range operatorv1.EncapsulationTypes {
-				if pool.Encapsulation == t {
+				if v4pool.Encapsulation == t {
 					valid = true
 				}
 			}
 			if !valid {
-				return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s", pool.Encapsulation,
-					strings.Join(operatorv1.EncapsulationTypesString, ","))
+				return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+					v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 			}
 
 			valid = false
 			for _, t := range operatorv1.NATOutgoingTypes {
-				if pool.NATOutgoing == t {
+				if v4pool.NATOutgoing == t {
 					valid = true
 				}
 			}
 			if !valid {
-				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s", pool.NATOutgoing,
-					strings.Join(operatorv1.NATOutgoingTypesString, ","))
+				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
+					v4pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
 			}
 
-			if pool.NodeSelector == "" {
+			if v4pool.NodeSelector == "" {
+				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
+			}
+		}
+
+		if v6pool != nil {
+			_, _, err := net.ParseCIDR(v6pool.CIDR)
+			if err != nil {
+				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
+			}
+			if v4pool.Encapsulation != operatorv1.EncapsulationNone {
+				return fmt.Errorf("invalid encapsulation for ipPool %s", v6pool.CIDR)
+			}
+			valid := false
+			for _, t := range operatorv1.NATOutgoingTypes {
+				if v6pool.NATOutgoing == t {
+					valid = true
+				}
+			}
+			if !valid {
+				return fmt.Errorf("%s is invalid for v6 ipPool.natOutgoing, should be one of %s",
+					v6pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
+			}
+
+			if v6pool.NodeSelector == "" {
 				return fmt.Errorf("ipPool.nodeSelector, should not be empty")
 			}
 		}
@@ -68,8 +101,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if err != nil {
 				return err
 			}
-
 		}
+
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 != nil {
 			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
 			if err != nil {
@@ -77,6 +110,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 	}
+
 	return nil
 }
 

@@ -1,5 +1,5 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
-
+// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -279,6 +280,21 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		mtu = *c.cr.Spec.CalicoNetwork.MTU
 	}
 
+	var assign_ipv4 string
+	var assign_ipv6 string
+
+	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork); v4pool != nil {
+		assign_ipv4 = "true"
+	} else {
+		assign_ipv4 = "false"
+	}
+
+	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork); v6pool != nil {
+		assign_ipv6 = "true"
+	} else {
+		assign_ipv6 = "false"
+	}
+
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -289,7 +305,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "mtu": %d,
       "nodename_file_optional": %v,
       "ipam": {
-          "type": "calico-ipam"
+          "type": "calico-ipam",
+	  "assign_ipv4" : "%s",
+	  "assign_ipv6" : "%s"
       },
       "policy": {
           "type": "k8s"
@@ -304,7 +322,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"portMappings": true}
     }
   ]
-}`, mtu, c.netConfig.NodenameFileOptional)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -670,7 +688,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{
 			Name: "NODENAME",
@@ -725,9 +742,12 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
 
+		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork)
+		v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork)
+
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
-		if v4Method != "" {
+		if v4Method != "" || v4pool != nil {
 			// IPv4 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
@@ -736,49 +756,81 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
 		}
 
-		// Env based on IPv6 auto-detection configuration.
-		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
-		if v6Method != "" {
-			// IPv6 Auto-detection is enabled.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
-		} else {
-			// IPv6 Auto-detection is disabled.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
-		}
-
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-		if len(c.cr.Spec.CalicoNetwork.IPPools) == 1 {
-			pool := c.cr.Spec.CalicoNetwork.IPPools[0]
+
+		if v4pool != nil {
 			// set the networking backend
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: pool.CIDR})
-			switch pool.Encapsulation {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR",
+				Value: v4pool.CIDR})
+
+			switch v4pool.Encapsulation {
 			case operator.EncapsulationIPIPCrossSubnet:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
+					Value: "CrossSubnet"})
 			case operator.EncapsulationIPIP:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
+					Value: "Always"})
 			case operator.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN",
+					Value: "Always"})
 			case operator.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN",
+					Value: "CrossSubnet"})
 			case operator.EncapsulationNone:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
+					Value: "Never"})
 			default:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP",
+					Value: "Always"})
 			}
 
 			// Default for NAT Outgoing is enabled so it is only necessary to
 			// set when it is being disabled.
-			if pool.NATOutgoing == operator.NATOutgoingDisabled {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
+			if v4pool.NATOutgoing == operator.NATOutgoingDisabled {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING",
+					Value: "false"})
 			}
-			if pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: pool.NodeSelector})
+			if v4pool.NodeSelector != "" {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR",
+					Value: v4pool.NodeSelector})
 			}
-		} else if len(c.cr.Spec.CalicoNetwork.IPPools) == 0 {
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+		} else {
+			// If there's also no IPv6 pool, set NO_DEFAULT_POOLS to "true".
+			if v6pool == nil {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+			}
+		}
+
+		// Env based on IPv6 auto-detection and ippool configuration.
+		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
+		if v6Method != "" || v6pool != nil {
+			// IPv6 Auto-detection is enabled.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
+		} else {
+			// IPv6 Auto-detection is disabled.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
+		}
+
+		if v6pool != nil {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
+			if v6pool.NATOutgoing == operator.NATOutgoingDisabled {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING",
+					Value: "false"})
+			}
+			if v6pool.NodeSelector != "" {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR",
+					Value: v6pool.NodeSelector})
+			}
+
+			// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
+			if v4pool == nil {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
+			}
 		}
 	}
 
@@ -906,4 +958,32 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 		}
 	}
 	return ""
+}
+
+// GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
+func GetIPv4Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
+	for ii, pool := range cn.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil {
+			if addr.To4() != nil {
+				return &cn.IPPools[ii]
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
+func GetIPv6Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
+	for ii, pool := range cn.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil {
+			if addr.To4() == nil {
+				return &cn.IPPools[ii]
+			}
+		}
+	}
+
+	return nil
 }

@@ -21,6 +21,7 @@ import (
 
 	osconfigv1 "github.com/openshift/api/config/v1"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/render"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -30,8 +31,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		Expect(v4pool).ToNot(BeNil())
+		Expect(v4pool.CIDR).To(Equal("192.168.0.0/16"))
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		Expect(v6pool).To(BeNil())
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -40,8 +44,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		Expect(v4pool).ToNot(BeNil())
+		Expect(v4pool.CIDR).To(Equal("192.168.0.0/16"))
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		Expect(v6pool).To(BeNil())
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -100,12 +107,16 @@ var _ = Describe("Defaulting logic tests", func() {
 	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",
 		func(i *operator.Installation, on *osconfigv1.Network) {
 			Expect(mergeAndFillDefaults(i, on)).To(BeNil())
-			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) == 1 {
-				pool := i.Spec.CalicoNetwork.IPPools[0]
-				Expect(pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", pool)
-				Expect(pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", pool)
-				Expect(pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", pool)
-				Expect(pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", pool)
+
+			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
+				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork)
+				Expect(v4pool).ToNot(BeNil())
+				Expect(v4pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", v4pool)
+				Expect(v4pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", v4pool)
+				Expect(v4pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", v4pool)
+				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", v4pool)
+				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork)
+				Expect(v6pool).To(BeNil())
 			}
 		},
 

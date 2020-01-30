@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,11 +27,19 @@ import (
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.CalicoNetwork != nil {
-		if len(instance.Spec.CalicoNetwork.IPPools) > 2 {
-			return fmt.Errorf("Only one IPPool per version allowed")
+		nPools := len(instance.Spec.CalicoNetwork.IPPools)
+		if nPools > 2 {
+			return fmt.Errorf("Only one IPPool per version is allowed.")
 		}
 
-		if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork); v4pool != nil {
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+
+		if nPools == 2 && (v4pool == nil || v6pool == nil) {
+			return fmt.Errorf("Only one IPPool per version is allowed.")
+		}
+
+		if v4pool != nil {
 			_, _, err := net.ParseCIDR(v4pool.CIDR)
 			if err != nil {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
@@ -64,10 +72,13 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
-		if v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork); v6pool != nil {
+		if v6pool != nil {
 			_, _, err := net.ParseCIDR(v6pool.CIDR)
 			if err != nil {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
+			}
+			if v4pool.Encapsulation != operatorv1.EncapsulationNone {
+				return fmt.Errorf("invalid encapsulation for ipPool %s", v6pool.CIDR)
 			}
 			valid := false
 			for _, t := range operatorv1.NATOutgoingTypes {
@@ -89,7 +100,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
 			if err != nil {
 				return err
-
 			}
 		}
 
@@ -100,6 +110,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 	}
+
 	return nil
 }
 

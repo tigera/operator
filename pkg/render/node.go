@@ -280,7 +280,14 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		mtu = *c.cr.Spec.CalicoNetwork.MTU
 	}
 
+	var assign_ipv4 string
 	var assign_ipv6 string
+
+	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork); v4pool != nil {
+		assign_ipv4 = "true"
+	} else {
+		assign_ipv4 = "false"
+	}
 
 	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork); v6pool != nil {
 		assign_ipv6 = "true"
@@ -299,6 +306,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "nodename_file_optional": %v,
       "ipam": {
           "type": "calico-ipam"
+	  "assign_ipv4" : %s,
 	  "assign_ipv6" : %s,
       },
       "policy": {
@@ -314,7 +322,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"portMappings": true}
     }
   ]
-}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv6)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -790,6 +798,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			if v4pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
 			}
+		} else {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "None"})
 		}
 
 		if v6pool != nil {

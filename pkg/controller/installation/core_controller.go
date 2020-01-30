@@ -674,11 +674,40 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		if len(o.Spec.ClusterNetwork) == 0 {
 			return nil
 		}
+		v4found := false
+		v6found := false
+
+		// Since we don't really know all the use cases in OpenShift of having multiple
+		// ClusterNetworks, we grab the '1st' IPv4 and IPv6 cidrs. This will allow the
+		// operator to work in situations where there are more than one of each.
 		for _, osCIDR := range o.Spec.ClusterNetwork {
-			i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-				operator.IPPool{
-					CIDR: osCIDR.CIDR,
-				})
+			addr, _, err := net.ParseCIDR(osCIDR.CIDR)
+			if err == nil {
+				if addr.To4() == nil {
+					if v6found {
+						continue
+					}
+					v6found = true
+					i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
+						operator.IPPool{
+							CIDR: osCIDR.CIDR,
+						})
+				} else {
+					if v4found {
+						continue
+					}
+					v4found = true
+					i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
+						operator.IPPool{
+							CIDR: osCIDR.CIDR,
+						})
+				}
+			} else {
+				continue
+			}
+			if v6found && v4found {
+				break
+			}
 		}
 	} else {
 		// Empty IPPools list so nothing to do.
@@ -692,7 +721,8 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 				within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)
 			}
 			if !within {
-				return fmt.Errorf("IPPool %v is not within the OpenShift ClusterNetwork", pool.CIDR)
+				return fmt.Errorf("IPPool %v is not within the OpenShift ClusterNetwork",
+					pool.CIDR)
 			}
 		}
 	}

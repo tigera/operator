@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -269,7 +269,7 @@ func fillDefaults(instance *operator.Installation) error {
 				v4pool.Encapsulation = operator.EncapsulationDefault
 			}
 			if v4pool.NATOutgoing == "" {
-				v4pool.NATOutgoing = operator.NATOutgoingDefault
+				v4pool.NATOutgoing = operator.NATOutgoingEnabled
 			}
 			if v4pool.NodeSelector == "" {
 				v4pool.NodeSelector = operator.NodeSelectorDefault
@@ -278,7 +278,7 @@ func fillDefaults(instance *operator.Installation) error {
 
 		if v6pool != nil {
 			if v6pool.NATOutgoing == "" {
-				v6pool.NATOutgoing = operator.NATOutgoingDefaultv6
+				v6pool.NATOutgoing = operator.NATOutgoingDisabled
 			}
 			if v6pool.NodeSelector == "" {
 				v6pool.NodeSelector = operator.NodeSelectorDefault

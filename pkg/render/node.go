@@ -747,7 +747,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
-		if v4Method != "" || v4pool != nil {
+		if v4Method != "" {
 			// IPv4 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
@@ -805,7 +805,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// Env based on IPv6 auto-detection and ippool configuration.
 		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
-		if v6Method != "" || v6pool != nil {
+		if v6Method != "" {
 			// IPv6 Auto-detection is enabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})

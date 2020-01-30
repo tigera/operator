@@ -77,9 +77,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if err != nil {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
 			}
+
+			// Encapsulation is not supported for IPv6 pools.
 			if v6pool.Encapsulation != operatorv1.EncapsulationNone {
 				return fmt.Errorf("invalid encapsulation for ipPool %s", v6pool.CIDR)
 			}
+
 			valid := false
 			for _, t := range operatorv1.NATOutgoingTypes {
 				if v6pool.NATOutgoing == t {

@@ -682,28 +682,27 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		// operator to work in situations where there are more than one of each.
 		for _, osCIDR := range o.Spec.ClusterNetwork {
 			addr, _, err := net.ParseCIDR(osCIDR.CIDR)
-			if err == nil {
-				if addr.To4() == nil {
-					if v6found {
-						continue
-					}
-					v6found = true
-					i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-						operator.IPPool{
-							CIDR: osCIDR.CIDR,
-						})
-				} else {
-					if v4found {
-						continue
-					}
-					v4found = true
-					i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-						operator.IPPool{
-							CIDR: osCIDR.CIDR,
-						})
-				}
-			} else {
+			if err != nil {
 				continue
+			}
+			if addr.To4() == nil {
+				if v6found {
+					continue
+				}
+				v6found = true
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
+					operator.IPPool{
+						CIDR: osCIDR.CIDR,
+					})
+			} else {
+				if v4found {
+					continue
+				}
+				v4found = true
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
+					operator.IPPool{
+						CIDR: osCIDR.CIDR,
+					})
 			}
 			if v6found && v4found {
 				break

@@ -272,12 +272,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 
 func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-	ps := []corev1.LocalObjectReference{}
-	for _, x := range c.pullSecrets {
-		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
-	}
 
-	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
+	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
@@ -291,26 +287,35 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"k8s-app": "intrusion-detection-controller"},
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "intrusion-detection-controller",
-					Namespace: IntrusionDetectionNamespace,
-					Labels: map[string]string{
-						"k8s-app": "intrusion-detection-controller",
-					},
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					ServiceAccountName: "intrusion-detection-controller",
-					ImagePullSecrets:   ps,
-					Containers: []corev1.Container{
-						ElasticsearchContainerDecorateIndexCreator(
-							ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret),
-							c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
-					},
-				}),
+			Template: *c.deploymentPodTemplate(),
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplateSpec {
+	ps := []corev1.LocalObjectReference{}
+	for _, x := range c.pullSecrets {
+		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+	}
+
+	return ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "intrusion-detection-controller",
+			Namespace: IntrusionDetectionNamespace,
+			Labels: map[string]string{
+				"k8s-app": "intrusion-detection-controller",
 			},
 		},
-	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			ServiceAccountName: "intrusion-detection-controller",
+			ImagePullSecrets:   ps,
+			Containers: []corev1.Container{
+				ElasticsearchContainerDecorateIndexCreator(
+					ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret),
+					c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
+			},
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {

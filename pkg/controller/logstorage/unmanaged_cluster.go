@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
-	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
+	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
+	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
+	"github.com/elastic/cloud-on-k8s/operators/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -115,6 +115,17 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		}
 	}
 
+	// The ECK operator updates the Kibana resource, so we need to get it to pass into render so we don't remove ECK's updates.
+	kibana := &kibanaalpha1.Kibana{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana); err != nil {
+		if errors.IsNotFound(err) {
+			kibana = nil
+		} else {
+			r.setDegraded(ctx, reqLogger, ls, "Failed to read Kibana", err)
+			return reconcile.Result{}, err
+		}
+	}
+
 	esClusterConfig := render.NewElasticsearchClusterConfig("cluster", ls.Replicas(), defaultElasticsearchShards)
 
 	reqLogger.V(2).Info("Creating Elasticsearch components")
@@ -128,6 +139,7 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		pullSecrets,
 		r.provider,
 		network.Spec.Registry,
+		kibana,
 	)
 	if err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error rendering LogStorage", err)
@@ -222,7 +234,7 @@ func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kiba
 func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, error) {
 	if es, err := r.getElasticsearch(ctx); err != nil {
 		return false, err
-	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
+	} else if es.Status.Phase == esalpha1.ElasticsearchOperationalPhase {
 		return true, nil
 	}
 

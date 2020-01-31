@@ -52,7 +52,8 @@ func Elasticsearch(
 	createWebhookSecret bool,
 	pullSecrets []*corev1.Secret,
 	provider operatorv1.Provider,
-	registry string) (Component, error) {
+	registry string,
+	kibana *kibanav1alpha1.Kibana) (Component, error) {
 	var esCertSecrets, kibanaCertSecrets []runtime.Object
 	if esCertSecret == nil {
 		var err error
@@ -93,6 +94,7 @@ func Elasticsearch(
 		pullSecrets:         pullSecrets,
 		provider:            provider,
 		registry:            registry,
+		kibana:              kibana,
 	}, nil
 }
 
@@ -105,6 +107,7 @@ type elasticsearchComponent struct {
 	pullSecrets         []*corev1.Secret
 	provider            operatorv1.Provider
 	registry            string
+	kibana              *kibanav1alpha1.Kibana
 }
 
 func (es *elasticsearchComponent) Objects() []runtime.Object {
@@ -565,7 +568,7 @@ func (es elasticsearchComponent) kibana() []runtime.Object {
 }
 
 func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
-	return &kibanav1alpha1.Kibana{
+	kibana = &kibanav1alpha1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
 			Namespace: KibanaNamespace,
@@ -628,4 +631,13 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 			},
 		},
 	}
+
+	// ECK writes fields into the Kibana resource for its own use.
+	// We need to keep these fields to prevent a loop of each operator
+	// trying to update the resource.
+	if es.kibana != nil {
+		kibana.Spec.ElasticSearch = es.kibana.Spec.ElasticSearch
+		kibana.ObjectMeta.Finalizers = es.kibana.ObjectMeta.Finalizers
+	}
+	return kibana
 }

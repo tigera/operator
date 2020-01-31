@@ -182,6 +182,31 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[oidcConfigHashAnnotation] = AnnotationHash(c.oidcConfig.Data)
 	}
 
+	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-manager",
+			Namespace: ManagerNamespace,
+			Labels: map[string]string{
+				"k8s-app": "tigera-manager",
+			},
+			Annotations: annotations,
+		},
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector: map[string]string{
+				"beta.kubernetes.io/os": "linux",
+			},
+			ServiceAccountName: "tigera-manager",
+			Tolerations:        c.managerTolerations(),
+			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+			Containers: []corev1.Container{
+				ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret),
+				ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret),
+				c.managerProxyContainer(),
+			},
+			Volumes: c.managerVolumes(),
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -201,30 +226,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-manager",
-					Namespace: ManagerNamespace,
-					Labels: map[string]string{
-						"k8s-app": "tigera-manager",
-					},
-					Annotations: annotations,
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"beta.kubernetes.io/os": "linux",
-					},
-					ServiceAccountName: "tigera-manager",
-					Tolerations:        c.managerTolerations(),
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
-					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret),
-						ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret),
-						c.managerProxyContainer(),
-					},
-					Volumes: c.managerVolumes(),
-				}),
-			},
+			Template: *podTemplate,
 		},
 	}
 	return d

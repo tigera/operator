@@ -306,8 +306,8 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "nodename_file_optional": %v,
       "ipam": {
           "type": "calico-ipam",
-	  "assign_ipv4" : "%s",
-	  "assign_ipv6" : "%s"
+          "assign_ipv4" : "%s",
+          "assign_ipv6" : "%s"
       },
       "policy": {
           "type": "k8s"

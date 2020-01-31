@@ -234,7 +234,7 @@ func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kiba
 func (r *ReconcileLogStorage) isElasticsearchReady(ctx context.Context) (bool, error) {
 	if es, err := r.getElasticsearch(ctx); err != nil {
 		return false, err
-	} else if es.Status.Phase == "Operational" || es.Status.Phase == esalpha1.ElasticsearchReadyPhase {
+	} else if es.Status.Phase == esalpha1.ElasticsearchOperationalPhase {
 		return true, nil
 	}
 

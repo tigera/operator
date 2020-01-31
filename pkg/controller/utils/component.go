@@ -7,8 +7,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 
-	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
+	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -195,15 +195,30 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
 			return csa
 		}
+
+		// ECK sets these values so we need to copy them over to avoid and update battle
+		// Note: This should be revisited when the ECK version moves to GA, as it would be impossible to remove annotations
+		// or finalizers from Elasticsearch.
+		dsa.Annotations = csa.Annotations
+		dsa.Finalizers = csa.Finalizers
+
 		return dsa
 	case *kibanaalpha1.Kibana:
 		// Only update if the spec has changed
 		csa := current.(*kibanaalpha1.Kibana)
 		dsa := desired.(*kibanaalpha1.Kibana)
-
 		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
 			return csa
 		}
+
+		// ECK sets these values so we need to copy them over to avoid and update battle
+		// Note: This should be revisited when the ECK version moves to GA, as it would be impossible to remove annotations
+		// or finalizers from Kibana.
+		dsa.Annotations = csa.Annotations
+		dsa.Finalizers = csa.Finalizers
+		dsa.Spec.Elasticsearch = csa.Spec.Elasticsearch
+
+		//log.Info(pretty.Compare(csa.Spec, dsa.Spec))
 		return dsa
 	default:
 		// Default to just using the desired state, with an updated RV.

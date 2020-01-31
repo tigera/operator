@@ -14,7 +14,7 @@ const (
 	// Overrides for Calico.
 	VersionTigeraNode            = "v2.7.0-0.dev-188-gc5255d3"
 	VersionTigeraTypha           = "v2.7.0-0.dev-74-g67bc0b1"
-	VersionTigeraKubeControllers = "v2.7.0-0.dev-106-g96f6399"
+	VersionTigeraKubeControllers = "v2.7.0-0.dev-109-gfa8b79c"
 
 	// API server images.
 	VersionAPIServer   = "v2.7.0-0.dev-32-gb094281f"

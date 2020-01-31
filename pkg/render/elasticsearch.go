@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1alpha1"
-	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1alpha1"
-	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1alpha1"
+	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
+	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
+	kibanav1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
 	inf "gopkg.in/inf.v0"
@@ -52,7 +52,8 @@ func Elasticsearch(
 	createWebhookSecret bool,
 	pullSecrets []*corev1.Secret,
 	provider operatorv1.Provider,
-	registry string) (Component, error) {
+	registry string,
+	kibana *kibanav1alpha1.Kibana) (Component, error) {
 	var esCertSecrets, kibanaCertSecrets []runtime.Object
 	if esCertSecret == nil {
 		var err error
@@ -93,6 +94,7 @@ func Elasticsearch(
 		pullSecrets:         pullSecrets,
 		provider:            provider,
 		registry:            registry,
+		savedKibana:         kibana,
 	}, nil
 }
 
@@ -105,6 +107,7 @@ type elasticsearchComponent struct {
 	pullSecrets         []*corev1.Secret
 	provider            operatorv1.Provider
 	registry            string
+	savedKibana         *kibanav1alpha1.Kibana
 }
 
 func (es *elasticsearchComponent) Objects() []runtime.Object {
@@ -565,7 +568,7 @@ func (es elasticsearchComponent) kibana() []runtime.Object {
 }
 
 func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
-	return &kibanav1alpha1.Kibana{
+	kibana := &kibanav1alpha1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
 			Namespace: KibanaNamespace,
@@ -628,4 +631,14 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 			},
 		},
 	}
+
+	// ECK writes fields into the Kibana resource for its own use.
+	// We need to keep these fields to prevent a loop of each operator
+	// trying to update the resource.
+	if es.savedKibana != nil {
+		kibana.Spec.Elasticsearch = es.savedKibana.Spec.Elasticsearch
+		kibana.ObjectMeta.Finalizers = es.savedKibana.ObjectMeta.Finalizers
+		kibana.ObjectMeta.ResourceVersion = es.savedKibana.ObjectMeta.ResourceVersion
+	}
+	return kibana
 }

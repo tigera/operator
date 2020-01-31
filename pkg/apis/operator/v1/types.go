@@ -173,7 +173,6 @@ type NATOutgoingType string
 const (
 	NATOutgoingEnabled  NATOutgoingType = "Enabled"
 	NATOutgoingDisabled NATOutgoingType = "Disabled"
-	NATOutgoingDefault  NATOutgoingType = "Enabled"
 )
 
 var NATOutgoingTypes []NATOutgoingType = []NATOutgoingType{

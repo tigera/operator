@@ -810,6 +810,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
+
+			// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
+			if v4Method == "" {
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
+			}
 		} else {
 			// IPv6 Auto-detection is disabled.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
@@ -825,11 +830,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			if v6pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR",
 					Value: v6pool.NodeSelector})
-			}
-
-			// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
-			if v4pool == nil {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 			}
 		}
 	}

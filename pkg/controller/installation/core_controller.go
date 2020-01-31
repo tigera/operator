@@ -274,6 +274,13 @@ func fillDefaults(instance *operator.Installation) error {
 			if v4pool.NodeSelector == "" {
 				v4pool.NodeSelector = operator.NodeSelectorDefault
 			}
+			// Default IPv4 address detection to "first found" if not specified.
+			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+				t := true
+				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+					FirstFound: &t,
+				}
+			}
 		}
 
 		if v6pool != nil {
@@ -283,13 +290,12 @@ func fillDefaults(instance *operator.Installation) error {
 			if v6pool.NodeSelector == "" {
 				v6pool.NodeSelector = operator.NodeSelectorDefault
 			}
-		}
-
-		// Default IPv4 address detection to "first found" if not specified.
-		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-			t := true
-			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-				FirstFound: &t,
+			// Default IPv6 address detection to "first found" if not specified.
+			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+				t := true
+				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+					FirstFound: &t,
+				}
 			}
 		}
 	}
@@ -683,6 +689,7 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		for _, osCIDR := range o.Spec.ClusterNetwork {
 			addr, _, err := net.ParseCIDR(osCIDR.CIDR)
 			if err != nil {
+				log.Error(err, "Failed to parse ClusterNetwork CIDR.")
 				continue
 			}
 			if addr.To4() == nil {

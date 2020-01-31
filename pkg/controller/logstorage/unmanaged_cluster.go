@@ -115,6 +115,17 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		}
 	}
 
+	// The ECK operator updates the Kibana resource, so we need to get it to pass into render so we don't remove ECK's updates.
+	kibana := &kibanaalpha1.Kibana{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana); err != nil {
+		if errors.IsNotFound(err) {
+			kibana = nil
+		} else {
+			r.setDegraded(ctx, reqLogger, ls, "Failed to read Kibana", err)
+			return reconcile.Result{}, err
+		}
+	}
+
 	esClusterConfig := render.NewElasticsearchClusterConfig("cluster", ls.Replicas(), defaultElasticsearchShards)
 
 	reqLogger.V(2).Info("Creating Elasticsearch components")
@@ -128,6 +139,7 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		pullSecrets,
 		r.provider,
 		network.Spec.Registry,
+		kibana,
 	)
 	if err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error rendering LogStorage", err)

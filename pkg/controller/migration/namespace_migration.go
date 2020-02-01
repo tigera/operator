@@ -15,9 +15,12 @@
 package migration
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -26,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -320,7 +324,7 @@ func (m *CoreNamespaceMigration) labelUnmigratedNodes() error {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
 		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != nodeSelectorValuePost {
-			if err := m.addNodeLabels(node.Name, preOperatorNodeLabel); err != nil {
+			if err := m.addNodeLabel(node.Name, nodeSelectorKey, nodeSelectorValuePre); err != nil {
 				return err
 			}
 		}
@@ -337,7 +341,7 @@ func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes() error {
 		if !ok {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
-		if err := m.removeNodeLabels(node.Name, preOperatorNodeLabel); err != nil {
+		if err := m.removeNodeLabel(node.Name, nodeSelectorKey); err != nil {
 			return err
 		}
 	}
@@ -358,18 +362,15 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if ds.Spec.Template.Spec.NodeSelector == nil {
 			ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 		}
-		// Check if nodeSelector is already set
-		if _, ok := ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey]; !ok {
-			ds.Spec.Template.Spec.NodeSelector[nodeSelectorKey] = nodeSelectorValuePre
 
-			ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Update(ds)
-			if err != nil {
-				if apierrs.IsConflict(err) {
-					// Retry on update conflicts.
-					return false, nil
-				}
-				return false, err
+		err = m.addNodeSelectorToDaemonSet(ds, kubeSystem, nodeSelectorKey, nodeSelectorValuePre)
+		// Check if nodeSelector is already set
+		if err != nil {
+			if apierrs.IsConflict(err) {
+				// Retry on update conflicts.
+				return false, nil
 			}
+			return false, err
 		}
 
 		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady {
@@ -412,7 +413,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 			err := m.waitForCalicoPodsHealthy()
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
-				err = m.addNodeLabels(node.Name, migratedNodeLabel)
+				err = m.addNodeLabel(node.Name, nodeSelectorKey, nodeSelectorValuePost)
 				if err != nil {
 					return fmt.Errorf("Setting label on node %s failed; %s", node.Name, err)
 				}
@@ -483,30 +484,55 @@ func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset 
 // addNodeLabels adds the specified labels to the named node. Perform
 // Get/Check/Update so that it always working on latest version.
 // If node labels has been set already, do nothing.
-func (m *CoreNamespaceMigration) addNodeLabels(nodeName string, labelMaps ...map[string]string) error {
+func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		if node.Labels == nil {
-			node.Labels = make(map[string]string)
+		newNode := node.DeepCopy()
+
+		if newNode.Labels == nil {
+			newNode.Labels = make(map[string]string)
 		}
 
-		needUpdate := false
-		for _, labels := range labelMaps {
-			for k, v := range labels {
-				if currentVal, ok := node.Labels[k]; ok && currentVal == v {
-					continue
-				}
-				node.Labels[k] = v
-				needUpdate = true
-			}
+		needUpdate := true
+		if curr, ok := newNode.Labels[key]; ok && curr == value {
+			needUpdate = false
 		}
+
+		//k, err := json.Marshal(key)
+		//func HTMLEscape(dst *bytes.Buffer, src []byte) {
+		//var k bytes.Buffer
+		//json.HTMLEscape(&k, []byte(key))
+		//k, err := json.Marshal(strings.Replace(key, "/", "~1", -1))
+		//if err != nil {
+		//	log.Info("marshall err ", err)
+		//}
+		k := strings.Replace(key, "/", "~1", -1)
+
+		//v, _ := json.Marshal(value)
+
+		lp := []LabelPatch{{
+			Op:    "add",
+			Path:  fmt.Sprintf("/metadata/labels/%s", k),
+			Value: value,
+		}}
+
+		patchBytes, err := json.Marshal(lp)
+		if err != nil {
+			return false, err
+		}
+		//patchBytes, err := createNodeLabelPatch(node.Labels, newNode.Labels)
+		//if err != nil {
+		//	return false, fmt.Errorf("patch to add labels failed: %v", err)
+		//}
+		log.Info("Patch ", node.Name, " with: ", string(patchBytes))
 
 		if needUpdate {
-			_, err := m.client.CoreV1().Nodes().Update(node)
+			n, err := m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
+			log.Info("node: ", n)
 			if err == nil {
 				return true, nil
 			}
@@ -523,28 +549,86 @@ func (m *CoreNamespaceMigration) addNodeLabels(nodeName string, labelMaps ...map
 	})
 }
 
+type LabelPatch struct {
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value string `json:"value"`
+}
+
+//func createNodeLabelPatch(orig, update map[string]string) ([]byte, error) {
+//
+//	lp := []LabelPatch{{
+//		Op:    "replace",
+//		Path:  "/labels",
+//		Value: update,
+//	}}
+//
+//	patchBytes, err := json.Marshal(lp)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	return patchBytes, nil
+//}
+
+//const annotationNameValueTemplate = `%s: %s`
+//const annotationPatchTemplate = `{"metadata": {"annotations": {%s}}}`
+//
+//func calculateAnnotationPatch(namesAndValues ...string) ([]byte, error) {
+//    settings := []string{}
+//    for i := 0; i < len(namesAndValues); i += 2 {
+//        // Marshal the key and value in order to make sure all the escaping is done correctly.
+//        nameJson, err := json.Marshal(namesAndValues[i])
+//        if err != nil {
+//            return nil, err
+//        }
+//        valueJson, err := json.Marshal(namesAndValues[i+1])
+//        if err != nil {
+//            return nil, err
+//        }
+//        settings = append(settings, fmt.Sprintf(annotationNameValueTemplate, nameJson, valueJson))
+//    }
+//    patch := []byte(fmt.Sprintf(annotationPatchTemplate, strings.Join(settings, ", ")))
+//    return patch, nil
+//}
+
 // Remove node labels from node. Perform Get/Check/Update so that it always working on the
 // most recent version of the resource.
 // If node labels do not exist, do nothing.
-func (m *CoreNamespaceMigration) removeNodeLabels(nodeName string, labelMaps ...map[string]string) error {
+func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
+		newNode := node.DeepCopy()
+
 		needUpdate := false
-		for _, labels := range labelMaps {
-			for k := range labels {
-				if _, ok := node.Labels[k]; ok {
-					delete(node.Labels, k)
-					needUpdate = true
-				}
-			}
+		if _, ok := newNode.Labels[key]; ok {
+			needUpdate = true
+		}
+
+		// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+		k := strings.Replace(key, "/", "~1", -1)
+		lp := []LabelPatch{{
+			Op:   "remove",
+			Path: fmt.Sprintf("/metadata/labels/%s", k),
+		}}
+
+		patchBytes, err := json.Marshal(lp)
+		if err != nil {
+			return false, err
+		}
+
+		//patchBytes, err := createNodeLabelPatch(node.Labels, newNode.Labels)
+		log.Info("Patchbytes: ", string(patchBytes))
+		if err != nil {
+			return false, fmt.Errorf("patch to remove labels failed: %v", err)
 		}
 
 		if needUpdate {
-			_, err := m.client.CoreV1().Nodes().Update(node)
+			_, err = m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
 			if err == nil {
 				return true, nil
 			}

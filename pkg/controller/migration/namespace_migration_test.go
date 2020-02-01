@@ -5,7 +5,7 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,22 +16,31 @@ var _ = Describe("Namespace Migration tests", func() {
 	var instance *CoreNamespaceMigration
 
 	BeforeEach(func() {
+		cfg, err := config.GetConfig()
+		Expect(err).NotTo(HaveOccurred())
+		c := kubernetes.NewForConfigOrDie(cfg)
 		// Create a Kubernetes clientset.
-		c = fake.NewSimpleClientset()
+		//c = fake.NewSimpleClientset()
 		instance = &CoreNamespaceMigration{
 			client: c,
 		}
 	})
 
 	AfterEach(func() {
-		c = nil
 	})
 
 	Context("addNodeLabels", func() {
 		It("should add labels to nodes", func() {
 			_, err := c.CoreV1().Nodes().Create(&v1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: "testNode"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "testNode",
+					Labels: map[string]string{"key": "value"},
+				},
 			})
+			defer func() {
+				err := c.CoreV1().Nodes().Delete("testNode", &metav1.DeleteOptions{})
+				Expect(err).NotTo(HaveOccurred())
+			}()
 			Expect(err).NotTo(HaveOccurred())
 			err = instance.addNodeLabels("testNode", map[string]string{"labelKey": "labelValue"})
 			Expect(err).NotTo(HaveOccurred())

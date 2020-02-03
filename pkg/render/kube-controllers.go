@@ -17,13 +17,14 @@ package render
 import (
 	"strings"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	apps "k8s.io/api/apps/v1"
-
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
 )
 
 var replicas int32 = 1
@@ -56,7 +57,7 @@ func (c *kubeControllersComponent) controllersServiceAccount() *v1.ServiceAccoun
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-kube-controllers",
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},
 	}
@@ -159,7 +160,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 			{
 				Kind:      "ServiceAccount",
 				Name:      "calico-kube-controllers",
-				Namespace: CalicoNamespace,
+				Namespace: common.CalicoNamespace,
 			},
 		},
 	}
@@ -196,7 +197,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-kube-controllers",
-			Namespace: CalicoNamespace,
+			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
 			},
@@ -214,7 +215,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "calico-kube-controllers",
-					Namespace: CalicoNamespace,
+					Namespace: common.CalicoNamespace,
 					Labels: map[string]string{
 						"k8s-app": "calico-kube-controllers",
 					},

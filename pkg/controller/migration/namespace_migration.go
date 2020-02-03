@@ -527,7 +527,7 @@ func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error
 		}
 
 		if needUpdate {
-			n, err := m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
+			_, err := m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
 			if err == nil {
 				return true, nil
 			}

@@ -155,7 +155,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
-	for _, secretName := range []string{render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret, render.ECKWebhookSecretName} {
+	for _, secretName := range []string{
+		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
+		render.ECKWebhookSecretName, render.ElasticsearchCuratorUserSecret} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
 		}

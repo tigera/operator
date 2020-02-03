@@ -519,16 +519,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
-		if err := r.namespaceMigration.Run(reqLogger, r.status); err != nil {
-			// No need to set status/degraded since the function will set if needed.
-			return reconcile.Result{}, err
+		if err := r.namespaceMigration.Run(reqLogger); err != nil {
+			r.SetDegraded("error with the migration", err, reqLogger)
+			// We should always requeue a migration problem. Don't return error
+			// to make sure we never start backing off retrying.
+			return reconcile.Result{Requeue: true}, nil
 		}
 		// Requeue so we can update our resources (without the migration changes)
 		// Also needed since we updated the instance.
 		return reconcile.Result{Requeue: true}, nil
 	} else if r.namespaceMigration.NeedCleanup() {
 		if err := r.namespaceMigration.CleanupMigration(); err != nil {
-			r.status.SetDegraded("Error cleaning up the migration", err.Error())
+			r.SetDegraded("Error cleaning up the migration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

@@ -195,40 +195,36 @@ func SetTyphaAntiAffinity(d *appsv1.Deployment) {
 
 // Run will update old deployments and daemonsets, label nodes, migrate the
 // calio-node pods on each node from the old pod to the new one, then clean up.
-func (m *CoreNamespaceMigration) Run(log logr.Logger, status *status.StatusManager) error {
+// The expectation is that this function will do the majority of the migration before
+// returning (the exception being label clean up on the nodes), if there is an error
+// it will be returned and the
+func (m *CoreNamespaceMigration) Run(log logr.Logger) error {
 	if err := m.deleteKubeSystemKubeControllers(); err != nil {
-		setDegraded(log, status, "Failed deleting kube-system calico-kube-controllers", err.Error())
-		return err
+		return fmt.Errorf("failed deleting kube-system calico-kube-controllers: %s", err.Error())
 	}
 	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
 	if err := m.waitForOperatorTyphaDeploymentReady(); err != nil {
-		setDegraded(log, status, "Failed to wait for operator typha deployment to be ready", err.Error())
-		return err
+		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
 	}
 	log.V(1).Info("Operator Typha Deployment is ready")
 	if err := m.labelUnmigratedNodes(); err != nil {
-		setDegraded(log, status, "Failed to label unmigrated nodes", err.Error())
-		return err
+		return fmt.Errorf("failed to label unmigrated nodes: %s", err.Error())
 	}
 	log.V(1).Info("All unmigrated nodes labeled")
 	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(); err != nil {
-		setDegraded(log, status, "The kube-system node DaemonSet is not ready with the updated nodeSelect", err.Error())
-		return err
+		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
 	if err := m.migrateEachNode(log); err != nil {
-		setDegraded(log, status, "Failed to migrate all nodes", err.Error())
-		return err
+		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
 	log.V(1).Info("Nodes migrated")
 	if err := m.deleteKubeSystemCalicoNode(); err != nil {
-		setDegraded(log, status, "Failed to delete kube-system node DaemonSet", err.Error())
-		return err
+		return fmt.Errorf("failed to delete kube-system node DaemonSet: %s", err.Error())
 	}
 	log.V(1).Info("kube-system node DaemonSet deleted")
 	if err := m.deleteKubeSystemTypha(); err != nil {
-		setDegraded(log, status, "Failed to delete kube-system typha Deployment", err.Error())
-		return err
+		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
 
 	return nil
@@ -299,7 +295,7 @@ func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode() error {
 // the calico-system namespace is ready before continuing, it will wait up to
 // 1 minute before returning with an error.
 func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady() error {
-	return wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
 		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(common.TyphaDeploymentName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
@@ -353,7 +349,7 @@ func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes() error {
 // kube-system namespace with a node selector that will prevent it from being
 // deployed to nodes that have been migrated and waits for the daemonset to update.
 func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() error {
-	return wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
+	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
 		ds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get("calico-node", metav1.GetOptions{})
 		if err != nil {
 			return false, err
@@ -423,7 +419,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")
 		for _, node := range nodes {
 			// This is to ensure that our new pods are becoming healthy before continuing on.
-			// We only wait up to 2 minutes after switching a node to allow the new pod
+			// We only wait up to 3 minutes after switching a node to allow the new pod
 			// to come up. Also if the operator crashed we don't want to continue
 			// updating if the pods are not healthy.
 			log.V(1).Info("Waiting for new calico pods to be healthy")
@@ -435,7 +431,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 					return fmt.Errorf("Setting label on node %s failed; %s", node.Name, err)
 				}
 				log.V(1).Info("Waiting for new calico pod to start and be healthy")
-				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 2*time.Minute, calicoPodLabel)
+				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)

@@ -163,6 +163,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %v", err)
 	}

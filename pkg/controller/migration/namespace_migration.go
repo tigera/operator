@@ -373,7 +373,12 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 			return false, err
 		}
 
-		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady {
+		// Get latest kube-system node ds.
+		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Get("calico-node", metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady || ds.Status.ObservedGeneration != ds.ObjectMeta.Generation {
 			return false, fmt.Errorf("All pods are not ready yet: %d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 		}
 
@@ -385,10 +390,22 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet, namespace, key, value string) error {
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
-		ds.Spec.Template.Spec.NodeSelector[key] = value
 
-		var err error
-		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Update(ds)
+		k := strings.Replace(key, "/", "~1", -1)
+
+		p := []StringPatch{{
+			Op:    "add",
+			Path:  fmt.Sprintf("/spec/template/spec/nodeSelector/%s", k),
+			Value: value,
+		}}
+
+		patchBytes, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+		log.Info("Patch NodeSelector with: ", string(patchBytes))
+
+		_, err = m.client.AppsV1().DaemonSets(kubeSystem).Patch(ds.Name, types.JSONPatchType, patchBytes)
 		if err != nil {
 			return err
 		}
@@ -491,30 +508,14 @@ func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error
 			return false, err
 		}
 
-		newNode := node.DeepCopy()
-
-		if newNode.Labels == nil {
-			newNode.Labels = make(map[string]string)
-		}
-
 		needUpdate := true
-		if curr, ok := newNode.Labels[key]; ok && curr == value {
+		if curr, ok := node.Labels[key]; ok && curr == value {
 			needUpdate = false
 		}
 
-		//k, err := json.Marshal(key)
-		//func HTMLEscape(dst *bytes.Buffer, src []byte) {
-		//var k bytes.Buffer
-		//json.HTMLEscape(&k, []byte(key))
-		//k, err := json.Marshal(strings.Replace(key, "/", "~1", -1))
-		//if err != nil {
-		//	log.Info("marshall err ", err)
-		//}
 		k := strings.Replace(key, "/", "~1", -1)
 
-		//v, _ := json.Marshal(value)
-
-		lp := []LabelPatch{{
+		lp := []StringPatch{{
 			Op:    "add",
 			Path:  fmt.Sprintf("/metadata/labels/%s", k),
 			Value: value,
@@ -524,15 +525,9 @@ func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error
 		if err != nil {
 			return false, err
 		}
-		//patchBytes, err := createNodeLabelPatch(node.Labels, newNode.Labels)
-		//if err != nil {
-		//	return false, fmt.Errorf("patch to add labels failed: %v", err)
-		//}
-		log.Info("Patch ", node.Name, " with: ", string(patchBytes))
 
 		if needUpdate {
 			n, err := m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
-			log.Info("node: ", n)
 			if err == nil {
 				return true, nil
 			}
@@ -549,48 +544,11 @@ func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error
 	})
 }
 
-type LabelPatch struct {
+type StringPatch struct {
 	Op    string `json:"op"`
 	Path  string `json:"path"`
 	Value string `json:"value"`
 }
-
-//func createNodeLabelPatch(orig, update map[string]string) ([]byte, error) {
-//
-//	lp := []LabelPatch{{
-//		Op:    "replace",
-//		Path:  "/labels",
-//		Value: update,
-//	}}
-//
-//	patchBytes, err := json.Marshal(lp)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	return patchBytes, nil
-//}
-
-//const annotationNameValueTemplate = `%s: %s`
-//const annotationPatchTemplate = `{"metadata": {"annotations": {%s}}}`
-//
-//func calculateAnnotationPatch(namesAndValues ...string) ([]byte, error) {
-//    settings := []string{}
-//    for i := 0; i < len(namesAndValues); i += 2 {
-//        // Marshal the key and value in order to make sure all the escaping is done correctly.
-//        nameJson, err := json.Marshal(namesAndValues[i])
-//        if err != nil {
-//            return nil, err
-//        }
-//        valueJson, err := json.Marshal(namesAndValues[i+1])
-//        if err != nil {
-//            return nil, err
-//        }
-//        settings = append(settings, fmt.Sprintf(annotationNameValueTemplate, nameJson, valueJson))
-//    }
-//    patch := []byte(fmt.Sprintf(annotationPatchTemplate, strings.Join(settings, ", ")))
-//    return patch, nil
-//}
 
 // Remove node labels from node. Perform Get/Check/Update so that it always working on the
 // most recent version of the resource.
@@ -602,16 +560,14 @@ func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
 			return false, err
 		}
 
-		newNode := node.DeepCopy()
-
 		needUpdate := false
-		if _, ok := newNode.Labels[key]; ok {
+		if _, ok := node.Labels[key]; ok {
 			needUpdate = true
 		}
 
 		// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
 		k := strings.Replace(key, "/", "~1", -1)
-		lp := []LabelPatch{{
+		lp := []StringPatch{{
 			Op:   "remove",
 			Path: fmt.Sprintf("/metadata/labels/%s", k),
 		}}
@@ -621,8 +577,6 @@ func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
 			return false, err
 		}
 
-		//patchBytes, err := createNodeLabelPatch(node.Labels, newNode.Labels)
-		log.Info("Patchbytes: ", string(patchBytes))
 		if err != nil {
 			return false, fmt.Errorf("patch to remove labels failed: %v", err)
 		}

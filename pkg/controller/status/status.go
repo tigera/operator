@@ -39,10 +39,10 @@ var log = logf.Log.WithName("status_manager")
 type StatusManager struct {
 	client       client.Client
 	component    string
-	daemonsets   []types.NamespacedName
-	deployments  []types.NamespacedName
-	statefulsets []types.NamespacedName
-	cronjobs     []types.NamespacedName
+	daemonsets   map[string]types.NamespacedName
+	deployments  map[string]types.NamespacedName
+	statefulsets map[string]types.NamespacedName
+	cronjobs     map[string]types.NamespacedName
 	lock         sync.Mutex
 	enabled      bool
 
@@ -60,10 +60,10 @@ func New(client client.Client, component string) *StatusManager {
 	return &StatusManager{
 		client:       client,
 		component:    component,
-		daemonsets:   []types.NamespacedName{},
-		deployments:  []types.NamespacedName{},
-		statefulsets: []types.NamespacedName{},
-		cronjobs:     []types.NamespacedName{},
+		daemonsets:   make(map[string]types.NamespacedName),
+		deployments:  make(map[string]types.NamespacedName),
+		statefulsets: make(map[string]types.NamespacedName),
+		cronjobs:     make(map[string]types.NamespacedName),
 	}
 }
 
@@ -123,38 +123,82 @@ func (m *StatusManager) OnCRNotFound() {
 	m.enabled = false
 	m.progressing = []string{}
 	m.failing = []string{}
-	m.daemonsets = []types.NamespacedName{}
-	m.deployments = []types.NamespacedName{}
-	m.statefulsets = []types.NamespacedName{}
-	m.cronjobs = []types.NamespacedName{}
+	m.daemonsets = make(map[string]types.NamespacedName)
+	m.deployments = make(map[string]types.NamespacedName)
+	m.statefulsets = make(map[string]types.NamespacedName)
+	m.cronjobs = make(map[string]types.NamespacedName)
 }
 
-// SetDaemonsets tells the status manager to monitor the health of the given daemonsets.
-func (m *StatusManager) SetDaemonsets(ds []types.NamespacedName) {
+// AddDaemonsets tells the status manager to monitor the health of the given daemonsets.
+func (m *StatusManager) AddDaemonsets(dss []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.daemonsets = ds
+	for _, ds := range dss {
+		m.daemonsets[ds.String()] = ds
+	}
 }
 
-// SetDeployments tells the status manager to monitor the health of the given deployments.
-func (m *StatusManager) SetDeployments(deps []types.NamespacedName) {
+// AddDeployments tells the status manager to monitor the health of the given deployments.
+func (m *StatusManager) AddDeployments(deps []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.deployments = deps
+	for _, dep := range deps {
+		m.deployments[dep.String()] = dep
+	}
 }
 
-// SetStatefulSets tells the status manager to monitor the health of the given statefulsets.
-func (m *StatusManager) SetStatefulSets(ss []types.NamespacedName) {
+// AddStatefulSets tells the status manager to monitor the health of the given statefulsets.
+func (m *StatusManager) AddStatefulSets(sss []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.statefulsets = ss
+	for _, ss := range sss {
+		m.statefulsets[ss.String()] = ss
+	}
 }
 
-// SetCronJobs tells the status manager to monitor the health of the given cronjobs.
-func (m *StatusManager) SetCronJobs(cj []types.NamespacedName) {
+// AddCronJobs tells the status manager to monitor the health of the given cronjobs.
+func (m *StatusManager) AddCronJobs(cjs []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.cronjobs = cj
+	for _, cj := range cjs {
+		m.cronjobs[cj.String()] = cj
+	}
+}
+
+// RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
+func (m *StatusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, ds := range dss {
+		delete(m.daemonsets, ds.String())
+	}
+}
+
+// RemoveDeployments tells the status manager to stop monitoring the health of the given deployments.
+func (m *StatusManager) RemoveDeployments(dps ...types.NamespacedName) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, dp := range dps {
+		delete(m.deployments, dp.String())
+	}
+}
+
+// RemoveStatefulSets tells the status manager to stop monitoring the health of the given statefulsets.
+func (m *StatusManager) RemoveStatefulSets(sss ...types.NamespacedName) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, ss := range sss {
+		delete(m.statefulsets, ss.String())
+	}
+}
+
+// RemoveCronJobs tells the status manager to stop monitoring the health of the given cronjobs.
+func (m *StatusManager) RemoveCronJobs(cjs ...types.NamespacedName) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, cj := range cjs {
+		delete(m.cronjobs, cj.String())
+	}
 }
 
 // SetDegraded sets degraded state with the provided reason and message.

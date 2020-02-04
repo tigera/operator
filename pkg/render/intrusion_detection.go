@@ -82,7 +82,31 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
-	return ElasticsearchDecorateAnnotations(&batchv1.Job{
+	podTemplate := ElasticsearchDecorateAnnotations(&v1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
+		},
+		Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{
+			RestartPolicy:    v1.RestartPolicyOnFailure,
+			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Containers: []v1.Container{
+				ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionJobUserSecret),
+			},
+			Volumes: []corev1.Volume{{
+				Name: "kibana-ca-cert-volume",
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: KibanaPublicCertSecret,
+						Items: []v1.KeyToPath{
+							{Key: "tls.crt", Path: "ca.pem"},
+						},
+					},
+				},
+			}},
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*v1.PodTemplateSpec)
+
+	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IntrusionDetectionInstallerJobName,
@@ -94,31 +118,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 					"job-name": IntrusionDetectionInstallerJobName,
 				},
 			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
-				},
-				Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{
-					RestartPolicy:    v1.RestartPolicyOnFailure,
-					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
-					Containers: []v1.Container{
-						ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionJobUserSecret),
-					},
-					Volumes: []corev1.Volume{{
-						Name: "kibana-ca-cert-volume",
-						VolumeSource: v1.VolumeSource{
-							Secret: &v1.SecretVolumeSource{
-								SecretName: KibanaPublicCertSecret,
-								Items: []v1.KeyToPath{
-									{Key: "tls.crt", Path: "ca.pem"},
-								},
-							},
-						},
-					}},
-				}),
-			},
+			Template: *podTemplate,
 		},
-	}, c.esClusterConfig, c.esSecrets).(*batchv1.Job)
+	}
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {

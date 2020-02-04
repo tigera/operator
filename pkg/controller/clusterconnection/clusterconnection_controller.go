@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/tigera/operator/pkg/controller/installation"
-	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -143,7 +142,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		tunnelSecret,
 	)
 
-	if err := ch.CreateOrUpdate(ctx, component, &status.StatusManager{}); err != nil {
+	if err := ch.CreateOrUpdate(ctx, component, nil); err != nil {
 		return result, err
 	}
 

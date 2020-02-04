@@ -262,7 +262,38 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 	}
 
-	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
+	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "compliance-controller",
+			Namespace: ComplianceNamespace,
+			Labels: map[string]string{
+				"k8s-app": "compliance-controller",
+			},
+		},
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector: map[string]string{
+				"beta.kubernetes.io/os": "linux",
+			},
+			ServiceAccountName: "tigera-compliance-controller",
+			Tolerations: []corev1.Toleration{
+				{
+					Key:    "node-role.kubernetes.io/master",
+					Effect: corev1.TaintEffectNoSchedule,
+				},
+			},
+			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Containers: []corev1.Container{
+				ElasticsearchContainerDecorate(corev1.Container{
+					Name:          "compliance-controller",
+					Image:         constructImage(ComplianceControllerImage, c.installation.Spec.Registry),
+					Env:           envVars,
+					LivenessProbe: complianceLivenessProbe,
+				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret),
+			},
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
+	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-controller",
@@ -277,38 +308,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-controller"}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "compliance-controller",
-					Namespace: ComplianceNamespace,
-					Labels: map[string]string{
-						"k8s-app": "compliance-controller",
-					},
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"beta.kubernetes.io/os": "linux",
-					},
-					ServiceAccountName: "tigera-compliance-controller",
-					Tolerations: []corev1.Toleration{
-						{
-							Key:    "node-role.kubernetes.io/master",
-							Effect: corev1.TaintEffectNoSchedule,
-						},
-					},
-					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
-					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(corev1.Container{
-							Name:          "compliance-controller",
-							Image:         constructImage(ComplianceControllerImage, c.installation.Spec.Registry),
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
-						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret),
-					},
-				}),
-			},
+			Template: *podTemplate,
 		},
-	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
+	}
 }
 
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
@@ -492,7 +494,86 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
 	defaultMode := int32(420)
-	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
+	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "compliance-server",
+			Namespace: ComplianceNamespace,
+			Labels: map[string]string{
+				"k8s-app": "compliance-server",
+			},
+			Annotations: map[string]string{
+				complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
+			},
+		},
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+			ServiceAccountName: "tigera-compliance-server",
+			Tolerations: []corev1.Toleration{
+				{
+					Key:    "node-role.kubernetes.io/master",
+					Effect: corev1.TaintEffectNoSchedule,
+				},
+			},
+			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Containers: []corev1.Container{
+				ElasticsearchContainerDecorate(corev1.Container{
+					Name:  "compliance-server",
+					Image: constructImage(ComplianceServerImage, c.installation.Spec.Registry),
+					Env:   envVars,
+					LivenessProbe: &corev1.Probe{
+						Handler: corev1.Handler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/compliance/version",
+								Port:   intstr.FromInt(complianceServerPort),
+								Scheme: corev1.URISchemeHTTPS,
+							},
+						},
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       10,
+						FailureThreshold:    5,
+					},
+					ReadinessProbe: &corev1.Probe{
+						Handler: corev1.Handler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/compliance/version",
+								Port:   intstr.FromInt(complianceServerPort),
+								Scheme: corev1.URISchemeHTTPS,
+							},
+						},
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       10,
+						FailureThreshold:    5,
+					},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "cert",
+						MountPath: "/code/apiserver.local.config/certificates",
+						ReadOnly:  true,
+					}},
+				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
+			},
+			Volumes: []corev1.Volume{{
+				Name: "cert",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &defaultMode,
+						SecretName:  ComplianceServerCertSecret,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  "tls.crt",
+								Path: "apiserver.crt",
+							},
+							{
+								Key:  "tls.key",
+								Path: "apiserver.key",
+							},
+						},
+					},
+				},
+			}},
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
+	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-server",
@@ -507,86 +588,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-server"}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "compliance-server",
-					Namespace: ComplianceNamespace,
-					Labels: map[string]string{
-						"k8s-app": "compliance-server",
-					},
-					Annotations: map[string]string{
-						complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
-					},
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
-					ServiceAccountName: "tigera-compliance-server",
-					Tolerations: []corev1.Toleration{
-						{
-							Key:    "node-role.kubernetes.io/master",
-							Effect: corev1.TaintEffectNoSchedule,
-						},
-					},
-					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
-					Containers: []corev1.Container{
-						ElasticsearchContainerDecorate(corev1.Container{
-							Name:  "compliance-server",
-							Image: constructImage(ComplianceServerImage, c.installation.Spec.Registry),
-							Env:   envVars,
-							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path:   "/compliance/version",
-										Port:   intstr.FromInt(complianceServerPort),
-										Scheme: corev1.URISchemeHTTPS,
-									},
-								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       10,
-								FailureThreshold:    5,
-							},
-							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path:   "/compliance/version",
-										Port:   intstr.FromInt(complianceServerPort),
-										Scheme: corev1.URISchemeHTTPS,
-									},
-								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       10,
-								FailureThreshold:    5,
-							},
-							VolumeMounts: []corev1.VolumeMount{{
-								Name:      "cert",
-								MountPath: "/code/apiserver.local.config/certificates",
-								ReadOnly:  true,
-							}},
-						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
-					},
-					Volumes: []corev1.Volume{{
-						Name: "cert",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								DefaultMode: &defaultMode,
-								SecretName:  ComplianceServerCertSecret,
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "tls.crt",
-										Path: "apiserver.crt",
-									},
-									{
-										Key:  "tls.key",
-										Path: "apiserver.key",
-									},
-								},
-							},
-						},
-					}},
-				}),
-			},
+			Template: *podTemplate,
 		},
-	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
+	}
 }
 
 func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.ServiceAccount {
@@ -649,7 +653,38 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 	}
 
-	return ElasticsearchDecorateAnnotations(&appsv1.Deployment{
+	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "compliance-snapshotter",
+			Namespace: ComplianceNamespace,
+			Labels: map[string]string{
+				"k8s-app": "compliance-snapshotter",
+			},
+		},
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+			ServiceAccountName: "tigera-compliance-snapshotter",
+			Tolerations: []corev1.Toleration{
+				{
+					Key:    "node-role.kubernetes.io/master",
+					Effect: corev1.TaintEffectNoSchedule,
+				},
+			},
+			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Containers: []corev1.Container{
+				ElasticsearchContainerDecorateIndexCreator(
+					ElasticsearchContainerDecorate(corev1.Container{
+						Name:          "compliance-snapshotter",
+						Image:         constructImage(ComplianceSnapshotterImage, c.installation.Spec.Registry),
+						Env:           envVars,
+						LivenessProbe: complianceLivenessProbe,
+					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+				),
+			},
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
+	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-snapshotter",
@@ -664,38 +699,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-snapshotter"}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "compliance-snapshotter",
-					Namespace: ComplianceNamespace,
-					Labels: map[string]string{
-						"k8s-app": "compliance-snapshotter",
-					},
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
-					ServiceAccountName: "tigera-compliance-snapshotter",
-					Tolerations: []corev1.Toleration{
-						{
-							Key:    "node-role.kubernetes.io/master",
-							Effect: corev1.TaintEffectNoSchedule,
-						},
-					},
-					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
-					Containers: []corev1.Container{
-						ElasticsearchContainerDecorateIndexCreator(
-							ElasticsearchContainerDecorate(corev1.Container{
-								Name:          "compliance-snapshotter",
-								Image:         constructImage(ComplianceSnapshotterImage, c.installation.Spec.Registry),
-								Env:           envVars,
-								LivenessProbe: complianceLivenessProbe,
-							}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
-						),
-					},
-				}),
-			},
+			Template: *podTemplate,
 		},
-	}, c.esClusterConfig, c.esSecrets).(*appsv1.Deployment)
+	}
 }
 
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
@@ -780,7 +786,49 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		},
 	}
 
-	return ElasticsearchDecorateAnnotations(&appsv1.DaemonSet{
+	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "compliance-benchmarker",
+			Namespace: ComplianceNamespace,
+			Labels: map[string]string{
+				"k8s-app": "compliance-benchmarker",
+			},
+		},
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
+			ServiceAccountName: "tigera-compliance-benchmarker",
+			HostPID:            true,
+			Tolerations: []corev1.Toleration{
+				{
+					Effect:   corev1.TaintEffectNoSchedule,
+					Operator: corev1.TolerationOpExists,
+				},
+				{
+					Key:      "CriticalAddonsOnly",
+					Operator: corev1.TolerationOpExists,
+				},
+				{
+					Effect:   corev1.TaintEffectNoExecute,
+					Operator: corev1.TolerationOpExists,
+				},
+			},
+			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Containers: []corev1.Container{
+				ElasticsearchContainerDecorateIndexCreator(
+					ElasticsearchContainerDecorate(corev1.Container{
+						Name:          "compliance-benchmarker",
+						Image:         constructImage(ComplianceBenchmarkerImage, c.installation.Spec.Registry),
+						Env:           envVars,
+						VolumeMounts:  volMounts,
+						LivenessProbe: complianceLivenessProbe,
+					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+				),
+			},
+			Volumes: vols,
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
+	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",
@@ -790,49 +838,9 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-benchmarker"}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "compliance-benchmarker",
-					Namespace: ComplianceNamespace,
-					Labels: map[string]string{
-						"k8s-app": "compliance-benchmarker",
-					},
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
-					ServiceAccountName: "tigera-compliance-benchmarker",
-					HostPID:            true,
-					Tolerations: []corev1.Toleration{
-						{
-							Effect:   corev1.TaintEffectNoSchedule,
-							Operator: corev1.TolerationOpExists,
-						},
-						{
-							Key:      "CriticalAddonsOnly",
-							Operator: corev1.TolerationOpExists,
-						},
-						{
-							Effect:   corev1.TaintEffectNoExecute,
-							Operator: corev1.TolerationOpExists,
-						},
-					},
-					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
-					Containers: []corev1.Container{
-						ElasticsearchContainerDecorateIndexCreator(
-							ElasticsearchContainerDecorate(corev1.Container{
-								Name:          "compliance-benchmarker",
-								Image:         constructImage(ComplianceBenchmarkerImage, c.installation.Spec.Registry),
-								Env:           envVars,
-								VolumeMounts:  volMounts,
-								LivenessProbe: complianceLivenessProbe,
-							}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
-						),
-					},
-					Volumes: vols,
-				}),
-			},
+			Template: *podTemplate,
 		},
-	}, c.esClusterConfig, c.esSecrets).(*appsv1.DaemonSet)
+	}
 }
 
 func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() *ocsv1.SecurityContextConstraints {

@@ -242,6 +242,12 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 // Important note: Following Elastic ECK docs, the recommendation is to set the Java heap size
 // to half the size of RAM allocated to the Pod:
 // https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
+//
+// This recommendation does not consider space for machine learning however - we're using the
+// default limit of 30% of node memory there, so we adjust accordingly.
+//
+// Finally limit the value to 26GiB to encourage zero-based compressed oops:
+// https://www.elastic.co/blog/a-heap-of-trouble
 func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 	// Get the Quantity's raw number with any scale factor applied (based any unit when it was parsed)
 	// e.g.
@@ -250,8 +256,8 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 	// "1000" is parsed as a Quantity with value 1000, scale factor 0, and returns 1000
 	rawMemQuantity := q.AsDec()
 
-	// Next cut the raw number by half (following Elastic recommendation)
-	divisor := inf.NewDec(2, 0)
+	// Use one third of that for the JVM heap.
+	divisor := inf.NewDec(3, 0)
 	halvedQuantity := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
 
 	// The remaining operations below perform validation and possible modification of the
@@ -273,7 +279,13 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 		newRawMemQuantity = minLimit.UnscaledBig().Int64()
 	}
 
-	// Note: Because we roumd to the nearest mulitple of 1024 above and then use BinarySI format below,
+	// Limit the JVM heap to 26GiB.
+	maxLimit := inf.NewDec(27917287424, 0)
+	if rounderToNearest.Cmp(maxLimit) > 0 {
+		newRawMemQuantity = maxLimit.UnscaledBig().Int64()
+	}
+
+	// Note: Because we round to the nearest multiple of 1024 above and then use BinarySI format below,
 	// we will always get a binary unit (e.g. Ki, Mi, Gi). However, depending on what the raw number is
 	// the Quantity internal formatter might not use the most intuitive unit.
 	//

@@ -177,6 +177,23 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		annots[filterHashAnnotation] = AnnotationHash(c.filters)
 	}
 
+	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"k8s-app": "fluentd-node",
+			},
+			Annotations: annots,
+		},
+		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:                  map[string]string{},
+			Tolerations:                   c.tolerations(),
+			ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
+			TerminationGracePeriodSeconds: &terminationGracePeriod,
+			Containers:                    []corev1.Container{c.container()},
+			Volumes:                       c.volumes(),
+		}),
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
 	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -185,22 +202,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "fluentd-node"}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": "fluentd-node",
-					},
-					Annotations: annots,
-				},
-				Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-					NodeSelector:                  map[string]string{},
-					Tolerations:                   c.tolerations(),
-					ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
-					TerminationGracePeriodSeconds: &terminationGracePeriod,
-					Containers:                    []corev1.Container{c.container()},
-					Volumes:                       c.volumes(),
-				}),
-			},
+			Template: *podTemplate,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 					MaxUnavailable: &maxUnavailable,
@@ -208,8 +210,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			},
 		},
 	}
-
-	ds = ElasticsearchDecorateAnnotations(ds, c.esClusterConfig, c.esSecrets).(*appsv1.DaemonSet)
 
 	setCriticalPod(&(ds.Spec.Template))
 	return ds

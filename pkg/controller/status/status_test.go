@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/tigera/operator/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -104,4 +105,68 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
 	})
 
+	It("should contain all the NamespacesNames for all the resources added by multiple calls to Set<Resources>", func() {
+		sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+		sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS2"}})
+		sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+		sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP2"}})
+		sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS1"}})
+		sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS2"}})
+		sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "CJ1"}})
+		sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "CJ2"}})
+
+		Expect(sm.statefulsets).Should(Equal(map[string]types.NamespacedName{
+			"NS1/SS1": {Namespace: "NS1", Name: "SS1"},
+			"NS1/SS2": {Namespace: "NS1", Name: "SS2"},
+		}))
+		Expect(sm.deployments).Should(Equal(map[string]types.NamespacedName{
+			"NS1/DP1": {Namespace: "NS1", Name: "DP1"},
+			"NS1/DP2": {Namespace: "NS1", Name: "DP2"},
+		}))
+		Expect(sm.daemonsets).Should(Equal(map[string]types.NamespacedName{
+			"NS1/DS1": {Namespace: "NS1", Name: "DS1"},
+			"NS1/DS2": {Namespace: "NS1", Name: "DS2"},
+		}))
+		Expect(sm.cronjobs).Should(Equal(map[string]types.NamespacedName{
+			"NS1/CJ1": {Namespace: "NS1", Name: "CJ1"},
+			"NS1/CJ2": {Namespace: "NS1", Name: "CJ2"},
+		}))
+	})
+
+	It("should not contain the NamespacedNames for resources removed by calls to Remove<Resource", func() {
+		sm.AddStatefulSets([]types.NamespacedName{
+			{Namespace: "NS1", Name: "SS1"},
+			{Namespace: "NS1", Name: "SS2"},
+		})
+		sm.AddDeployments([]types.NamespacedName{
+			{Namespace: "NS1", Name: "DP1"},
+			{Namespace: "NS1", Name: "DP2"},
+		})
+		sm.AddDaemonsets([]types.NamespacedName{
+			{Namespace: "NS1", Name: "DS1"},
+			{Namespace: "NS1", Name: "DS2"},
+		})
+		sm.AddCronJobs([]types.NamespacedName{
+			{Namespace: "NS1", Name: "CJ1"},
+			{Namespace: "NS1", Name: "CJ2"},
+		})
+
+		sm.RemoveStatefulSets(types.NamespacedName{Namespace: "NS1", Name: "SS2"})
+		sm.RemoveDeployments(types.NamespacedName{Namespace: "NS1", Name: "DP2"})
+		sm.RemoveDaemonsets(types.NamespacedName{Namespace: "NS1", Name: "DS2"})
+		sm.RemoveCronJobs(types.NamespacedName{Namespace: "NS1", Name: "CJ2"})
+
+		Expect(sm.statefulsets).Should(Equal(map[string]types.NamespacedName{
+			"NS1/SS1": {Namespace: "NS1", Name: "SS1"},
+		}))
+		Expect(sm.deployments).Should(Equal(map[string]types.NamespacedName{
+			"NS1/DP1": {Namespace: "NS1", Name: "DP1"},
+		}))
+		Expect(sm.daemonsets).Should(Equal(map[string]types.NamespacedName{
+			"NS1/DS1": {Namespace: "NS1", Name: "DS1"},
+		}))
+		Expect(sm.cronjobs).Should(Equal(map[string]types.NamespacedName{
+			"NS1/CJ1": {Namespace: "NS1", Name: "CJ1"},
+		}))
+	})
 })

@@ -129,9 +129,9 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		continue
 	}
 	if status != nil {
-		status.SetDaemonsets(daemonSets)
-		status.SetDeployments(deployments)
-		status.SetStatefulSets(statefulsets)
+		status.AddDaemonsets(daemonSets)
+		status.AddDeployments(deployments)
+		status.AddStatefulSets(statefulsets)
 	}
 	cmpLog.Info("Done reconciling component")
 	return nil

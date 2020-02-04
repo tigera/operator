@@ -192,7 +192,7 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		return reconcile.Result{}, err
 	}
 
-	r.status.SetCronJobs([]types.NamespacedName{{Name: render.EsCuratorName, Namespace: render.ElasticsearchNamespace}})
+	r.status.AddCronJobs([]types.NamespacedName{{Name: render.EsCuratorName, Namespace: render.ElasticsearchNamespace}})
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

@@ -694,6 +694,18 @@ func (c *managerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"clusterinformations"},
 				Verbs:     []string{"get", "list"},
 			},
+			// List and view the threat defense configuration
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"globalalerts",
+					"globalalerts/status",
+					"globalalerttemplates",
+					"globalthreatfeeds",
+					"globalthreatfeeds/status",
+				},
+				Verbs: []string{"get", "watch", "list"},
+			},
 		},
 	}
 }
@@ -779,6 +791,18 @@ func (c *managerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"clusterinformations"},
 				Verbs:     []string{"get", "list"},
+			},
+			// Manage the threat defense configuration
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"globalalerts",
+					"globalalerts/status",
+					"globalalerttemplates",
+					"globalthreatfeeds",
+					"globalthreatfeeds/status",
+				},
+				Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 			},
 		},
 	}

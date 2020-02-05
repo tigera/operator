@@ -688,6 +688,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+		// It may seem like defining and setting FELIX_IPV6SUPPORT to false is redundant, since IPv6
+		// support is usually disabled by default. But FELIX_IPV6SUPPORT maps to 'configParams.Ipv6Support'
+		// in felix and its default has been 'true' since earlier versions. So not having it here and set
+		// to false would cause IPv6 to be enabled by default in felix.
+		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{
 			Name: "NODENAME",

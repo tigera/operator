@@ -21,6 +21,7 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -190,6 +191,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS))
 	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS))
 	components = appendNotNil(components, KubeControllers(r.installation))
+	components = appendNotNil(components, ClusterRoles(r.installation))
 	return components
 }
 
@@ -198,4 +200,230 @@ func appendNotNil(components []Component, c Component) []Component {
 		components = append(components, c)
 	}
 	return components
+}
+
+type clusterRolesComponent struct {
+	cr *operator.Installation
+}
+
+func ClusterRoles(cr *operator.Installation) *clusterRolesComponent {
+	return &clusterRolesComponent{cr}
+}
+
+func (c *clusterRolesComponent) Objects() []runtime.Object {
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		return []runtime.Object{c.tigeraUserClusterRole(), c.tigeraNetworkAdminClusterRole()}
+	}
+
+	return []runtime.Object{}
+}
+
+func (c *clusterRolesComponent) Ready() bool {
+	return true
+}
+
+// tigeraUserClusterRole returns a cluster role for a default Tigera Secure user.
+func (c *clusterRolesComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		// List requests that the Tigera manager needs.
+		{
+			APIGroups: []string{
+				"projectcalico.org",
+				"networking.k8s.io",
+				"extensions",
+				"",
+			},
+			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+			// more details).  Similar for all tiered policy resource types.
+			Resources: []string{
+				"tiers",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"namespaces",
+				"globalnetworksets",
+				"networksets",
+				"managedclusters",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+			},
+			Verbs: []string{"watch", "list"},
+		},
+		// Access to statistics.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/proxy"},
+			ResourceNames: []string{
+				"https:tigera-api:8080", "calico-node-prometheus:9090",
+			},
+			Verbs: []string{"get", "create"},
+		},
+		// Access to policies in the default tier
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"tiers"},
+			ResourceNames: []string{"default"},
+			Verbs:         []string{"get"},
+		},
+		// List and download the reports in the Tigera Secure manager.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreports"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreporttypes"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// List and view the threat defense configuration
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalalerts",
+				"globalalerts/status",
+				"globalalerttemplates",
+				"globalthreatfeeds",
+				"globalthreatfeeds/status",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		},
+	}
+
+	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
+	// cluster
+	if c.cr.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
+		// Access to flow logs, audit logs, and statistics
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{"lma.tigera.io"},
+			Resources: []string{"*"},
+			ResourceNames: []string{
+				"flows", "audit*", "events", "dns",
+			},
+			Verbs: []string{"get"},
+		})
+	}
+
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-ui-user",
+		},
+		Rules: rules,
+	}
+}
+
+// tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure manager network admin.
+func (c *clusterRolesComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		// Full access to all network policies
+		{
+			APIGroups: []string{
+				"projectcalico.org",
+				"networking.k8s.io",
+				"extensions",
+			},
+			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+			// more details).  Similar for all tiered policy resource types.
+			Resources: []string{
+				"tiers",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"globalnetworksets",
+				"networksets",
+				"managedclusters",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		// Additional "list" requests that the Tigera Secure manager needs
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"watch", "list"},
+		},
+		// Access to statistics.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/proxy"},
+			ResourceNames: []string{
+				"https:tigera-api:8080", "calico-node-prometheus:9090",
+			},
+			Verbs: []string{"get", "create"},
+		},
+		// Manage globalreport configuration, view report generation status, and list reports in the Tigera Secure manager.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreports"},
+			Verbs:     []string{"*"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreports/status"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		// List and download the reports in the Tigera Secure manager.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreporttypes"},
+			Verbs:     []string{"get"},
+		},
+		// Access to cluster information containing Calico and EE versions from the UI.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Manage the threat defense configuration
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalalerts",
+				"globalalerts/status",
+				"globalalerttemplates",
+				"globalthreatfeeds",
+				"globalthreatfeeds/status",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+	}
+
+	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
+	// cluster
+	if c.cr.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
+		// Access to flow logs, audit logs, and statistics
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{"lma.tigera.io"},
+			Resources: []string{"*"},
+			ResourceNames: []string{
+				"flows", "audit*", "events", "dns",
+			},
+			Verbs: []string{"get"},
+		})
+	}
+
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-network-admin",
+		},
+		Rules: rules,
+	}
 }

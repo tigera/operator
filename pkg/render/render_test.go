@@ -78,7 +78,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico})
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal((37 + 1 + 1 + 12)))
+		Expect(componentCount(c.Render())).To(Equal((37 + 1 + 1 + 14)))
 	})
 })
 

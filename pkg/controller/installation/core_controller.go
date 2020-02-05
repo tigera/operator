@@ -26,6 +26,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -57,11 +58,19 @@ var openshiftNetworkConfig = "cluster"
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
-	return add(mgr, newReconciler(mgr, provider, tsee))
+	ri, err := newReconciler(mgr, provider, tsee)
+	if err != nil {
+		return fmt.Errorf("failed to create Core Reconciler: %v", err)
+	}
+	return add(mgr, ri)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *ReconcileInstallation {
+func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (*ReconcileInstallation, error) {
+	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
+	}
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
@@ -70,11 +79,12 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) *
 		autoDetectedProvider: provider,
 		status:               status.New(mgr.GetClient(), "calico"),
 		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
+		namespaceMigration:   nm,
 		requiresTSEE:         tsee,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()
-	return r
+	return r, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -173,6 +183,7 @@ type ReconcileInstallation struct {
 	autoDetectedProvider operator.Provider
 	status               *status.StatusManager
 	typhaAutoscaler      *typhaAutoscaler
+	namespaceMigration   *migration.CoreNamespaceMigration
 	requiresTSEE         bool
 }
 
@@ -416,6 +427,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	// Determine if we need to migrate resources from the kube-system namespace. If
+	// we do then we'll render the Calico components with additional node selectors to
+	// prevent scheduling, later we will run a migration that migrates nodes one by one
+	// to mimic a 'normal' rolling update.
+	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration()
+	if err != nil {
+		log.Error(err, "Error checking if namespace migration is needed")
+		r.status.SetDegraded("Error checking if namespace migration is needed", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -428,6 +450,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
+		needNsMigration,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -489,6 +512,24 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 		if err = r.client.Patch(ctx, openshiftConfig, patchFrom); err != nil {
 			r.SetDegraded("Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Run this after we have rendered our components so the new (operator created)
+	// Deployments and Daemonset exist with our special migration nodeSelectors.
+	if needNsMigration {
+		if err := r.namespaceMigration.Run(reqLogger); err != nil {
+			r.SetDegraded("error migrating resources to calico-system", err, reqLogger)
+			// We should always requeue a migration problem. Don't return error
+			// to make sure we never start backing off retrying.
+			return reconcile.Result{Requeue: true}, nil
+		}
+		// Requeue so we can update our resources (without the migration changes)
+		return reconcile.Result{Requeue: true}, nil
+	} else if r.namespaceMigration.NeedCleanup() {
+		if err := r.namespaceMigration.CleanupMigration(); err != nil {
+			r.SetDegraded("error migrating resources to calico-system", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

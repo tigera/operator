@@ -709,6 +709,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			},
 			Verbs: []string{"watch", "list"},
 		},
+		// Additional "list" requests required to view flows.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
 		// Access to statistics.
 		{
 			APIGroups: []string{""},
@@ -813,6 +819,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{""},
 			Resources: []string{"namespaces"},
 			Verbs:     []string{"watch", "list"},
+		},
+		// Additional "list" requests required to view flows.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
 		},
 		// Access to statistics.
 		{

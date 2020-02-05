@@ -64,6 +64,7 @@ func Manager(
 			ManagerTLSSecretName,
 			ManagerSecretKeyName,
 			ManagerSecretCertName,
+			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
 		)
 		if err != nil {

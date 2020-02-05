@@ -60,6 +60,7 @@ func Elasticsearch(
 			TigeraElasticsearchCertSecret,
 			"tls.key",
 			"tls.crt",
+			DefaultCertificateDuration,
 			nil, ElasticsearchHTTPURL,
 		)
 		if err != nil {
@@ -74,6 +75,7 @@ func Elasticsearch(
 			TigeraKibanaCertSecret,
 			"tls.key",
 			"tls.crt",
+			DefaultCertificateDuration,
 			nil, KibanaHTTPURL,
 		)
 		if err != nil {

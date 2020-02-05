@@ -145,6 +145,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 		NodeTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
+		DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{setClientAuth},
 		"typha-client")
 	if err != nil {
@@ -158,6 +159,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 		TyphaTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
+		DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{setServerAuth},
 		"typha-server")
 	if err != nil {

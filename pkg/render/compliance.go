@@ -62,6 +62,7 @@ func Compliance(
 			ComplianceServerCertSecret,
 			"tls.key",
 			"tls.crt",
+			DefaultCertificateDuration,
 			nil, "compliance.tigera-compliance.svc",
 		)
 		if err != nil {

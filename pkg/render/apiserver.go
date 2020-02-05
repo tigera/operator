@@ -46,6 +46,7 @@ func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1
 			APIServerTLSSecretName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
+			DefaultCertificateDuration,
 			nil,
 			apiServiceHostname,
 		)

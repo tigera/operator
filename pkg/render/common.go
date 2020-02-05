@@ -35,7 +35,8 @@ import (
 )
 
 const (
-	Optional = true
+	Optional                   = true
+	DefaultCertificateDuration = 100 * 365 * 24 * time.Hour
 )
 
 var log = logf.Log.WithName("render")
@@ -98,7 +99,7 @@ func makeCA() (*crypto.CA, error) {
 // as the common name for the certificate. If hostnames are not provided, localhost is used.
 // This code came from:
 // https://github.com/openshift/library-go/blob/84f02c4b7d6ab9d67f63b13586693600051de401/pkg/controller/controllercmd/cmd.go#L153
-func makeSignedTLSPair(ca *crypto.CA, fns []crypto.CertificateExtensionFunc, hostnames ...string) (tls *crypto.TLSCertificateConfig, err error) {
+func makeSignedTLSPair(ca *crypto.CA, fns []crypto.CertificateExtensionFunc, dur time.Duration, hostnames ...string) (tls *crypto.TLSCertificateConfig, err error) {
 	if ca == nil {
 		ca, err = makeCA()
 		if err != nil {
@@ -111,11 +112,7 @@ func makeSignedTLSPair(ca *crypto.CA, fns []crypto.CertificateExtensionFunc, hos
 	if len(hostnames) > 0 {
 		hostnamesSet = sets.NewString(hostnames...)
 	}
-	// Set cert expiration to 100 years
-	return ca.MakeServerCertForDuration(
-		hostnamesSet,
-		100*365*24*time.Hour, // 100years*365days*24hours
-		fns...)
+	return ca.MakeServerCertForDuration(hostnamesSet, dur, fns...)
 }
 
 //type CertificateExtensionFunc func(*x509.Certificate) error
@@ -140,6 +137,7 @@ func setServerAuth(x *x509.Certificate) error {
 //   secretName: The name of the secret.
 //   secretKeyName: The name of the data field that will contain the key.
 //   secretCertName: The name of the data field that will contain the cert.
+//   dur: How long the certificate will be valid.
 //   hostnames: The first will be used as the CN, and the rest as SANs. If
 //     no hostnames are provided then "localhost" will be used.
 func createOperatorTLSSecret(
@@ -147,12 +145,13 @@ func createOperatorTLSSecret(
 	secretName string,
 	secretKeyName string,
 	secretCertName string,
+	dur time.Duration,
 	cef []crypto.CertificateExtensionFunc,
 	hostnames ...string,
 ) (*v1.Secret, error) {
 	log.Info("Creating certificate secret", "secret", secretName)
 	// Create cert
-	cert, err := makeSignedTLSPair(ca, cef, hostnames...)
+	cert, err := makeSignedTLSPair(ca, cef, dur, hostnames...)
 	if err != nil {
 		log.Error(err, "Unable to create signed cert pair")
 		return nil, fmt.Errorf("Unable to create signed cert pair: %s", err)

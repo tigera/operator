@@ -3,6 +3,7 @@ module github.com/tigera/operator
 go 1.12
 
 require (
+	github.com/cloudflare/cfssl v1.4.1
 	github.com/elastic/cloud-on-k8s v0.0.0-20190729075318-8280d4172234
 	github.com/elastic/go-ucfg v0.8.1 // indirect
 	github.com/go-logr/logr v0.1.0

@@ -1,10 +1,9 @@
-# Tigera Operator
+# Calico Operator
 
-[![Build Status](https://semaphoreci.com/api/v1/projects/735b014f-f9ff-4974-9c80-c703157de421/2839810/badge.svg)](https://semaphoreci.com/calico/operator)
 [![Docker image](https://img.shields.io/badge/docker-quay.io%2Ftigera%2Foperator-blue)](https://quay.io/repository/tigera/operator)
 
-This repository contains a Kubernetes operator which manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift. Its goal is
-to make installation, upgrades, and ongoing lifecycle management of Calico and Tigera Secure as simple and reliable as possible.
+This repository contains a Kubernetes operator which manages the lifecycle of a Calico or Calico Enterprise installation on Kubernetes or OpenShift. Its goal is
+to make installation, upgrades, and ongoing lifecycle management of Calico and Calico Enterprise as simple and reliable as possible.
 
 This operator is built using the [operator-sdk](https://github.com/operator-framework/operator-sdk), so you should be familiar with how that works before getting started.
 
@@ -73,9 +72,9 @@ To tear down the cluster:
 
 	make cluster-destroy
 
-### Using Tigera Secure
+### Using Calico Enterprise
 
-To install Tigera Secure instead of Calico, you need to install an image pull secret,
+To install Calico Enterprise instead of Calico, you need to install an image pull secret,
 as well as modify the Installation CR.
 
 Create the pull secret in the tigera-operator namespace:
@@ -95,7 +94,7 @@ spec:
   - name: tigera-pull-secret
 ```
 
-You can then install additional Tigera Secure components by creating their CRs from within
+You can then install additional Calico Enterprise components by creating their CRs from within
 the `./deploy/crds/` directory.
 
 ### Running unit tests

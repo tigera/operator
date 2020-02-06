@@ -45,7 +45,13 @@ var _ = Describe("Rendering tests", func() {
 		}
 		g = render.Guardian(
 			addr,
-			[]*corev1.Secret{},
+			[]*corev1.Secret{{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pull-secret",
+					Namespace: render.OperatorNamespace(),
+				},
+			}},
 			false,
 			"my-reg/",
 			secret,
@@ -62,6 +68,7 @@ var _ = Describe("Rendering tests", func() {
 			kind    string
 		}{
 			{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.GuardianClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -74,7 +81,7 @@ var _ = Describe("Rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		deployment := resources[4].(*appsv1.Deployment)
+		deployment := resources[5].(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.VersionGuardian))
 	})
 

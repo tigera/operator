@@ -124,24 +124,24 @@ func (c *complianceComponent) Objects() []runtime.Object {
 		c.complianceGlobalReportNetworkAccess(),
 		c.complianceGlobalReportPolicyAudit(),
 		c.complianceGlobalReportCISBenchmark(),
+
+		// Even though we do not have a compliance-server, we need a serviceaccount
+		// in the managed cluster for RBAC requests.
+		c.complianceServerServiceAccount(),
+		c.complianceServerClusterRoleBinding(),
 	)
 
 	// Compliance server is only for Standalone or Management clusters
 	if c.installation.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
 		complianceObjs = append(complianceObjs,
-			c.complianceServerServiceAccount(),
 			c.complianceServerClusterRole(),
-			c.complianceServerClusterRoleBinding(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
 		)
 	} else {
-		// We still need a serviceaccount in the managed cluster for RBAC requests.
 		complianceObjs = append(complianceObjs,
-			c.complianceServerServiceAccount(),
 			c.complianceServerManagedClusterRole(),
-			c.complianceServerClusterRoleBinding(),
 		)
 	}
 
@@ -464,6 +464,11 @@ func (c *complianceComponent) complianceServerManagedClusterRole() *rbacv1.Clust
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"},
 		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"globalreporttypes", "globalreports"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
 			{
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},

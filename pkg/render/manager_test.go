@@ -88,9 +88,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 
 		deployment := resources[12].(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:" + components.VersionManager))
-		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy:" + components.VersionManagerEsProxy))
-		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron:" + components.VersionManagerProxy))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("quay.io/tigera/cnx-manager:" + components.VersionManager))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("quay.io/tigera/es-proxy:" + components.VersionManagerEsProxy))
+		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("quay.io/tigera/voltron:" + components.VersionManagerProxy))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {

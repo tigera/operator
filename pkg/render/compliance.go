@@ -125,8 +125,8 @@ func (c *complianceComponent) Objects() []runtime.Object {
 		c.complianceGlobalReportPolicyAudit(),
 		c.complianceGlobalReportCISBenchmark(),
 
-		// Even though we do not have a compliance-server, we need a serviceaccount
-		// in the managed cluster for RBAC requests.
+		// We always need a sa and crb, whether a deployment of compliance-server is present or not.
+		// These two are used for rbac checks for managed clusters.
 		c.complianceServerServiceAccount(),
 		c.complianceServerClusterRoleBinding(),
 	)

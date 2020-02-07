@@ -135,6 +135,9 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))

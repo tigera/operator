@@ -136,6 +136,13 @@ func (c *complianceComponent) Objects() []runtime.Object {
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
 		)
+	} else {
+		// We still need a serviceaccount in the managed cluster for RBAC requests.
+		complianceObjs = append(complianceObjs,
+			c.complianceServerServiceAccount(),
+			c.complianceServerManagedClusterRole(),
+			c.complianceServerClusterRoleBinding(),
+		)
 	}
 
 	if c.openshift {
@@ -443,6 +450,20 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+func (c *complianceComponent) complianceServerManagedClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"},
+		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},

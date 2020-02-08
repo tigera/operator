@@ -31,10 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-var (
-	nodeMetricsPort int32 = 9081
-)
-
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
@@ -854,7 +850,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeMetricsPort)},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cr.Spec.NodeMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -948,8 +944,8 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			Ports: []v1.ServicePort{
 				v1.ServicePort{
 					Name:       "calico-metrics-port",
-					Port:       nodeMetricsPort,
-					TargetPort: intstr.FromInt(int(nodeMetricsPort)),
+					Port:       c.cr.Spec.NodeMetricsPort,
+					TargetPort: intstr.FromInt(int(c.cr.Spec.NodeMetricsPort)),
 					Protocol:   v1.ProtocolTCP,
 				},
 			},

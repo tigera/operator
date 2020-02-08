@@ -311,6 +311,11 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	// If the user hasn't specified a NodeMetricsPort, default it to 9081.
+	if instance.Spec.NodeMetricsPort == 0 {
+		instance.Spec.NodeMetricsPort = 9081
+	}
+
 	return nil
 }
 

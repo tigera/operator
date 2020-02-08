@@ -55,6 +55,10 @@ type InstallationSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
+
+	// NodeMetricsPort allows users to specify which port calico/node serves metrics on.
+	// +optional
+	NodeMetricsPort int32 `json:"nodeMetricsPort,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

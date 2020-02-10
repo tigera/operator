@@ -50,7 +50,26 @@ var log = logf.Log.WithName("status_manager")
 // Each of these states can be set independently of each other. For example, a component can be both available and
 // degraded if it is running successfully but a configuration change has resulted in a configuration that cannot
 // be actioned.
-type StatusManager struct {
+type StatusManager interface {
+	Run()
+	OnCRFound()
+	OnCRNotFound()
+	AddDaemonsets(dss []types.NamespacedName)
+	AddDeployments(deps []types.NamespacedName)
+	AddStatefulSets(sss []types.NamespacedName)
+	AddCronJobs(cjs []types.NamespacedName)
+	RemoveDaemonsets(dss ...types.NamespacedName)
+	RemoveDeployments(dps ...types.NamespacedName)
+	RemoveStatefulSets(sss ...types.NamespacedName)
+	RemoveCronJobs(cjs ...types.NamespacedName)
+	SetDegraded(reason, msg string)
+	ClearDegraded()
+	IsAvailable() bool
+	IsProgressing() bool
+	IsDegraded() bool
+}
+
+type statusManager struct {
 	client       client.Client
 	component    string
 	daemonsets   map[string]types.NamespacedName
@@ -70,8 +89,8 @@ type StatusManager struct {
 	failing     []string
 }
 
-func New(client client.Client, component string) *StatusManager {
-	return &StatusManager{
+func New(client client.Client, component string) StatusManager {
+	return &statusManager{
 		client:       client,
 		component:    component,
 		daemonsets:   make(map[string]types.NamespacedName),
@@ -82,7 +101,7 @@ func New(client client.Client, component string) *StatusManager {
 }
 
 // Run starts the status manager state monitoring routine.
-func (m *StatusManager) Run() {
+func (m *statusManager) Run() {
 	go func() {
 		// Loop forever, periodically checking dependent objects for their state.
 		for {
@@ -120,7 +139,7 @@ func (m *StatusManager) Run() {
 // OnCRFound indicates to the status manager that it should start reporting status. Until called,
 // the status manager will be be in a "dormant" state, and will not write status to the API.
 // Call this function from a controller once it has first received an instance of its CRD.
-func (m *StatusManager) OnCRFound() {
+func (m *statusManager) OnCRFound() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.enabled = true
@@ -128,7 +147,7 @@ func (m *StatusManager) OnCRFound() {
 
 // OnCRNotFound indicates that the CR managed by the parent controller has not been found. The
 // status manager will clear its state.
-func (m *StatusManager) OnCRNotFound() {
+func (m *statusManager) OnCRNotFound() {
 	m.ClearDegraded()
 	m.clearAvailable()
 	m.clearProgressing()
@@ -144,7 +163,7 @@ func (m *StatusManager) OnCRNotFound() {
 }
 
 // AddDaemonsets tells the status manager to monitor the health of the given daemonsets.
-func (m *StatusManager) AddDaemonsets(dss []types.NamespacedName) {
+func (m *statusManager) AddDaemonsets(dss []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, ds := range dss {
@@ -153,7 +172,7 @@ func (m *StatusManager) AddDaemonsets(dss []types.NamespacedName) {
 }
 
 // AddDeployments tells the status manager to monitor the health of the given deployments.
-func (m *StatusManager) AddDeployments(deps []types.NamespacedName) {
+func (m *statusManager) AddDeployments(deps []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, dep := range deps {
@@ -162,7 +181,7 @@ func (m *StatusManager) AddDeployments(deps []types.NamespacedName) {
 }
 
 // AddStatefulSets tells the status manager to monitor the health of the given statefulsets.
-func (m *StatusManager) AddStatefulSets(sss []types.NamespacedName) {
+func (m *statusManager) AddStatefulSets(sss []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, ss := range sss {
@@ -171,7 +190,7 @@ func (m *StatusManager) AddStatefulSets(sss []types.NamespacedName) {
 }
 
 // AddCronJobs tells the status manager to monitor the health of the given cronjobs.
-func (m *StatusManager) AddCronJobs(cjs []types.NamespacedName) {
+func (m *statusManager) AddCronJobs(cjs []types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, cj := range cjs {
@@ -180,7 +199,7 @@ func (m *StatusManager) AddCronJobs(cjs []types.NamespacedName) {
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
-func (m *StatusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
+func (m *statusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, ds := range dss {
@@ -189,7 +208,7 @@ func (m *StatusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 }
 
 // RemoveDeployments tells the status manager to stop monitoring the health of the given deployments.
-func (m *StatusManager) RemoveDeployments(dps ...types.NamespacedName) {
+func (m *statusManager) RemoveDeployments(dps ...types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, dp := range dps {
@@ -198,7 +217,7 @@ func (m *StatusManager) RemoveDeployments(dps ...types.NamespacedName) {
 }
 
 // RemoveStatefulSets tells the status manager to stop monitoring the health of the given statefulsets.
-func (m *StatusManager) RemoveStatefulSets(sss ...types.NamespacedName) {
+func (m *statusManager) RemoveStatefulSets(sss ...types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, ss := range sss {
@@ -207,7 +226,7 @@ func (m *StatusManager) RemoveStatefulSets(sss ...types.NamespacedName) {
 }
 
 // RemoveCronJobs tells the status manager to stop monitoring the health of the given cronjobs.
-func (m *StatusManager) RemoveCronJobs(cjs ...types.NamespacedName) {
+func (m *statusManager) RemoveCronJobs(cjs ...types.NamespacedName) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	for _, cj := range cjs {
@@ -216,7 +235,7 @@ func (m *StatusManager) RemoveCronJobs(cjs ...types.NamespacedName) {
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
-func (m *StatusManager) SetDegraded(reason, msg string) {
+func (m *statusManager) SetDegraded(reason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = true
@@ -225,7 +244,7 @@ func (m *StatusManager) SetDegraded(reason, msg string) {
 }
 
 // ClearDegraded clears degraded state.
-func (m *StatusManager) ClearDegraded() {
+func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
@@ -234,7 +253,7 @@ func (m *StatusManager) ClearDegraded() {
 }
 
 // IsAvailable returns true if the component is available and false otherwise.
-func (m *StatusManager) IsAvailable() bool {
+func (m *statusManager) IsAvailable() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -246,7 +265,7 @@ func (m *StatusManager) IsAvailable() bool {
 }
 
 // IsProgressing returns true if the component is progressing and false otherwise.
-func (m *StatusManager) IsProgressing() bool {
+func (m *statusManager) IsProgressing() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -258,7 +277,7 @@ func (m *StatusManager) IsProgressing() bool {
 }
 
 // IsDegraded returns true if the component is degraded and false otherwise.
-func (m *StatusManager) IsDegraded() bool {
+func (m *statusManager) IsDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -277,7 +296,7 @@ func (m *StatusManager) IsDegraded() bool {
 
 // syncState syncs our internal state with that of the cluster. It returns true if we've synced
 // and returns false if we are still waiting for information.
-func (m *StatusManager) syncState() bool {
+func (m *statusManager) syncState() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	progressing := []string{}
@@ -398,7 +417,7 @@ func (m *StatusManager) syncState() bool {
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
 // to be in CrashLoopBackOff state.
-func (m *StatusManager) podsFailing(selector *metav1.LabelSelector, namespace string) string {
+func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) string {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
@@ -423,7 +442,7 @@ func (m *StatusManager) podsFailing(selector *metav1.LabelSelector, namespace st
 	return ""
 }
 
-func (m StatusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {
+func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {
 	if c.State.Waiting != nil {
 		// Check well-known error states here and report an appropriate mesage to the end user.
 		if c.State.Waiting.Reason == "CrashLoopBackOff" {
@@ -440,7 +459,7 @@ func (m StatusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSta
 	return ""
 }
 
-func (m *StatusManager) set(conditions ...operator.TigeraStatusCondition) {
+func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 	if !m.enabled {
 		// Never set any conditions unless the status manager is enabled.
 		return
@@ -494,7 +513,7 @@ func (m *StatusManager) set(conditions ...operator.TigeraStatusCondition) {
 	}
 }
 
-func (m *StatusManager) setAvailable(reason, msg string) {
+func (m *statusManager) setAvailable(reason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -504,7 +523,7 @@ func (m *StatusManager) setAvailable(reason, msg string) {
 	m.set(conditions...)
 }
 
-func (m *StatusManager) setDegraded(reason, msg string) {
+func (m *statusManager) setDegraded(reason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -515,7 +534,7 @@ func (m *StatusManager) setDegraded(reason, msg string) {
 	m.set(conditions...)
 }
 
-func (m *StatusManager) setProgressing(reason, msg string) {
+func (m *statusManager) setProgressing(reason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -525,7 +544,7 @@ func (m *StatusManager) setProgressing(reason, msg string) {
 	m.set(conditions...)
 }
 
-func (m *StatusManager) clearDegraded() {
+func (m *statusManager) clearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -535,7 +554,7 @@ func (m *StatusManager) clearDegraded() {
 	m.set(conditions...)
 }
 
-func (m *StatusManager) clearProgressing() {
+func (m *statusManager) clearProgressing() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -545,7 +564,7 @@ func (m *StatusManager) clearProgressing() {
 	m.set(conditions...)
 }
 
-func (m *StatusManager) clearAvailable() {
+func (m *statusManager) clearAvailable() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -555,13 +574,13 @@ func (m *StatusManager) clearAvailable() {
 	m.set(conditions...)
 }
 
-func (m *StatusManager) progressingMessage() string {
+func (m *statusManager) progressingMessage() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	return strings.Join(m.progressing, "\n")
 }
 
-func (m *StatusManager) degradedMessage() string {
+func (m *statusManager) degradedMessage() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	msgs := []string{}
@@ -572,7 +591,7 @@ func (m *StatusManager) degradedMessage() string {
 	return strings.Join(msgs, "\n")
 }
 
-func (m *StatusManager) degradedReason() string {
+func (m *statusManager) degradedReason() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	reasons := []string{}

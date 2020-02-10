@@ -125,7 +125,7 @@ type ReconcileManager struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
-	status   *status.StatusManager
+	status   status.StatusManager
 }
 
 // GetManager returns the default manager instance with defaults populated.

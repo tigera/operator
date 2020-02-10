@@ -20,6 +20,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
+	"strings"
 	"text/template"
 
 	"gopkg.in/yaml.v2"
@@ -30,6 +32,7 @@ var (
 	debug          = flag.Bool("debug", false, "enable debug logging")
 	eeVersionsPath = flag.String("ee-versions", "", "path to os versions file")
 	osVersionsPath = flag.String("os-versions", "", "path to ee versions file")
+	gcrBearerFlag  = flag.String("gcr-bearer", "", "output of 'gcloud auth print-access-token")
 )
 
 func main() {
@@ -45,10 +48,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *gcrBearerFlag != "" {
+		gcrBearer = *gcrBearerFlag
+	} else {
+		log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
+		gcrBearer = getGcrBearer()
+		if gcrBearer == "" {
+			fmt.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
+			os.Exit(1)
+		}
+	}
+
 	if err := run(*osVersionsPath, *eeVersionsPath); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
+}
+
+func getGcrBearer() string {
+	t, err := exec.Command("gcloud", "auth", "print-access-token").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(t))
 }
 
 func imageRef(r, i, v string) string {

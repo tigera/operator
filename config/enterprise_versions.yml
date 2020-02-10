@@ -1,0 +1,70 @@
+components:
+  cnx-manager:
+    image: tigera/cnx-manager
+    version: v2.7.0-0.dev-234-g952d0a82
+  voltron:
+    image: tigera/voltron
+    version: v2.7.0-0.dev-34-g4eac4a3
+  cnx-apiserver:
+    image: tigera/cnx-apiserver
+    version: v2.7.0-0.dev-32-gb094281f
+  cnx-queryserver:
+    image: tigera/cnx-queryserver
+    version: v2.7.0-0.dev-26-g232a725
+  cnx-kube-controllers:
+    image: tigera/kube-controllers
+    version: v2.7.0-0.dev-109-gfa8b79c
+  typha:
+    image: tigera/typha
+    version: v2.7.0-0.dev-74-g67bc0b1
+  cnx-node:
+    image: tigera/cnx-node
+    version: v2.7.0-0.dev-188-gc5255d3
+  fluentd:
+    image: tigera/fluentd
+    version: v2.7.0-0.dev-4-gb1486b3
+  es-proxy:
+    image: tigera/es-proxy
+    version: v2.7.0-0.dev-43-g422fefb
+  eck-kibana:
+    version: 7.3.2
+  kibana:
+    image: tigera/kibana
+    version: 7.3
+  elasticsearch-operator:
+    registry: docker.elastic.co
+    image: eck/eck-operator
+    version: 0.9.0
+  elasticsearch:
+    registry: docker.elastic.co
+    image: elasticsearch/elasticsearch
+    version: 7.3.2
+  elastic-tsee-installer:
+    image: tigera/intrusion-detection-job-installer
+    version: v2.7.0-0.dev-27-gd7ce71b
+  es-curator:
+    image: tigera/es-curator
+    version: v2.6.0-0.dev-25-gb04da05
+  intrusion-detection-controller:
+    image: tigera/intrusion-detection-controller
+    version: v2.7.0-0.dev-27-gd7ce71b
+  compliance-controller:
+    image: tigera/compliance-controller
+    version: v2.7.0-0.dev-38-g23b93c3
+  compliance-reporter:
+    image: tigera/compliance-reporter
+    version: v2.7.0-0.dev-38-g23b93c3
+  compliance-snapshotter:
+    image: tigera/compliance-snapshotter
+    version: v2.7.0-0.dev-38-g23b93c3
+  compliance-server:
+    image: tigera/compliance-server
+    version: v2.7.0-0.dev-38-g23b93c3
+  compliance-benchmarker:
+    image: tigera/compliance-benchmarker
+    version: v2.7.0-0.dev-38-g23b93c3
+  # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
+  # to the docs & manifest tooling not to default to the tigera registry.
+  guardian:
+    image: tigera/guardian
+    version: v2.7.0-0.dev-34-g4eac4a3

@@ -16,20 +16,24 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
-	"text/template"
+	"os/exec"
+	"strings"
+)
 
-	"gopkg.in/yaml.v2"
+const (
+	defaultCalicoRegistry     = "quay.io"
+	defaultEnterpriseRegistry = "gcr.io/unique-caldron-775/cnx"
 )
 
 var (
 	versionsGoTpl  = flag.String("versions-go-tpl", "hack/gen-versions/versions.go.tpl", "path to versions.go.tpl")
 	debug          = flag.Bool("debug", false, "enable debug logging")
-	eeVersionsPath = flag.String("ee-versions", "", "path to os versions file")
-	osVersionsPath = flag.String("os-versions", "", "path to ee versions file")
+	digests        = flag.Bool("digests", true, "get digests")
+	eeVersionsPath = flag.String("ee-versions", "", "path to calico versions file")
+	osVersionsPath = flag.String("os-versions", "", "path to enterprise versions file")
+	gcrBearerFlag  = flag.String("gcr-bearer", "", "output of 'gcloud auth print-access-token")
 )
 
 func main() {
@@ -45,75 +49,56 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*osVersionsPath, *eeVersionsPath); err != nil {
+	if *digests {
+		if *gcrBearerFlag != "" {
+			gcrBearer = *gcrBearerFlag
+		} else {
+			log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
+			gcrBearer = getGcrBearer()
+			if gcrBearer == "" {
+				log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
+				os.Exit(1)
+			}
+		}
+	}
+
+	osv, err := GetComponents(*osVersionsPath)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	if *digests {
+		if err := updateDigests(osv, defaultCalicoRegistry); err != nil {
+			log.Println("failed to get digest for components: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	eev, err := GetComponents(*eeVersionsPath)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	if *digests {
+		if err := updateDigests(eev, defaultEnterpriseRegistry); err != nil {
+			log.Println("failed to get digest for components: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	// print them
+	if err := printVersionsGo(*versionsGoTpl, osv, eev); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
 }
 
-func imageRef(r, i, v string) string {
-	return fmt.Sprintf("%s/%s:%s", r, i, v)
-}
-
-func run(osVersionsPath, eeVersionsPath string) error {
-	osv, err := loadVersions(osVersionsPath)
+func getGcrBearer() string {
+	t, err := exec.Command("gcloud", "auth", "print-access-token").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to load OS versions: %v", err)
+		return ""
 	}
-
-	eev, err := loadVersions(eeVersionsPath)
-	if err != nil {
-		return fmt.Errorf("failed to load EE versions: %v", err)
-	}
-
-	if err := writeVersions(osv, eev); err != nil {
-		return fmt.Errorf("failed to write versions: %v", err)
-	}
-
-	return nil
-}
-
-type Versions struct {
-	Calico, Enterprise Components
-}
-
-type Components map[string]Component
-
-type Component struct {
-	Version,
-	Registry,
-	Image string
-}
-
-func loadVersions(versionsPath string) (Components, error) {
-	var c struct {
-		Components Components
-	}
-
-	f, err := ioutil.ReadFile(versionsPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := yaml.Unmarshal(f, &c); err != nil {
-		return nil, err
-	}
-
-	return c.Components, nil
-}
-
-func writeVersions(osVersions, eeVersions Components) error {
-	t, err := template.ParseFiles(*versionsGoTpl)
-	if err != nil {
-		return fmt.Errorf("failed to parse template file file: %v", err)
-	}
-
-	t.Option("missingkey=error")
-
-	vz := Versions{Calico: osVersions, Enterprise: eeVersions}
-
-	if err := t.Execute(os.Stdout, vz); err != nil {
-		return err
-	}
-
-	return nil
+	return strings.TrimSpace(string(t))
 }

@@ -119,6 +119,14 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 									Image:         constructImage(EsCuratorImageName, ec.registry),
 									Env:           ec.envVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
+									Resources: corev1.ResourceRequirements{
+										Limits: corev1.ResourceList{
+											"memory": resource.MustParse("192Mi"),
+										},
+										Requests: corev1.ResourceList{
+											"memory":  resource.MustParse("128Mi"),
+										},
+									},
 									SecurityContext: &v1.SecurityContext{
 										RunAsNonRoot:             &f,
 										AllowPrivilegeEscalation: &f,

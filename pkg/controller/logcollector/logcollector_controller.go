@@ -108,7 +108,7 @@ type ReconcileLogCollector struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
-	status   *status.StatusManager
+	status   status.StatusManager
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.

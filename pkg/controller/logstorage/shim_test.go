@@ -26,7 +26,7 @@ import (
 func NewReconcilerWithShims(
 	cli client.Client,
 	schema *runtime.Scheme,
-	status *status.StatusManager,
+	status status.StatusManager,
 	provider operatorv1.Provider,
 	resolvConfPath string) (*ReconcileLogStorage, error) {
 

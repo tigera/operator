@@ -68,7 +68,7 @@ func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr *status.StatusManager, resolvConfPath string, provider operatorv1.Provider) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider) (*ReconcileLogStorage, error) {
 	localDNS, err := getLocalDNSName(resolvConfPath)
 	if err != nil {
 		localDNS = defaultLocalDNS
@@ -197,7 +197,7 @@ type ReconcileLogStorage struct {
 	// that reads objects from the cache and writes to the apiserver
 	client   client.Client
 	scheme   *runtime.Scheme
-	status   *status.StatusManager
+	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
 }

@@ -36,7 +36,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, *status.StatusManager) error
+	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -55,7 +55,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status *status.StatusManager) error {
+func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))

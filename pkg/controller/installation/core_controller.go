@@ -181,7 +181,7 @@ type ReconcileInstallation struct {
 	controller           controller.Controller
 	watches              map[runtime.Object]struct{}
 	autoDetectedProvider operator.Provider
-	status               *status.StatusManager
+	status               status.StatusManager
 	typhaAutoscaler      *typhaAutoscaler
 	namespaceMigration   *migration.CoreNamespaceMigration
 	requiresTSEE         bool

@@ -456,7 +456,7 @@ func (c *nodeComponent) cniDirectories() (string, string) {
 	var cniBinDir, cniNetDir string
 	switch c.provider {
 	case operator.ProviderOpenShift:
-		cniNetDir = "/etc/kubernetes/cni/net.d"
+		cniNetDir = "/var/run/multus/cni/net.d"
 		cniBinDir = "/var/lib/cni/bin"
 	case operator.ProviderGKE:
 		// Used if we're installing a CNI plugin. If using the GKE plugin, these are not necessary.

@@ -61,7 +61,13 @@ func main() {
 	}
 
 	// get modified with digests
-	osv, eev, err := getComponentHashes(*osVersionsPath, *eeVersionsPath)
+	osv, err := GetComponentHashes(*osVersionsPath, defaultCalicoRegistry)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	eev, err := GetComponentHashes(*eeVersionsPath, defaultEnterpriseRegistry)
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)

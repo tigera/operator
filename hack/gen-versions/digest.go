@@ -18,6 +18,9 @@ var client = &http.Client{
 	Timeout: 5 * time.Second,
 }
 
+// updateDigests updates a set of Components to include a 'digest' field.
+// Components which do not specify a registry are assigned the defaultReg as per
+// the versions.yml spec.
 func updateDigests(cs Components, defaultReg string) error {
 	for key, component := range cs {
 		var registry = defaultReg
@@ -90,10 +93,15 @@ func getDigest(registry, img, version string) (string, error) {
 	return digest, nil
 }
 
+// generateURL produces an https URL for any given image registry.
 func generateURL(registry, image, version string) string {
+	// handle references to docker.io registry which is actually a dns alias for
+	// registry-1.docker.io.
 	registry = strings.Replace(registry, "docker.io", "registry-1.docker.io", 1)
+	// for registries that contain more than just the domain (e.g. gcr.io/myproject/prefix),
+	// split the url so that only the domain name appears before the /v2, and the rest appears after.
 	r := strings.Split(registry, "/")
-	u, _ := url.Parse(fmt.Sprintf("https://%s/", r[0]))
-	u.Path = path.Join("v2/", strings.Join(r[1:], "/"), image, "/manifests", version)
+	u, _ := url.Parse(fmt.Sprintf("https://%s/v2/", r[0]))
+	u.Path = path.Join(u.Path, strings.Join(r[1:], "/"), image, "/manifests", version)
 	return u.String()
 }

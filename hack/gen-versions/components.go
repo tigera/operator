@@ -32,61 +32,39 @@ type Component struct {
 	Image    string `json:"image"`
 }
 
-// getComponentHashes traverses each entry in
-func getComponentHashes(osVersionsPath, eeVersionsPath string) (Components, Components, error) {
-	osv, err := readComponents(osVersionsPath)
+// GetComponentHashes parses a versions.yml file, scrubs the data of known issues,
+// and returns the data in a Components struct.
+func GetComponentHashes(versionsPath, defaultRegistry string) (Components, error) {
+	v, err := readComponents(versionsPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load OS versions: %v", err)
+		return nil, fmt.Errorf("failed to load OS versions: %v", err)
 	}
 
-	// make some adjustments to versions.yml.
-	// networking-calico isn't associated with any real image so remove it
-	delete(osv, "networking-calico")
+	delete(v, "calico")
+	delete(v, "networking-calico")
 
 	// add known default images to any components that are missing them.
-	for key, component := range osv {
+	for key, component := range v {
 		if component.Image == "" {
 			image := defaultImages[key]
 			if image == "" {
-				return nil, nil, fmt.Errorf("no image or default image available for component '%s'. "+
+				return nil, fmt.Errorf("no image nor default image available for component '%s'. "+
 					"Either fill in the 'image' field or update this code with a defaultImage.", key)
 			}
-			osv[key].Image = image
+			v[key].Image = image
 		}
 	}
 
-	if err := updateDigests(osv, defaultCalicoRegistry); err != nil {
-		return nil, nil, fmt.Errorf("failed to get digest for os components: %v", err)
+	if err := updateDigests(v, defaultRegistry); err != nil {
+		return nil, fmt.Errorf("failed to get digest for components: %v", err)
 	}
 
 	if *debug {
-		bits, _ := json.Marshal(osv)
+		bits, _ := json.Marshal(v)
 		log.Println(string(bits))
 	}
 
-	eev, err := readComponents(eeVersionsPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load EE versions: %v", err)
-	}
-
-	// add known default images to any components that are missing them.
-	for key, component := range eev {
-		if component.Image == "" {
-			image := defaultImages[key]
-			if image == "" {
-				return nil, nil, fmt.Errorf("no image or default image available for key %s", key)
-			}
-			eev[key].Image = image
-		}
-	}
-	delete(eev, "calico")
-	delete(eev, "networking-calico")
-
-	if err := updateDigests(eev, defaultEnterpriseRegistry); err != nil {
-		return nil, nil, fmt.Errorf("failed to get digest for os components: %v", err)
-	}
-
-	return osv, eev, nil
+	return v, nil
 }
 
 // readComponents opens a versions.yml file and returns the components

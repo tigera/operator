@@ -41,6 +41,12 @@ spec:
                     a single pool will be configured when needed.
                   items:
                     properties:
+                      blockSize:
+                        description: 'BlockSize specifies the CIDR prefex length to
+                          use when allocating per-node IP blocks from the main IP
+                          pool CIDR. Default: 26'
+                        format: int32
+                        type: integer
                       cidr:
                         description: CIDR contains the address range for the IP Pool
                           in classless inter-domain routing format.

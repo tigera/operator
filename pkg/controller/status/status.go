@@ -301,75 +301,67 @@ func (m *statusManager) syncState() bool {
 	defer m.lock.Unlock()
 	progressing := []string{}
 	failing := []string{}
-	numDaemonSets := len(m.daemonsets)
-	numDeployments := len(m.deployments)
-	numStatefulSets := len(m.statefulsets)
-	if len(m.daemonsets) > 0 {
-		// For each daemonset, check its rollout status.
-		for _, dsnn := range m.daemonsets {
-			ds := &appsv1.DaemonSet{}
-			err := m.client.Get(context.TODO(), dsnn, ds)
-			if err != nil {
-				log.WithValues("error", err).Info("Error querying daemonset")
-				continue
-			}
-			if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
-				progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
-			} else if ds.Status.NumberUnavailable > 0 {
-				progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
-			} else if ds.Status.NumberAvailable == 0 {
-				progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
-			} else if ds.Generation > ds.Status.ObservedGeneration {
-				progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
-			}
-
-			// Check if any pods within the daemonset are failing.
-			if f := m.podsFailing(ds.Spec.Selector, ds.Namespace); f != "" {
-				failing = append(failing, f)
-			}
+	// For each daemonset, check its rollout status.
+	for _, dsnn := range m.daemonsets {
+		ds := &appsv1.DaemonSet{}
+		err := m.client.Get(context.TODO(), dsnn, ds)
+		if err != nil {
+			log.WithValues("error", err).Info("Error querying daemonset")
+			continue
 		}
-	}
-	if len(m.deployments) > 0 {
-		for _, depnn := range m.deployments {
-			dep := &appsv1.Deployment{}
-			err := m.client.Get(context.TODO(), depnn, dep)
-			if err != nil {
-				log.WithValues("error", err).Info("Error querying deployment")
-				continue
-			}
-			if dep.Status.UnavailableReplicas > 0 {
-				progressing = append(progressing, fmt.Sprintf("Deployment %q is not available (awaiting %d replicas)", depnn.String(), dep.Status.UnavailableReplicas))
-			} else if dep.Status.AvailableReplicas == 0 {
-				progressing = append(progressing, fmt.Sprintf("Deployment %q is not yet scheduled on any nodes", depnn.String()))
-			} else if dep.Status.ObservedGeneration < dep.Generation {
-				progressing = append(progressing, fmt.Sprintf("Deployment %q update is being processed (generation %d, observed generation %d)", depnn.String(), dep.Generation, dep.Status.ObservedGeneration))
-			}
+		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
+			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
+		} else if ds.Status.NumberUnavailable > 0 {
+			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
+		} else if ds.Status.NumberAvailable == 0 {
+			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
+		} else if ds.Generation > ds.Status.ObservedGeneration {
+			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
+		}
 
-			// Check if any pods within the deployment are failing.
-			if f := m.podsFailing(dep.Spec.Selector, dep.Namespace); f != "" {
-				failing = append(failing, f)
-			}
+		// Check if any pods within the daemonset are failing.
+		if f := m.podsFailing(ds.Spec.Selector, ds.Namespace); f != "" {
+			failing = append(failing, f)
 		}
 	}
 
-	if len(m.statefulsets) > 0 {
-		for _, depnn := range m.statefulsets {
-			ss := &appsv1.StatefulSet{}
-			err := m.client.Get(context.TODO(), depnn, ss)
-			if err != nil {
-				log.WithValues("error", err).Info("Error querying statefulset")
-				continue
-			}
-			if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
-				progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas))
-			} else if ss.Status.ObservedGeneration < ss.Generation {
-				progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
-			}
+	for _, depnn := range m.deployments {
+		dep := &appsv1.Deployment{}
+		err := m.client.Get(context.TODO(), depnn, dep)
+		if err != nil {
+			log.WithValues("error", err).Info("Error querying deployment")
+			continue
+		}
+		if dep.Status.UnavailableReplicas > 0 {
+			progressing = append(progressing, fmt.Sprintf("Deployment %q is not available (awaiting %d replicas)", depnn.String(), dep.Status.UnavailableReplicas))
+		} else if dep.Status.AvailableReplicas == 0 {
+			progressing = append(progressing, fmt.Sprintf("Deployment %q is not yet scheduled on any nodes", depnn.String()))
+		} else if dep.Status.ObservedGeneration < dep.Generation {
+			progressing = append(progressing, fmt.Sprintf("Deployment %q update is being processed (generation %d, observed generation %d)", depnn.String(), dep.Generation, dep.Status.ObservedGeneration))
+		}
 
-			// Check if any pods within the deployment are failing.
-			if f := m.podsFailing(ss.Spec.Selector, ss.Namespace); f != "" {
-				failing = append(failing, f)
-			}
+		// Check if any pods within the deployment are failing.
+		if f := m.podsFailing(dep.Spec.Selector, dep.Namespace); f != "" {
+			failing = append(failing, f)
+		}
+	}
+
+	for _, depnn := range m.statefulsets {
+		ss := &appsv1.StatefulSet{}
+		err := m.client.Get(context.TODO(), depnn, ss)
+		if err != nil {
+			log.WithValues("error", err).Info("Error querying statefulset")
+			continue
+		}
+		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
+			progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas))
+		} else if ss.Status.ObservedGeneration < ss.Generation {
+			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
+		}
+
+		// Check if any pods within the deployment are failing.
+		if f := m.podsFailing(ss.Spec.Selector, ss.Namespace); f != "" {
+			failing = append(failing, f)
 		}
 	}
 
@@ -398,7 +390,7 @@ func (m *statusManager) syncState() bool {
 		}
 	}
 
-	if numDeployments+numDaemonSets+numStatefulSets > 0 {
+	if len(m.deployments)+len(m.daemonsets)+len(m.statefulsets)+len(m.cronjobs) > 0 {
 		// We have been told about the resources we need to watch - set state before unlocking.
 		m.progressing = progressing
 		m.failing = failing

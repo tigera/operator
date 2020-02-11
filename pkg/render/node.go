@@ -35,6 +35,7 @@ const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
+	prometheusHashAnnotation   = "prometheus.io"
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -393,6 +394,15 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	}
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+
+	if c.cr.Spec.NodeMetricsPort != 0 {
+		scrapingAnnotation := map[string]string{
+			"prometheus.io/scrape": "true",
+			"prometheus.io/port":   string(c.cr.Spec.NodeMetricsPort),
+		}
+
+		annotations[prometheusHashAnnotation] = AnnotationHash(scrapingAnnotation)
+	}
 
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -931,6 +941,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 // nodeMetricsService creates a Service which exposes the calico/node metrics
 // reporting endpoint.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
+	// If the caller hasn't specified a NodeMetricsPort, default it to 9081.
+	if c.cr.Spec.NodeMetricsPort == 0 {
+		c.cr.Spec.NodeMetricsPort = 9081
+	}
+
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

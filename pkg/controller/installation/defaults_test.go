@@ -87,6 +87,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 					NodeAddressAutodetectionV6: nil,
 				},
+				NodeMetricsPort: 9081,
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)

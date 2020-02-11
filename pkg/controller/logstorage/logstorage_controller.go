@@ -21,19 +21,25 @@ import (
 	"os"
 	"regexp"
 
+	apps "k8s.io/api/apps/v1"
+
+	"github.com/elastic/cloud-on-k8s/operators/pkg/utils/stringsutil"
+
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+
+	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -134,17 +140,21 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &operatorv1.LogStorage{},
-	}); err != nil {
+	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
+	}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{
+		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
+	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &operatorv1.LogStorage{},
-	}); err != nil {
+	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{
+		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
+	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 
@@ -257,6 +267,24 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	ctx := context.Background()
 
+	// Try to retrieve the LogStorage resource to see if we need to clean up after it's been marked for deletion
+	if ls, err := GetLogStorage(ctx, r.client); err != nil {
+		if !errors.IsNotFound(err) {
+			r.status.SetDegraded("Failed to get LogStorage CR", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else if ls.DeletionTimestamp != nil {
+		var errMsg string
+
+		err := r.finalizeDeletion(ctx, ls)
+		if err != nil {
+			errMsg = err.Error()
+		}
+
+		r.status.SetDegraded("Finalizing deletion of LogStorage before continuing", errMsg)
+		return reconcile.Result{}, err
+	}
+
 	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -297,6 +325,59 @@ func (r *ReconcileLogStorage) updateStatus(ctx context.Context, reqLogger logr.L
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", state))
 		r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", state), err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// finalizeDeletion makes sure that both Kibana and Elasticsearch are deleted before removing the finalizer on the LogStorage
+// resource. This needs to happen because the ECK operator will be deleted when the LogStorage resource is deleted, but
+// the ECK operator is needed to delete Elasticsearch and Kibana.
+func (r *ReconcileLogStorage) finalizeDeletion(ctx context.Context, ls *operatorv1.LogStorage) error {
+	log.Info("Finalizing LogStorage deletion")
+	// if both Elasticsearch and Kibana are already deleted then this stays true and we'll remove the LogStorage CR
+	// finalizer. We want to wait until the ECK operator has completely removed Elasticsearch before allowing the
+	// LogStorage CR to be deleted
+	removeFinalizer := true
+
+	// Delete Elasticsearch
+	if es, err := r.getElasticsearch(ctx); err == nil {
+		// If the DeletionTimestamp is set then we're just waiting for the ECK operator to finish deleting Elasticsearch
+		if es.DeletionTimestamp == nil {
+			log.Info("Deleting Elasticsearch")
+			if err := r.client.Delete(ctx, es); err != nil {
+				return err
+			}
+		}
+		removeFinalizer = false
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Delete Kibana
+	if kb, err := r.getKibana(ctx); err == nil {
+		// If the DeletionTimestamp is set then we're just waiting for the ECK operator to finish deleting Kibana
+		if kb.DeletionTimestamp == nil {
+			log.Info("Deleting Kibana")
+			if err := r.client.Delete(ctx, kb); err != nil {
+				return err
+			}
+		}
+		removeFinalizer = false
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	if !removeFinalizer {
+		log.Info("Waiting for Elasticsearch and Kibana deletion to complete before removing finalizers from LogStorage")
+		return nil
+	}
+
+	// remove the finalizer now that Elasticsearch and Kibana have been deleted
+	log.Info("Removing finalizers from LogStorage")
+	ls.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, ls.GetFinalizers()))
+	if err := r.client.Update(ctx, ls); err != nil {
 		return err
 	}
 

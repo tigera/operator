@@ -228,7 +228,10 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
+		var nodeMetricsPort int32 = 9081
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
+		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
+
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))
@@ -437,7 +440,10 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
+		var nodeMetricsPort int32 = 9081
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
+		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
+
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(6))

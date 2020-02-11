@@ -211,6 +211,12 @@ type IPPool struct {
 	// Default: 'all()'
 	// +optional
 	NodeSelector string `json:"nodeSelector,omitempty"`
+
+	// BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from
+	// the main IP pool CIDR.
+	// Default: 26
+	// +optional
+	BlockSize *int32 `json:"blockSize,omitempty"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Tigera Secure installation.

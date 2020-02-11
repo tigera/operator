@@ -68,6 +68,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		table.Entry("IPv6 CIDR with smaller pool", "fd00:1234::/32", "fd00:1234:5600::/40", true),
 	)
 	var defaultMTU int32 = 1440
+	var twentySix int32 = 26
 	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
 		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
 			if expectSuccess {
@@ -103,6 +104,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Encapsulation: "IPIP",
 						NATOutgoing:   "Enabled",
 						NodeSelector:  "all()",
+						BlockSize:     &twentySix,
 					},
 				},
 				MTU: &defaultMTU,
@@ -126,6 +128,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Encapsulation: "IPIP",
 						NATOutgoing:   "Enabled",
 						NodeSelector:  "all()",
+						BlockSize:     &twentySix,
 					},
 				},
 				MTU: &defaultMTU,
@@ -157,6 +160,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Encapsulation: "VXLAN",
 						NATOutgoing:   "Disabled",
 						NodeSelector:  "all()",
+						BlockSize:     &twentySix,
 					},
 				},
 				MTU: &defaultMTU,
@@ -212,6 +216,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Encapsulation: "IPIP",
 						NATOutgoing:   "Enabled",
 						NodeSelector:  "all()",
+						BlockSize:     &twentySix,
 					},
 				},
 				MTU: &defaultMTU,

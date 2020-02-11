@@ -74,7 +74,7 @@ func Manager(
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
 		var err error
-		tlsKeyPair, err = createOperatorTLSSecret(nil,
+		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			ManagerTLSSecretName,
 			ManagerSecretKeyName,
 			ManagerSecretCertName,
@@ -100,7 +100,7 @@ func Manager(
 			tunnelSecrets = append(tunnelSecrets, tunnelSecret)
 		}
 
-		tunnelSecrets = append(tunnelSecrets, copySecrets(ManagerNamespace, tunnelSecret)...)
+		tunnelSecrets = append(tunnelSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
 	}
 	return &managerComponent{
 		cr:                         cr,
@@ -156,9 +156,9 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	if c.openshift {
 		objs = append(objs, c.securityContextConstraints())
 	}
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(ManagerNamespace, c.esSecrets...)...)...)
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
+	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	objs = append(objs, secretsToRuntimeObjects(c.tunnelSecrets...)...)
 	if c.oidcConfig != nil {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)

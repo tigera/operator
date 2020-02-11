@@ -215,7 +215,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// or finalizers from Elasticsearch.
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
-
+		dsa.Status = csa.Status
 		return dsa
 	case *kibanaalpha1.Kibana:
 		// Only update if the spec has changed
@@ -231,8 +231,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
 		dsa.Spec.Elasticsearch = csa.Spec.Elasticsearch
-
-		//log.Info(pretty.Compare(csa.Spec, dsa.Spec))
+		dsa.Status = csa.Status
 		return dsa
 	default:
 		// Default to just using the desired state, with an updated RV.

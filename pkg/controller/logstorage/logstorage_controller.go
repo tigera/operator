@@ -70,7 +70,12 @@ func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 		return err
 	}
 
-	return add(mgr, r)
+	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return err
+	}
+
+	return add(c)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -124,14 +129,9 @@ func getLocalDNSName(resolvConfPath string) (string, error) {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
+func add(c controller.Controller) error {
 	// Watch for changes to primary resource LogStorage
-	err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
+	err := c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}

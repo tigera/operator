@@ -19,13 +19,19 @@ import (
 	"os"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"github.com/tigera/operator/pkg/apis"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/logstorage"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	tmock "github.com/tigera/operator/pkg/mock"
 	"github.com/tigera/operator/pkg/render"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,8 +43,6 @@ import (
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
 	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
-
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -63,6 +67,98 @@ var (
 )
 
 var _ = Describe("LogStorage controller", func() {
+	Context("add", func() {
+		It("tests we're watching the expected resources", func() {
+			mockController := &tmock.Controller{}
+
+			mockController.On("Watch",
+				&source.Kind{Type: &operatorv1.LogStorage{}},
+				&handler.EnqueueRequestForObject{},
+				[]predicate.Predicate(nil),
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &operatorv1.Installation{}},
+				&handler.EnqueueRequestForObject{}, []predicate.Predicate(nil),
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &esalpha1.Elasticsearch{
+					ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+				}},
+				&handler.EnqueueRequestForObject{},
+				[]predicate.Predicate(nil),
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace},
+				}},
+				&handler.EnqueueRequestForObject{},
+				[]predicate.Predicate(nil),
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &kibanaalpha1.Kibana{
+					ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace},
+				}},
+				&handler.EnqueueRequestForObject{},
+				[]predicate.Predicate(nil),
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()},
+				}},
+				mock.Anything,
+				mock.Anything,
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()},
+				}},
+				&handler.EnqueueRequestForObject{},
+				mock.Anything,
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+					ObjectMeta: metav1.ObjectMeta{Name: render.ECKWebhookSecretName, Namespace: render.OperatorNamespace()},
+				}},
+				&handler.EnqueueRequestForObject{},
+				mock.Anything,
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &corev1.Secret{}},
+				&handler.EnqueueRequestForObject{},
+				mock.Anything,
+			).Return(nil).Once()
+
+			mockController.On("Watch",
+				&source.Kind{Type: &corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
+					ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchConfigMapName, Namespace: render.OperatorNamespace()},
+				}},
+				&handler.EnqueueRequestForObject{},
+				mock.Anything,
+			).Return(nil).Once()
+
+			mockController.On("Watch", &source.Kind{Type: &corev1.Service{
+				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace},
+			}}, &handler.EnqueueRequestForObject{}, mock.Anything).Return(nil).Once()
+
+			Expect(logstorage.ShimAdd(mockController)).ShouldNot(HaveOccurred())
+
+			mockController.AssertExpectations(GinkgoT())
+		})
+	})
+
 	Context("Reconcile", func() {
 		var (
 			cli        client.Client

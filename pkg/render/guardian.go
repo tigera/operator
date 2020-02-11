@@ -75,7 +75,7 @@ func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		copySecrets(GuardianNamespace, c.tunnelSecret)[0],
+		CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
 	)
 
 	return objs, nil

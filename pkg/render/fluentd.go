@@ -121,7 +121,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 			c.eksLogForwarderDeployment())
 	}
 
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(LogCollectorNamespace, c.esSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObjects(CopySecrets(LogCollectorNamespace, c.esSecrets...)...)...)
 	objs = append(objs, c.daemonset())
 
 	return objs, nil

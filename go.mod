@@ -16,6 +16,7 @@ require (
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.4.0
 
 	github.com/tigera/api v0.0.0-20200117234535-b3d9372ce711
 	gopkg.in/inf.v0 v0.9.1

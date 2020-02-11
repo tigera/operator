@@ -12,51 +12,26 @@ import (
 	"time"
 )
 
-var defaultImages = map[string]string{
-	"calico/cni":              "calico/cni",
-	"calico/dikastes":         "calico/dikastes",
-	"calico/kube-controllers": "calico/kube-controllers",
-	"calico/node":             "calico/node",
-	"calicoctl":               "calico/ctl",
-	"flannel":                 "coreos/flannel",
-	"flexvol":                 "calico/pod2daemon-flexvol",
-	"typha":                   "calico/typha",
-	"eck-kibana":              "tigera/kibana",
-}
-
 var gcrBearer = ""
 
 var client = &http.Client{
 	Timeout: 5 * time.Second,
 }
 
-func getDigests(osv Components, defaultReg string) error {
-	for key, component := range osv {
-		if key == "networking-calico" || key == "calico" {
-			continue
-		}
-
+func updateDigests(cs Components, defaultReg string) error {
+	for key, component := range cs {
 		var registry = defaultReg
 		if component.Registry != "" {
 			registry = component.Registry
 		}
 
-		// todo: specify image reference in versions.yml
-		var image = component.Image
-		if image == "" {
-			image = defaultImages[key]
-			if image == "" {
-				return fmt.Errorf("no image or default image available for key %s", key)
-			}
-		}
-		if image == "busybox" {
-			image = "library/busybox"
+		digest, err := getDigest(registry, component.Image, component.Version)
+		if err != nil {
+			return fmt.Errorf("failed to get digest for '%s/%s:%s': %v", registry, component.Image, component.Version, err)
 		}
 
-		digest, err := getDigest(registry, image, component.Version)
-		if err != nil {
-			return fmt.Errorf("failed to get digest for '%s': %v", imageRef(registry, image, component.Version), err)
-		}
+		cs[key].Digest = digest
+
 		log.Println(digest)
 	}
 

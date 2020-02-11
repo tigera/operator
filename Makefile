@@ -425,12 +425,6 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) && \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
-gen-versions-test:
-	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) && \
-	go test ./hack/gen-versions'
-
 .PHONY: help
 ## Display this help text
 help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383502660

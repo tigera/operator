@@ -865,20 +865,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
-	iptablesBackend := "auto"
-
 	// Configure provider specific environment variables here.
 	switch c.provider {
 	case operator.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
-		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-			// TODO: Remove this once the private node/felix is updated to support the auto
-			// option.
-			// Use iptables in nftables mode.
-			iptablesBackend = "NFT"
-		}
-
 		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
@@ -895,7 +886,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.ProviderAKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: iptablesBackend})
+	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 	return nodeEnv
 }
 

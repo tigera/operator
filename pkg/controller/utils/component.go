@@ -71,7 +71,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	daemonSets := []types.NamespacedName{}
 	deployments := []types.NamespacedName{}
 	statefulsets := []types.NamespacedName{}
-	objsToCreate, _ := component.Objects()
+	objsToCreate, objsToDelete := component.Objects()
 
 	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
@@ -149,6 +149,16 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		status.AddDeployments(deployments)
 		status.AddStatefulSets(statefulsets)
 	}
+
+	for _, obj := range objsToDelete {
+		err := c.client.Delete(ctx, obj)
+		if err != nil {
+			logCtx := ContextLoggerForResource(c.log, obj)
+			logCtx.Error(err, "Error deleting object %v", obj)
+			return err
+		}
+	}
+
 	cmpLog.Info("Done reconciling component")
 	return nil
 }

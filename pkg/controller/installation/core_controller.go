@@ -311,11 +311,6 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	if instance.Spec.NodeMetricsPort != nil && *instance.Spec.NodeMetricsPort == 0 {
-		var nodeMetricsPort int32 = 9081
-		instance.Spec.NodeMetricsPort = &nodeMetricsPort
-	}
-
 	return nil
 }
 

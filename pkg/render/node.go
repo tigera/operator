@@ -35,7 +35,6 @@ const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
-	prometheusHashAnnotation   = "prometheus.io"
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -60,7 +59,10 @@ func (c *nodeComponent) Objects() []runtime.Object {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
+		metricsService := c.nodeMetricsService()
+		if metricsService != nil {
+			objs = append(objs, c.nodeMetricsService())
+		}
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
@@ -394,15 +396,6 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	}
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
-
-	if c.cr.Spec.NodeMetricsPort != nil {
-		scrapingAnnotation := map[string]string{
-			"prometheus.io/scrape": "true",
-			"prometheus.io/port":   string(*c.cr.Spec.NodeMetricsPort),
-		}
-
-		annotations[prometheusHashAnnotation] = AnnotationHash(scrapingAnnotation)
-	}
 
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -944,7 +937,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 
 // nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
-	service := v1.Service{
+	if c.cr.Spec.NodeMetricsPort == nil {
+		return nil
+	}
+
+	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
@@ -954,26 +951,16 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 		Spec: v1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": "calico-node"},
 			Type:     v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
+				v1.ServicePort{
+					Name:       "calico-metrics-port",
+					Port:       *c.cr.Spec.NodeMetricsPort,
+					TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
+					Protocol:   v1.ProtocolTCP,
+				},
+			},
 		},
 	}
-
-	// If the caller hasn't specified a NodeMetricsPort, default it to 9081.
-	if c.cr.Spec.NodeMetricsPort != nil {
-		if *c.cr.Spec.NodeMetricsPort == 0 {
-			var nodeMetricsPort int32 = 9081
-			c.cr.Spec.NodeMetricsPort = &nodeMetricsPort
-		}
-		service.Spec.Ports = []v1.ServicePort{
-			v1.ServicePort{
-				Name:       "calico-metrics-port",
-				Port:       *c.cr.Spec.NodeMetricsPort,
-				TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
-				Protocol:   v1.ProtocolTCP,
-			},
-		}
-	}
-
-	return &service
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

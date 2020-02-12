@@ -31,10 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-var (
-	nodeMetricsPort int32 = 9081
-)
-
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
@@ -63,7 +59,10 @@ func (c *nodeComponent) Objects() []runtime.Object {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
+		metricsService := c.nodeMetricsService()
+		if metricsService != nil {
+			objs = append(objs, c.nodeMetricsService())
+		}
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
@@ -854,7 +853,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -863,6 +861,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
+
+		if c.cr.Spec.NodeMetricsPort != nil {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT",
+				Value: fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)})
+		}
 	}
 
 	iptablesBackend := "auto"
@@ -932,9 +935,12 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-// nodeMetricsService creates a Service which exposes the calico/node metrics
-// reporting endpoint.
+// nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
+	if c.cr.Spec.NodeMetricsPort == nil {
+		return nil
+	}
+
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -948,8 +954,8 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			Ports: []v1.ServicePort{
 				v1.ServicePort{
 					Name:       "calico-metrics-port",
-					Port:       nodeMetricsPort,
-					TargetPort: intstr.FromInt(int(nodeMetricsPort)),
+					Port:       *c.cr.Spec.NodeMetricsPort,
+					TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
 					Protocol:   v1.ProtocolTCP,
 				},
 			},

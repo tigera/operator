@@ -35,7 +35,7 @@ type Component struct {
 func GetComponents(versionsPath string) (Components, error) {
 	v, err := readComponents(versionsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load OS versions: %v", err)
+		return nil, fmt.Errorf("failed to read components: %v", err)
 	}
 
 	delete(v, "calico")
@@ -63,7 +63,7 @@ func readComponents(versionsPath string) (Components, error) {
 	if err != nil {
 		return nil, err
 	}
-	var c = map[string]Components{}
+	c := make(map[string]Components)
 	if err := yaml.Unmarshal(f, &c); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func printVersionsGo(tplFile string, osVersions, eeVersions Components) error {
 	}
 	t.Option("missingkey=error")
 
-	var vz = map[string]Components{
+	vz := map[string]Components{
 		"Calico":     osVersions,
 		"Enterprise": eeVersions,
 	}

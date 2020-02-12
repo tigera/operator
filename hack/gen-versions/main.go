@@ -49,14 +49,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *gcrBearerFlag != "" {
-		gcrBearer = *gcrBearerFlag
-	} else {
-		log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
-		gcrBearer = getGcrBearer()
-		if gcrBearer == "" {
-			log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
-			os.Exit(1)
+	if *digests {
+		if *gcrBearerFlag != "" {
+			gcrBearer = *gcrBearerFlag
+		} else {
+			log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
+			gcrBearer = getGcrBearer()
+			if gcrBearer == "" {
+				log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
+				os.Exit(1)
+			}
 		}
 	}
 

@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"text/template"
 
@@ -32,9 +30,9 @@ type Component struct {
 	Image    string `json:"image"`
 }
 
-// GetComponentHashes parses a versions.yml file, scrubs the data of known issues,
+// GetComponents parses a versions.yml file, scrubs the data of known issues,
 // and returns the data in a Components struct.
-func GetComponentHashes(versionsPath, defaultRegistry string) (Components, error) {
+func GetComponents(versionsPath string) (Components, error) {
 	v, err := readComponents(versionsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OS versions: %v", err)
@@ -53,15 +51,6 @@ func GetComponentHashes(versionsPath, defaultRegistry string) (Components, error
 			}
 			v[key].Image = image
 		}
-	}
-
-	if err := updateDigests(v, defaultRegistry); err != nil {
-		return nil, fmt.Errorf("failed to get digest for components: %v", err)
-	}
-
-	if *debug {
-		bits, _ := json.Marshal(v)
-		log.Println(string(bits))
 	}
 
 	return v, nil

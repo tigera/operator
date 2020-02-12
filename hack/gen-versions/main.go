@@ -16,7 +16,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -31,6 +30,7 @@ const (
 var (
 	versionsGoTpl  = flag.String("versions-go-tpl", "hack/gen-versions/versions.go.tpl", "path to versions.go.tpl")
 	debug          = flag.Bool("debug", false, "enable debug logging")
+	digests        = flag.Bool("digests", true, "get digests")
 	eeVersionsPath = flag.String("ee-versions", "", "path to calico versions file")
 	osVersionsPath = flag.String("os-versions", "", "path to enterprise versions file")
 	gcrBearerFlag  = flag.String("gcr-bearer", "", "output of 'gcloud auth print-access-token")
@@ -55,22 +55,35 @@ func main() {
 		log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
 		gcrBearer = getGcrBearer()
 		if gcrBearer == "" {
-			fmt.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
+			log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
 			os.Exit(1)
 		}
 	}
 
-	// get modified with digests
-	osv, err := GetComponentHashes(*osVersionsPath, defaultCalicoRegistry)
+	osv, err := GetComponents(*osVersionsPath)
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
 
-	eev, err := GetComponentHashes(*eeVersionsPath, defaultEnterpriseRegistry)
+	if *digests {
+		if err := updateDigests(osv, defaultCalicoRegistry); err != nil {
+			log.Println("failed to get digest for components: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	eev, err := GetComponents(*eeVersionsPath)
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)
+	}
+
+	if *digests {
+		if err := updateDigests(osv, defaultCalicoRegistry); err != nil {
+			log.Println("failed to get digest for components: %v", err)
+			os.Exit(1)
+		}
 	}
 
 	// print them

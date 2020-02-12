@@ -417,7 +417,7 @@ gen-files:
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
 gen-versions: $(BINDIR)/gen-versions
-	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS) > pkg/components/versions.go
+	$(BINDIR)/gen-versions -digests=false -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS) > pkg/components/versions.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)

@@ -39,11 +39,11 @@ type elasticsearchManaged struct {
 	provider   operatorv1.Provider
 }
 
-func (es elasticsearchManaged) Objects() []runtime.Object {
+func (es elasticsearchManaged) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{
 		createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift),
 		es.externalService(),
-	}
+	}, nil
 }
 
 func (es elasticsearchManaged) Ready() bool {

@@ -50,7 +50,7 @@ var _ = Describe("Rendering tests", func() {
 			"my-reg/",
 			secret,
 		)
-		resources = g.Objects()
+		resources, _ = g.Objects()
 	})
 
 	It("should render all resources for a managed cluster", func() {

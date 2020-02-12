@@ -123,7 +123,7 @@ type elasticsearchComponent struct {
 	registry            string
 }
 
-func (es *elasticsearchComponent) Objects() []runtime.Object {
+func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	var objs []runtime.Object
 	objs = append(objs, es.eckOperator()...)
 	objs = append(objs, createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift))
@@ -135,7 +135,7 @@ func (es *elasticsearchComponent) Objects() []runtime.Object {
 	objs = append(objs, es.elasticsearchCluster())
 	objs = append(objs, es.kibana()...)
 
-	return objs
+	return objs, nil
 }
 
 func (es *elasticsearchComponent) Ready() bool {

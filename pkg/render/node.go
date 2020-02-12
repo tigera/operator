@@ -55,7 +55,7 @@ type nodeComponent struct {
 	migrationNeeded bool
 }
 
-func (c *nodeComponent) Objects() []runtime.Object {
+func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
@@ -80,7 +80,7 @@ func (c *nodeComponent) Objects() []runtime.Object {
 
 	objs = append(objs, c.nodeDaemonset())
 
-	return objs
+	return objs, nil
 }
 
 func (c *nodeComponent) Ready() bool {

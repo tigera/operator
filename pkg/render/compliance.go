@@ -92,7 +92,7 @@ type complianceComponent struct {
 	openshift                   bool
 }
 
-func (c *complianceComponent) Objects() []runtime.Object {
+func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	complianceObjs := append(
 		[]runtime.Object{createNamespace(ComplianceNamespace, c.openshift)},
 		copyImagePullSecrets(c.pullSecrets, ComplianceNamespace)...,
@@ -144,7 +144,7 @@ func (c *complianceComponent) Objects() []runtime.Object {
 
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(copySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
-	return complianceObjs
+	return complianceObjs, nil
 }
 
 func (c *complianceComponent) Ready() bool {

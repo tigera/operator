@@ -99,7 +99,7 @@ type ReconcileAPIServer struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
-	status   *status.StatusManager
+	status   status.StatusManager
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read

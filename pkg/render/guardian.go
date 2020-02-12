@@ -35,7 +35,6 @@ const (
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
 	GuardianServiceName            = "tigera-guardian"
-	GuardianConfigMapName          = "tigera-guardian-config"
 	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
 )
@@ -65,15 +64,20 @@ type GuardianComponent struct {
 }
 
 func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	return []runtime.Object{
+	objs := []runtime.Object{
 		createNamespace(GuardianNamespace, c.openshift),
+	}
+	objs = append(objs, copyImagePullSecrets(c.pullSecrets, GuardianNamespace)...)
+	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
 		copySecrets(GuardianNamespace, c.tunnelSecret)[0],
-	}, nil
+	)
+
+	return objs, nil
 }
 
 func (c *GuardianComponent) Ready() bool {

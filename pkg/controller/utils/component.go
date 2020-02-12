@@ -36,7 +36,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, *status.StatusManager) error
+	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -55,7 +55,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status *status.StatusManager) error {
+func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -217,7 +217,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// or finalizers from Elasticsearch.
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
-
+		dsa.Status = csa.Status
 		return dsa
 	case *kibanaalpha1.Kibana:
 		// Only update if the spec has changed
@@ -233,8 +233,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
 		dsa.Spec.Elasticsearch = csa.Spec.Elasticsearch
-
-		//log.Info(pretty.Compare(csa.Spec, dsa.Spec))
+		dsa.Status = csa.Status
 		return dsa
 	default:
 		// Default to just using the desired state, with an updated RV.

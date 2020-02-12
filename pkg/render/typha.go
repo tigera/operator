@@ -54,7 +54,7 @@ type typhaComponent struct {
 	namespaceMigration bool
 }
 
-func (c *typhaComponent) Objects() []runtime.Object {
+func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
@@ -62,7 +62,7 @@ func (c *typhaComponent) Objects() []runtime.Object {
 		c.typhaDeployment(),
 		c.typhaService(),
 		c.typhaPodDisruptionBudget(),
-	}
+	}, nil
 }
 
 func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1beta1.PodDisruptionBudget {
@@ -450,7 +450,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraTyphaEnv := []v1.EnvVar{
-		// When we add AWS integration then we need Security group stuff here
+			// When we add AWS integration then we need Security group stuff here
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}

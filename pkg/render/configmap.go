@@ -27,12 +27,12 @@ type configMapComponent struct {
 	configMaps []*corev1.ConfigMap
 }
 
-func (c *configMapComponent) Objects() []runtime.Object {
+func (c *configMapComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{}
 	for _, cm := range c.configMaps {
 		objs = append(objs, cm)
 	}
-	return objs
+	return objs, nil
 }
 
 func (c *configMapComponent) Ready() bool {

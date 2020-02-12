@@ -50,7 +50,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Typha(installation, provider, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -79,7 +79,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
 		component := render.Typha(installation, provider, typhaNodeTLS, true)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")

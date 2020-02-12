@@ -71,7 +71,9 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	daemonSets := []types.NamespacedName{}
 	deployments := []types.NamespacedName{}
 	statefulsets := []types.NamespacedName{}
-	for _, obj := range component.Objects() {
+	objsToCreate, _ := component.Objects()
+
+	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
 		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
 			return err

@@ -236,6 +236,6 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []r
 		true,
 		nil)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
-	resources := component.Objects()
+	resources, _ := component.Objects()
 	return resources
 }

@@ -36,7 +36,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace", func() {
 		component := render.Namespaces(instance, notOpenshift, nil)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -49,7 +49,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		// We expect calico-system and tigera-prometheus.
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Namespaces(instance, notOpenshift, nil)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -66,7 +66,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace for openshift", func() {
 		component := render.Namespaces(instance, openshift, nil)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()

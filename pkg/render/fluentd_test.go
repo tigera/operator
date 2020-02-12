@@ -49,7 +49,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
 		// Should render the correct resources.
@@ -84,7 +84,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
 		// Should render the correct resources.
@@ -150,7 +150,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
 		// Should render the correct resources.
@@ -218,7 +218,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Flow: "flow-filter",
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
 		// Should render the correct resources.
@@ -263,7 +263,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.

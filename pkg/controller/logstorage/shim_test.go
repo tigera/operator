@@ -21,6 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 func NewReconcilerWithShims(
@@ -31,4 +32,8 @@ func NewReconcilerWithShims(
 	resolvConfPath string) (*ReconcileLogStorage, error) {
 
 	return newReconciler(cli, schema, status, resolvConfPath, provider)
+}
+
+func ShimAdd(c controller.Controller) error {
+	return add(c)
 }

@@ -524,7 +524,7 @@ var _ = Describe("Node rendering tests", func() {
 
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))

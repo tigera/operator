@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/migration"
 
@@ -565,7 +566,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        constructImage(CNIImageName, c.cr.Spec.Registry),
+		Image:        components.GetImageReference(components.CNIImageName, c.cr.Spec.Registry),
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -581,7 +582,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        constructImage(FlexVolumeImageName, c.cr.Spec.Registry),
+		Image:        components.GetImageReference(components.FlexVolumeImageName, c.cr.Spec.Registry),
 		VolumeMounts: flexVolumeMounts,
 	}
 }
@@ -619,9 +620,9 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 	isPrivileged := true
 
 	// Select which image to use.
-	image := constructImage(NodeImageNameCalico, c.cr.Spec.Registry)
+	image := components.GetImageReference(components.NodeImageNameCalico, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(NodeImageNameTigera, c.cr.Spec.Registry)
+		image = components.GetImageReference(components.NodeImageNameTigera, c.cr.Spec.Registry)
 	}
 	return v1.Container{
 		Name:            "calico-node",

@@ -336,7 +336,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 		},
 		Spec: esalpha1.ElasticsearchSpec{
 			Version: components.VersionECKElasticsearch,
-			Image:   constructImage(ECKElasticsearchImageName, es.registry),
+			Image:   components.GetImageReference(components.ECKElasticsearchImageName, es.registry),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
 					Certificate: cmneckalpha1.SecretRef{
@@ -530,7 +530,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					Containers: []corev1.Container{{
-						Image: constructImage(ECKOperatorImageName, es.registry),
+						Image: components.GetImageReference(components.ECKOperatorImageName, es.registry),
 						Name:  "manager",
 						Args:  []string{"manager", "--operator-roles", "all", "--enable-debug-logs=false"},
 						Env: []corev1.EnvVar{
@@ -606,7 +606,7 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 		},
 		Spec: kibanav1alpha1.KibanaSpec{
 			Version: components.VersionECKKibana,
-			Image:   constructImage(KibanaImageName, es.registry),
+			Image:   components.GetImageReference(components.KibanaImageName, es.registry),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{

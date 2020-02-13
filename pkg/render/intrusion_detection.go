@@ -22,6 +22,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"github.com/tigera/operator/pkg/components"
 )
 
 const (
@@ -127,7 +128,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
+		Image: components.GetImageReference(components.IntrusionDetectionJobInstallerImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -322,7 +323,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: constructImage(IntrusionDetectionControllerImageName, c.registry),
+		Image: components.GetImageReference(components.IntrusionDetectionControllerImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",

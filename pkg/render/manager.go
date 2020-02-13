@@ -22,6 +22,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"github.com/tigera/operator/pkg/components"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -375,7 +376,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
-		Image:           constructImage(ManagerImageName, c.registry),
+		Image:           components.GetImageReference(components.ManagerImageName, c.registry),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
@@ -419,7 +420,7 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  VoltronName,
-		Image: constructImage(ManagerProxyImageName, c.registry),
+		Image: components.GetImageReference(components.ManagerProxyImageName, c.registry),
 		Env: []corev1.EnvVar{
 			{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
@@ -445,7 +446,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:            "tigera-es-proxy",
-		Image:           constructImage(ManagerEsProxyImageName, c.registry),
+		Image:           components.GetImageReference(components.ManagerEsProxyImageName, c.registry),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 	}

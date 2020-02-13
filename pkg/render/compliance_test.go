@@ -33,7 +33,7 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
-			resources := component.Objects()
+			resources, _ := component.Objects()
 
 			ns := "tigera-compliance"
 			rbac := "rbac.authorization.k8s.io"
@@ -68,11 +68,11 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
-				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
-				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
 			}
@@ -100,7 +100,7 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
-			resources := component.Objects()
+			resources, _ := component.Objects()
 
 			ns := "tigera-compliance"
 			rbac := "rbac.authorization.k8s.io"
@@ -135,6 +135,9 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))

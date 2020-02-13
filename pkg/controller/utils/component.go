@@ -36,7 +36,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, *status.StatusManager) error
+	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -55,7 +55,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status *status.StatusManager) error {
+func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -71,7 +71,9 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	daemonSets := []types.NamespacedName{}
 	deployments := []types.NamespacedName{}
 	statefulsets := []types.NamespacedName{}
-	for _, obj := range component.Objects() {
+	objsToCreate, objsToDelete := component.Objects()
+
+	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
 		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
 			return err
@@ -79,7 +81,6 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 		logCtx := ContextLoggerForResource(c.log, obj)
 		var old runtime.Object = obj.DeepCopyObject()
-		var key client.ObjectKey
 		key, err := client.ObjectKeyFromObject(obj)
 		if err != nil {
 			return err
@@ -147,6 +148,26 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		status.AddDeployments(deployments)
 		status.AddStatefulSets(statefulsets)
 	}
+
+	for _, obj := range objsToDelete {
+		err := c.client.Delete(ctx, obj)
+		if err != nil {
+			logCtx := ContextLoggerForResource(c.log, obj)
+			logCtx.Error(err, "Error deleting object %v", obj)
+			return err
+		}
+
+		key, err := client.ObjectKeyFromObject(obj)
+		switch obj.(type) {
+		case *apps.Deployment:
+			status.RemoveDeployments(key)
+		case *apps.DaemonSet:
+			status.RemoveDaemonsets(key)
+		case *apps.StatefulSet:
+			status.RemoveStatefulSets(key)
+		}
+	}
+
 	cmpLog.Info("Done reconciling component")
 	return nil
 }
@@ -215,7 +236,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// or finalizers from Elasticsearch.
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
-
+		dsa.Status = csa.Status
 		return dsa
 	case *kibanaalpha1.Kibana:
 		// Only update if the spec has changed
@@ -231,8 +252,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
 		dsa.Spec.Elasticsearch = csa.Spec.Elasticsearch
-
-		//log.Info(pretty.Compare(csa.Spec, dsa.Spec))
+		dsa.Status = csa.Status
 		return dsa
 	default:
 		// Default to just using the desired state, with an updated RV.

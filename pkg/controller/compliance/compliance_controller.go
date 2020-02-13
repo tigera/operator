@@ -112,7 +112,7 @@ type ReconcileCompliance struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
-	status   *status.StatusManager
+	status   status.StatusManager
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {

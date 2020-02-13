@@ -27,7 +27,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
 
 		component := render.IntrusionDetection(nil, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, "testregistry.com/", esConfigMap, nil, notOpenshift)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(9))
 
 		// Should render the correct resources.

@@ -101,7 +101,7 @@ type fluentdComponent struct {
 	installation    *operatorv1.Installation
 }
 
-func (c *fluentdComponent) Objects() []runtime.Object {
+func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	var objs []runtime.Object
 	objs = append(objs,
 		createNamespace(
@@ -123,7 +123,7 @@ func (c *fluentdComponent) Objects() []runtime.Object {
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(LogCollectorNamespace, c.esSecrets...)...)...)
 	objs = append(objs, c.daemonset())
 
-	return objs
+	return objs, nil
 }
 
 func (c *fluentdComponent) Ready() bool {

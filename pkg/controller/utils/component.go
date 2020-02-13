@@ -71,7 +71,9 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	daemonSets := []types.NamespacedName{}
 	deployments := []types.NamespacedName{}
 	statefulsets := []types.NamespacedName{}
-	for _, obj := range component.Objects() {
+	objsToCreate, objsToDelete := component.Objects()
+
+	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
 		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
 			return err
@@ -79,7 +81,6 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 		logCtx := ContextLoggerForResource(c.log, obj)
 		var old runtime.Object = obj.DeepCopyObject()
-		var key client.ObjectKey
 		key, err := client.ObjectKeyFromObject(obj)
 		if err != nil {
 			return err
@@ -147,6 +148,26 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		status.AddDeployments(deployments)
 		status.AddStatefulSets(statefulsets)
 	}
+
+	for _, obj := range objsToDelete {
+		err := c.client.Delete(ctx, obj)
+		if err != nil {
+			logCtx := ContextLoggerForResource(c.log, obj)
+			logCtx.Error(err, "Error deleting object %v", obj)
+			return err
+		}
+
+		key, err := client.ObjectKeyFromObject(obj)
+		switch obj.(type) {
+		case *apps.Deployment:
+			status.RemoveDeployments(key)
+		case *apps.DaemonSet:
+			status.RemoveDaemonsets(key)
+		case *apps.StatefulSet:
+			status.RemoveStatefulSets(key)
+		}
+	}
+
 	cmpLog.Info("Done reconciling component")
 	return nil
 }

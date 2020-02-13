@@ -39,8 +39,9 @@ var (
 )
 
 type Component interface {
-	// Objects returns all objects this component contains.
-	Objects() []runtime.Object
+	// Objects returns the lists of objects in this component that should be created and/or deleted during
+	// rendering.
+	Objects() (objsToCreate, objsToDelete []runtime.Object)
 
 	// Ready returns true if the component is ready to be created.
 	Ready() bool

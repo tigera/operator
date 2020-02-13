@@ -57,7 +57,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -230,7 +230,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -321,7 +321,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when running on openshift", func() {
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -439,7 +439,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -538,7 +538,7 @@ var _ = Describe("Node rendering tests", func() {
 			"template-1.yaml": "dataforTemplate1 that is not used here",
 		}
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -583,7 +583,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -598,7 +598,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -613,7 +613,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -627,7 +627,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should include updates needed for the core upgrade", func() {
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, true)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5), fmt.Sprintf("resources are %v", resources))
 
 		// Should render the correct resources.
@@ -662,7 +662,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Provider does not matter for IPPool configuration
 			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")

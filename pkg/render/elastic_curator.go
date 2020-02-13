@@ -73,12 +73,13 @@ type elasticCuratorComponent struct {
 	clusterName string
 }
 
-func (ec *elasticCuratorComponent) Objects() []runtime.Object {
+func (ec *elasticCuratorComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		ec.cronJob(),
 	}
 	objs = append(objs, copyImagePullSecrets(ec.pullSecrets, ElasticsearchNamespace)...)
-	return append(objs, secretsToRuntimeObjects(copySecrets(ElasticsearchNamespace, ec.esSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObjects(copySecrets(ElasticsearchNamespace, ec.esSecrets...)...)...)
+	return objs, nil
 }
 
 func (ec elasticCuratorComponent) cronJob() *batch.CronJob {

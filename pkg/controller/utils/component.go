@@ -27,6 +27,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -151,7 +152,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 	for _, obj := range objsToDelete {
 		err := c.client.Delete(ctx, obj)
-		if err != nil {
+		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)
 			logCtx.Error(err, "Error deleting object %v", obj)
 			return err

@@ -29,7 +29,10 @@ import (
 )
 
 const (
-	ComplianceNamespace = "tigera-compliance"
+	ComplianceNamespace       = "tigera-compliance"
+	ComplianceServerName      = "compliance-server"
+	ComplianceControllerName  = "compliance-controller"
+	ComplianceSnapshotterName = "compliance-snapshotter"
 )
 
 const (
@@ -131,6 +134,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
+	var objsToDelete []runtime.Object
 	// Compliance server is only for Standalone or Management clusters
 	if c.installation.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
@@ -143,6 +147,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerManagedClusterRole(),
 		)
+		objsToDelete = []runtime.Object{c.complianceServerDeployment()}
 	}
 
 	if c.openshift {
@@ -151,7 +156,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(copySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
-	return complianceObjs, nil
+	return complianceObjs, objsToDelete
 }
 
 func (c *complianceComponent) Ready() bool {
@@ -272,10 +277,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-controller",
+			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-controller",
+				"k8s-app": ComplianceControllerName,
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
@@ -292,7 +297,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
-					Name:          "compliance-controller",
+					Name:          ComplianceControllerName,
 					Image:         constructImage(ComplianceControllerImage, c.installation.Spec.Registry),
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
@@ -304,10 +309,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-controller",
+			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-controller",
+				"k8s-app": ComplianceControllerName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -315,7 +320,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-controller"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceControllerName}},
 			Template: *podTemplate,
 		},
 	}
@@ -510,7 +515,7 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 					TargetPort: intstr.FromInt(complianceServerPort),
 				},
 			},
-			Selector: map[string]string{"k8s-app": "compliance-server"},
+			Selector: map[string]string{"k8s-app": ComplianceServerName},
 		},
 	}
 }
@@ -523,10 +528,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	defaultMode := int32(420)
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-server",
+			Name:      ComplianceServerName,
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-server",
+				"k8s-app": ComplianceServerName,
 			},
 			Annotations: map[string]string{
 				complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
@@ -544,7 +549,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
-					Name:  "compliance-server",
+					Name:  ComplianceServerName,
 					Image: constructImage(ComplianceServerImage, c.installation.Spec.Registry),
 					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
@@ -603,10 +608,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-server",
+			Name:      ComplianceServerName,
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-server",
+				"k8s-app": ComplianceServerName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -614,7 +619,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-server"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceServerName}},
 			Template: *podTemplate,
 		},
 	}
@@ -682,10 +687,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-snapshotter",
+			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-snapshotter",
+				"k8s-app": ComplianceSnapshotterName,
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
@@ -701,7 +706,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
-						Name:          "compliance-snapshotter",
+						Name:          ComplianceSnapshotterName,
 						Image:         constructImage(ComplianceSnapshotterImage, c.installation.Spec.Registry),
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
@@ -714,10 +719,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-snapshotter",
+			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-snapshotter",
+				"k8s-app": ComplianceSnapshotterName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -725,7 +730,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-snapshotter"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceSnapshotterName}},
 			Template: *podTemplate,
 		},
 	}

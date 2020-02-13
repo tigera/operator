@@ -52,34 +52,41 @@ type nodeComponent struct {
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	objs := []runtime.Object{
+	objsToCreate := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
 	}
+
+	var objsToDelete []runtime.Object
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		metricsService := c.nodeMetricsService()
-		if metricsService != nil {
-			objs = append(objs, c.nodeMetricsService())
+		metricsServiceToCreate, metricsServiceToDelete := c.nodeMetricsService()
+		if metricsServiceToCreate == nil {
+			objsToDelete = append(objsToDelete, metricsServiceToDelete)
+		} else {
+			if metricsServiceToDelete == nil {
+				objsToCreate = append(objsToCreate, metricsServiceToCreate)
+			}
 		}
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
-		objs = append(objs, cniConfig)
+		objsToCreate = append(objsToCreate, cniConfig)
 	}
 
 	if btcm := c.birdTemplateConfigMap(); btcm != nil {
-		objs = append(objs, btcm)
+		objsToCreate = append(objsToCreate, btcm)
 	}
 
 	if c.provider == operator.ProviderDockerEE {
-		objs = append(objs, c.clusterAdminClusterRoleBinding())
+		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
-	objs = append(objs, c.nodeDaemonset())
+	objsToCreate = append(objsToCreate, c.nodeDaemonset())
 
-	return objs, nil
+	return objsToCreate, objsToDelete
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -927,31 +934,34 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 }
 
 // nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
-func (c *nodeComponent) nodeMetricsService() *v1.Service {
-	if c.cr.Spec.NodeMetricsPort == nil {
-		return nil
-	}
-
-	return &v1.Service{
+func (c *nodeComponent) nodeMetricsService() (*v1.Service, *v1.Service) {
+	service := v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
-		Spec: v1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": "calico-node"},
-			Type:     v1.ServiceTypeClusterIP,
-			Ports: []v1.ServicePort{
-				v1.ServicePort{
-					Name:       "calico-metrics-port",
-					Port:       *c.cr.Spec.NodeMetricsPort,
-					TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
-					Protocol:   v1.ProtocolTCP,
-				},
+	}
+
+	if c.cr.Spec.NodeMetricsPort == nil {
+		return nil, &service
+	}
+
+	service.Spec = v1.ServiceSpec{
+		Selector: map[string]string{"k8s-app": "calico-node"},
+		Type:     v1.ServiceTypeClusterIP,
+		Ports: []v1.ServicePort{
+			v1.ServicePort{
+				Name:       "calico-metrics-port",
+				Port:       *c.cr.Spec.NodeMetricsPort,
+				TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
+				Protocol:   v1.ProtocolTCP,
 			},
 		},
 	}
+
+	return &service, nil
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

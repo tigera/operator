@@ -795,8 +795,8 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.Spec.NodeMetricsPort = nil
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(5))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -806,28 +806,12 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(notExpectedEnvVar))
 	})
 
-	It("should export FELIX_PROMETHEUSREPORTERPORT set to 9081 if NodeMetricsPort is set to zero", func() {
-		var nodeMetricsPort int32 = 0
-		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
-		Expect(len(resources)).To(Equal(6))
-
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-		Expect(dsResource).ToNot(BeNil())
-
-		expectedEnvVar := v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"}
-		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(expectedEnvVar))
-	})
-
 	It("should export FELIX_PROMETHEUSREPORTERPORT with a custom value if NodeMetricsPort is set", func() {
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")

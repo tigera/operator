@@ -73,18 +73,15 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	statefulsets := []types.NamespacedName{}
 	objsToCreate, objsToDelete := component.Objects()
 
-	var err error
-	var key client.ObjectKey
-
 	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
-		if err = controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
 			return err
 		}
 
 		logCtx := ContextLoggerForResource(c.log, obj)
 		var old runtime.Object = obj.DeepCopyObject()
-		key, err = client.ObjectKeyFromObject(obj)
+		key, err := client.ObjectKeyFromObject(obj)
 		if err != nil {
 			return err
 		}
@@ -160,7 +157,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			return err
 		}
 
-		key, err = client.ObjectKeyFromObject(obj)
+		key, err := client.ObjectKeyFromObject(obj)
 		switch obj.(type) {
 		case *apps.Deployment:
 			status.RemoveDeployments(key)

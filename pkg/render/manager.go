@@ -135,7 +135,7 @@ type managerComponent struct {
 	tunnelSecrets []*corev1.Secret
 }
 
-func (c *managerComponent) Objects() []runtime.Object {
+func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
@@ -166,7 +166,7 @@ func (c *managerComponent) Objects() []runtime.Object {
 	objs = append(objs, c.managerDeployment())
 	objs = append(objs, c.globalAlertTemplates()...)
 
-	return objs
+	return objs, nil
 }
 
 func (c *managerComponent) Ready() bool {

@@ -33,7 +33,7 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
-			resources := component.Objects()
+			resources, _ := component.Objects()
 
 			ns := "tigera-compliance"
 			rbac := "rbac.authorization.k8s.io"
@@ -100,7 +100,7 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
-			resources := component.Objects()
+			resources, _ := component.Objects()
 
 			ns := "tigera-compliance"
 			rbac := "rbac.authorization.k8s.io"

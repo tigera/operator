@@ -75,7 +75,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderNone, "docker.elastic.co/eck/")
 		Expect(err).NotTo(HaveOccurred())
 
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
@@ -113,7 +113,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false,
 			[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret"}}}, operator.ProviderNone, "docker.elastic.co/eck/")
 		Expect(err).NotTo(HaveOccurred())
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
@@ -147,7 +147,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderOpenShift, "docker.elastic.co/eck/")
 		Expect(err).NotTo(HaveOccurred())
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
@@ -181,7 +181,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		}
 		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, true, nil, operator.ProviderOpenShift, "docker.elastic.co/eck/")
 		Expect(err).NotTo(HaveOccurred())
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
@@ -214,7 +214,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			{"tigera-secure", "tigera-kibana", "", "", ""},
 		}
 		Expect(err).NotTo(HaveOccurred())
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {

@@ -31,10 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-var (
-	nodeMetricsPort int32 = 9081
-)
-
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
@@ -56,31 +52,41 @@ type nodeComponent struct {
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	objs := []runtime.Object{
+	objsToCreate := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
 	}
+
+	var objsToDelete []runtime.Object
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
+		metricsServiceToCreate, metricsServiceToDelete := c.nodeMetricsService()
+		if metricsServiceToCreate == nil {
+			objsToDelete = append(objsToDelete, metricsServiceToDelete)
+		} else {
+			if metricsServiceToDelete == nil {
+				objsToCreate = append(objsToCreate, metricsServiceToCreate)
+			}
+		}
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
-		objs = append(objs, cniConfig)
+		objsToCreate = append(objsToCreate, cniConfig)
 	}
 
 	if btcm := c.birdTemplateConfigMap(); btcm != nil {
-		objs = append(objs, btcm)
+		objsToCreate = append(objsToCreate, btcm)
 	}
 
 	if c.provider == operator.ProviderDockerEE {
-		objs = append(objs, c.clusterAdminClusterRoleBinding())
+		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
-	objs = append(objs, c.nodeDaemonset())
+	objsToCreate = append(objsToCreate, c.nodeDaemonset())
 
-	return objs, nil
+	return objsToCreate, objsToDelete
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -854,7 +860,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -863,6 +868,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
+
+		if c.cr.Spec.NodeMetricsPort != nil {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT",
+				Value: fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)})
+		}
 	}
 
 	// Configure provider specific environment variables here.
@@ -923,29 +933,35 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-// nodeMetricsService creates a Service which exposes the calico/node metrics
-// reporting endpoint.
-func (c *nodeComponent) nodeMetricsService() *v1.Service {
-	return &v1.Service{
+// nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
+func (c *nodeComponent) nodeMetricsService() (*v1.Service, *v1.Service) {
+	service := v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
-		Spec: v1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": "calico-node"},
-			Type:     v1.ServiceTypeClusterIP,
-			Ports: []v1.ServicePort{
-				v1.ServicePort{
-					Name:       "calico-metrics-port",
-					Port:       nodeMetricsPort,
-					TargetPort: intstr.FromInt(int(nodeMetricsPort)),
-					Protocol:   v1.ProtocolTCP,
-				},
+	}
+
+	if c.cr.Spec.NodeMetricsPort == nil {
+		return nil, &service
+	}
+
+	service.Spec = v1.ServiceSpec{
+		Selector: map[string]string{"k8s-app": "calico-node"},
+		Type:     v1.ServiceTypeClusterIP,
+		Ports: []v1.ServicePort{
+			v1.ServicePort{
+				Name:       "calico-metrics-port",
+				Port:       *c.cr.Spec.NodeMetricsPort,
+				TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
+				Protocol:   v1.ProtocolTCP,
 			},
 		},
 	}
+
+	return &service, nil
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

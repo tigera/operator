@@ -55,6 +55,11 @@ type InstallationSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
+
+	// NodeSelector is a string used to select targets for "control-plane" operator pods.
+	// Default: 'all()'
+	// +optional
+	NodeSelector string `json:"nodeSelector,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

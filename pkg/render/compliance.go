@@ -134,6 +134,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
+	var objsToDelete []runtime.Object
 	// Compliance server is only for Standalone or Management clusters
 	if c.installation.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
@@ -146,6 +147,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerManagedClusterRole(),
 		)
+		objsToDelete = []runtime.Object{c.complianceServerDeployment()}
 	}
 
 	if c.openshift {
@@ -154,7 +156,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(copySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
-	return complianceObjs, nil
+	return complianceObjs, objsToDelete
 }
 
 func (c *complianceComponent) Ready() bool {

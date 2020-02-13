@@ -25,11 +25,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -137,6 +134,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.Info("Reconciling Compliance")
 
 	ctx := context.Background()
+
 	// Fetch the Compliance instance
 	instance, err := GetCompliance(ctx, r.client)
 	if err != nil {
@@ -239,15 +237,6 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// If cluster type is managed, we want to delete the compliance-server deployment.
-	if network.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
-		if err := removeComplianceServer(ctx, r.client); err != nil && !errors.IsNotFound(err) {
-			log.Error(err, "error removing compliance server")
-			r.status.SetDegraded("Error removing compliance server", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
@@ -268,12 +257,4 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func removeComplianceServer(ctx context.Context, c client.Client) error {
-	return c.Delete(ctx, &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.ComplianceServerName,
-			Namespace: render.ComplianceNamespace,
-		}})
 }

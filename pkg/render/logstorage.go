@@ -18,11 +18,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/elastic/cloud-on-k8s/operators/pkg/utils/stringsutil"
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
-	esv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	kbv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
+	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
 	"gopkg.in/inf.v0"
@@ -89,8 +89,8 @@ const (
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
 	installation *operatorv1.Installation,
-	elasticsearch *esv1alpha1.Elasticsearch,
-	kibana *kbv1alpha1.Kibana,
+	elasticsearch *esv1.Elasticsearch,
+	kibana *kbv1.Kibana,
 	clusterConfig *ElasticsearchClusterConfig,
 	elasticsearchSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
@@ -121,8 +121,8 @@ func LogStorage(
 type elasticsearchComponent struct {
 	logStorage           *operatorv1.LogStorage
 	installation         *operatorv1.Installation
-	elasticsearch        *esv1alpha1.Elasticsearch
-	kibana               *kbv1alpha1.Kibana
+	elasticsearch        *esv1.Elasticsearch
+	kibana               *kbv1.Kibana
 	clusterConfig        *ElasticsearchClusterConfig
 	elasticsearchSecrets []*corev1.Secret
 	kibanaSecrets        []*corev1.Secret
@@ -443,10 +443,10 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearch {
+func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
 
-	return &esv1alpha1.Elasticsearch{
+	return &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
@@ -455,20 +455,20 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearc
 				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
 			},
 		},
-		Spec: esv1alpha1.ElasticsearchSpec{
+		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentElasticsearch.Version,
 			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry),
-			HTTP: cmneckalpha1.HTTPConfig{
-				TLS: cmneckalpha1.TLSOptions{
-					Certificate: cmneckalpha1.SecretRef{
+			HTTP: cmnv1.HTTPConfig{
+				TLS: cmnv1.TLSOptions{
+					Certificate: cmnv1.SecretRef{
 						SecretName: TigeraElasticsearchCertSecret,
 					},
 				},
 			},
-			Nodes: []esv1alpha1.NodeSpec{
+			Nodes: []esv1.NodeSpec{
 				{
 					NodeCount: int32(nodeConfig.Count),
-					Config: &cmneckalpha1.Config{
+					Config: &cmnv1.Config{
 						Data: map[string]interface{}{
 							"node.master": "true",
 							"node.data":   "true",
@@ -681,8 +681,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	}
 }
 
-func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
-	return &kbv1alpha1.Kibana{
+func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
+	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
 			Namespace: KibanaNamespace,
@@ -693,10 +693,10 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
 			},
 		},
-		Spec: kbv1alpha1.KibanaSpec{
+		Spec: kbv1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
 			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
-			Config: &cmneckalpha1.Config{
+			Config: &cmnv1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{
 						"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
@@ -705,14 +705,14 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 				},
 			},
 			NodeCount: 1,
-			HTTP: cmneckalpha1.HTTPConfig{
-				TLS: cmneckalpha1.TLSOptions{
-					Certificate: cmneckalpha1.SecretRef{
+			HTTP: cmnv1.HTTPConfig{
+				TLS: cmnv1.TLSOptions{
+					Certificate: cmnv1.SecretRef{
 						SecretName: TigeraKibanaCertSecret,
 					},
 				},
 			},
-			ElasticsearchRef: cmneckalpha1.ObjectSelector{
+			ElasticsearchRef: cmnv1.ObjectSelector{
 				Name:      ElasticsearchName,
 				Namespace: ElasticsearchNamespace,
 			},
@@ -808,5 +808,27 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.logStorage.Spec.Retention.ComplianceReports)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
+	}
+}
+
+// The ECK operator creates a webhook service that is not automatically removed.
+func (es elasticsearchManaged) webhookService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKWebhookName,
+			Namespace: ECKOperatorNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       ECKWebhookName,
+					Port:       443,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(9443),
+				},
+			},
+			Selector: map[string]string{"control-plane": ECKOperatorName, "k8s-app": ECKOperatorName},
+		},
 	}
 }

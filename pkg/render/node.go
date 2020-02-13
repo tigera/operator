@@ -62,13 +62,11 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		metricsServiceToCreate, metricsServiceToDelete := c.nodeMetricsService()
-		if metricsServiceToCreate == nil {
-			objsToDelete = append(objsToDelete, metricsServiceToDelete)
+		metricsService := c.nodeMetricsService()
+		if c.cr.Spec.NodeMetricsPort != nil {
+			objsToCreate = append(objsToCreate, metricsService)
 		} else {
-			if metricsServiceToDelete == nil {
-				objsToCreate = append(objsToCreate, metricsServiceToCreate)
-			}
+			objsToDelete = append(objsToDelete, metricsService)
 		}
 	}
 
@@ -934,34 +932,33 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 }
 
 // nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
-func (c *nodeComponent) nodeMetricsService() (*v1.Service, *v1.Service) {
-	service := v1.Service{
+func (c *nodeComponent) nodeMetricsService() *v1.Service {
+	var nodeMetricsPort int32 = 0
+	if c.cr.Spec.NodeMetricsPort != nil {
+		nodeMetricsPort = *c.cr.Spec.NodeMetricsPort
+	}
+
+	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
-	}
 
-	if c.cr.Spec.NodeMetricsPort == nil {
-		return nil, &service
-	}
-
-	service.Spec = v1.ServiceSpec{
-		Selector: map[string]string{"k8s-app": "calico-node"},
-		Type:     v1.ServiceTypeClusterIP,
-		Ports: []v1.ServicePort{
-			v1.ServicePort{
-				Name:       "calico-metrics-port",
-				Port:       *c.cr.Spec.NodeMetricsPort,
-				TargetPort: intstr.FromInt(int(*c.cr.Spec.NodeMetricsPort)),
-				Protocol:   v1.ProtocolTCP,
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": "calico-node"},
+			Type:     v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
+				v1.ServicePort{
+					Name:       "calico-metrics-port",
+					Port:       nodeMetricsPort,
+					TargetPort: intstr.FromInt(int(nodeMetricsPort)),
+					Protocol:   v1.ProtocolTCP,
+				},
 			},
 		},
 	}
-
-	return &service, nil
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

@@ -25,7 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const ElasticsearchServiceName = "tigera-secure-es-http"
+const (
+	ElasticsearchServiceName = "tigera-secure-es-http"
+	ECKWebhookName           = "elastic-webhook-service"
+)
 
 func ElasticsearchManaged(clusterDNS string, provider operatorv1.Provider) Component {
 	return &elasticsearchManaged{
@@ -43,7 +46,7 @@ func (es elasticsearchManaged) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{
 		createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift),
 		es.externalService(),
-	}, nil
+	}, []runtime.Object{es.webhookService()}
 }
 
 func (es elasticsearchManaged) Ready() bool {
@@ -60,6 +63,17 @@ func (es elasticsearchManaged) externalService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,
 			ExternalName: fmt.Sprintf("%s.%s.%s", GuardianServiceName, GuardianNamespace, es.clusterDNS),
+		},
+	}
+}
+
+// The ECK operator creates a webhook service that is not automatically removed.
+func (es elasticsearchManaged) webhookService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKWebhookName,
+			Namespace: ECKOperatorNamespace,
 		},
 	}
 }

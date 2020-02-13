@@ -46,7 +46,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	It("should render all resources for a custom configuration", func() {
 		component := render.KubeControllers(instance)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
 		// Should render the correct resources.
@@ -80,7 +80,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(instance)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
 		// Should render the correct resources.

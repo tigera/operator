@@ -39,13 +39,13 @@ type awsSGSetupComponent struct {
 	initImageVersion string
 }
 
-func (c *awsSGSetupComponent) Objects() []runtime.Object {
+func (c *awsSGSetupComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{
 		c.serviceAccount(),
 		c.role(),
 		c.roleBinding(),
 		c.setupJob(),
-	}
+	}, nil
 }
 
 func (c *awsSGSetupComponent) Ready() bool {

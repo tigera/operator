@@ -39,13 +39,13 @@ type kubeControllersComponent struct {
 	cr *operator.Installation
 }
 
-func (c *kubeControllersComponent) Objects() []runtime.Object {
+func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),
 		c.controllersDeployment(),
-	}
+	}, nil
 }
 
 func (c *kubeControllersComponent) Ready() bool {

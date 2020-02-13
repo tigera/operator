@@ -34,10 +34,10 @@ func ElasticsearchSecrets(esPublicCertSecret *corev1.Secret, kibanaPublicCertSec
 	}
 }
 
-func (es elasticsearchSecrets) Objects() []runtime.Object {
+func (es elasticsearchSecrets) Objects() ([]runtime.Object, []runtime.Object) {
 	var objs []runtime.Object
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(OperatorNamespace(), es.esPublicCertSecret, es.kibanaPublicCertSecret)...)...)
-	return objs
+	return objs, nil
 }
 
 func (es elasticsearchSecrets) Ready() bool {

@@ -62,6 +62,8 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
 		var ff bool = true
+		var nodeMetricsPort int32 = 9081
+
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -87,6 +89,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 					NodeAddressAutodetectionV6: nil,
 				},
+				NodeMetricsPort: &nodeMetricsPort,
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)

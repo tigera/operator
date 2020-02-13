@@ -56,7 +56,7 @@ type InstallationSpec struct {
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
 
-	// NodeSelector is a selector string used to determine installation targets.
+	// NodeSelector is a string used to select targets for "control-plane" operator pods.
 	// Default: 'all()'
 	// +optional
 	NodeSelector string `json:"nodeSelector,omitempty"`

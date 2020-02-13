@@ -63,7 +63,7 @@ type GuardianComponent struct {
 	tunnelSecret *corev1.Secret
 }
 
-func (c *GuardianComponent) Objects() []runtime.Object {
+func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		createNamespace(GuardianNamespace, c.openshift),
 	}
@@ -77,7 +77,7 @@ func (c *GuardianComponent) Objects() []runtime.Object {
 		copySecrets(GuardianNamespace, c.tunnelSecret)[0],
 	)
 
-	return objs
+	return objs, nil
 }
 
 func (c *GuardianComponent) Ready() bool {

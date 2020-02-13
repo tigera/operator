@@ -60,21 +60,20 @@ type intrusionDetectionComponent struct {
 	openshift        bool
 }
 
-func (c *intrusionDetectionComponent) Objects() []runtime.Object {
+func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(copySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
-
-	return append(objs,
-		c.intrusionDetectionServiceAccount(),
+	objs = append(objs, c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
-		c.intrusionDetectionElasticsearchJob(),
-	)
+		c.intrusionDetectionElasticsearchJob())
+
+	return objs, nil
 }
 
 func (c *intrusionDetectionComponent) Ready() bool {

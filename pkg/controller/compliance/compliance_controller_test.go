@@ -44,7 +44,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -57,16 +56,12 @@ var _ = Describe("Compliance controller tests", func() {
 	var r ReconcileCompliance
 	var scheme *runtime.Scheme
 
-	BeforeSuite(func() {
+	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "apps", Version: "v1"}, &appsv1.Deployment{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.ClusterRole{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.ClusterRoleBinding{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.Role{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.RoleBinding{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &appsv1.DaemonSet{})
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
@@ -153,6 +148,20 @@ var _ = Describe("Compliance controller tests", func() {
 
 	It("should remove the compliance server in managed clusters", func() {
 
+		By("reconciling when clustertype is Standalone")
+		result, err := r.Reconcile(reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Requeue).NotTo(BeTrue())
+
+		By("creating a compliance-server deployment")
+		dpl := appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerName,
+			Namespace: render.ComplianceNamespace,
+		}, &dpl)).NotTo(HaveOccurred())
+		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceServerName))
+
 		By("changing the cluster type to Managed")
 		Expect(c.Update(
 			ctx,
@@ -167,13 +176,10 @@ var _ = Describe("Compliance controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 		By("reconciling after the cluster type changes")
-		_, err := r.Reconcile(reconcile.Request{})
+		_, err = r.Reconcile(reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 
 		By("removing one unnecessary deployment")
-		dpl := appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{},
-		}
 
 		// The server should be removed...
 		err = c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerName,

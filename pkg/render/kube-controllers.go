@@ -20,6 +20,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"github.com/tigera/operator/pkg/components"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -192,9 +193,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	// Pick which image to use based on variant.
-	image := constructImage(KubeControllersImageNameCalico, c.cr.Spec.Registry)
+	image := components.GetImageReference(components.KubeControllersImageNameCalico, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(KubeControllersImageNameTigera, c.cr.Spec.Registry)
+		image = components.GetImageReference(components.KubeControllersImageNameTigera, c.cr.Spec.Registry)
 	}
 
 	d := apps.Deployment{

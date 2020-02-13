@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/tigera/operator/pkg/components"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -81,7 +83,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					},
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
-						Image: fmt.Sprintf("%s%s", constructImage(OperatorInitImageName, c.registry), c.initImageVersion),
+						Image: fmt.Sprintf("%s%s", components.GetImageReference(components.OperatorInitImageName, c.registry), c.initImageVersion),
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",

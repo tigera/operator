@@ -160,7 +160,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			return err
 		}
 
-		key, err := client.ObjectKeyFromObject(obj)
+		key, err = client.ObjectKeyFromObject(obj)
 		switch obj.(type) {
 		case *apps.Deployment:
 			status.RemoveDeployments(key)

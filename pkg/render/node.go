@@ -31,10 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-var (
-	nodeMetricsPort int32 = 9081
-)
-
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
@@ -56,31 +52,39 @@ type nodeComponent struct {
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	objs := []runtime.Object{
+	objsToCreate := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
 	}
+
+	var objsToDelete []runtime.Object
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
+		metricsService := c.nodeMetricsService()
+		if c.cr.Spec.NodeMetricsPort != nil {
+			objsToCreate = append(objsToCreate, metricsService)
+		} else {
+			objsToDelete = append(objsToDelete, metricsService)
+		}
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
-		objs = append(objs, cniConfig)
+		objsToCreate = append(objsToCreate, cniConfig)
 	}
 
 	if btcm := c.birdTemplateConfigMap(); btcm != nil {
-		objs = append(objs, btcm)
+		objsToCreate = append(objsToCreate, btcm)
 	}
 
 	if c.provider == operator.ProviderDockerEE {
-		objs = append(objs, c.clusterAdminClusterRoleBinding())
+		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
-	objs = append(objs, c.nodeDaemonset())
+	objsToCreate = append(objsToCreate, c.nodeDaemonset())
 
-	return objs, nil
+	return objsToCreate, objsToDelete
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -854,7 +858,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -863,6 +866,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
+
+		if c.cr.Spec.NodeMetricsPort != nil {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT",
+				Value: fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)})
+		}
 	}
 
 	// Configure provider specific environment variables here.
@@ -923,9 +931,13 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-// nodeMetricsService creates a Service which exposes the calico/node metrics
-// reporting endpoint.
+// nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
+	var nodeMetricsPort int32 = 0
+	if c.cr.Spec.NodeMetricsPort != nil {
+		nodeMetricsPort = *c.cr.Spec.NodeMetricsPort
+	}
+
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -933,6 +945,7 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
+
 		Spec: v1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": "calico-node"},
 			Type:     v1.ServiceTypeClusterIP,

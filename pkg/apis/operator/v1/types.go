@@ -56,6 +56,11 @@ type InstallationSpec struct {
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
 
+	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
+	// components. This currently only applies to kube-controllers and the apiserver.
+	// +optional
+	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
+
 	// NodeMetricsPort specifies which port calico/node serves metrics on. If omitted, then metrics are disabled.
 	// +optional
 	NodeMetricsPort *int32 `json:"nodeMetricsPort,omitempty"`

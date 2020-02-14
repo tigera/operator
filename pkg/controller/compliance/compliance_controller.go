@@ -112,7 +112,7 @@ type ReconcileCompliance struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
-	status   *status.StatusManager
+	status   status.StatusManager
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -163,7 +163,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	network, err := installation.GetInstallation(ctx, r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -180,7 +180,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
@@ -202,7 +202,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		secretsToWatch = append(secretsToWatch, render.ElasticsearchComplianceServerUserSecret)
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), secretsToWatch, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(ctx, secretsToWatch, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
@@ -237,7 +237,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

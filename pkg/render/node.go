@@ -55,7 +55,7 @@ type nodeComponent struct {
 	migrationNeeded bool
 }
 
-func (c *nodeComponent) Objects() []runtime.Object {
+func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
@@ -80,7 +80,7 @@ func (c *nodeComponent) Objects() []runtime.Object {
 
 	objs = append(objs, c.nodeDaemonset())
 
-	return objs
+	return objs, nil
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -456,7 +456,7 @@ func (c *nodeComponent) cniDirectories() (string, string) {
 	var cniBinDir, cniNetDir string
 	switch c.provider {
 	case operator.ProviderOpenShift:
-		cniNetDir = "/etc/kubernetes/cni/net.d"
+		cniNetDir = "/var/run/multus/cni/net.d"
 		cniBinDir = "/var/lib/cni/bin"
 	case operator.ProviderGKE:
 		// Used if we're installing a CNI plugin. If using the GKE plugin, these are not necessary.
@@ -865,23 +865,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
-	iptablesBackend := "auto"
-
 	// Configure provider specific environment variables here.
 	switch c.provider {
 	case operator.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-			// TODO: Remove this once the private node/felix is updated to support the auto
-			// option.
-			// Use iptables in nftables mode.
-			iptablesBackend = "NFT"
-		}
-
-		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/openshift-dns"})
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
 	case operator.ProviderEKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
@@ -895,7 +886,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.ProviderAKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: iptablesBackend})
+	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 	return nodeEnv
 }
 

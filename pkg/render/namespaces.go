@@ -41,7 +41,7 @@ type namespaceComponent struct {
 	pullSecrets []*corev1.Secret
 }
 
-func (c *namespaceComponent) Objects() []runtime.Object {
+func (c *namespaceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	ns := []runtime.Object{
 		createNamespace(common.CalicoNamespace, c.openshift),
 	}
@@ -55,7 +55,7 @@ func (c *namespaceComponent) Objects() []runtime.Object {
 			ns = append(ns, copyImagePullSecrets(c.pullSecrets, TigeraPrometheusNamespace)...)
 		}
 	}
-	return ns
+	return ns, nil
 }
 
 func (c *namespaceComponent) Ready() bool {

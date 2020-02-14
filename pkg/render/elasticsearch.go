@@ -123,7 +123,7 @@ type elasticsearchComponent struct {
 	registry            string
 }
 
-func (es *elasticsearchComponent) Objects() []runtime.Object {
+func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	var objs []runtime.Object
 	objs = append(objs, es.eckOperator()...)
 	objs = append(objs, createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift))
@@ -135,7 +135,7 @@ func (es *elasticsearchComponent) Objects() []runtime.Object {
 	objs = append(objs, es.elasticsearchCluster())
 	objs = append(objs, es.kibana()...)
 
-	return objs
+	return objs, nil
 }
 
 func (es *elasticsearchComponent) Ready() bool {
@@ -549,7 +549,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("1"),
-								"memory": resource.MustParse("100Mi"),
+								"memory": resource.MustParse("150Mi"),
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),

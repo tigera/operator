@@ -80,7 +80,7 @@ type apiServerComponent struct {
 	openshift    bool
 }
 
-func (c *apiServerComponent) Objects() []runtime.Object {
+func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		createNamespace(APIServerNamespace, c.openshift),
 	}
@@ -113,7 +113,7 @@ func (c *apiServerComponent) Objects() []runtime.Object {
 		c.tigeraNetworkAdminClusterRole(),
 	)
 
-	return objs
+	return objs, nil
 }
 
 func (c *apiServerComponent) Ready() bool {

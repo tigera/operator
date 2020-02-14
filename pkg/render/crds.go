@@ -31,12 +31,12 @@ type crdComponent struct {
 	cr *operator.Installation
 }
 
-func (c *crdComponent) Objects() []runtime.Object {
+func (c *crdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	crds := c.calicoCRDs()
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		crds = append(crds, tigeraSecureCRDs()...)
 	}
-	return crds
+	return crds, nil
 }
 
 func (c *crdComponent) Ready() bool {

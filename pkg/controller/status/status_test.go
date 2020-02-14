@@ -26,7 +26,7 @@ import (
 )
 
 var _ = Describe("Status reporting tests", func() {
-	var sm *StatusManager
+	var sm *statusManager
 	var client client.Client
 	BeforeEach(func() {
 		// Setup Scheme for all resources
@@ -35,7 +35,15 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		client = fake.NewFakeClientWithScheme(scheme)
 
-		sm = New(client, "test-component")
+		sm = &statusManager{
+			client:       client,
+			component:    "test-component",
+			daemonsets:   make(map[string]types.NamespacedName),
+			deployments:  make(map[string]types.NamespacedName),
+			statefulsets: make(map[string]types.NamespacedName),
+			cronjobs:     make(map[string]types.NamespacedName),
+		}
+
 		Expect(sm.IsAvailable()).To(BeFalse())
 		sm.OnCRFound()
 	})

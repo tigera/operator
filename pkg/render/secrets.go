@@ -27,12 +27,12 @@ type secretsComponent struct {
 	secrets []*corev1.Secret
 }
 
-func (c *secretsComponent) Objects() []runtime.Object {
+func (c *secretsComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{}
 	for _, s := range c.secrets {
 		objs = append(objs, s)
 	}
-	return objs
+	return objs, nil
 }
 
 func (c *secretsComponent) Ready() bool {

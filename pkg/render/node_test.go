@@ -57,7 +57,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -230,7 +230,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -321,7 +321,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when running on openshift", func() {
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
@@ -337,7 +337,7 @@ var _ = Describe("Node rendering tests", func() {
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s", render.NodeImageNameCalico)))
 
-		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
+		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
 
 		// Verify volumes. In particular, we want to make sure the flexvol-driver-host volume uses the right
 		// host path for flexvolume drivers.
@@ -349,7 +349,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 			{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/cni/bin"}}},
-			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/kubernetes/cni/net.d"}}},
+			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/multus/cni/net.d"}}},
 			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 			{
@@ -439,7 +439,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -457,7 +457,7 @@ var _ = Describe("Node rendering tests", func() {
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(render.TigeraRegistry + "tigera/cnx-node:v2.7.0-0.dev-188-gc5255d3"))
 
-		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/kubernetes/cni/net.d")
+		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
 
 		optional := true
 		expectedNodeEnv := []v1.EnvVar{
@@ -524,8 +524,8 @@ var _ = Describe("Node rendering tests", func() {
 
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "NFT"},
-			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/openshift-dns"},
+			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
+			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
@@ -538,7 +538,7 @@ var _ = Describe("Node rendering tests", func() {
 			"template-1.yaml": "dataforTemplate1 that is not used here",
 		}
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt, typhaNodeTLS, false)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
@@ -583,7 +583,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -598,7 +598,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -613,7 +613,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -627,7 +627,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should include updates needed for the core upgrade", func() {
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, true)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5), fmt.Sprintf("resources are %v", resources))
 
 		// Should render the correct resources.
@@ -662,7 +662,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Provider does not matter for IPPool configuration
 			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-			resources := component.Objects()
+			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")

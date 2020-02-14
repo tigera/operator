@@ -47,7 +47,7 @@ var _ = Describe("API server rendering tests", func() {
 		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
-		resources := component.Objects()
+		resources, _ := component.Objects()
 
 		// Should render the correct resources.
 		// - 1 namespace
@@ -209,7 +209,7 @@ var _ = Describe("API server rendering tests", func() {
 	It("should render an API server with custom configuration", func() {
 		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 
 		// Should render the correct resources.
 		// Expect same number as above
@@ -224,7 +224,7 @@ var _ = Describe("API server rendering tests", func() {
 	It("should render needed resources for k8s kube-controller", func() {
 		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 
 		Expect(len(resources)).To(Equal(20))
 

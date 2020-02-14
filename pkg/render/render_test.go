@@ -85,7 +85,8 @@ var _ = Describe("Rendering tests", func() {
 func componentCount(components []render.Component) int {
 	count := 0
 	for _, c := range components {
-		count += len(c.Objects())
+		objsToCreate, _ := c.Objects()
+		count += len(objsToCreate)
 	}
 	return count
 }

@@ -495,6 +495,12 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 			},
 		},
 	}
+
+	// Add the ControlPlaneNodeSelector to our Deployment if one was specified.
+	for k, v := range c.installation.Spec.ControlPlaneNodeSelector {
+		d.Spec.Template.Spec.NodeSelector[k] = v
+	}
+
 	return d
 }
 

@@ -21,15 +21,16 @@ import (
 	"os"
 	"regexp"
 
-	apps "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/elastic/cloud-on-k8s/operators/pkg/utils/stringsutil"
+	apps "k8s.io/api/apps/v1"
+	storagev1 "k8s.io/api/storage/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -56,6 +57,7 @@ const (
 	defaultResolveConfPath             = "/etc/resolv.conf"
 	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
+	defaultElasticsearchShards         = 5
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -138,6 +140,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchStorageClass},
+	}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %v", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
@@ -267,116 +275,271 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	ctx := context.Background()
 
-	// Try to retrieve the LogStorage resource to see if we need to clean up after it's been marked for deletion
-	if ls, err := GetLogStorage(ctx, r.client); err != nil {
+	ls, err := GetLogStorage(ctx, r.client)
+	if err != nil {
+		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
+		// there are still "LogStorage" related items that need to be set up
 		if !errors.IsNotFound(err) {
-			r.status.SetDegraded("Failed to get LogStorage CR", err.Error())
+			r.status.SetDegraded("An error occurred while trying to retrieve the LogStorage CR", err.Error())
 			return reconcile.Result{}, err
 		}
-	} else if ls.DeletionTimestamp != nil {
-		if err := r.finalizeDeletion(ctx, ls); err != nil {
-			r.setDegraded(ctx, reqLogger, ls, "Finalizing deletion of LogStorage before continuing", err)
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{}, nil
+		r.status.OnCRNotFound()
+	} else {
+		r.status.OnCRFound()
 	}
 
-	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	installationCR, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.status.SetDegraded("An error occurred while trying to retrieve the Installation CR", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
+	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
+		return reconcile.Result{}, nil
+	} else if ls == nil && installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+		err := fmt.Errorf("LogStorage must exist for '%s' cluster type", installationCR.Spec.ClusterManagementType)
+		log.Error(err, err.Error())
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, nil
+	} else if ls != nil && ls.DeletionTimestamp != nil && installationCR.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
+		// Note that we check if the DeletionTimestamp is set as the render function is responsible for any cleanup needed
+		// before the LogStorage CR can be deleted, and removing the finalizers from that CR
+		err := fmt.Errorf("cluster type is '%s' but logstorage still exists", operatorv1.ClusterManagementTypeManaged)
+		log.Error(err, err.Error())
+		r.status.SetDegraded("LogStorage validation failed", err.Error())
 		return reconcile.Result{}, nil
 	}
 
-	if network.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
-		return r.reconcileManaged(ctx, network, reqLogger)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR, r.client)
+	if err != nil {
+		log.Error(err, "error retrieving pull secrets")
+		r.status.SetDegraded("An error occurring while retrieving the pull secrets", err.Error())
+		return reconcile.Result{}, err
 	}
 
-	return r.reconcileUnmanaged(ctx, network, reqLogger)
-}
-
-func (r *ReconcileLogStorage) setDegraded(ctx context.Context, reqLogger logr.Logger, ls *operatorv1.LogStorage, message string, err error) {
-	if err := r.updateStatus(ctx, reqLogger, ls, operatorv1.LogStorageStatusDegraded); err != nil {
-		reqLogger.Error(err, fmt.Sprintf("Failed to update LogStorage status to %s", operatorv1.LogStorageStatusDegraded))
+	esService, err := r.getElasticsearchService(ctx)
+	if err != nil {
+		log.Error(err, "failed to retrieve Elasticsearch service")
+		r.status.SetDegraded("Failed to retrieve the Elasticsearch service", err.Error())
+		return reconcile.Result{}, err
 	}
-	if err == nil {
-		reqLogger.Info(message)
-		r.status.SetDegraded(message, "")
+
+	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
+	createWebhookSecret := false
+
+	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged && ls.DeletionTimestamp == nil {
+		if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
+			if errors.IsNotFound(err) {
+				err := fmt.Errorf("couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass)
+				log.Error(err, err.Error())
+				r.status.SetDegraded("Failed to get storage class", err.Error())
+				return reconcile.Result{}, nil
+			}
+
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get storage class", err.Error())
+			return reconcile.Result{}, nil
+		}
+
+		if elasticsearchSecrets, err = r.elasticsearchSecrets(ctx); err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if kibanaSecrets, err = r.kibanaSecrets(ctx); err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		// The ECK operator requires that we provide it with a secret so it can add certificate information in for its webhooks.
+		// If it's created we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKWebhookSecretName, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
+			if errors.IsNotFound(err) {
+				createWebhookSecret = true
+			} else {
+				log.Error(err, err.Error())
+				r.status.SetDegraded("Failed to read Elasticsearch webhook secret", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
+		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded("Failed to get curator credentials", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	elasticsearch, err := r.getElasticsearch(ctx)
+	if err != nil {
+		log.Error(err, err.Error())
+		r.status.SetDegraded("An error occurred trying to retrieve Elasticsearch", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	kibana, err := r.getKibana(ctx)
+	if err != nil {
+		log.Error(err, err.Error())
+		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
+	// create the ComponentHandler from the installationCR
+	var hdler utils.ComponentHandler
+	if ls != nil {
+		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	} else {
-		reqLogger.Error(err, message)
-		r.status.SetDegraded(message, err.Error())
+		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
 	}
-}
 
-func (r *ReconcileLogStorage) updateStatus(ctx context.Context, reqLogger logr.Logger, ls *operatorv1.LogStorage, state string) error {
-	ls.Status.State = state
+	component := render.Elasticsearch(
+		ls,
+		installationCR,
+		elasticsearch,
+		kibana,
+		render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards),
+		elasticsearchSecrets,
+		kibanaSecrets,
+		createWebhookSecret,
+		pullSecrets,
+		r.provider,
+		curatorSecrets,
+		esService,
+		r.localDNS,
+	)
+
+	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
+		log.Error(err, err.Error())
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if ls != nil && ls.DeletionTimestamp == nil {
+		if elasticsearch == nil || elasticsearch.Status.Phase != esalpha1.ElasticsearchOperationalPhase {
+			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
+			return reconcile.Result{}, nil
+		}
+
+		if kibana == nil || kibana.Status.AssociationStatus != cmneckalpha1.AssociationEstablished {
+			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
+			return reconcile.Result{}, nil
+		}
+
+		if len(curatorSecrets) == 0 {
+			log.Info("waiting for curator secrets to become available")
+			r.status.SetDegraded("Waiting for curator secrets to become available", "")
+			return reconcile.Result{}, nil
+		}
+	}
+
+	r.status.ClearDegraded()
+	ls.Status.State = operatorv1.LogStorageStatusReady
 	if err := r.client.Status().Update(ctx, ls); err != nil {
-		reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", state))
-		r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", state), err.Error())
-		return err
+		reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady))
+		r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady), err.Error())
+		return reconcile.Result{}, err
 	}
 
-	return nil
+	return reconcile.Result{}, nil
 }
 
-// finalizeDeletion makes sure that both Kibana and Elasticsearch are deleted before removing the finalizer on the LogStorage
-// resource. This needs to happen because the ECK operator will be deleted when the LogStorage resource is deleted, but
-// the ECK operator is needed to delete Elasticsearch and Kibana.
-func (r *ReconcileLogStorage) finalizeDeletion(ctx context.Context, ls *operatorv1.LogStorage) error {
-	log.Info("Finalizing LogStorage deletion")
-	// if both Elasticsearch and Kibana are already deleted then this stays true and we'll remove the LogStorage CR
-	// finalizer. We want to wait until the ECK operator has completely removed Elasticsearch before allowing the
-	// LogStorage CR to be deleted
-	removeFinalizer := true
-
-	// Delete Elasticsearch
-	if es, err := r.getElasticsearch(ctx); err == nil {
-		// If the DeletionTimestamp is set then we're just waiting for the ECK operator to finish deleting Elasticsearch
-		if es.DeletionTimestamp == nil {
-			log.Info("Deleting Elasticsearch")
-			if err := r.client.Delete(ctx, es); err != nil {
-				return err
-			}
+func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*corev1.Secret, error) {
+	var secrets []*corev1.Secret
+	secret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}, secret); err != nil {
+		if errors.IsNotFound(err) {
+			secret, err = render.CreateOperatorTLSSecret(nil,
+				render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt",
+				render.DefaultCertificateDuration, nil, render.ElasticsearchHTTPURL,
+			)
+		} else {
+			return nil, err
 		}
-		removeFinalizer = false
-	} else if !errors.IsNotFound(err) {
-		return err
 	}
+	secrets = append(secrets, secret, render.CopySecrets(render.ElasticsearchNamespace, secret)[0])
 
-	// Delete Kibana
-	if kb, err := r.getKibana(ctx); err == nil {
-		// If the DeletionTimestamp is set then we're just waiting for the ECK operator to finish deleting Kibana
-		if kb.DeletionTimestamp == nil {
-			log.Info("Deleting Kibana")
-			if err := r.client.Delete(ctx, kb); err != nil {
-				return err
-			}
+	secret = &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}, secret); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
 		}
-		removeFinalizer = false
-	} else if !errors.IsNotFound(err) {
-		return err
+		log.Info("Elasticsearch public cert secret not found yet")
+	} else {
+		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), secret)...)
 	}
 
-	if !removeFinalizer {
-		log.Info("Waiting for Elasticsearch and Kibana deletion to complete before removing finalizers from LogStorage")
-		return nil
+	return secrets, nil
+}
+
+func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secret, error) {
+	var secrets []*corev1.Secret
+	secret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, secret); err != nil {
+		if errors.IsNotFound(err) {
+			secret, err = render.CreateOperatorTLSSecret(nil,
+				render.TigeraKibanaCertSecret, "tls.key", "tls.crt",
+				render.DefaultCertificateDuration, nil, render.KibanaHTTPURL,
+			)
+		} else {
+			return nil, err
+		}
+	}
+	secrets = append(secrets, secret, render.CopySecrets(render.KibanaNamespace, secret)[0])
+
+	secret = &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}, secret); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		log.Info("Kibana public cert secret not found yet")
+	} else {
+		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), secret)...)
 	}
 
-	// remove the finalizer now that Elasticsearch and Kibana have been deleted
-	log.Info("Removing finalizers from LogStorage")
-	ls.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, ls.GetFinalizers()))
-	if err := r.client.Update(ctx, ls); err != nil {
-		return err
-	}
+	return secrets, nil
+}
 
-	return nil
+func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esalpha1.Elasticsearch, error) {
+	es := esalpha1.Elasticsearch{}
+	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &es, nil
+}
+
+func (r *ReconcileLogStorage) getElasticsearchService(ctx context.Context) (*corev1.Service, error) {
+	svc := corev1.Service{}
+	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, &svc)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &svc, nil
+}
+
+func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kibana, error) {
+	kb := kibanaalpha1.Kibana{}
+	err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, &kb)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &kb, nil
 }

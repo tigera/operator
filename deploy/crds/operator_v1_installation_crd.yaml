@@ -136,6 +136,13 @@ spec:
               - Management
               - Managed
               type: string
+            controlPlaneNodeSelector:
+              additionalProperties:
+                type: string
+              description: ControlPlaneNodeSelector is used to select control plane
+                nodes on which to run specific Calico components. This currently only
+                applies to kube-controllers and the apiserver.
+              type: object
             imagePullSecrets:
               description: ImagePullSecrets is an array of references to container
                 registry pull secrets to use. These are applied to all images to be
@@ -155,6 +162,11 @@ spec:
               - OpenShift
               - DockerEnterprise
               type: string
+            nodeMetricsPort:
+              description: NodeMetricsPort specifies which port calico/node serves
+                metrics on. If omitted, then metrics are disabled.
+              format: int32
+              type: integer
             registry:
               description: Registry is the default Docker registry used for component
                 Docker images. If specified, all Calico and Tigera Secure images will

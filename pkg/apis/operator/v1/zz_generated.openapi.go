@@ -328,6 +328,27 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 							Format:      "",
 						},
 					},
+					"controlPlaneNodeSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico components. This currently only applies to kube-controllers and the apiserver.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"nodeMetricsPort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeMetricsPort specifies which port calico/node serves metrics on. If omitted, then metrics are disabled.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 				},
 			},
 		},

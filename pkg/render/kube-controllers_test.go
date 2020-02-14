@@ -94,4 +94,15 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.VersionTigeraKubeControllers))
 	})
+
+	It("should include a ControlPlaneNodeSelector when specified", func() {
+		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		component := render.KubeControllers(instance)
+		resources := component.Objects()
+		Expect(len(resources)).To(Equal(4))
+
+		d := resources[3].(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+	})
 })

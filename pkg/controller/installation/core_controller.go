@@ -311,10 +311,6 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	if len(instance.Spec.NodeSelector) == 0 {
-		instance.Spec.NodeSelector = operator.NodeSelectorDefault
-	}
-
 	return nil
 }
 

@@ -243,6 +243,19 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(crb.Subjects[0].Kind).To(Equal("User"))
 		Expect(crb.Subjects[0].Name).To(Equal("system:kube-controller-manager"))
 	})
+
+	It("should include a ControlPlaneNodeSelector when specified", func() {
+		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		component, err := render.APIServer(instance, nil, nil, openshift)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources := component.Objects()
+
+		Expect(len(resources)).To(Equal(20))
+		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+
+		d := resources[13].(*v1.Deployment)
+		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+	})
 })
 
 func verifyAPIService(service *v1beta1.APIService) {

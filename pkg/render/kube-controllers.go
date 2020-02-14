@@ -253,5 +253,11 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
+
+	// Add the ControlPlaneNodeSelector to our Deployment if one was specified.
+	for k, v := range c.cr.Spec.ControlPlaneNodeSelector {
+		d.Spec.Template.Spec.NodeSelector[k] = v
+	}
+
 	return &d
 }

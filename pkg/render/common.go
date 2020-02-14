@@ -131,6 +131,39 @@ func setServerAuth(x *x509.Certificate) error {
 	return nil
 }
 
+func CreateTLSSecret(
+	ca *crypto.CA,
+	secretName string,
+	secretNamespace string,
+	secretKeyName string,
+	secretCertName string,
+	dur time.Duration,
+	cef []crypto.CertificateExtensionFunc,
+	hostnames ...string,
+) (*v1.Secret, error) {
+	return createTLSSecret(ca,
+		secretName,
+		secretNamespace,
+		secretKeyName,
+		secretCertName,
+		dur,
+		cef, hostnames...,
+	)
+}
+
+func CreateOperatorTLSSecret(
+	ca *crypto.CA,
+	secretName string,
+	secretKeyName string,
+	secretCertName string,
+	dur time.Duration,
+	cef []crypto.CertificateExtensionFunc,
+	hostnames ...string,
+) (*v1.Secret, error) {
+
+	return createOperatorTLSSecret(ca, secretName, secretKeyName, secretCertName, dur, cef, hostnames...)
+}
+
 // createOperatorTLSSecret Creates a new TLS secret with the information passed
 //   ca: The ca to use for creating the Cert/Key pair. If nil then a
 //       self-signed CA will be created
@@ -217,6 +250,10 @@ func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object 
 		secrets = append(secrets, x)
 	}
 	return secrets
+}
+
+func CopySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {
+	return copySecrets(ns, oSecrets...)
 }
 
 func copySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {

@@ -99,7 +99,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.KubeControllers(instance)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
 		d := resources[3].(*apps.Deployment)

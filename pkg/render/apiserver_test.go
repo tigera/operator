@@ -248,7 +248,7 @@ var _ = Describe("API server rendering tests", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources := component.Objects()
+		resources, _ := component.Objects()
 
 		Expect(len(resources)).To(Equal(20))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")

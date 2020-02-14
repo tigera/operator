@@ -17,7 +17,6 @@ package logstorage_test
 import (
 	"context"
 	"os"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,12 +30,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
 	"github.com/stretchr/testify/mock"
 
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
-	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
+	esv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
+	kbv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
@@ -82,128 +82,139 @@ var _ = Describe("LogStorage controller", func() {
 		})
 
 		Context("Managed Cluster", func() {
-			BeforeEach(func() {
-				ctx := context.Background()
-				Expect(cli.Create(ctx, &operatorv1.Installation{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "default",
-					},
-					Status: operatorv1.InstallationStatus{
-						Variant: operatorv1.TigeraSecureEnterprise,
-					},
-					Spec: operatorv1.InstallationSpec{
-						Variant:               operatorv1.TigeraSecureEnterprise,
-						ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
-					},
-				})).ShouldNot(HaveOccurred())
-
-				mockStatus = &status.MockStatus{}
-				mockStatus.On("Run").Return()
-			})
-			Context("ExternalService is correctly setup", func() {
+			Context("LogStorage is nil", func() {
 				BeforeEach(func() {
-					mockStatus.On("AddDaemonsets", mock.Anything).Return()
-					mockStatus.On("AddDeployments", mock.Anything).Return()
-					mockStatus.On("AddStatefulSets", mock.Anything).Return()
-				})
-				It("tests that the ExternalService is setup with the default service name", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
-					Expect(err).ShouldNot(HaveOccurred())
 					ctx := context.Background()
+					Expect(cli.Create(ctx, &operatorv1.Installation{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Status: operatorv1.InstallationStatus{
+							Variant: operatorv1.TigeraSecureEnterprise,
+						},
+						Spec: operatorv1.InstallationSpec{
+							Variant:               operatorv1.TigeraSecureEnterprise,
+							ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
+						},
+					})).ShouldNot(HaveOccurred())
 
-					_, err = r.Reconcile(reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
-
-					svc := &corev1.Service{}
-					Expect(
-						cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
-					).ShouldNot(HaveOccurred())
-
-					Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.cluster.local"))
-					Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+					mockStatus = &status.MockStatus{}
+					mockStatus.On("Run").Return()
 				})
-				It("tests that the ExternalService is setup with the url parsed from the given resolv.conf", func() {
-					dir, err := os.Getwd()
-					if err != nil {
-						panic(err)
-					}
-					resolvConfPath := dir + "/testdata/resolv.conf"
+				Context("ExternalService is correctly setup", func() {
+					BeforeEach(func() {
+						mockStatus.On("AddDaemonsets", mock.Anything).Return()
+						mockStatus.On("AddDeployments", mock.Anything).Return()
+						mockStatus.On("AddStatefulSets", mock.Anything).Return()
+						mockStatus.On("AddCronJobs", mock.Anything)
+						mockStatus.On("OnCRNotFound").Return()
+						mockStatus.On("ClearDegraded")
+					})
+					It("tests that the ExternalService is setup with the default service name", func() {
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+						Expect(err).ShouldNot(HaveOccurred())
+						ctx := context.Background()
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath)
-					Expect(err).ShouldNot(HaveOccurred())
-					ctx := context.Background()
+						_, err = r.Reconcile(reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
 
-					_, err = r.Reconcile(reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
+						svc := &corev1.Service{}
+						Expect(
+							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+						).ShouldNot(HaveOccurred())
 
-					svc := &corev1.Service{}
-					Expect(
-						cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
-					).ShouldNot(HaveOccurred())
+						Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.cluster.local"))
+						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+					})
+					It("tests that the ExternalService is setup with the url parsed from the given resolv.conf", func() {
+						dir, err := os.Getwd()
+						if err != nil {
+							panic(err)
+						}
+						resolvConfPath := dir + "/testdata/resolv.conf"
 
-					Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.othername.local"))
-					Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath)
+						Expect(err).ShouldNot(HaveOccurred())
+						ctx := context.Background()
+
+						_, err = r.Reconcile(reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+
+						svc := &corev1.Service{}
+						Expect(
+							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+						).ShouldNot(HaveOccurred())
+
+						Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.othername.local"))
+						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+					})
+				})
+
+				Context("LogStorage exists", func() {
+					BeforeEach(func() {
+						setUpLogStorageComponents(cli)
+						mockStatus.On("OnCRFound").Return()
+					})
+
+					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+						Expect(err).ShouldNot(HaveOccurred())
+
+						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is 'Managed' but LogStorage CR still exists").Return()
+						result, err := r.Reconcile(reconcile.Request{})
+						Expect(result).Should(Equal(reconcile.Result{}))
+						Expect(err).ShouldNot(HaveOccurred())
+
+						mockStatus.AssertExpectations(GinkgoT())
+					})
+
+					It("finalises the deletion of the LogStorage CR when marked for deletion and continues without error", func() {
+						mockStatus.On("AddDaemonsets", mock.Anything).Return()
+						mockStatus.On("AddDeployments", mock.Anything).Return()
+						mockStatus.On("AddStatefulSets", mock.Anything).Return()
+						mockStatus.On("AddCronJobs", mock.Anything)
+						mockStatus.On("ClearDegraded", mock.Anything).Return()
+
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+						Expect(err).ShouldNot(HaveOccurred())
+
+						ls := &operatorv1.LogStorage{}
+						Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+
+						now := metav1.Now()
+						ls.DeletionTimestamp = &now
+						ls.SetFinalizers([]string{"tigera.io/eck-cleanup"})
+						Expect(cli.Update(context.Background(), ls)).ShouldNot(HaveOccurred())
+
+						result, err := r.Reconcile(reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(result).Should(Equal(reconcile.Result{}))
+
+						By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
+						err = cli.Get(context.Background(), esObjKey, &esv1alpha1.Elasticsearch{})
+						Expect(errors.IsNotFound(err)).Should(BeTrue())
+						err = cli.Get(context.Background(), kbObjKey, &kbv1alpha1.Kibana{})
+						Expect(errors.IsNotFound(err)).Should(BeTrue())
+
+						// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
+						By("waiting for the Elasticsearch and Kibana resources to be deleted")
+						ls = &operatorv1.LogStorage{}
+						Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
+
+						result, err = r.Reconcile(reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(result).Should(Equal(reconcile.Result{}))
+
+						By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
+						ls = &operatorv1.LogStorage{}
+						Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(ls.Finalizers).ShouldNot(ContainElement("tigera.io/eck-cleanup"))
+
+						mockStatus.AssertExpectations(GinkgoT())
+					})
 				})
 			})
-
-			Context("LogStorage exists", func() {
-				BeforeEach(func() {
-					setUpLogStorageComponents(cli)
-				})
-
-				It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
-					Expect(err).ShouldNot(HaveOccurred())
-
-					result, err := r.Reconcile(reconcile.Request{})
-					Expect(result).Should(Equal(reconcile.Result{}))
-					Expect(err).Should(HaveOccurred())
-					Expect(err.Error()).Should(Equal("cluster type is Managed but logstorage still exists"))
-
-					mockStatus.AssertExpectations(GinkgoT())
-				})
-
-				It("finalises the deletion of the LogStorage CR when marked for deletion and continues without error", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
-					Expect(err).ShouldNot(HaveOccurred())
-
-					ls := &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-
-					now := metav1.Now()
-					ls.DeletionTimestamp = &now
-					ls.SetFinalizers([]string{"tigera.io/eck-cleanup"})
-					Expect(cli.Update(context.Background(), ls)).ShouldNot(HaveOccurred())
-
-					result, err := r.Reconcile(reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(result).Should(Equal(reconcile.Result{}))
-
-					By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
-					err = cli.Get(context.Background(), esObjKey, &esalpha1.Elasticsearch{})
-					Expect(errors.IsNotFound(err)).Should(BeTrue())
-					err = cli.Get(context.Background(), kbObjKey, &kibanaalpha1.Kibana{})
-					Expect(errors.IsNotFound(err)).Should(BeTrue())
-
-					// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
-					By("waiting for the Elasticsearch and Kibana resources to be deleted")
-					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
-
-					result, err = r.Reconcile(reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(result).Should(Equal(reconcile.Result{}))
-
-					By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
-					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-					Expect(ls.Finalizers).ShouldNot(ContainElement("tigera.io/eck-cleanup"))
-
-					mockStatus.AssertExpectations(GinkgoT())
-				})
-			})
-
 		})
 		Context("Unmanaged cluster", func() {
 			Context("successful LogStorage Reconcile", func() {
@@ -258,7 +269,7 @@ var _ = Describe("LogStorage controller", func() {
 					result, err := r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
-					Expect(result).Should(Equal(reconcile.Result{RequeueAfter: 5 * time.Second}))
+					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("asserting the finalizers have been set on the LogStorage CR")
 					ls := &operatorv1.LogStorage{}
@@ -267,13 +278,13 @@ var _ = Describe("LogStorage controller", func() {
 
 					Expect(cli.Get(ctx, eckOperatorObjKey, &appsv1.StatefulSet{})).ShouldNot(HaveOccurred())
 
-					es := &esalpha1.Elasticsearch{}
+					es := &esv1alpha1.Elasticsearch{}
 					Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
 
-					es.Status.Phase = esalpha1.ElasticsearchOperationalPhase
+					es.Status.Phase = esv1alpha1.ElasticsearchOperationalPhase
 					Expect(cli.Update(ctx, es)).ShouldNot(HaveOccurred())
 
-					kb := &kibanaalpha1.Kibana{}
+					kb := &kbv1alpha1.Kibana{}
 					Expect(cli.Get(ctx, kbObjKey, kb)).ShouldNot(HaveOccurred())
 
 					kb.Status.AssociationStatus = cmneckalpha1.AssociationEstablished
@@ -282,7 +293,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esPublicCertObjMeta})).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: kbPublicCertObjMeta})).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", "Elasticsearch secrets are not available yet, waiting until they become available", "secrets \"tigera-ee-curator-elasticsearch-access\" not found").Return()
+					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
@@ -356,9 +367,9 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
-					err = cli.Get(context.Background(), esObjKey, &esalpha1.Elasticsearch{})
+					err = cli.Get(context.Background(), esObjKey, &esv1alpha1.Elasticsearch{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
-					err = cli.Get(context.Background(), kbObjKey, &kibanaalpha1.Kibana{})
+					err = cli.Get(context.Background(), kbObjKey, &kbv1alpha1.Kibana{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
 
 					// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
@@ -367,6 +378,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 
+					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "")
 					result, err = r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
@@ -382,6 +394,7 @@ var _ = Describe("LogStorage controller", func() {
 		})
 	})
 })
+var log = logf.Log.WithName("controller_logstorage")
 
 func setUpLogStorageComponents(cli client.Client) {
 	ctx := context.Background()
@@ -390,7 +403,7 @@ func setUpLogStorageComponents(cli client.Client) {
 			Name: render.ElasticsearchStorageClass,
 		},
 	})).ShouldNot(HaveOccurred())
-
+	retention := int32(1)
 	ls := &operatorv1.LogStorage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-secure",
@@ -399,39 +412,65 @@ func setUpLogStorageComponents(cli client.Client) {
 			Nodes: &operatorv1.Nodes{
 				Count: int64(1),
 			},
+			Retention: &operatorv1.Retention{
+				Flows:             &retention,
+				AuditReports:      &retention,
+				Snapshots:         &retention,
+				ComplianceReports: &retention,
+			},
 		},
 	}
 
-	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
-
 	By("creating all the components needed for LogStorage to be available")
-	component, err := render.Elasticsearch(
+	component := render.LogStorage(
 		ls,
+		&operatorv1.Installation{
+			Spec: operatorv1.InstallationSpec{
+				KubernetesProvider:    operatorv1.ProviderNone,
+				Registry:              "testregistry.com/",
+				ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
+			},
+		},
+		&esv1alpha1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+		&kbv1alpha1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		render.NewElasticsearchClusterConfig("cluster", 1, 1),
-		&corev1.Secret{ObjectMeta: esPublicCertObjMeta},
-		&corev1.Secret{ObjectMeta: kbPublicCertObjMeta},
+		[]*corev1.Secret{
+			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
+		},
+		[]*corev1.Secret{
+			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
+		},
 		false,
-		[]*corev1.Secret{},
-		operatorv1.ProviderNone,
-		"test-registry/",
+		[]*corev1.Secret{
+			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+		}, operatorv1.ProviderNone,
+		[]*corev1.Secret{
+			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
+		},
+		nil, "cluster.local",
 	)
-	Expect(err).ShouldNot(HaveOccurred())
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {
 		switch obj.(type) {
-		case *esalpha1.Elasticsearch:
+		case *esv1alpha1.Elasticsearch:
 			By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
-			es := obj.(*esalpha1.Elasticsearch)
-			es.Status.Phase = esalpha1.ElasticsearchOperationalPhase
+			es := obj.(*esv1alpha1.Elasticsearch)
+			es.Status.Phase = esv1alpha1.ElasticsearchOperationalPhase
 			obj = es
 
-		case *kibanaalpha1.Kibana:
+		case *kbv1alpha1.Kibana:
 			By("setting the Kibana status to operational so we pass the Kibana ready check")
-			kb := obj.(*kibanaalpha1.Kibana)
+			kb := obj.(*kbv1alpha1.Kibana)
 			kb.Status.AssociationStatus = cmneckalpha1.AssociationEstablished
 			obj = kb
 		}
+
 		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
 	}
 

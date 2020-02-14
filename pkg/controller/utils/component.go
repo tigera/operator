@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,9 +69,11 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 
 	// Iterate through each object that comprises the component and attempt to create it,
 	// or update it if needed.
-	daemonSets := []types.NamespacedName{}
-	deployments := []types.NamespacedName{}
-	statefulsets := []types.NamespacedName{}
+	var daemonSets []types.NamespacedName
+	var deployments []types.NamespacedName
+	var statefulsets []types.NamespacedName
+	var cronJobs []types.NamespacedName
+
 	objsToCreate, objsToDelete := component.Objects()
 
 	for _, obj := range objsToCreate {
@@ -94,6 +97,8 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			daemonSets = append(daemonSets, key)
 		case *apps.StatefulSet:
 			statefulsets = append(statefulsets, key)
+		case *batchv1beta.CronJob:
+			cronJobs = append(cronJobs, key)
 		}
 
 		// Check to see if the object exists or not.
@@ -147,6 +152,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		status.AddDaemonsets(daemonSets)
 		status.AddDeployments(deployments)
 		status.AddStatefulSets(statefulsets)
+		status.AddCronJobs(cronJobs)
 	}
 
 	for _, obj := range objsToDelete {
@@ -158,13 +164,17 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		}
 
 		key, err := client.ObjectKeyFromObject(obj)
-		switch obj.(type) {
-		case *apps.Deployment:
-			status.RemoveDeployments(key)
-		case *apps.DaemonSet:
-			status.RemoveDaemonsets(key)
-		case *apps.StatefulSet:
-			status.RemoveStatefulSets(key)
+		if status != nil {
+			switch obj.(type) {
+			case *apps.Deployment:
+				status.RemoveDeployments(key)
+			case *apps.DaemonSet:
+				status.RemoveDaemonsets(key)
+			case *apps.StatefulSet:
+				status.RemoveStatefulSets(key)
+			case *batchv1beta.CronJob:
+				status.RemoveCronJobs(key)
+			}
 		}
 	}
 

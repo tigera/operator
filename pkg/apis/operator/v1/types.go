@@ -55,6 +55,11 @@ type InstallationSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
+
+	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
+	// components.
+	// +optional
+	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

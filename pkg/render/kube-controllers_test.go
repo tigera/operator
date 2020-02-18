@@ -60,7 +60,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("test-reg/%s:%s", components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
+			fmt.Sprintf("test-reg/%s@%s", components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Digest),
 		))
 
 		// Verify env
@@ -94,7 +94,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)
 
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers@" + components.ComponentTigeraKubeControllers.Digest))
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {

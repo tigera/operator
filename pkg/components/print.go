@@ -36,6 +36,6 @@ func Print(digest bool) {
 		ComponentTigeraNode,
 		ComponentTigeraTypha,
 	} {
-		fmt.Println(GetReference(c, "", digest))
+		fmt.Println(GetReference(c, ""))
 	}
 }

@@ -23,16 +23,8 @@ type component struct {
 	Digest  string
 }
 
-func digestRef(c component, registry string) string {
-	return fmt.Sprintf("%s%s@%s", registry, c.Image, c.Digest)
-}
-
-func versionRef(c component, registry string) string {
-	return fmt.Sprintf("%s%s:%s", registry, c.Image, c.Version)
-}
-
 // GetReference returns the fully qualified image to use, including registry and version.
-func GetReference(c component, registry string, digest bool) string {
+func GetReference(c component, registry string) string {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" {
@@ -51,8 +43,5 @@ func GetReference(c component, registry string, digest bool) string {
 		}
 	}
 
-	if digest {
-		return digestRef(c, registry)
-	}
-	return versionRef(c, registry)
+	return fmt.Sprintf("%s%s@%s", registry, c.Image, c.Digest)
 }

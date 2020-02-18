@@ -17,8 +17,8 @@ package render
 import (
 	"fmt"
 
-	"github.com/tigera/operator/pkg/components"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -118,7 +118,7 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         components.GetReference(components.ComponentEsCurator, ec.registry, RefByDigest),
+									Image:         components.GetReference(components.ComponentEsCurator, ec.registry),
 									Env:           ec.envVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &v1.SecurityContext{

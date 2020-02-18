@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-var gcrBearer = ""
-
 var client = &http.Client{
 	Timeout: 5 * time.Second,
 }

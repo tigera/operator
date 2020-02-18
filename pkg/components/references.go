@@ -56,11 +56,3 @@ func GetReference(c component, registry string, digest bool) string {
 	}
 	return versionRef(c, registry)
 }
-
-// Deprecated. Stop using a different container for init and just import this code.
-func GetOperatorInitReference(version, registry string, digest bool) string {
-	if registry == "" {
-		registry = TigeraRegistry
-	}
-	return fmt.Sprintf("%s%s:%s", registry, OperatorInitImageName, version)
-}

@@ -33,48 +33,50 @@ const (
 )
 
 var (
-	templateDir    = flag.String("template-dir", "hack/gen-versions/", "path to directory containing templates files named calico.go.tpl and enterprise.go.tpl")
-	debug          = flag.Bool("debug", false, "enable debug logging")
-	digests        = flag.Bool("digests", true, "get digests")
-	eeVersionsPath = flag.String("ee-versions", "", "path to calico versions file")
-	osVersionsPath = flag.String("os-versions", "", "path to enterprise versions file")
-	gcrBearerFlag  = flag.String("gcr-bearer", "", "output of 'gcloud auth print-access-token")
+	templateDir    string
+	debug          bool
+	digests        bool
+	eeVersionsPath string
+	osVersionsPath string
+	gcrBearer      string
 )
 
 func main() {
+	flag.StringVar(&templateDir, "template-dir", "hack/gen-versions/", "path to directory containing templates files named calico.go.tpl and enterprise.go.tpl")
+	flag.BoolVar(&debug, "debug", false, "enable debug logging")
+	flag.BoolVar(&digests, "digests", true, "get digests")
+	flag.StringVar(&eeVersionsPath, "ee-versions", "", "path to calico versions file")
+	flag.StringVar(&osVersionsPath, "os-versions", "", "path to enterprise versions file")
+	flag.StringVar(&gcrBearer, "gcr-bearer", "", "output of 'gcloud auth print-access-token")
 	flag.Parse()
 
-	if *debug {
+	if debug {
 		log.SetOutput(os.Stderr)
 		log.Println("debug logging enabled")
 	}
 
-	if *osVersionsPath != "" && *eeVersionsPath != "" {
+	if osVersionsPath != "" && eeVersionsPath != "" {
 		log.Println("must only set one of either -os-versions or -ee-versions")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	if *digests {
-		if *gcrBearerFlag != "" {
-			gcrBearer = *gcrBearerFlag
-		} else {
-			log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
-			gcrBearer = getGcrBearer()
-			if gcrBearer == "" {
-				log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
-				os.Exit(1)
-			}
+	if digests && gcrBearer == "" {
+		log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
+		gcrBearer = getGcrBearer()
+		if gcrBearer == "" {
+			log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
+			os.Exit(1)
 		}
 	}
 
-	if *osVersionsPath != "" {
-		if err := run(*osVersionsPath, filepath.Join(*templateDir, osVersionsTpl), defaultCalicoRegistry); err != nil {
+	if osVersionsPath != "" {
+		if err := run(osVersionsPath, filepath.Join(templateDir, osVersionsTpl), defaultCalicoRegistry); err != nil {
 			log.Println(err)
 			os.Exit(1)
 		}
-	} else if *eeVersionsPath != "" {
-		if err := run(*eeVersionsPath, filepath.Join(*templateDir, eeVersionsTpl), defaultEnterpriseRegistry); err != nil {
+	} else if eeVersionsPath != "" {
+		if err := run(eeVersionsPath, filepath.Join(templateDir, eeVersionsTpl), defaultEnterpriseRegistry); err != nil {
 			log.Println(err)
 			os.Exit(1)
 		}
@@ -90,7 +92,7 @@ func run(versionsPath, tpl, defaultRegistry string) error {
 		return err
 	}
 
-	if *digests {
+	if digests {
 		if err := updateDigests(vz, defaultRegistry); err != nil {
 			return fmt.Errorf("failed to get digest for components: %v", err)
 		}

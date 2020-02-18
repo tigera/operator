@@ -134,7 +134,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 	{{ end }}
-	{{ with .guardian }}
+	{{ with .voltron }}
 	ComponentManagerProxy = component{
 		Version: "{{ .Version }}",
 		Digest:  "{{ .Digest }}",

@@ -137,8 +137,8 @@ var (
 	
 	ComponentManagerProxy = component{
 		Version: "v2.7.0-0.dev-34-g4eac4a3",
-		Digest:  "sha256:0d24ba5d2006b880575b5e8bcb58ab7c805c5b1c0497a70d4604eddf1c96b78b",
-		Image:   "tigera/guardian",
+		Digest:  "sha256:d0af3c73e78b069f0035dc3c37b2059c0f282ec7a50514ab1aa089babcbde6ae",
+		Image:   "tigera/voltron",
 	}
 	
 	

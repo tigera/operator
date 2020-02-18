@@ -26,6 +26,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
@@ -149,7 +150,9 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
-		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("testregistry.com/%s", render.APIServerImageName)))
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
+			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
+		))
 
 		expectedArgs := []string{
 			"--secure-port=5443",
@@ -177,7 +180,9 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(*(d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)).To(BeTrue())
 
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("testregistry.com/%s", render.QueryServerImageName)))
+		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(
+			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
+		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
 

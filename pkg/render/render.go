@@ -37,7 +37,7 @@ var (
 	CommonName           = "common-name"
 	URISAN               = "uri-san"
 
-	RefByDigest = true
+	RefByDigest = false
 )
 
 type Component interface {

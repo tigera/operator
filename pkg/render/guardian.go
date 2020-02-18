@@ -23,6 +23,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"github.com/tigera/operator/pkg/components"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -228,7 +229,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
-			Image: constructImage(GuardianImageName, c.registry),
+			Image: components.GetReference(components.ComponentGuardian, c.registry, RefByDigest),
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

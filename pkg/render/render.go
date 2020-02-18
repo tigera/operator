@@ -36,6 +36,8 @@ var (
 	TLSSecretKeyName     = "key.key"
 	CommonName           = "common-name"
 	URISAN               = "uri-san"
+
+	RefByDigest = true
 )
 
 type Component interface {

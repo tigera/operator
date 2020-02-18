@@ -325,12 +325,10 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean images test $(BINDIR)/gen-versions
-	# check if user modified versions.go directly instead of going through template
-	git diff-index HEAD -- ./pkg/components/versions.go || \
-	echo "A commit in this PR modified ./pkg/components/versions.go directly. \
-	Please instead modify ./hack/gen-versions/versions.go.tpl or the version data in \
-	./config/"
+ci: clean images test $(BINDIR)/gen-versions validate-gen-versions
+
+validate-gen-versions:
+	./hack/gen-versions/validate.sh
 
 ## Deploys images to registry
 cd:

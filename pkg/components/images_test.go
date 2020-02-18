@@ -21,24 +21,24 @@ import (
 
 var _ = Describe("No registry override", func() {
 	It("should render a calico image correctly", func() {
-		Expect(GetReference(ComponentCalicoNode, "", false)).To(Equal("docker.io/calico/node:" + ComponentCalicoNode.Version))
+		Expect(GetReference(ComponentCalicoNode, "")).To(Equal("docker.io/calico/node:" + ComponentCalicoNode.Digest))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(GetReference(ComponentTigeraNode, "", false)).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:" + ComponentTigeraNode.Version))
+		Expect(GetReference(ComponentTigeraNode, "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:" + ComponentTigeraNode.Digest))
 	})
 	It("should render an ECK image correctly", func() {
-		Expect(GetReference(ComponentElasticsearchOperator, "", false)).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
+		Expect(GetReference(ComponentElasticsearchOperator, "")).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
 })
 
 var _ = Describe("registry override", func() {
 	It("should render a calico image correctly", func() {
-		Expect(GetReference(ComponentCalicoNode, "quay.io/", false)).To(Equal("quay.io/calico/node:" + ComponentCalicoNode.Version))
+		Expect(GetReference(ComponentCalicoNode, "quay.io/")).To(Equal("quay.io/calico/node:" + ComponentCalicoNode.Digest))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(GetReference(ComponentTigeraNode, "quay.io/", false)).To(Equal("quay.io/tigera/cnx-node:" + ComponentTigeraNode.Version))
+		Expect(GetReference(ComponentTigeraNode, "quay.io/")).To(Equal("quay.io/tigera/cnx-node:" + ComponentTigeraNode.Digest))
 	})
 	It("should render an ECK image correctly", func() {
-		Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", false)).To(Equal("quay.io/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
+		Expect(GetReference(ComponentElasticsearchOperator, "quay.io/")).To(Equal("quay.io/eck/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
 })

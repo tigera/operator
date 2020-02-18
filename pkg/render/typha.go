@@ -393,9 +393,9 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoTypha, c.cr.Spec.Registry, RefByDigest)
+	image := components.GetReference(components.ComponentCalicoTypha, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraTypha, c.cr.Spec.Registry, RefByDigest)
+		image = components.GetReference(components.ComponentTigeraTypha, c.cr.Spec.Registry)
 	}
 	return v1.Container{
 		Name:           "calico-typha",

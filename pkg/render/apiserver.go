@@ -18,13 +18,13 @@ import (
 	"fmt"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"github.com/tigera/operator/pkg/components"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
 
@@ -517,7 +517,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry, RefByDigest),
+		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry),
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -560,7 +560,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
-	image := components.GetReference(components.ComponentQueryServer, c.installation.Spec.Registry, RefByDigest)
+	image := components.GetReference(components.ComponentQueryServer, c.installation.Spec.Registry)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

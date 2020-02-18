@@ -331,12 +331,12 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
 			Annotations: map[string]string{
-				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
+				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Digest,
 			},
 		},
 		Spec: esalpha1.ElasticsearchSpec{
-			Version: components.ComponentElasticsearch.Version,
-			Image:   components.GetReference(components.ComponentElasticsearch, es.registry, RefByDigest),
+			Version: components.ComponentElasticsearch.Digest,
+			Image:   components.GetReference(components.ComponentElasticsearch, es.registry),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
 					Certificate: cmneckalpha1.SecretRef{
@@ -530,7 +530,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					Containers: []corev1.Container{{
-						Image: components.GetReference(components.ComponentElasticsearchOperator, es.registry, RefByDigest),
+						Image: components.GetReference(components.ComponentElasticsearchOperator, es.registry),
 						Name:  "manager",
 						Args:  []string{"manager", "--operator-roles", "all", "--enable-debug-logs=false"},
 						Env: []corev1.EnvVar{
@@ -601,12 +601,12 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 				"k8s-app": KibanaName,
 			},
 			Annotations: map[string]string{
-				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
+				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Digest,
 			},
 		},
 		Spec: kibanav1alpha1.KibanaSpec{
-			Version: components.ComponentKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.registry, RefByDigest),
+			Version: components.ComponentKibana.Digest,
+			Image:   components.GetReference(components.ComponentKibana, es.registry),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{

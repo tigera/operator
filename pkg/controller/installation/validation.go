@@ -79,7 +79,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
-				if ones > new.Spec.BlockSize {
+				if int32(ones) > *v4pool.BlockSize {
 					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
 				}
 			}
@@ -116,7 +116,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				}
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
-				if ones > new.Spec.BlockSize {
+				if int32(ones) > *v6pool.BlockSize {
 					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
 				}
 			}

@@ -6,6 +6,7 @@ import (
 
 func Print(digest bool) {
 	for _, c := range []component{
+		ComponentOperatorInit,
 		ComponentCalicoNode,
 		ComponentAPIServer,
 		ComponentCalicoCNI,

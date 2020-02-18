@@ -14,6 +14,8 @@
 
 package components
 
+import "github.com/tigera/operator/version"
+
 var (
 	
 	ComponentCalicoCNI = component{
@@ -50,4 +52,9 @@ var (
 		Image:   "calico/pod2daemon-flexvol",
 	}
 	
+	ComponentOperatorInit = component{
+		Version: version.VERSION,
+		Digest:  "",
+		Image:   "tigera/operator-init",
+	}
 )

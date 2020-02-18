@@ -20,7 +20,3 @@ const (
 	K8sGcrRegistry = "gcr.io/"
 	ECKRegistry    = "docker.elastic.co/"
 )
-
-const (
-	OperatorInitImageName = "tigera/operator-init:"
-)

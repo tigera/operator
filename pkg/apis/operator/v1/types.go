@@ -223,7 +223,7 @@ type IPPool struct {
 
 	// BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from
 	// the main IP pool CIDR.
-	// Default: 26
+	// Default: 26 (IPv4), 122 (IPv6)
 	// +optional
 	BlockSize *int32 `json:"blockSize,omitempty"`
 }

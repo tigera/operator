@@ -40,7 +40,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 
 		if v4pool != nil {
-			_, _, err := net.ParseCIDR(v4pool.CIDR)
+			_, cidr, err := net.ParseCIDR(v4pool.CIDR)
 			if err != nil {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
 			}
@@ -71,13 +71,22 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.nodeSelector should not be empty")
 			}
 
-			if v4pool.BlockSize != nil && (*v4pool.BlockSize > 32 || *v4pool.BlockSize < 20) {
-				return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
+			if v4pool.BlockSize != nil {
+				if *v4pool.BlockSize > 32 || *v4pool.BlockSize < 20 {
+					return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
+
+				}
+
+				// Verify that the CIDR contains the blocksize.
+				ones, _ := cidr.Mask.Size()
+				if ones > new.Spec.BlockSize {
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+				}
 			}
 		}
 
 		if v6pool != nil {
-			_, _, err := net.ParseCIDR(v6pool.CIDR)
+			_, cidr, err := net.ParseCIDR(v6pool.CIDR)
 			if err != nil {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
 			}
@@ -101,8 +110,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.nodeSelector should not be empty")
 			}
 
-			if v6pool.BlockSize != nil && (*v6pool.BlockSize > 128 || *v6pool.BlockSize < 116) {
-				return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
+			if v6pool.BlockSize != nil {
+				if *v6pool.BlockSize > 128 || *v6pool.BlockSize < 116 {
+					return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
+				}
+				// Verify that the CIDR contains the blocksize.
+				ones, _ := cidr.Mask.Size()
+				if ones > new.Spec.BlockSize {
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+				}
 			}
 		}
 

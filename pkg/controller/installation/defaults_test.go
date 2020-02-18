@@ -68,6 +68,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var nodeMetricsPort int32 = 9081
 		var false_ = false
 		var twentySeven int32 = 27
+		var oneTwoThree int32 = 123
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -94,7 +95,7 @@ var _ = Describe("Defaulting logic tests", func() {
 							Encapsulation: "None",
 							NATOutgoing:   "Enabled",
 							NodeSelector:  "has(thiskey)",
-							BlockSize:     &twentySeven,
+							BlockSize:     &oneTwoThree,
 						},
 					},
 					MTU: &mtu,

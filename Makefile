@@ -325,7 +325,10 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean images test $(BINDIR)/gen-versions
+ci: clean images test $(BINDIR)/gen-versions validate-gen-versions
+
+validate-gen-versions:
+	./hack/gen-versions/validate.sh
 
 ## Deploys images to registry
 cd:
@@ -409,16 +412,13 @@ gen-files:
 	operator-sdk generate k8s
 	operator-sdk generate openapi
 
+OS_VERSIONS?=config/calico_versions.yml
+EE_VERSIONS?=config/enterprise_versions.yml
 gen-versions: $(BINDIR)/gen-versions
-ifndef OS_VERSIONS
-	$(error OS_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)
-endif
-ifndef EE_VERSIONS
-	$(error EE_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)
-endif
-	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) -ee-versions=$(EE_VERSIONS)
+	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
+	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
 
-$(BINDIR)/gen-versions:
+$(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) && \

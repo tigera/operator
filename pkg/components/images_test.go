@@ -12,34 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package components
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/components"
 )
 
 var _ = Describe("No registry override", func() {
 	It("should render a calico image correctly", func() {
-		Expect(constructImage(NodeImageNameCalico, "")).To(Equal("docker.io/calico/node:" + components.VersionCalicoNode))
+		Expect(GetReference(ComponentCalicoNode, "")).To(Equal("docker.io/calico/node:" + ComponentCalicoNode.Digest))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(constructImage(NodeImageNameTigera, "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:" + components.VersionTigeraNode))
+		Expect(GetReference(ComponentTigeraNode, "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:" + ComponentTigeraNode.Digest))
 	})
 	It("should render an ECK image correctly", func() {
-		Expect(constructImage(ECKOperatorImageName, "")).To(Equal("docker.elastic.co/eck/eck-operator:" + components.VersionECKOperator))
+		Expect(GetReference(ComponentElasticsearchOperator, "")).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
 })
 
 var _ = Describe("registry override", func() {
 	It("should render a calico image correctly", func() {
-		Expect(constructImage(NodeImageNameCalico, "quay.io/")).To(Equal("quay.io/calico/node:" + components.VersionCalicoNode))
+		Expect(GetReference(ComponentCalicoNode, "quay.io/")).To(Equal("quay.io/calico/node:" + ComponentCalicoNode.Digest))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(constructImage(NodeImageNameTigera, "quay.io/")).To(Equal("quay.io/tigera/cnx-node:" + components.VersionTigeraNode))
+		Expect(GetReference(ComponentTigeraNode, "quay.io/")).To(Equal("quay.io/tigera/cnx-node:" + ComponentTigeraNode.Digest))
 	})
 	It("should render an ECK image correctly", func() {
-		Expect(constructImage(ECKOperatorImageName, "quay.io/")).To(Equal("quay.io/eck/eck-operator:" + components.VersionECKOperator))
+		Expect(GetReference(ComponentElasticsearchOperator, "quay.io/")).To(Equal("quay.io/eck/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
 })

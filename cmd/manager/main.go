@@ -42,12 +42,15 @@ var log = logf.Log.WithName("cmd")
 // kubeconfig but should use the in-cluster service account
 var urlOnlyKubeconfig string
 var showVersion bool
+var showDigest bool
 
 func init() {
 	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",
 		"Path to a kubeconfig, but only for the apiserver url.")
 	flag.BoolVar(&showVersion, "version", false,
 		"Show version information")
+	flag.BoolVar(&showDigest, "digest", false,
+		"Show digests")
 }
 
 func printVersion() {
@@ -69,29 +72,7 @@ func main() {
 	pflag.Parse()
 
 	if showVersion {
-		fmt.Println("Operator:", version.VERSION)
-		fmt.Println("CalicoNode:", components.VersionCalicoNode)
-		fmt.Println("CalicoCNI:", components.VersionCalicoCNI)
-		fmt.Println("CalicoTypha:", components.VersionCalicoTypha)
-		fmt.Println("CalicoKubeControllers:", components.VersionCalicoKubeControllers)
-		fmt.Println("FlexVolume:", components.VersionFlexVolume)
-		fmt.Println("TigeraNode:", components.VersionTigeraNode)
-		fmt.Println("TigeraTypha:", components.VersionTigeraTypha)
-		fmt.Println("TigeraKubeControllers:", components.VersionTigeraKubeControllers)
-		fmt.Println("APIServer:", components.VersionAPIServer)
-		fmt.Println("QueryServer:", components.VersionQueryServer)
-		fmt.Println("ComplianceController:", components.VersionComplianceController)
-		fmt.Println("ComplianceReporter:", components.VersionComplianceReporter)
-		fmt.Println("ComplianceServer:", components.VersionComplianceServer)
-		fmt.Println("ComplianceSnapshotter:", components.VersionComplianceSnapshotter)
-		fmt.Println("ComplianceBenchmarker:", components.VersionComplianceBenchmarker)
-		fmt.Println("IntrusionDetectionController:", components.VersionIntrusionDetectionController)
-		fmt.Println("IntrusionDetectionJobInstaller:", components.VersionIntrusionDetectionJobInstaller)
-		fmt.Println("Manager:", components.VersionManager)
-		fmt.Println("ManagerProxy:", components.VersionManagerProxy)
-		fmt.Println("ManagerEsProxy:", components.VersionManagerEsProxy)
-		fmt.Println("Fluentd:", components.VersionFluentd)
-		fmt.Println("EsCurator:", components.VersionEsCurator)
+		components.Print(showDigest)
 
 		os.Exit(0)
 	}

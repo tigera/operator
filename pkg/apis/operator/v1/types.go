@@ -25,7 +25,7 @@ type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
 	// Default: Calico
 	// +optional
-	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
 	// Registry is the default Docker registry used for component Docker images. If specified,
@@ -41,7 +41,7 @@ type InstallationSpec struct {
 	// KubernetesProvider specifies a particular provider of the Kubernetes platform. This is often auto-detected.
 	// If specified, this enables provider-specific configuration and must match the auto-detected value (if any).
 	// +optional
-	// +kubebuilder:validation:Enum=EKS,GKE,AKS,OpenShift,DockerEnterprise
+	// +kubebuilder:validation:Enum=EKS;GKE;AKS;OpenShift;DockerEnterprise
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CalicoNetwork specifies configuration options for Calico provided pod networking.
@@ -53,7 +53,7 @@ type InstallationSpec struct {
 	// a single view to manage any number of Managed clusters, which are a lighter weight installation.
 	// Default: Standalone
 	// +optional
-	// +kubebuilder:validation:Enum=Standalone,Management,Managed
+	// +kubebuilder:validation:Enum=Standalone;Management;Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
 
 	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
@@ -207,13 +207,13 @@ type IPPool struct {
 	// the IP Pool.
 	// Default: IPIP
 	// +optional
-	// +kubebuilder:validation:Enum=IPIPCrossSubnet,IPIP,VXLAN,VXLANCrossSubnet,None
+	// +kubebuilder:validation:Enum=IPIPCrossSubnet;IPIP;VXLAN;VXLANCrossSubnet;None
 	Encapsulation EncapsulationType `json:"encapsulation,omitempty"`
 
 	// NATOutgoing specifies if NAT will be enabled or disabled for outgoing traffic.
 	// Default: Enabled
 	// +optional
-	// +kubebuilder:validation:Enum=Enabled,Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	NATOutgoing NATOutgoingType `json:"natOutgoing,omitempty"`
 
 	// NodeSelector specifies the node selector that will be set for the IP Pool.
@@ -226,7 +226,7 @@ type IPPool struct {
 // +k8s:openapi-gen=true
 type InstallationStatus struct {
 	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
-	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 }
 

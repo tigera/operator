@@ -39,7 +39,7 @@ type ManagerStatus struct {
 type Auth struct {
 	// Type configures the type of authentication used by the manager.
 	// Default: Token
-	// +kubebuilder:validation:Enum=Token,Basic,OIDC,OAuth
+	// +kubebuilder:validation:Enum=Token;Basic;OIDC;OAuth
 	Type AuthType `json:"type,omitempty"`
 
 	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.

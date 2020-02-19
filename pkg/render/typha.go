@@ -28,6 +28,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration"
 )
 
@@ -392,9 +393,9 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	// Select which image to use.
-	image := constructImage(TyphaImageNameCalico, c.cr.Spec.Registry)
+	image := components.GetReference(components.ComponentCalicoTypha, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(TyphaImageNameTigera, c.cr.Spec.Registry)
+		image = components.GetReference(components.ComponentTigeraTypha, c.cr.Spec.Registry)
 	}
 	return v1.Container{
 		Name:           "calico-typha",

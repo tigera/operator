@@ -41,7 +41,7 @@ type InstallationSpec struct {
 	// KubernetesProvider specifies a particular provider of the Kubernetes platform. This is often auto-detected.
 	// If specified, this enables provider-specific configuration and must match the auto-detected value (if any).
 	// +optional
-	// +kubebuilder:validation:Enum=EKS,GKE,AKS,OpenShift,DockerEnterprise
+	// +kubebuilder:validation:Enum=,EKS,GKE,AKS,OpenShift,DockerEnterprise
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CalicoNetwork specifies configuration options for Calico provided pod networking.

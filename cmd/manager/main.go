@@ -42,6 +42,7 @@ var log = logf.Log.WithName("cmd")
 // kubeconfig but should use the in-cluster service account
 var urlOnlyKubeconfig string
 var showVersion bool
+var showDigest bool
 
 func init() {
 	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",
@@ -70,29 +71,28 @@ func main() {
 
 	if showVersion {
 		fmt.Println("Operator:", version.VERSION)
-		fmt.Println("CalicoNode:", components.VersionCalicoNode)
-		fmt.Println("CalicoCNI:", components.VersionCalicoCNI)
-		fmt.Println("CalicoTypha:", components.VersionCalicoTypha)
-		fmt.Println("CalicoKubeControllers:", components.VersionCalicoKubeControllers)
-		fmt.Println("FlexVolume:", components.VersionFlexVolume)
-		fmt.Println("TigeraNode:", components.VersionTigeraNode)
-		fmt.Println("TigeraTypha:", components.VersionTigeraTypha)
-		fmt.Println("TigeraKubeControllers:", components.VersionTigeraKubeControllers)
-		fmt.Println("APIServer:", components.VersionAPIServer)
-		fmt.Println("QueryServer:", components.VersionQueryServer)
-		fmt.Println("ComplianceController:", components.VersionComplianceController)
-		fmt.Println("ComplianceReporter:", components.VersionComplianceReporter)
-		fmt.Println("ComplianceServer:", components.VersionComplianceServer)
-		fmt.Println("ComplianceSnapshotter:", components.VersionComplianceSnapshotter)
-		fmt.Println("ComplianceBenchmarker:", components.VersionComplianceBenchmarker)
-		fmt.Println("IntrusionDetectionController:", components.VersionIntrusionDetectionController)
-		fmt.Println("IntrusionDetectionJobInstaller:", components.VersionIntrusionDetectionJobInstaller)
-		fmt.Println("Manager:", components.VersionManager)
-		fmt.Println("ManagerProxy:", components.VersionManagerProxy)
-		fmt.Println("ManagerEsProxy:", components.VersionManagerEsProxy)
-		fmt.Println("Fluentd:", components.VersionFluentd)
-		fmt.Println("EsCurator:", components.VersionEsCurator)
-
+		fmt.Println(components.GetReference(components.ComponentCalicoNode, ""))
+		fmt.Println(components.GetReference(components.ComponentCalicoCNI, ""))
+		fmt.Println(components.GetReference(components.ComponentCalicoTypha, ""))
+		fmt.Println(components.GetReference(components.ComponentCalicoKubeControllers, ""))
+		fmt.Println(components.GetReference(components.ComponentFlexVolume, ""))
+		fmt.Println(components.GetReference(components.ComponentTigeraNode, ""))
+		fmt.Println(components.GetReference(components.ComponentTigeraTypha, ""))
+		fmt.Println(components.GetReference(components.ComponentTigeraKubeControllers, ""))
+		fmt.Println(components.GetReference(components.ComponentAPIServer, ""))
+		fmt.Println(components.GetReference(components.ComponentQueryServer, ""))
+		fmt.Println(components.GetReference(components.ComponentComplianceController, ""))
+		fmt.Println(components.GetReference(components.ComponentComplianceReporter, ""))
+		fmt.Println(components.GetReference(components.ComponentComplianceServer, ""))
+		fmt.Println(components.GetReference(components.ComponentComplianceSnapshotter, ""))
+		fmt.Println(components.GetReference(components.ComponentComplianceBenchmarker, ""))
+		fmt.Println(components.GetReference(components.ComponentIntrusionDetectionController, ""))
+		fmt.Println(components.GetReference(components.ComponentElasticTseeInstaller, ""))
+		fmt.Println(components.GetReference(components.ComponentManager, ""))
+		fmt.Println(components.GetReference(components.ComponentManagerProxy, ""))
+		fmt.Println(components.GetReference(components.ComponentGuardian, ""))
+		fmt.Println(components.GetReference(components.ComponentFluentd, ""))
+		fmt.Println(components.GetReference(components.ComponentEsCurator, ""))
 		os.Exit(0)
 	}
 

@@ -17,6 +17,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -228,7 +229,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
-			Image: constructImage(GuardianImageName, c.registry),
+			Image: components.GetReference(components.ComponentGuardian, c.registry),
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

@@ -15,6 +15,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -127,7 +128,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
+		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.registry),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -322,7 +323,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: constructImage(IntrusionDetectionControllerImageName, c.registry),
+		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.registry),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",

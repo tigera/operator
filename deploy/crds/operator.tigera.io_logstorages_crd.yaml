@@ -9,21 +9,25 @@ spec:
     listKind: LogStorageList
     plural: logstorages
     singular: logstorage
-  scope: Cluster
+  scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
+      description: LogStorage installs the components required for Tigera flow and
+        DNS log storage. At most one instance of this resource is supported. It must
+        be named "tigera-secure". When created, this installs an Elasticsearch cluster
+        for use by Tigera Secure.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
             of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
           description: 'Kind is a string value representing the REST resource this
             object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -52,6 +56,21 @@ spec:
                 resourceRequirements:
                   description: ResourceRequirements defines the resource limits and
                     requirements for the Elasticsearch cluster.
+                  properties:
+                    limits:
+                      additionalProperties:
+                        type: string
+                      description: 'Limits describes the maximum amount of compute
+                        resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                      type: object
+                    requests:
+                      additionalProperties:
+                        type: string
+                      description: 'Requests describes the minimum amount of compute
+                        resources required. If Requests is omitted for a container,
+                        it defaults to Limits if that is explicitly specified, otherwise
+                        to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                      type: object
                   type: object
               type: object
             retention:
@@ -92,11 +111,6 @@ spec:
                     Default: 367'
                   format: int32
                   type: integer
-              required:
-              - flows
-              - auditReports
-              - snapshots
-              - complianceReports
               type: object
           type: object
         status:
@@ -117,6 +131,7 @@ spec:
               description: State provides user-readable status.
               type: string
           type: object
+      type: object
   version: v1
   versions:
   - name: v1

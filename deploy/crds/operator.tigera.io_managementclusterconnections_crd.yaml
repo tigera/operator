@@ -9,23 +9,28 @@ spec:
     listKind: ManagementClusterConnectionList
     plural: managementclusterconnections
     singular: managementclusterconnection
-  scope: Cluster
+  scope: Namespaced
   validation:
     openAPIV3Schema:
+      description: ManagementClusterConnection represents a link between a managed
+        cluster and a management cluster. At most one instance of this resource is
+        supported. It must be named "tigera-secure".
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
             of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
           description: 'Kind is a string value representing the REST resource this
             object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
         spec:
+          description: ManagementClusterConnectionSpec defines the desired state of
+            ManagementClusterConnection
           properties:
             managementClusterAddr:
               description: 'Specify where the managed cluster can reach the management
@@ -33,6 +38,7 @@ spec:
                 to access this address. This field is used by managed clusters only.'
               type: string
           type: object
+      type: object
   version: v1
   versions:
   - name: v1

@@ -9,21 +9,26 @@ spec:
     listKind: LogCollectorList
     plural: logcollectors
     singular: logcollector
-  scope: Cluster
+  scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
+      description: LogCollector installs the components required for Tigera flow and
+        DNS log collection. At most one instance of this resource is supported. It
+        must be named "tigera-secure". When created, this installs fluentd on all
+        nodes configured to collect Tigera log data and export it to Tigera's Elasticsearch
+        cluster as well as any additionally configured destinations.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
             of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
           description: 'Kind is a string value representing the REST resource this
             object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -55,8 +60,8 @@ spec:
                         audit logs in the log-group. Default: kube-apiserver-audit-'
                       type: string
                   required:
-                  - region
                   - groupName
+                  - region
                   type: object
               type: object
             additionalStores:
@@ -77,9 +82,9 @@ spec:
                       description: AWS Region of the S3 bucket
                       type: string
                   required:
-                  - region
                   - bucketName
                   - bucketPath
+                  - region
                   type: object
                 syslog:
                   description: If specified, enables exporting of flow, audit, and
@@ -106,6 +111,7 @@ spec:
               description: State provides user-readable status.
               type: string
           type: object
+      type: object
   version: v1
   versions:
   - name: v1

@@ -32,9 +32,10 @@ BUILDOS ?= $(shell uname -s | tr A-Z a-z)
 ifeq ($(BUILDARCH),aarch64)
         BUILDARCH=arm64
 endif
-ifeq ($(BUILDARCH),x86_64)
-        BUILDARCH=amd64
-endif
+# TODO: WHY ARE YOU LIKE THIS
+# ifeq ($(BUILDARCH),x86_64)
+#        BUILDARCH=amd64
+# endif
 
 # unless otherwise set, I am building for my own architecture, i.e. not cross-compiling
 ARCH ?= $(BUILDARCH)
@@ -404,10 +405,20 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
+OPERATOR_SDK_VERSION=v0.15.2
+OPERATOR_SDK=bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+# TODO: the trailing 'gnu' will be 'darwin' on linux
+OPERATOR_SDK_URL=https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk-$(OPERATOR_SDK_VERSION)-$(BUILDARCH)-$(BUILDOS)-gnu
+$(OPERATOR_SDK):
+	mkdir -p bin
+	curl -o $(OPERATOR_SDK) -LO $(OPERATOR_SDK_URL)
+	chmod +x $(OPERATOR_SDK)
+
+
 ## Generating code after API changes
 gen-files:
-	operator-sdk generate k8s
-	operator-sdk generate openapi
+	$(OPERATOR_SDK) generate k8s
+	$(OPERATOR_SDK) generate openapi
 
 gen-versions: $(BINDIR)/gen-versions
 ifndef OS_VERSIONS

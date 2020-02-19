@@ -9,21 +9,25 @@ spec:
     listKind: InstallationList
     plural: installations
     singular: installation
-  scope: Cluster
+  scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
+      description: Installation configures an installation of Calico or Tigera Secure
+        EE. At most one instance of this resource is supported. It must be named "default".
+        The Installation API installs core networking and network policy components,
+        and provides general install-time configuration.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
             of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
           description: 'Kind is a string value representing the REST resource this
             object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -148,6 +152,13 @@ spec:
                 registry pull secrets to use. These are applied to all images to be
                 pulled.
               items:
+                description: LocalObjectReference contains enough information to let
+                  you locate the referenced object inside the same namespace.
+                properties:
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    type: string
                 type: object
               type: array
             kubernetesProvider:
@@ -192,6 +203,7 @@ spec:
               - TigeraSecureEnterprise
               type: string
           type: object
+      type: object
   version: v1
   versions:
   - name: v1

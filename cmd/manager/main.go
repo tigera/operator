@@ -72,7 +72,7 @@ func main() {
 	pflag.Parse()
 
 	if showVersion {
-		components.Print(showDigest)
+		components.Print()
 
 		os.Exit(0)
 	}

@@ -75,7 +75,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					},
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
-						Image: components.GetReference(components.ComponentOperatorInit, c.registry),
+						Image: components.GetOperatorInitReference(c.registry),
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",

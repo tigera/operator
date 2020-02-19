@@ -4,9 +4,8 @@ import (
 	"fmt"
 )
 
-func Print(digest bool) {
+func Print() {
 	for _, c := range []component{
-		ComponentOperatorInit,
 		ComponentCalicoNode,
 		ComponentAPIServer,
 		ComponentCalicoCNI,
@@ -36,6 +35,6 @@ func Print(digest bool) {
 		ComponentTigeraNode,
 		ComponentTigeraTypha,
 	} {
-		fmt.Println(GetReference(c, ""))
+		fmt.Printf("%s (%s)\n", GetReference(c, ""), c.Version)
 	}
 }

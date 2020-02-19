@@ -45,3 +45,19 @@ func GetReference(c component, registry string) string {
 
 	return fmt.Sprintf("%s%s@%s", registry, c.Image, c.Digest)
 }
+
+// GetOperatorInitReference returns the fully qualified image to use, including registry and version
+// for the operatorInit image.
+//
+// Deprecated: GetOperatorInitReference exists to solve a complex dependency where the digest of the operator
+// init image isn't known until it's built, and it's code and docker image share this repository. This function
+// should go away once operatorInit logic is moved into the operator.
+func GetOperatorInitReference(registry string) string {
+	// If a user did not supply a registry, use the default registry
+	// based on component
+	if registry == "" {
+		registry = TigeraRegistry
+	}
+
+	return fmt.Sprintf("%s%s:%s", registry, ComponentOperatorInit.Image, ComponentOperatorInit.Version)
+}

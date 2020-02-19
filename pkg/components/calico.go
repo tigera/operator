@@ -54,7 +54,6 @@ var (
 	
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
-		Digest:  "",
 		Image:   "tigera/operator-init",
 	}
 )

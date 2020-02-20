@@ -323,7 +323,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.registry),
+		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.registry),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",

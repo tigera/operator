@@ -452,11 +452,11 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearc
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
 			Annotations: map[string]string{
-				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Digest,
+				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
 			},
 		},
 		Spec: esv1alpha1.ElasticsearchSpec{
-			Version: components.ComponentElasticsearch.Digest,
+			Version: components.ComponentElasticsearch.Version,
 			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
@@ -690,11 +690,11 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 				"k8s-app": KibanaName,
 			},
 			Annotations: map[string]string{
-				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Digest,
+				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
 			},
 		},
 		Spec: kbv1alpha1.KibanaSpec{
-			Version: components.ComponentKibana.Digest,
+			Version: components.ComponentKibana.Version,
 			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{

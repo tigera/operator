@@ -694,7 +694,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 			},
 		},
 		Spec: kbv1alpha1.KibanaSpec{
-			Version: components.ComponentKibana.Version,
+			Version: components.ComponentEckKibana.Version,
 			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{

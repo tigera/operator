@@ -65,24 +65,22 @@ func main() {
 		log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
 		gcrBearer = getGcrBearer()
 		if gcrBearer == "" {
-			log.Println("failed to get gcloud bearer token. Are you signed into gcloud cli?")
-			os.Exit(1)
+			log.Fatalln("failed to get gcloud bearer token. Are you signed into gcloud cli?")
 		}
 	}
 
 	if osVersionsPath != "" {
 		if err := run(osVersionsPath, filepath.Join(templateDir, osVersionsTpl), defaultCalicoRegistry); err != nil {
-			log.Println(err)
-			os.Exit(1)
+			log.Fatalln(err)
 		}
 	} else if eeVersionsPath != "" {
 		if err := run(eeVersionsPath, filepath.Join(templateDir, eeVersionsTpl), defaultEnterpriseRegistry); err != nil {
-			log.Println(err)
-			os.Exit(1)
+			log.Fatalln(err)
 		}
 	} else {
 		log.Println("must specify either -os-versions or -ee-versions")
 		flag.PrintDefaults()
+		os.Exit(1)
 	}
 }
 

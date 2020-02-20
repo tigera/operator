@@ -15,8 +15,7 @@
 package render
 
 import (
-	"fmt"
-	"os"
+	"github.com/tigera/operator/pkg/components"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,17 +25,12 @@ import (
 )
 
 func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, r string) (Component, error) {
-	initImageVersion := os.Getenv("TIGERA_OPERATOR_INIT_IMAGE_VERSION")
-	if initImageVersion == "" {
-		return nil, fmt.Errorf("Unable to render AWS SecurityGroup Setup Job")
-	}
-	return &awsSGSetupComponent{pullSecrets: ps, registry: r, initImageVersion: initImageVersion}, nil
+	return &awsSGSetupComponent{pullSecrets: ps, registry: r}, nil
 }
 
 type awsSGSetupComponent struct {
-	pullSecrets      []corev1.LocalObjectReference
-	registry         string
-	initImageVersion string
+	pullSecrets []corev1.LocalObjectReference
+	registry    string
 }
 
 func (c *awsSGSetupComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -81,7 +75,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					},
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
-						Image: fmt.Sprintf("%s%s", constructImage(OperatorInitImageName, c.registry), c.initImageVersion),
+						Image: components.GetOperatorInitReference(c.registry),
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",

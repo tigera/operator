@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -516,7 +517,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: constructImage(APIServerImageName, c.installation.Spec.Registry),
+		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry),
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -559,7 +560,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
-	image := constructImage(QueryServerImageName, c.installation.Spec.Registry)
+	image := components.GetReference(components.ComponentQueryServer, c.installation.Spec.Registry)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

@@ -347,7 +347,7 @@ func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes() error {
 // deployed to nodes that have been migrated and waits for the daemonset to update.
 func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() error {
 	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
-		ds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get("calico-node", metav1.GetOptions{})
+		ds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(nodeDaemonSetName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -366,7 +366,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		}
 
 		// Get latest kube-system node ds.
-		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Get("calico-node", metav1.GetOptions{})
+		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Get(nodeDaemonSetName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -383,21 +383,31 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
 
-		k := strings.Replace(key, "/", "~1", -1)
+		var patchBytes []byte
+		if len(ds.Spec.Template.Spec.NodeSelector) > 0 {
+			k := strings.Replace(key, "/", "~1", -1)
 
-		p := []StringPatch{{
-			Op:    "add",
-			Path:  fmt.Sprintf("/spec/template/spec/nodeSelector/%s", k),
-			Value: value,
-		}}
+			// This patch does not work when NodeSelectors don't already exist, only use it when some already exist.
+			p := []StringPatch{
+				{
+					Op:    "add",
+					Path:  fmt.Sprintf("/spec/template/spec/nodeSelector/%s", k),
+					Value: value,
+				},
+			}
 
-		patchBytes, err := json.Marshal(p)
-		if err != nil {
-			return err
+			var err error
+			patchBytes, err = json.Marshal(p)
+			if err != nil {
+				return err
+			}
+		} else {
+			// This patch will overwrite any existing NodeSelectors if any exist so only use it when there are none.
+			patchBytes = []byte(fmt.Sprintf(`[ { "op": "add", "path": "/spec/template/spec/nodeSelector", "value": { "%s": "%s" } }]`, key, value))
 		}
 		log.Info("Patch NodeSelector with: ", string(patchBytes))
 
-		_, err = m.client.AppsV1().DaemonSets(kubeSystem).Patch(ds.Name, types.JSONPatchType, patchBytes)
+		_, err := m.client.AppsV1().DaemonSets(kubeSystem).Patch(ds.Name, types.JSONPatchType, patchBytes)
 		if err != nil {
 			return err
 		}

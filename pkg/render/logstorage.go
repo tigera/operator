@@ -456,7 +456,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearc
 			},
 		},
 		Spec: esv1alpha1.ElasticsearchSpec{
-			Version: components.ComponentElasticsearch.Digest,
+			Version: components.ComponentElasticsearch.Version,
 			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
@@ -694,7 +694,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 			},
 		},
 		Spec: kbv1alpha1.KibanaSpec{
-			Version: components.ComponentKibana.Digest,
+			Version: components.ComponentKibana.Version,
 			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{

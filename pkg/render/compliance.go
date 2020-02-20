@@ -62,7 +62,7 @@ func Compliance(
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
 		var err error
-		complianceServerCertSecret, err = createOperatorTLSSecret(nil,
+		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
 			ComplianceServerCertSecret,
 			"tls.key",
 			"tls.crt",
@@ -75,7 +75,7 @@ func Compliance(
 		complianceServerCertSecrets = []*corev1.Secret{complianceServerCertSecret}
 	}
 
-	complianceServerCertSecrets = append(complianceServerCertSecrets, copySecrets(ComplianceNamespace, complianceServerCertSecret)...)
+	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
@@ -155,7 +155,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	}
 
-	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(copySecrets(ComplianceNamespace, c.esSecrets...)...)...)
+	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
 	return complianceObjs, objsToDelete
 }

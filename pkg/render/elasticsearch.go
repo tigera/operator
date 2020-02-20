@@ -379,7 +379,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("1"),
-								"memory": resource.MustParse("100Mi"),
+								"memory": resource.MustParse("150Mi"),
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),

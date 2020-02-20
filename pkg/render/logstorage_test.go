@@ -122,14 +122,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, "cluster.local")
+					}, operator.ProviderNone, nil, nil, nil, "cluster.local")
 
 				createResources, deleteResources := component.Objects()
 
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
 			})
-			It("should render an elasticsearchComponent and delete the ExternalService", func() {
+			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{
 					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
 						ls := resource.(*operatorv1.LogStorage)
@@ -157,6 +157,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				expectedDeleteResources := []resourceTestObj{
 					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
+					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, nil},
 				}
 
 				component := render.LogStorage(
@@ -176,6 +177,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, operator.ProviderNone, nil,
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace},
+						Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeExternalName},
+					},
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: render.KibanaServiceName, Namespace: render.KibanaNamespace},
 						Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeExternalName},
 					}, "cluster.local")
 
@@ -239,7 +244,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 					},
-					nil, "cluster.local")
+					nil, nil, "cluster.local")
 
 				createResources, deleteResources := component.Objects()
 
@@ -266,7 +271,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []resourceTestObj{
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
+					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
 					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
+						svc := resource.(*corev1.Service)
+
+						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.cluster.local", render.GuardianServiceName, render.GuardianNamespace)))
+					}},
+					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
 
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
@@ -279,7 +291,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operator.ProviderNone,
-					nil, nil, "cluster.local")
+					nil, nil, nil, "cluster.local")
 
 				createResources, deleteResources := component.Objects()
 
@@ -371,7 +383,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, "cluster.local")
+				nil, nil, "cluster.local")
 
 			createResources, deleteResources := component.Objects()
 
@@ -410,7 +422,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, "cluster.local")
+				nil, nil, "cluster.local")
 
 			createResources, deleteResources := component.Objects()
 
@@ -447,7 +459,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, "cluster.local")
+				nil, nil, "cluster.local")
 
 			createResources, deleteResources := component.Objects()
 

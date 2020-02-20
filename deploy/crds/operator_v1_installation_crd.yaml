@@ -162,6 +162,7 @@ spec:
                 enables provider-specific configuration and must match the auto-detected
                 value (if any).
               enum:
+              - ""
               - EKS
               - GKE
               - AKS

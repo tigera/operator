@@ -146,7 +146,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 	}
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.NodeSecret, err = createOperatorTLSSecret(ca,
+	tntls.NodeSecret, err = CreateOperatorTLSSecret(ca,
 		NodeTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
@@ -160,7 +160,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 	tntls.NodeSecret.Data[CommonName] = []byte("typha-client")
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.TyphaSecret, err = createOperatorTLSSecret(ca,
+	tntls.TyphaSecret, err = CreateOperatorTLSSecret(ca,
 		TyphaTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,

@@ -43,7 +43,7 @@ func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, p
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
 		var err error
-		tlsKeyPair, err = createOperatorTLSSecret(nil,
+		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			APIServerTLSSecretName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,

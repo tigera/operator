@@ -74,7 +74,7 @@ func getDigest(registry, img, version string) (string, error) {
 		data := map[string]string{}
 		json.Unmarshal(body, &data)
 
-		elasticBearer, ok := data["access_token"]
+		elasticBearer, ok := data["token"]
 		if !ok || elasticBearer == "" {
 			return "", fmt.Errorf("failed to get auth token for elastic: %s", string(body))
 		}

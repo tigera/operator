@@ -41,13 +41,13 @@ components:
     version: 7.3.2
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v2.7.0-0.dev-27-gd7ce71b
+    version: v2.7.0-0.dev-38-gbf021d6
   es-curator:
     image: tigera/es-curator
     version: v2.6.0-0.dev-25-gb04da05
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v2.7.0-0.dev-27-gd7ce71b
+    version: v2.7.0-0.dev-38-gbf021d6
   compliance-controller:
     image: tigera/compliance-controller
     version: v2.7.0-0.dev-38-g23b93c3

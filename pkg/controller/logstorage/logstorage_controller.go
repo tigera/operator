@@ -332,6 +332,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	kbService, err := r.getKibanaService(ctx)
+	if err != nil {
+		log.Error(err, "failed to retrieve Kibana service")
+		r.status.SetDegraded("Failed to retrieve the Kibana service", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
 	createWebhookSecret := false
@@ -418,6 +425,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.provider,
 		curatorSecrets,
 		esService,
+		kbService,
 		r.localDNS,
 	)
 
@@ -549,4 +557,16 @@ func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kiba
 		return nil, err
 	}
 	return &kb, nil
+}
+
+func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Service, error) {
+	svc := corev1.Service{}
+	err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaServiceName, Namespace: render.KibanaNamespace}, &svc)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &svc, nil
 }

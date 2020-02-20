@@ -66,8 +66,8 @@ var (
 	
 	
 	ComponentElasticTseeInstaller = component{
-		Version: "v2.7.0-0.dev-27-gd7ce71b",
-		Digest:  "sha256:164cbe3753a04d583f1f9801a667f097271111c055db9a5f74a9efeb6106ba72",
+		Version: "v2.7.0-0.dev-38-gbf021d6",
+		Digest:  "sha256:3fded7f9999c7b4547044da41c857e30e061b0680942efdd007dbd5214ab574b",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 	
@@ -115,8 +115,8 @@ var (
 	
 	
 	ComponentIntrusionDetectionController = component{
-		Version: "v2.7.0-0.dev-27-gd7ce71b",
-		Digest:  "sha256:0f5721727c4355dddf1f880c8bda25b9d9d0bb85c34c6945e3db1df2ed96868d",
+		Version: "v2.7.0-0.dev-38-gbf021d6",
+		Digest:  "sha256:d91bc2a82527c14306e50c4682cf3ff681914c067547df5c500cb5760f5413d6",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 	

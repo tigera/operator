@@ -106,3 +106,41 @@ To run all the unit tests, run:
 To run a specific test or set of tests, use the `GINKGO_FOCUS` argument.
 
 	make test GINKGO_FOCUS="component function tests"
+
+### Making temporary changes to components the operator manages
+
+The operator creates and manages resources and will reconcile them to be in the desired state. Due to the
+reconciliation it does, if a user makes direct changes to a resource the operator will revert those changes.
+To enable the user to make temporary changes, an annotation can be added to any resource directly managed by
+the operator which will cause the operator to no longer update the resource.
+Adding the following as an annotation to any resource will prevent the operator from making any future updates to the annotated resource:
+  ```
+  unsupported.operator.tigera.io/ignore: "true"
+  ```
+
+#### Example update to calico-node DaemonSet 
+
+Notice that the annotation is added in the top level metadata (not in the spec.template.metadata).
+(note the below is not a valid manifest but just an example)
+```
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: calico-node
+  namespace: calico-system
+  labels:
+    k8s-app: calico-node
+  annotations:
+    unsupported.operator.tigera.io/ignore: "true"
+spec:
+  template:
+    metadata:
+      labels:
+        k8s-app: calico-node
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+    spec:
+      containers:
+        - name: calico-node
+          image: calico/node:my-special-tag
+```

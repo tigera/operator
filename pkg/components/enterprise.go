@@ -150,8 +150,8 @@ var (
 	
 	
 	ComponentTigeraKubeControllers = component{
-		Version: "v2.7.0-0.dev-109-gfa8b79c",
-		Digest:  "sha256:87f896f15f3f6e1262791e1da2d3a9aa98416163b093d72d7b2c19910760aeb4",
+		Version: "v2.7.0-0.dev-128-g3f4d4f5",
+		Digest:  "sha256:6d52b51da6d48bf627aeeb865d0c18f6b0051c012ee9d168b8cb6446c28086dc",
 		Image:   "tigera/kube-controllers",
 	}
 	

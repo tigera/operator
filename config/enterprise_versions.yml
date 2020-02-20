@@ -13,7 +13,7 @@ components:
     version: v2.7.0-0.dev-26-g232a725
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v2.7.0-0.dev-109-gfa8b79c
+    version: v2.7.0-0.dev-128-g3f4d4f5
   typha:
     image: tigera/typha
     version: v2.7.0-0.dev-74-g67bc0b1

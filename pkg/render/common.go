@@ -131,7 +131,7 @@ func setServerAuth(x *x509.Certificate) error {
 	return nil
 }
 
-// createOperatorTLSSecret Creates a new TLS secret with the information passed
+// CreateOperatorTLSSecret Creates a new TLS secret with the information passed
 //   ca: The ca to use for creating the Cert/Key pair. If nil then a
 //       self-signed CA will be created
 //   secretName: The name of the secret.
@@ -140,7 +140,7 @@ func setServerAuth(x *x509.Certificate) error {
 //   dur: How long the certificate will be valid.
 //   hostnames: The first will be used as the CN, and the rest as SANs. If
 //     no hostnames are provided then "localhost" will be used.
-func createOperatorTLSSecret(
+func CreateOperatorTLSSecret(
 	ca *crypto.CA,
 	secretName string,
 	secretKeyName string,
@@ -219,7 +219,7 @@ func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object 
 	return secrets
 }
 
-func copySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {
+func CopySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {
 	var secrets []*v1.Secret
 	for _, s := range oSecrets {
 		x := s.DeepCopy()

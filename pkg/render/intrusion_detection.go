@@ -64,8 +64,8 @@ type intrusionDetectionComponent struct {
 func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
+	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
+	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
 	objs = append(objs, c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),

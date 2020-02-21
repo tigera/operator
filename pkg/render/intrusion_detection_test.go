@@ -31,7 +31,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operator.Installation{Spec: operator.InstallationSpec{Registry: "testregistry.com/"}},
-			esConfigMap, nil, notOpenshift)
+			esConfigMap, nil, notOpenshift,
+		)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(9))
 

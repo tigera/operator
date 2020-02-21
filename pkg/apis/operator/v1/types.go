@@ -31,8 +31,8 @@ type InstallationSpec struct {
 	// Registry is the default Docker registry used for component Docker images. If specified,
 	// all images will be pulled from this registry. If not specified then the default registries
 	// will be used.
-	// Image format used by the operator:
-	//    <registry>/<imagePath>/<imageName>:[<tag-name>|sha256@<image-sha>]
+	// Image format:
+	//    <registry>/<imagePath>/<imageName>@sha256:<image-sha>]
 	// This option allows configuring the <registry> portion of the above format.
 	// +optional
 	Registry string `json:"registry,omitempty"`
@@ -40,8 +40,8 @@ type InstallationSpec struct {
 	// ImagePath allows for the path part of an image to be specified. If specified
 	// then the specified value will be used as the image path for each image. If not specified
 	// or empty, the default for each image will be used.
-	// Image format used by the operator:
-	//    <registry>/<imagePath>/<imageName>:[<tag-name>|sha256@<image-sha>]
+	// Image format:
+	//    <registry>/<imagePath>/<imageName>@sha256:<image-sha>
 	// This option allows configuring the <imagePath> portion of the above format.
 	// +optional
 	ImagePath string `json:"imagePath,omitempty"`

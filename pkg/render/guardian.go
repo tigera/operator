@@ -17,6 +17,7 @@
 package render
 
 import (
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -43,14 +44,14 @@ func Guardian(
 	url string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	registry string,
+	installation *operatorv1.Installation,
 	tunnelSecret *corev1.Secret,
 ) Component {
 	return &GuardianComponent{
 		url:          url,
 		pullSecrets:  pullSecrets,
 		openshift:    openshift,
-		registry:     registry,
+		installation: installation,
 		tunnelSecret: tunnelSecret,
 	}
 }
@@ -59,7 +60,7 @@ type GuardianComponent struct {
 	url          string
 	pullSecrets  []*v1.Secret
 	openshift    bool
-	registry     string
+	installation *operatorv1.Installation
 	tunnelSecret *corev1.Secret
 }
 
@@ -228,7 +229,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
-			Image: constructImage(GuardianImageName, c.registry),
+			Image: constructImage(GuardianImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

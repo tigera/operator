@@ -29,9 +29,22 @@ type InstallationSpec struct {
 	Variant ProductVariant `json:"variant,omitempty"`
 
 	// Registry is the default Docker registry used for component Docker images. If specified,
-	// all Calico and Tigera Secure images will be pulled from this registry.
+	// all images will be pulled from this registry. If not specified then the default registries
+	// will be used.
+	// Image format:
+	//    <registry>/<imagePath>/<imageName>:<tag-name>
+	// This option allows configuring the <registry> portion of the above format.
 	// +optional
 	Registry string `json:"registry,omitempty"`
+
+	// ImagePath allows for the path part of an image to be specified. If specified
+	// then the specified value will be used as the image path for each image. If not specified
+	// or empty, the default for each image will be used.
+	// Image format:
+	//    <registry>/<imagePath>/<imageName>:<tag-name>
+	// This option allows configuring the <imagePath> portion of the above format.
+	// +optional
+	ImagePath string `json:"imagePath,omitempty"`
 
 	// ImagePullSecrets is an array of references to container registry pull secrets to use. These are
 	// applied to all images to be pulled.

@@ -152,7 +152,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		mcc.Spec.ManagementClusterAddr,
 		pullSecrets,
 		r.Provider == operatorv1.ProviderOpenShift,
-		instl.Spec.Registry,
+		instl,
 		tunnelSecret,
 	)
 

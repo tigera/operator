@@ -15,16 +15,18 @@ package components
 
 import (
 	"fmt"
+	"strings"
 )
 
 type component struct {
+	// Image is the full image path and name for this component (e.g., tigera/cnx-node, calico/cni)
 	Image   string
 	Version string
 	Digest  string
 }
 
 // GetReference returns the fully qualified image to use, including registry and version.
-func GetReference(c component, registry string) string {
+func GetReference(c component, registry, imagepath string) string {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" {
@@ -43,7 +45,20 @@ func GetReference(c component, registry string) string {
 		}
 	}
 
-	return fmt.Sprintf("%s%s@%s", registry, c.Image, c.Digest)
+	image := c.Image
+	if imagepath != "" {
+		image = ReplaceImagePath(image, imagepath)
+	}
+
+	return fmt.Sprintf("%s%s@%s", registry, image, c.Digest)
+}
+
+func ReplaceImagePath(image, imagepath string) string {
+	subs := strings.SplitAfterN(image, "/", 2)
+	if len(subs) == 2 {
+		return fmt.Sprintf("%s/%s", imagepath, subs[1])
+	}
+	return fmt.Sprintf("%s/%s", imagepath, subs[0])
 }
 
 // GetOperatorInitReference returns the fully qualified image to use, including registry and version

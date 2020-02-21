@@ -293,7 +293,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:          "compliance-controller",
-					Image:         constructImage(ComplianceControllerImage, c.installation.Spec.Registry),
+					Image:         constructImage(ComplianceControllerImage, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret),
@@ -400,7 +400,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					ElasticsearchContainerDecorateIndexCreator(
 						ElasticsearchContainerDecorate(corev1.Container{
 							Name:          "reporter",
-							Image:         constructImage(ComplianceReporterImage, c.installation.Spec.Registry),
+							Image:         constructImage(ComplianceReporterImage, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 							Env:           envVars,
 							LivenessProbe: complianceLivenessProbe,
 							SecurityContext: &corev1.SecurityContext{
@@ -545,7 +545,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:  "compliance-server",
-					Image: constructImage(ComplianceServerImage, c.installation.Spec.Registry),
+					Image: constructImage(ComplianceServerImage, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
@@ -702,7 +702,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          "compliance-snapshotter",
-						Image:         constructImage(ComplianceSnapshotterImage, c.installation.Spec.Registry),
+						Image:         constructImage(ComplianceSnapshotterImage, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
 					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
@@ -844,7 +844,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          "compliance-benchmarker",
-						Image:         constructImage(ComplianceBenchmarkerImage, c.installation.Spec.Registry),
+						Image:         constructImage(ComplianceBenchmarkerImage, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 						Env:           envVars,
 						VolumeMounts:  volMounts,
 						LivenessProbe: complianceLivenessProbe,

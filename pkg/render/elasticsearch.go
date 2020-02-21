@@ -66,7 +66,7 @@ func Elasticsearch(
 	createWebhookSecret bool,
 	pullSecrets []*corev1.Secret,
 	provider operatorv1.Provider,
-	registry string) (Component, error) {
+	installcr *operatorv1.Installation) (Component, error) {
 	var esCertSecrets, kibanaCertSecrets []runtime.Object
 	if esCertSecret == nil {
 		var err error
@@ -108,7 +108,7 @@ func Elasticsearch(
 		createWebhookSecret: createWebhookSecret,
 		pullSecrets:         pullSecrets,
 		provider:            provider,
-		registry:            registry,
+		installcr:           installcr,
 	}, nil
 }
 
@@ -120,7 +120,7 @@ type elasticsearchComponent struct {
 	createWebhookSecret bool
 	pullSecrets         []*corev1.Secret
 	provider            operatorv1.Provider
-	registry            string
+	installcr           *operatorv1.Installation
 }
 
 func (es *elasticsearchComponent) Objects() []runtime.Object {
@@ -336,7 +336,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 		},
 		Spec: esalpha1.ElasticsearchSpec{
 			Version: components.VersionECKElasticsearch,
-			Image:   constructImage(ECKElasticsearchImageName, es.registry),
+			Image:   constructImage(ECKElasticsearchImageName, es.installcr.Spec.Registry, es.installcr.Spec.ImagePath),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
 					Certificate: cmneckalpha1.SecretRef{
@@ -530,7 +530,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *apps.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					Containers: []corev1.Container{{
-						Image: constructImage(ECKOperatorImageName, es.registry),
+						Image: constructImage(ECKOperatorImageName, es.installcr.Spec.Registry, es.installcr.Spec.ImagePath),
 						Name:  "manager",
 						Args:  []string{"manager", "--operator-roles", "all", "--enable-debug-logs=false"},
 						Env: []corev1.EnvVar{
@@ -606,7 +606,7 @@ func (es elasticsearchComponent) kibanaCR() *kibanav1alpha1.Kibana {
 		},
 		Spec: kibanav1alpha1.KibanaSpec{
 			Version: components.VersionECKKibana,
-			Image:   constructImage(KibanaImageName, es.registry),
+			Image:   constructImage(KibanaImageName, es.installcr.Spec.Registry, es.installcr.Spec.ImagePath),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{

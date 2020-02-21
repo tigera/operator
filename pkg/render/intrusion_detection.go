@@ -37,7 +37,7 @@ func IntrusionDetection(
 	ls *operatorv1.LogStorage,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
-	registry string,
+	installation *operatorv1.Installation,
 	clusterName string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -46,7 +46,7 @@ func IntrusionDetection(
 		ls:               ls,
 		esSecrets:        esSecrets,
 		kibanaCertSecret: kibanaCertSecret,
-		registry:         registry,
+		installation:     installation,
 		clusterName:      clusterName,
 		pullSecrets:      pullSecrets,
 		openshift:        openshift,
@@ -57,7 +57,7 @@ type intrusionDetectionComponent struct {
 	ls               *operatorv1.LogStorage
 	esSecrets        []*corev1.Secret
 	kibanaCertSecret *corev1.Secret
-	registry         string
+	installation     *operatorv1.Installation
 	clusterName      string
 	pullSecrets      []*corev1.Secret
 	openshift        bool
@@ -138,7 +138,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.registry),
+		Image: constructImage(IntrusionDetectionJobInstallerImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -322,7 +322,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: constructImage(IntrusionDetectionControllerImageName, c.registry),
+		Image: constructImage(IntrusionDetectionControllerImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",

@@ -37,12 +37,12 @@ const (
 	maxLogsStoragePercent int32 = 70
 )
 
-func ElasticCurator(logStorage operatorv1.LogStorage, esSecrets, pullSecrets []*corev1.Secret, registry, clusterName string) Component {
+func ElasticCurator(logStorage operatorv1.LogStorage, esSecrets, pullSecrets []*corev1.Secret, installcr *operatorv1.Installation, clusterName string) Component {
 	return &elasticCuratorComponent{
 		logStorage:  logStorage,
 		pullSecrets: pullSecrets,
 		esSecrets:   esSecrets,
-		registry:    registry,
+		installcr:   installcr,
 		clusterName: clusterName,
 	}
 }
@@ -55,7 +55,7 @@ type elasticCuratorComponent struct {
 	logStorage  operatorv1.LogStorage
 	esSecrets   []*corev1.Secret
 	pullSecrets []*corev1.Secret
-	registry    string
+	installcr   *operatorv1.Installation
 	clusterName string
 }
 
@@ -103,7 +103,7 @@ func (ec elasticCuratorComponent) cronJob() *batch.CronJob {
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         constructImage(EsCuratorImageName, ec.registry),
+									Image:         constructImage(EsCuratorImageName, ec.installcr.Spec.Registry, ec.installcr.Spec.ImagePath),
 									Env:           ec.envVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &v1.SecurityContext{

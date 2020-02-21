@@ -231,7 +231,7 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []r
 		nil,
 		nil,
 		false,
-		"",
+		&operator.Installation{Spec: operator.InstallationSpec{}},
 		oidcConfig,
 		true,
 		nil)

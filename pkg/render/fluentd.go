@@ -256,7 +256,7 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
-		Image:           constructImage(FluentdImageName, c.installation.Spec.Registry),
+		Image:           constructImage(FluentdImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -489,14 +489,14 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName + "-startup",
-						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry),
+						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 						Command:      []string{"/bin/eks-log-forwarder-startup"},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName,
-						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry),
+						Image:        constructImage(FluentdImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},

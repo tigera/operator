@@ -393,9 +393,9 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoTypha, c.cr.Spec.Registry)
+	image := components.GetReference(components.ComponentCalicoTypha, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraTypha, c.cr.Spec.Registry)
+		image = components.GetReference(components.ComponentTigeraTypha, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 	return v1.Container{
 		Name:           "calico-typha",
@@ -451,7 +451,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraTyphaEnv := []v1.EnvVar{
-			// When we add AWS integration then we need Security group stuff here
+		// When we add AWS integration then we need Security group stuff here
 		}
 		typhaEnv = append(typhaEnv, extraTyphaEnv...)
 	}

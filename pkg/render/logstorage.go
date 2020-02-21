@@ -457,7 +457,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearc
 		},
 		Spec: esv1alpha1.ElasticsearchSpec{
 			Version: components.ComponentElasticsearch.Version,
-			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry),
+			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
 					Certificate: cmneckalpha1.SecretRef{
@@ -628,7 +628,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					Containers: []corev1.Container{{
-						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry),
+						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 						Name:  "manager",
 						Args:  []string{"manager", "--operator-roles", "all", "--enable-debug-logs=false"},
 						Env: []corev1.EnvVar{
@@ -695,7 +695,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 		},
 		Spec: kbv1alpha1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
+			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.Registry),
 			Config: &cmneckalpha1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -781,7 +781,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Spec.Registry),
+									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Spec.Registry, es.installation.Spec.Registry),
 									Env:           es.curatorEnvVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{

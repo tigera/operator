@@ -17,6 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +27,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
 		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
 
-		component := render.IntrusionDetection(nil, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, "testregistry.com/", esConfigMap, nil, notOpenshift)
+		component := render.IntrusionDetection(
+			nil,
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
+			&operator.Installation{Spec: operator.InstallationSpec{Registry: "testregistry.com/"}},
+			esConfigMap, nil, notOpenshift)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(9))
 

@@ -17,43 +17,43 @@ package components
 var (
 	
 	ComponentAPIServer = component{
-		Version: "v2.7.0-0.dev-32-gb094281f",
-		Digest:  "sha256:86e5debfc69e370dc78f8e4024adc7ce94f8827f792716d3289e8d87fa8e98ce",
+		Version: "v2.7.0",
+		Digest:  "sha256:33755103ca321c07e07e1b1302428c3a6d29bc40f0b71519be879a0a689868fd",
 		Image:   "tigera/cnx-apiserver",
 	}
 	
 	
 	ComponentComplianceBenchmarker = component{
-		Version: "v2.7.0-0.dev-38-g23b93c3",
-		Digest:  "sha256:98048f1972e1b0caefc82892a12146e392f4302bf4a4e3768ed9cfbfd9e2799c",
+		Version: "v2.7.0",
+		Digest:  "sha256:59886e14f8af2a9335df1666e65f6801a4b30f076872f3dad6cef14dd35e1838",
 		Image:   "tigera/compliance-benchmarker",
 	}
 	
 	
 	ComponentComplianceController = component{
-		Version: "v2.7.0-0.dev-38-g23b93c3",
-		Digest:  "sha256:97259c22599d350d92d80daffcfc44bad8eff7010d97f6dfd37eff7cf980a080",
+		Version: "v2.7.0",
+		Digest:  "sha256:a18b73d69c6edef6c0c87e0b85dfd4f8977293f24d899c6c369be914106b1b93",
 		Image:   "tigera/compliance-controller",
 	}
 	
 	
 	ComponentComplianceReporter = component{
-		Version: "v2.7.0-0.dev-38-g23b93c3",
-		Digest:  "sha256:8f592854c9ff8032cb76d07b627dbc3c05bae4267c2f317bd827b8d7bcba7fcd",
+		Version: "v2.7.0",
+		Digest:  "sha256:030112b0dbd9d66fd557f6c118e8001ff8569661bcc6503ed29891281e0e0695",
 		Image:   "tigera/compliance-reporter",
 	}
 	
 	
 	ComponentComplianceServer = component{
-		Version: "v2.7.0-0.dev-38-g23b93c3",
-		Digest:  "sha256:61a92fa99afdd5f534a4de2230dcc46c1a0203056062e18e3f9168af55d2ab99",
+		Version: "v2.7.0",
+		Digest:  "sha256:421c4ffe4b04bf91d4ae4840d65c3d42aa7edfa3e0fa6a222a7cb8297cc05465",
 		Image:   "tigera/compliance-server",
 	}
 	
 	
 	ComponentComplianceSnapshotter = component{
-		Version: "v2.7.0-0.dev-38-g23b93c3",
-		Digest:  "sha256:7fb58645b8db247b44df7438ec0220fcf2c0b081df754aef0d0abfbfe7dbe776",
+		Version: "v2.7.0",
+		Digest:  "sha256:b2a7ad0c8df9a7f51a9bf8865bdc357682309fa3ab0247092915304115c5be86",
 		Image:   "tigera/compliance-snapshotter",
 	}
 	
@@ -87,29 +87,29 @@ var (
 	
 	
 	ComponentEsCurator = component{
-		Version: "v2.6.0-0.dev-25-gb04da05",
-		Digest:  "sha256:0106b8f8683a0bdf8d7dfc8a2210c2effc664ce2a7570e0f23508fc00b82657f",
+		Version: "v2.7.0",
+		Digest:  "sha256:34a8486c7e0d646b17c788adb4bafd41d567a85be5c75f4bfe1d650ebc85d475",
 		Image:   "tigera/es-curator",
 	}
 	
 	
 	ComponentEsProxy = component{
-		Version: "v2.7.0-0.dev-43-g422fefb",
-		Digest:  "sha256:561a30afb86d770437ba896c727ed6f6453967d8503bd086cf6e7b098f774f62",
+		Version: "v2.7.0",
+		Digest:  "sha256:9da0f6f55431b9d6737bd915083cf51e09fe537b2072681e8b88a0cee5695259",
 		Image:   "tigera/es-proxy",
 	}
 	
 	
 	ComponentFluentd = component{
-		Version: "v2.7.0-0.dev-4-gb1486b3",
-		Digest:  "sha256:fced08b2ab80f967e69864299905bec19b482e2a55b3483f43f201f28f32553d",
+		Version: "v2.7.0",
+		Digest:  "sha256:89ab6e0e35d113f3a000916b4f03f0b811504cdc701f7c92d8d83f054b1f3bcc",
 		Image:   "tigera/fluentd",
 	}
 	
 	
 	ComponentGuardian = component{
-		Version: "v2.7.0-0.dev-34-g4eac4a3",
-		Digest:  "sha256:0d24ba5d2006b880575b5e8bcb58ab7c805c5b1c0497a70d4604eddf1c96b78b",
+		Version: "v2.7.0",
+		Digest:  "sha256:80db830bbac524904d6837ebdf66dadfe337c7ee26aabcf746fef1b7d82cb749",
 		Image:   "tigera/guardian",
 	}
 	
@@ -129,43 +129,43 @@ var (
 	
 	
 	ComponentManager = component{
-		Version: "v2.7.0-0.dev-234-g952d0a82",
-		Digest:  "sha256:9ed1dcc9fd85a895c9d621fe7e9fb5bc90e7737f84a48afa88804278331b7f8f",
+		Version: "v2.7.0",
+		Digest:  "sha256:439666b2f313341330ccece00cceff97b0c9cd77b4d834470060c519e51fccfc",
 		Image:   "tigera/cnx-manager",
 	}
 	
 	
 	ComponentManagerProxy = component{
-		Version: "v2.7.0-0.dev-34-g4eac4a3",
-		Digest:  "sha256:d0af3c73e78b069f0035dc3c37b2059c0f282ec7a50514ab1aa089babcbde6ae",
+		Version: "v2.7.0",
+		Digest:  "sha256:cd4540db662573a9f0383feff7686555f188233802476546e0b523104802e689",
 		Image:   "tigera/voltron",
 	}
 	
 	
 	ComponentQueryServer = component{
-		Version: "v2.7.0-0.dev-26-g232a725",
-		Digest:  "sha256:40459e70f0417be61034de3917ab981f03ee270989e460c0e2dd87d56eb133f0",
+		Version: "v2.7.0",
+		Digest:  "sha256:3603e45257693d8112fee4244ed5ceeb09c6dd34df07eb5ddb1b2e882eb209ae",
 		Image:   "tigera/cnx-queryserver",
 	}
 	
 	
 	ComponentTigeraKubeControllers = component{
 		Version: "v2.7.0-0.dev-128-g3f4d4f5",
-		Digest:  "sha256:6d52b51da6d48bf627aeeb865d0c18f6b0051c012ee9d168b8cb6446c28086dc",
+		Digest:  "sha256:489115ecd0cdd249a7d321f79fa5bbfe8df2de5b07b2ce11f25337283490d4a1",
 		Image:   "tigera/kube-controllers",
 	}
 	
 	
 	ComponentTigeraNode = component{
-		Version: "v2.7.0-0.dev-188-gc5255d3",
-		Digest:  "sha256:324c51fbee91a3252556e2a90342a2a2e60121bd60679e94a722c2cd755a4b9a",
+		Version: "v2.7.0",
+		Digest:  "sha256:205c5e15543ef4c0f166a77326a061f5d99a1e20f6c9e4a0a8227b620333d280",
 		Image:   "tigera/cnx-node",
 	}
 	
 	
 	ComponentTigeraTypha = component{
-		Version: "v2.7.0-0.dev-74-g67bc0b1",
-		Digest:  "sha256:a071de352b530363774297f1abb820ed01c6aaa84f5f92a6b3ab33670b65253d",
+		Version: "v2.7.0",
+		Digest:  "sha256:262d9e73ac8842eeaa6219a1c1453295cd55124b5ded5ade2cc765b03a1006e7",
 		Image:   "tigera/typha",
 	}
 	

@@ -82,12 +82,15 @@ func readComponents(versionsPath string) (Components, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := make(map[string]Components)
+
+	c := struct {
+		Components Components
+	}{}
 	if err := yaml.Unmarshal(f, &c); err != nil {
 		return nil, err
 	}
 
-	return c["components"], nil
+	return c.Components, nil
 }
 
 func render(tplFile string, vz Components) error {

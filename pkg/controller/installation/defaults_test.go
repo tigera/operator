@@ -54,7 +54,9 @@ var _ = Describe("Defaulting logic tests", func() {
 
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
-		var ff bool = true
+		var false_ = false
+		var twentySeven int32 = 27
+		var oneTwoThree int32 = 123
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -68,17 +70,29 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools: []operator.IPPool{{
-						CIDR:          "1.2.3.0/24",
-						Encapsulation: "IPIPCrossSubnet",
-						NATOutgoing:   "Enabled",
-						NodeSelector:  "has(thiskey)",
-					}},
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "1.2.3.0/24",
+							Encapsulation: "IPIPCrossSubnet",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "has(thiskey)",
+							BlockSize:     &twentySeven,
+						},
+						{
+							CIDR:          "fd00::0/64",
+							Encapsulation: "None",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "has(thiskey)",
+							BlockSize:     &oneTwoThree,
+						},
+					},
 					MTU: &mtu,
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{
-						FirstFound: &ff,
+						FirstFound: &false_,
 					},
-					NodeAddressAutodetectionV6: nil,
+					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
+						FirstFound: &false_,
+					},
 				},
 			},
 		}

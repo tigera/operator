@@ -32,6 +32,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].BlockSize).To(Equal(int32(26)))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -42,6 +43,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
 		Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].BlockSize).To(Equal(int32(26)))
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -54,6 +56,8 @@ var _ = Describe("Defaulting logic tests", func() {
 
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
+		var twentySeven int32 = 27
+		var oneTwoThree int32 = 123
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -67,12 +71,22 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools: []operator.IPPool{{
-						CIDR:          "1.2.3.0/24",
-						Encapsulation: "IPIPCrossSubnet",
-						NATOutgoing:   "Enabled",
-						NodeSelector:  "has(thiskey)",
-					}},
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "1.2.3.0/24",
+							Encapsulation: "IPIPCrossSubnet",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "has(thiskey)",
+							BlockSize:     &twentySeven,
+						},
+						{
+							CIDR:          "fd00::0/64",
+							Encapsulation: "None",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "has(thiskey)",
+							BlockSize:     &oneTwoThree,
+						},
+					},
 					MTU: &mtu,
 				},
 			},
@@ -90,6 +104,27 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		fillDefaults(instance)
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
+	})
+
+	It("should properly fill defaults for an IPv6-only instance", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{{CIDR: "fd00::0/64"}},
+				},
+			},
+		}
+
+		fillDefaults(instance)
+
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		Expect(v4pool).To(BeNil())
+
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		Expect(v6pool).NotTo(BeNil())
+		Expect(v6pool.CIDR).To(Equal("fd00::0/64"))
+		Expect(v6pool.BlockSize).NotTo(BeNil())
+		Expect(*v6pool.BlockSize).To(Equal(int32(122)))
 	})
 
 	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",

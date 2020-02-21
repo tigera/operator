@@ -165,9 +165,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	// Pick which image to use based on variant.
-	image := constructImage(KubeControllersImageNameCalico, c.cr.Spec.Registry)
+	image := constructImage(KubeControllersImageNameCalico, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(KubeControllersImageNameTigera, c.cr.Spec.Registry)
+		image = constructImage(KubeControllersImageNameTigera, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 
 	d := apps.Deployment{

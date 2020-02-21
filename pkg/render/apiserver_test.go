@@ -25,17 +25,25 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
 
 var _ = Describe("API server rendering tests", func() {
+	var instance *operator.Installation
+
 	BeforeEach(func() {
+		instance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				Registry: "testregistry.com/",
+			},
+		}
 	})
 
 	It("should render an API server with default configuration", func() {
-		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer("testregistry.com/", nil, nil, openshift)
+		//APIServer(install *operator.Installation, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
+		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources := component.Objects()
@@ -196,7 +204,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		component, err := render.APIServer("", nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources := component.Objects()
 
@@ -211,7 +219,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		component, err := render.APIServer("", nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources := component.Objects()
 

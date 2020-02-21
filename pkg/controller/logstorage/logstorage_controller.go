@@ -29,8 +29,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+<<<<<<< HEAD
 	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
 	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
+=======
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/go-logr/logr"
+>>>>>>> first working eck commit
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -142,6 +148,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
+<<<<<<< HEAD
 	err = c.Watch(&source.Kind{
 		Type: &storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchStorageClass},
@@ -166,6 +173,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
+=======
+	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &operatorv1.LogStorage{},
+	}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &operatorv1.LogStorage{},
+	}); err != nil {
+>>>>>>> first working eck commit
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 

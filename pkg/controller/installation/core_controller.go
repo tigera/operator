@@ -270,6 +270,10 @@ func fillDefaults(instance *operator.Installation) error {
 			if pool.NodeSelector == "" {
 				pool.NodeSelector = operator.NodeSelectorDefault
 			}
+			if pool.BlockSize == nil {
+				var twentySix int32 = 26
+				pool.BlockSize = &twentySix
+			}
 		}
 
 		// Default IPv4 address detection to "first found" if not specified.
@@ -298,7 +302,7 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 	if cr.Spec.KubernetesProvider == operator.ProviderNone {
 		cr.Spec.KubernetesProvider = provider
 	}
-	log.WithValues("provider", cr.Spec.KubernetesProvider).Info("Determined provider")
+	log.WithValues("provider", cr.Spec.KubernetesProvider).V(1).Info("Determined provider")
 	return nil
 }
 
@@ -330,7 +334,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
-		r.SetDegraded("Error validating CRD", err, reqLogger)
+		r.SetDegraded("Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

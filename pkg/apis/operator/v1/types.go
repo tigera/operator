@@ -93,7 +93,7 @@ const (
 	EncapsulationVXLAN            EncapsulationType = "VXLAN"
 	EncapsulationVXLANCrossSubnet EncapsulationType = "VXLANCrossSubnet"
 	EncapsulationNone             EncapsulationType = "None"
-	EncapsulationDefault          EncapsulationType = "IPIP"
+	EncapsulationDefault          EncapsulationType = EncapsulationIPIP
 )
 
 var EncapsulationTypes []EncapsulationType = []EncapsulationType{
@@ -160,6 +160,12 @@ type IPPool struct {
 	// Default: 'all()'
 	// +optional
 	NodeSelector string `json:"nodeSelector,omitempty"`
+
+	// BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from
+	// the main IP pool CIDR.
+	// Default: 26 (IPv4), 122 (IPv6)
+	// +optional
+	BlockSize *int32 `json:"blockSize,omitempty"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Tigera Secure installation.

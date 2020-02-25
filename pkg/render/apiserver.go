@@ -510,7 +510,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: constructImage(APIServerImageName, c.installation.Spec.Registry),
+		Image: constructImage(APIServerImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -553,7 +553,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
-	image := constructImage(QueryServerImageName, c.installation.Spec.Registry)
+	image := constructImage(QueryServerImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

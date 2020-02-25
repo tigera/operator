@@ -142,6 +142,14 @@ spec:
               - Management
               - Managed
               type: string
+            imagePath:
+              description: 'ImagePath allows for the path part of an image to be specified.
+                If specified then the specified value will be used as the image path
+                for each image. If not specified or empty, the default for each image
+                will be used. Image format used by the operator:    <registry>/<imagePath>/<imageName>:[<tag-name>|sha256@<image-sha>]
+                This option allows configuring the <imagePath> portion of the above
+                format.'
+              type: string
             imagePullSecrets:
               description: ImagePullSecrets is an array of references to container
                 registry pull secrets to use. These are applied to all images to be
@@ -162,9 +170,12 @@ spec:
               - DockerEnterprise
               type: string
             registry:
-              description: Registry is the default Docker registry used for component
-                Docker images. If specified, all Calico and Tigera Secure images will
-                be pulled from this registry.
+              description: 'Registry is the default Docker registry used for component
+                Docker images. If specified, all images will be pulled from this registry.
+                If not specified then the default registries will be used. Image format
+                used by the operator:    <registry>/<imagePath>/<imageName>:[<tag-name>|sha256@<image-sha>]
+                This option allows configuring the <registry> portion of the above
+                format.'
               type: string
             variant:
               description: 'Variant is the product to install - one of Calico or TigeraSecureEnterprise

@@ -72,7 +72,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			{"tigera-secure", "tigera-kibana", "", "", ""},
 		}
 
-		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderNone, "docker.elastic.co/eck/")
+		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderNone,
+			&operator.Installation{Spec: operator.InstallationSpec{}},
+		)
 		Expect(err).NotTo(HaveOccurred())
 
 		resources := component.Objects()
@@ -111,7 +113,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		}
 
 		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false,
-			[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret"}}}, operator.ProviderNone, "docker.elastic.co/eck/")
+			[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret"}}}, operator.ProviderNone,
+			&operator.Installation{Spec: operator.InstallationSpec{}},
+		)
 		Expect(err).NotTo(HaveOccurred())
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -145,7 +149,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			{"tigera-secure", "tigera-kibana", "", "", ""},
 		}
 
-		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderOpenShift, "docker.elastic.co/eck/")
+		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderOpenShift,
+			&operator.Installation{Spec: operator.InstallationSpec{}},
+		)
 		Expect(err).NotTo(HaveOccurred())
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -179,7 +185,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			{"tigera-secure-kibana-cert", "tigera-kibana", "", "v1", "Secret"},
 			{"tigera-secure", "tigera-kibana", "", "", ""},
 		}
-		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, true, nil, operator.ProviderOpenShift, "docker.elastic.co/eck/")
+		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, true, nil, operator.ProviderOpenShift,
+			&operator.Installation{Spec: operator.InstallationSpec{}},
+		)
 		Expect(err).NotTo(HaveOccurred())
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -192,7 +200,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	It("should not render Elasticsearch or Kibana cert secrets in the operator namespace when they are provided", func() {
 		component, err := render.Elasticsearch(logStorage, esConfig,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, false, nil, operator.ProviderOpenShift, "")
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, false, nil, operator.ProviderOpenShift,
+			&operator.Installation{Spec: operator.InstallationSpec{}},
+		)
 		expectedResources := []struct {
 			name    string
 			ns      string

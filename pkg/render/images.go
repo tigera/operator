@@ -86,16 +86,8 @@ const (
 
 // constructImage returns the fully qualified image to use, including registry and version.
 func constructImage(imageName, registry, imagepath string) string {
-	if imagepath != "" {
-		imageName = ReplaceImagePath(imageName, imagepath)
-	}
-
-	// If a user supplied a registry, use that for all images.
-	if registry != "" {
-		return fmt.Sprintf("%s%s", registry, imageName)
-	}
-
-	// Otherwise, default the registry based on component.
+	// Default the registry based on component.
+	// Do this before adjusting the imageName for imagepath
 	reg := TigeraRegistry
 	switch imageName {
 	case NodeImageNameCalico,
@@ -107,6 +99,15 @@ func constructImage(imageName, registry, imagepath string) string {
 		reg = CalicoRegistry
 	case ECKElasticsearchImageName, ECKOperatorImageName:
 		reg = ECKRegistry
+	}
+
+	if imagepath != "" {
+		imageName = ReplaceImagePath(imageName, imagepath)
+	}
+
+	// If a user supplied a registry, use that for all images.
+	if registry != "" {
+		return fmt.Sprintf("%s%s", registry, imageName)
 	}
 	return fmt.Sprintf("%s%s", reg, imageName)
 }

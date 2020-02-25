@@ -58,12 +58,12 @@ var _ = Describe("imagepath override", func() {
 
 var _ = Describe("registry and imagepath override", func() {
 	It("should render a calico image correctly", func() {
-		Expect(constructImage(NodeImageNameCalico, "quay.io/extra", "userpath")).To(Equal("quay.io/extra/userpath/node:" + components.VersionCalicoNode))
+		Expect(constructImage(NodeImageNameCalico, "quay.io/extra/", "userpath")).To(Equal("quay.io/extra/userpath/node:" + components.VersionCalicoNode))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(constructImage(NodeImageNameTigera, "quay.io/extra", "userpath")).To(Equal("quay.io/extra/userpath/cnx-node:" + components.VersionTigeraNode))
+		Expect(constructImage(NodeImageNameTigera, "quay.io/extra/", "userpath")).To(Equal("quay.io/extra/userpath/cnx-node:" + components.VersionTigeraNode))
 	})
 	It("should render an ECK image correctly", func() {
-		Expect(constructImage(ECKOperatorImageName, "quay.io/extra", "userpath")).To(Equal("quay.io/extra/userpath/eck-operator:" + components.VersionECKOperator))
+		Expect(constructImage(ECKOperatorImageName, "quay.io/extra/", "userpath")).To(Equal("quay.io/extra/userpath/eck-operator:" + components.VersionECKOperator))
 	})
 })

@@ -25,7 +25,7 @@ var _ = Describe("No registry override", func() {
 		Expect(constructImage(NodeImageNameCalico, "")).To(Equal("docker.io/calico/node:" + components.VersionCalicoNode))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(constructImage(NodeImageNameTigera, "")).To(Equal("quay.io/tigera/cnx-node:" + components.VersionTigeraNode))
+		Expect(constructImage(NodeImageNameTigera, "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node:" + components.VersionTigeraNode))
 	})
 	It("should render an ECK image correctly", func() {
 		Expect(constructImage(ECKOperatorImageName, "")).To(Equal("docker.elastic.co/eck/eck-operator:" + components.VersionECKOperator))

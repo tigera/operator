@@ -17,6 +17,7 @@ package render
 import (
 	"github.com/tigera/operator/pkg/components"
 
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -24,13 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, r string) (Component, error) {
-	return &awsSGSetupComponent{pullSecrets: ps, registry: r}, nil
+func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.Installation) (Component, error) {
+	return &awsSGSetupComponent{pullSecrets: ps, installcr: installcr}, nil
 }
 
 type awsSGSetupComponent struct {
 	pullSecrets []corev1.LocalObjectReference
-	registry    string
+	installcr   *operator.Installation
 }
 
 func (c *awsSGSetupComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -75,7 +76,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					},
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
-						Image: components.GetOperatorInitReference(c.registry),
+						Image: components.GetOperatorInitReference(c.installcr.Spec.Registry, c.installcr.Spec.ImagePath),
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",

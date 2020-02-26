@@ -321,8 +321,8 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		if len(instance.Spec.CalicoNetwork.FlexVolPath) == 0 {
-			instance.Spec.CalicoNetwork.FlexVolPath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		if len(instance.Spec.CalicoNetwork.FlexVolumePath) == 0 {
+			instance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}
 	}
 

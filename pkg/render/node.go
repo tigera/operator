@@ -404,7 +404,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
 	initContainers := []v1.Container{}
-	if c.cr.Spec.CalicoNetwork.FlexVolPath != "None" {
+	if c.cr.Spec.CalicoNetwork.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
@@ -530,7 +530,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Set the flex volume plugin location based on platform.
-	flexVolumePluginsPath := c.cr.Spec.CalicoNetwork.FlexVolPath
+	flexVolumePluginsPath := c.cr.Spec.CalicoNetwork.FlexVolumePath
 	if c.provider == operator.ProviderOpenShift {
 		// In OpenShift 4.x, the location for flexvolume plugins has changed.
 		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5

@@ -320,6 +320,10 @@ func fillDefaults(instance *operator.Installation) error {
 				v6pool.BlockSize = &oneTwentyTwo
 			}
 		}
+
+		if len(instance.Spec.CalicoNetwork.FlexVolPath) == 0 {
+			instance.Spec.CalicoNetwork.FlexVolPath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		}
 	}
 
 	return nil

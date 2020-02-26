@@ -121,10 +121,11 @@ type CalicoNetworkSpec struct {
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
 
-	// FlexVolInitContainerEnabled allows the toggling on/off of the FlexVol init container. If not specified,
-	// FlexVol will be enabled by default.
+	// FlexVolPath optionally specifies a custom path for FlexVolume. If not specified, FlexVol will be
+	// enabled by default. If set to 'None', FlexVolume will be disabled.
+	// Default: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	// +optional
-	FlexVolInitContainerEnabled *bool `json:"flexVolInitContainerEnabled,omitempty"`
+	FlexVolPath string `json:"flexVolPath"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

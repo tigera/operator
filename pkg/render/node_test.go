@@ -57,7 +57,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds"
+		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))

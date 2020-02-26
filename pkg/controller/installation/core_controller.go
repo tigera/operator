@@ -272,10 +272,6 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		if instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled == nil {
-			*instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled = true
-		}
-
 		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork)
 		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 

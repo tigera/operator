@@ -404,7 +404,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
 	initContainers := []v1.Container{}
-	if c.cr.Spec.CalicoNetwork.FlexVolInitContainerEnabled == nil || *c.cr.Spec.CalicoNetwork.FlexVolInitContainerEnabled == true {
+	if c.cr.Spec.CalicoNetwork.FlexVolPath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
@@ -530,7 +530,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Set the flex volume plugin location based on platform.
-	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+	flexVolumePluginsPath := c.cr.Spec.CalicoNetwork.FlexVolPath
 	if c.provider == operator.ProviderOpenShift {
 		// In OpenShift 4.x, the location for flexvolume plugins has changed.
 		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5

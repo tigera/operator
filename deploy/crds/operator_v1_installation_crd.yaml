@@ -35,6 +35,11 @@ spec:
               description: CalicoNetwork specifies configuration options for Calico
                 provided pod networking.
               properties:
+                flexVolPath:
+                  description: 'FlexVolPath optionally specifies a custom path for
+                    FlexVolume. If not specified, FlexVol will be enabled by default.
+                    If set to ''None'', FlexVolume will be disabled. Default: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"'
+                  type: string
                 ipPools:
                   description: IPPools contains a list of IP pools to use for allocating
                     pod IP addresses. At most one IP pool may be specified. If omitted,
@@ -81,9 +86,6 @@ spec:
                     for pods on the Calico network. Default: 1410'
                   format: int32
                   type: integer
-                flexVolInitContainerEnabled:
-                  description: 'Enable or disable the FlexVol init container. Default: enabled'
-                  type: bool
                 nodeAddressAutodetectionV4:
                   description: NodeAddressAutodetectionV4 specifies an approach to
                     automatically detect node IPv4 addresses. If not specified, will
@@ -133,6 +135,8 @@ spec:
                         interfaces that do not match the given regex.
                       type: string
                   type: object
+              required:
+              - flexVolPath
               type: object
             clusterManagementType:
               description: 'How the cluster is managed. Valid values for this field

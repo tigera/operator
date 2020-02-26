@@ -272,10 +272,6 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		if instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled == nil {
-			*instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled = true
-		}
-
 		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork)
 		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 
@@ -324,6 +320,24 @@ func fillDefaults(instance *operator.Installation) error {
 				v6pool.BlockSize = &oneTwentyTwo
 			}
 		}
+
+		// If not specified by the user, set the flex volume plugin location based on platform.
+		if len(instance.Spec.CalicoNetwork.FlexVolumePath) == 0 {
+			if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+				// In OpenShift 4.x, the location for flexvolume plugins has changed.
+				// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
+				instance.Spec.CalicoNetwork.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
+			} else if instance.Spec.KubernetesProvider == operator.ProviderGKE {
+				instance.Spec.CalicoNetwork.FlexVolumePath = "/home/kubernetes/flexvolume/"
+			} else if instance.Spec.KubernetesProvider == operator.ProviderAKS {
+				instance.Spec.CalicoNetwork.FlexVolumePath = "/etc/kubernetes/volumeplugins/"
+			} else {
+				instance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+			}
+		} else if instance.Spec.CalicoNetwork.FlexVolumePath == "None" {
+			instance.Spec.CalicoNetwork.FlexVolumePath = ""
+		}
+
 	}
 
 	return nil

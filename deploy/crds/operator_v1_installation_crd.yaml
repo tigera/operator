@@ -35,10 +35,11 @@ spec:
               description: CalicoNetwork specifies configuration options for Calico
                 provided pod networking.
               properties:
-                flexVolPath:
-                  description: 'FlexVolPath optionally specifies a custom path for
-                    FlexVolume. If not specified, FlexVol will be enabled by default.
-                    If set to ''None'', FlexVolume will be disabled. Default: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"'
+                flexVolumePath:
+                  description: 'FlexVolumePath optionally specifies a custom path
+                    for FlexVolume. If not specified, FlexVolume will be enabled by
+                    default. If set to ''None'', FlexVolume will be disabled. Default:
+                    "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"'
                   type: string
                 ipPools:
                   description: IPPools contains a list of IP pools to use for allocating
@@ -136,7 +137,7 @@ spec:
                       type: string
                   type: object
               required:
-              - flexVolPath
+              - flexVolumePath
               type: object
             clusterManagementType:
               description: 'How the cluster is managed. Valid values for this field

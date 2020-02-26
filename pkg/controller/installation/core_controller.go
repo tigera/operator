@@ -272,10 +272,6 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		if instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled == nil {
-			*instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled = true
-		}
-
 		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork)
 		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 
@@ -323,6 +319,10 @@ func fillDefaults(instance *operator.Installation) error {
 				var oneTwentyTwo int32 = 122
 				v6pool.BlockSize = &oneTwentyTwo
 			}
+		}
+
+		if len(instance.Spec.CalicoNetwork.FlexVolumePath) == 0 {
+			instance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}
 	}
 

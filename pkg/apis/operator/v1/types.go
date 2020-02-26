@@ -99,7 +99,7 @@ const (
 	ClusterManagementTypeManaged    ClusterManagementType = "Managed"
 )
 
-// CalicoNetwork specifies configuration options for Calico provided pod networking.
+// CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
 	// may be specified. If omitted, a single pool will be configured when needed.
@@ -120,6 +120,11 @@ type CalicoNetworkSpec struct {
 	// IPv6 addresses will not be auto-detected.
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
+
+	// FlexVolInitContainerEnabled allows the toggling on/off of the FlexVol init container. If not specified,
+	// FlexVol will be enabled by default.
+	// +optional
+	FlexVolInitContainerEnabled *bool `json:"flexVolInitContainerEnabled,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

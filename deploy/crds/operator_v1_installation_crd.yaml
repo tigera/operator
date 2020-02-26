@@ -81,6 +81,9 @@ spec:
                     for pods on the Calico network. Default: 1410'
                   format: int32
                   type: integer
+                flexVolInitContainerEnabled:
+                  description: 'Enable or disable the FlexVol init container. Default: enabled'
+                  type: bool
                 nodeAddressAutodetectionV4:
                   description: NodeAddressAutodetectionV4 specifies an approach to
                     automatically detect node IPv4 addresses. If not specified, will

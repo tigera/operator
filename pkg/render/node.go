@@ -403,6 +403,11 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
+	initContainers := []v1.Container{}
+	if c.cr.Spec.CalicoNetwork.FlexVolInitContainerEnabled == nil || *c.cr.Spec.CalicoNetwork.FlexVolInitContainerEnabled == true {
+		initContainers = append(initContainers, c.flexVolumeContainer())
+	}
+
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -425,7 +430,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                []v1.Container{c.flexVolumeContainer()},
+					InitContainers:                initContainers,
 					Containers:                    []v1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
 				},

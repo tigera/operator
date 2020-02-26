@@ -38,6 +38,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 		Expect(v6pool).To(BeNil())
+		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -53,6 +54,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 		Expect(v6pool).To(BeNil())
+		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -158,6 +160,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", v4pool)
 				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork)
 				Expect(v6pool).To(BeNil())
+				Expect(i.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
 			}
 		},
 

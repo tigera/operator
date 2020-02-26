@@ -38,10 +38,11 @@ var defaultImages = map[string]string{
 type Components map[string]*Component
 
 type Component struct {
-	Version  string `json:"version"`
-	Registry string `json:"registry"`
-	Digest   string `json:"digest"`
-	Image    string `json:"image"`
+	Version        string `json:"version"`
+	Registry       string `json:"registry"`
+	Digest         string `json:"digest"`
+	Image          string `json:"image"`
+	OperatorIgnore bool   `json:"operator-ignore"`
 }
 
 // GetComponents parses a versions.yml file, scrubs the data of known issues,
@@ -56,7 +57,7 @@ func GetComponents(versionsPath string) (Components, error) {
 
 	// add known default images to any components that are missing them.
 	for key, component := range v {
-		if key == "calico" || key == "networking-calico" {
+		if key == "calico" || key == "networking-calico" || component.OperatorIgnore {
 			continue
 		}
 

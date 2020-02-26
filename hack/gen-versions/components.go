@@ -33,6 +33,7 @@ var defaultImages = map[string]string{
 	"flexvol":                 "calico/pod2daemon-flexvol",
 	"typha":                   "calico/typha",
 	"eck-kibana":              "tigera/kibana",
+	"guardian":                "tigera/guardian",
 }
 
 type Components map[string]*Component
@@ -56,7 +57,7 @@ func GetComponents(versionsPath string) (Components, error) {
 
 	// add known default images to any components that are missing them.
 	for key, component := range v {
-		if key == "calico" || key == "networking-calico" {
+		if key == "calico" || key == "networking-calico" || key == "calico-private" || key == "cnx-manager-proxy" || key == "busybox" {
 			continue
 		}
 

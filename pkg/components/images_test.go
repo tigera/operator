@@ -29,6 +29,9 @@ var _ = Describe("No registry override", func() {
 	It("should render an ECK image correctly", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "", "")).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
+	It("should render an operator init image correctly", func() {
+		Expect(GetOperatorInitReference("", "")).To(Equal("quay.io/tigera/operator-init:" + ComponentOperatorInit.Version))
+	})
 })
 
 var _ = Describe("registry override", func() {
@@ -41,6 +44,9 @@ var _ = Describe("registry override", func() {
 	It("should render an ECK image correctly", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "")).To(Equal("quay.io/eck/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
+	It("should render an operator init image correctly", func() {
+		Expect(GetOperatorInitReference("gcr.io/", "")).To(Equal("gcr.io/tigera/operator-init:" + ComponentOperatorInit.Version))
+	})
 })
 var _ = Describe("imagepath override", func() {
 	It("should render a calico image correctly", func() {
@@ -52,6 +58,9 @@ var _ = Describe("imagepath override", func() {
 	It("should render an ECK image correctly", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "", "userpath")).To(Equal("docker.elastic.co/userpath/eck-operator:" + ComponentElasticsearchOperator.Digest))
 	})
+	It("should render an operator init image correctly", func() {
+		Expect(GetOperatorInitReference("", "userpath")).To(Equal("quay.io/userpath/operator-init:" + ComponentOperatorInit.Version))
+	})
 })
 var _ = Describe("registry and imagepath override", func() {
 	It("should render a calico image correctly", func() {
@@ -62,5 +71,8 @@ var _ = Describe("registry and imagepath override", func() {
 	})
 	It("should render an ECK image correctly", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "quay.io/extra", "userpath")).To(Equal("quay.io/extra/userpath/eck-operator:" + ComponentElasticsearchOperator.Digest))
+	})
+	It("should render an operator init image correctly", func() {
+		Expect(GetOperatorInitReference("gcr.io/extra", "userpath")).To(Equal("gcr.io/extra/userpath/operator-init:" + ComponentOperatorInit.Version))
 	})
 })

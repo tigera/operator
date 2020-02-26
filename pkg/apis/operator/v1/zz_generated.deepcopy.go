@@ -190,11 +190,6 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(NodeAddressAutodetection)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.FlexVolInitContainerEnabled != nil {
-		in, out := &in.FlexVolInitContainerEnabled, &out.FlexVolInitContainerEnabled
-		*out = new(bool)
-		**out = **in
-	}
 	return
 }
 

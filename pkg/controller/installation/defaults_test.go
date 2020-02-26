@@ -38,7 +38,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 		Expect(v6pool).To(BeNil())
-		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -54,7 +53,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 		Expect(v6pool).To(BeNil())
-		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -107,6 +105,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
+					FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				},
 				NodeMetricsPort: &nodeMetricsPort,
 			},
@@ -160,7 +159,6 @@ var _ = Describe("Defaulting logic tests", func() {
 				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", v4pool)
 				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork)
 				Expect(v6pool).To(BeNil())
-				Expect(i.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
 			}
 		},
 
@@ -176,7 +174,8 @@ var _ = Describe("Defaulting logic tests", func() {
 						{CIDR: "10.0.0.0/8"},
 					},
 				},
-			}),
+			},
+		),
 		table.Entry("CIDR specified from OS config and Calico config",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -194,6 +193,43 @@ var _ = Describe("Defaulting logic tests", func() {
 						{CIDR: "10.0.0.0/8"},
 					},
 				},
-			}),
+			},
+		),
+	)
+
+	table.DescribeTable("Test different values for FlexVolumePath",
+		func(i *operator.Installation, expectedFlexVolumePath string) {
+			Expect(fillDefaults(i)).To(BeNil())
+			Expect(i.Spec.CalicoNetwork).NotTo(BeNil())
+			Expect(i.Spec.CalicoNetwork.FlexVolumePath).To(Equal(expectedFlexVolumePath))
+		},
+
+		table.Entry("FlexVolumePath set to None",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						FlexVolumePath: "None",
+					},
+				},
+			}, "",
+		),
+
+		table.Entry("FlexVolumePath left empty (default)",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{},
+				},
+			}, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+		),
+
+		table.Entry("FlexVolumePath set to a custom path",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						FlexVolumePath: "/foo/bar/",
+					},
+				},
+			}, "/foo/bar/",
+		),
 	)
 })

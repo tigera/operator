@@ -36,10 +36,10 @@ spec:
                 provided pod networking.
               properties:
                 flexVolumePath:
-                  description: 'FlexVolumePath optionally specifies a custom path
-                    for FlexVolume. If not specified, FlexVolume will be enabled by
-                    default. If set to ''None'', FlexVolume will be disabled. Default:
-                    "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"'
+                  description: FlexVolumePath optionally specifies a custom path for
+                    FlexVolume. If not specified, FlexVolume will be enabled by default.
+                    If set to 'None', FlexVolume will be disabled. The default is
+                    based on the k8s provider.
                   type: string
                 ipPools:
                   description: IPPools contains a list of IP pools to use for allocating
@@ -136,8 +136,6 @@ spec:
                         interfaces that do not match the given regex.
                       type: string
                   type: object
-              required:
-              - flexVolumePath
               type: object
             clusterManagementType:
               description: 'How the cluster is managed. Valid values for this field

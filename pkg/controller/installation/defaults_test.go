@@ -38,7 +38,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 		Expect(v6pool).To(BeNil())
-		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
+		t := true
+		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(Equal(&t))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -54,7 +55,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
 		Expect(v6pool).To(BeNil())
-		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
+		t := true
+		Expect(instance.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(Equal(&t))
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -69,6 +71,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
 		var false_ = false
+		var true_ = true
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		instance := &operator.Installation{
@@ -107,6 +110,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
+					FlexVolInitContainerEnabled: &true_,
 				},
 				NodeMetricsPort: &nodeMetricsPort,
 			},
@@ -160,7 +164,8 @@ var _ = Describe("Defaulting logic tests", func() {
 				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", v4pool)
 				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork)
 				Expect(v6pool).To(BeNil())
-				Expect(i.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(BeTrue())
+				t := true
+				Expect(i.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(Equal(&t))
 			}
 		},
 

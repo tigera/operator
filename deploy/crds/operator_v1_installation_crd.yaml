@@ -35,6 +35,10 @@ spec:
               description: CalicoNetwork specifies configuration options for Calico
                 provided pod networking.
               properties:
+                flexVolInitContainerEnabled:
+                  description: 'FlexVolInitContainerEnabled allows the toggling on/off
+                    of the FlexVol init container. Default: true'
+                  type: boolean
                 ipPools:
                   description: IPPools contains a list of IP pools to use for allocating
                     pod IP addresses. At most one IP pool may be specified. If omitted,
@@ -81,9 +85,6 @@ spec:
                     for pods on the Calico network. Default: 1410'
                   format: int32
                   type: integer
-                flexVolInitContainerEnabled:
-                  description: 'Enable or disable the FlexVol init container. Default: enabled'
-                  type: bool
                 nodeAddressAutodetectionV4:
                   description: NodeAddressAutodetectionV4 specifies an approach to
                     automatically detect node IPv4 addresses. If not specified, will

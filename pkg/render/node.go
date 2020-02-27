@@ -530,7 +530,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Create and append flexvolume
-	if len(c.cr.Spec.CalicoNetwork.FlexVolumePath) != 0 {
+	if c.cr.Spec.CalicoNetwork.FlexVolumePath != "None" {
 		volumes = append(volumes, v1.Volume{
 			Name: "flexvol-driver-host",
 			VolumeSource: v1.VolumeSource{

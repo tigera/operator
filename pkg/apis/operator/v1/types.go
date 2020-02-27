@@ -121,8 +121,8 @@ type CalicoNetworkSpec struct {
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
 
-	// FlexVolInitContainerEnabled allows the toggling on/off of the FlexVol init container. If not specified,
-	// FlexVol will be enabled by default.
+	// FlexVolInitContainerEnabled allows the toggling on/off of the FlexVol init container.
+	// Default: true
 	// +optional
 	FlexVolInitContainerEnabled *bool `json:"flexVolInitContainerEnabled,omitempty"`
 }

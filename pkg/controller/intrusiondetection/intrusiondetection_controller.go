@@ -224,7 +224,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	component := render.IntrusionDetection(
 		esSecrets,
 		kibanaPublicCertSecret,
-		network.Spec.Registry,
+		network,
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,

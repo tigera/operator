@@ -90,10 +90,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(i.Spec.CalicoNetwork.IPPools).To(HaveLen(0))
 				return
 			}
-			if calicoNet.FlexVolInitContainerEnabled == nil {
-				t := true
-				Expect(i.Spec.CalicoNetwork.FlexVolInitContainerEnabled).To(Equal(&t))
-			}
 			Expect(i.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
 			pool := i.Spec.CalicoNetwork.IPPools[0]
 			pExpect := calicoNet.IPPools[0]

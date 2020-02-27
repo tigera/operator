@@ -35,10 +35,12 @@ spec:
               description: CalicoNetwork specifies configuration options for Calico
                 provided pod networking.
               properties:
-                flexVolInitContainerEnabled:
-                  description: 'FlexVolInitContainerEnabled allows the toggling on/off
-                    of the FlexVol init container. Default: true'
-                  type: boolean
+                flexVolumePath:
+                  description: FlexVolumePath optionally specifies a custom path for
+                    FlexVolume. If not specified, FlexVolume will be enabled by default.
+                    If set to 'None', FlexVolume will be disabled. The default is
+                    based on the k8s provider.
+                  type: string
                 ipPools:
                   description: IPPools contains a list of IP pools to use for allocating
                     pod IP addresses. At most one IP pool may be specified. If omitted,

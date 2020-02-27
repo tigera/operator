@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file is auto generated so if you are changing or updating it
+// then you should instead consider updating hack/gen-versions/main.go,
+// config/os_versions.yaml, or config/ee_versions.yaml.
+
 package components
 
 // This section contains images used when installing open-source Calico.

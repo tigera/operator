@@ -57,6 +57,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
+		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
@@ -88,7 +89,6 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s@%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Digest)))
 
 		// Verify the Flex volume container image.
-
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s@%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Digest)))
 
 		optional := true
@@ -324,6 +324,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when running on openshift", func() {
+		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
@@ -821,6 +822,19 @@ var _ = Describe("Node rendering tests", func() {
 		expectedEnvVar := v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "1234"}
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(expectedEnvVar))
+	})
+
+	It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
+		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "None"
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(5))
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+		Expect(ds).ToNot(BeNil())
+		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")).To(BeNil())
 	})
 })
 

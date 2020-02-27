@@ -410,7 +410,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
 	initContainers := []v1.Container{}
-	if c.cr.Spec.CalicoNetwork.FlexVolInitContainerEnabled == nil || *c.cr.Spec.CalicoNetwork.FlexVolInitContainerEnabled == true {
+	if c.cr.Spec.CalicoNetwork.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
@@ -535,25 +535,15 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		volumes = append(volumes, calicoLogVol)
 	}
 
-	// Set the flex volume plugin location based on platform.
-	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-	if c.provider == operator.ProviderOpenShift {
-		// In OpenShift 4.x, the location for flexvolume plugins has changed.
-		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
-		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
-	} else if c.provider == operator.ProviderGKE {
-		flexVolumePluginsPath = "/home/kubernetes/flexvolume/"
-	} else if c.provider == operator.ProviderAKS {
-		flexVolumePluginsPath = "/etc/kubernetes/volumeplugins/"
-	}
-
 	// Create and append flexvolume
-	volumes = append(volumes, v1.Volume{
-		Name: "flexvol-driver-host",
-		VolumeSource: v1.VolumeSource{
-			HostPath: &v1.HostPathVolumeSource{Path: flexVolumePluginsPath + "nodeagent~uds", Type: &dirOrCreate},
-		},
-	})
+	if c.cr.Spec.CalicoNetwork.FlexVolumePath != "None" {
+		volumes = append(volumes, v1.Volume{
+			Name: "flexvol-driver-host",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CalicoNetwork.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
+			},
+		})
+	}
 	if c.birdTemplates != nil {
 		volumes = append(volumes,
 			v1.Volume{

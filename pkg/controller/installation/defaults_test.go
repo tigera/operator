@@ -67,7 +67,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
 		var false_ = false
-		var true_ = true
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		instance := &operator.Installation{
@@ -212,7 +211,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						FlexVolumePath: "None",
 					},
 				},
-			}, "",
+			}, "None",
 		),
 
 		table.Entry("FlexVolumePath left empty (default)",

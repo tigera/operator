@@ -409,6 +409,8 @@ gen-files:
 	operator-sdk generate k8s
 	operator-sdk generate openapi
 
+OS_VERSIONS?=config/os_versions.yaml
+EE_VERSIONS?=config/ee_versions.yaml
 gen-versions: $(BINDIR)/gen-versions
 ifndef OS_VERSIONS
 	$(error OS_VERSIONS is undefined - run using make gen-versions OS_VERSIONS=/path/to/os_versions.yaml EE_VERSIONS=/path/to/ee_versions.yaml)

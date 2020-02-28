@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -333,6 +334,11 @@ func fillDefaults(instance *operator.Installation) error {
 				instance.Spec.FlexVolumePath = "/etc/kubernetes/volumeplugins/"
 			} else {
 				instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+			}
+		} else if instance.Spec.FlexVolumePath != "None" {
+			// Simple checks to make sure that the user provided a valid, absolute path to a directory.
+			if !path.IsAbs(instance.Spec.FlexVolumePath) {
+				return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path", instance.Spec.FlexVolumePath)
 			}
 		}
 	}

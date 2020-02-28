@@ -198,8 +198,12 @@ var _ = Describe("Defaulting logic tests", func() {
 	)
 
 	table.DescribeTable("Test different values for FlexVolumePath",
-		func(i *operator.Installation, expectedFlexVolumePath string) {
-			Expect(fillDefaults(i)).To(BeNil())
+		func(i *operator.Installation, expectErr bool, expectedFlexVolumePath string) {
+			if expectErr {
+				Expect(fillDefaults(i)).To(BeNil())
+			} else {
+				Expect(fillDefaults(i)).NotTo(BeNil())
+			}
 			Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
 		},
 
@@ -208,13 +212,13 @@ var _ = Describe("Defaulting logic tests", func() {
 				Spec: operator.InstallationSpec{
 					FlexVolumePath: "None",
 				},
-			}, "None",
+			}, false, "None",
 		),
 
 		table.Entry("FlexVolumePath left empty (default)",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{},
-			}, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+			}, false, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		),
 
 		table.Entry("FlexVolumePath set to a custom path",
@@ -222,7 +226,15 @@ var _ = Describe("Defaulting logic tests", func() {
 				Spec: operator.InstallationSpec{
 					FlexVolumePath: "/foo/bar/",
 				},
-			}, "/foo/bar/",
+			}, false, "/foo/bar/",
+		),
+
+		table.Entry("FlexVolumePath set to a relative path",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					FlexVolumePath: "foo/bar/",
+				},
+			}, true, "",
 		),
 	)
 })

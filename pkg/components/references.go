@@ -74,8 +74,10 @@ func GetOperatorInitReference(registry, imagepath string) string {
 		registry = TigeraRegistry
 	}
 
-	return fmt.Sprintf("%s%s:%s", registry,
-		ReplaceImagePath(ComponentOperatorInit.Image, imagepath),
-		ComponentOperatorInit.Version,
-	)
+	image := ComponentOperatorInit.Image
+	if imagepath != "" {
+		image = ReplaceImagePath(image, imagepath)
+	}
+
+	return fmt.Sprintf("%s%s:%s", registry, image, ComponentOperatorInit.Version)
 }

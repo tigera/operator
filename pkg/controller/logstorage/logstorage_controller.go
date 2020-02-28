@@ -242,7 +242,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		createWebhookSecret,
 		pullSecrets,
 		r.provider,
-		network.Spec.Registry,
+		network,
 	)
 	if err != nil {
 		r.setDegraded(ctx, reqLogger, ls, "Error rendering LogStorage", err)
@@ -309,7 +309,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network.Spec.Registry, clusterName)
+	curatorComponent := render.ElasticCurator(*ls, esSecrets, pullSecrets, network, clusterName)
 	if err := hdler.CreateOrUpdate(ctx, curatorComponent, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

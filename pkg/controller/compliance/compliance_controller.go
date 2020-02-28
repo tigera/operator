@@ -289,7 +289,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component := render.Compliance(ls, esSecrets, network.Spec.Registry, clusterName, pullSecrets, openshift)
+	component := render.Compliance(ls, esSecrets, network, clusterName, pullSecrets, openshift)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

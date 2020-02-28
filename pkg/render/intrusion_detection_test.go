@@ -40,7 +40,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 		}
 
-		component := render.IntrusionDetection(ls, nil, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}}, "testregistry.com/", "clusterTestName", nil, notOpenshift)
+		component := render.IntrusionDetection(ls, nil, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
+			&operatorv1.Installation{Spec: operatorv1.InstallationSpec{Registry: "testregistry.com/"}},
+			"clusterTestName", nil, notOpenshift,
+		)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(9))
 

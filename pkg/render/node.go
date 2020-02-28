@@ -536,7 +536,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        constructImage(CNIImageName, c.cr.Spec.Registry),
+		Image:        constructImage(CNIImageName, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -552,7 +552,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        constructImage(FlexVolumeImageName, c.cr.Spec.Registry),
+		Image:        constructImage(FlexVolumeImageName, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		VolumeMounts: flexVolumeMounts,
 	}
 }
@@ -590,9 +590,9 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 	isPrivileged := true
 
 	// Select which image to use.
-	image := constructImage(NodeImageNameCalico, c.cr.Spec.Registry)
+	image := constructImage(NodeImageNameCalico, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(NodeImageNameTigera, c.cr.Spec.Registry)
+		image = constructImage(NodeImageNameTigera, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 	return v1.Container{
 		Name:            "calico-node",

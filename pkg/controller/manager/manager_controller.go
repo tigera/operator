@@ -277,7 +277,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		tlsSecret,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
-		installation.Spec.Registry,
+		installation,
 		oidcConfig,
 	)
 	if err != nil {

@@ -29,7 +29,6 @@ import (
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	var instance *operator.Manager
-	var registry string
 	oidcEnvVar := corev1.EnvVar{
 		Name:      "CNX_WEB_OIDC_AUTHORITY",
 		Value:     "",
@@ -49,7 +48,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift,
+			&operator.Installation{Spec: operator.InstallationSpec{}}, nil,
+		)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(12))
@@ -101,7 +102,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tech-preview.operator.tigera.io/policy-recommendation": tcValues.annotationValue,
 				}
 			}
-			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
+			component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift,
+				&operator.Installation{Spec: operator.InstallationSpec{}}, nil,
+			)
 			Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 			resources := component.Objects()
 
@@ -128,7 +131,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Namespace: render.OperatorNamespace(),
 			},
 		}
-		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, oidcConfig)
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift,
+			&operator.Installation{Spec: operator.InstallationSpec{}}, oidcConfig,
+		)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 
 		// Should render the correct resource based on test case.
@@ -158,7 +163,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		instance.Spec.Auth.Authority = authority
 		oidcEnvVar.Value = authority
 
-		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift, registry, nil)
+		component, err := render.Manager(instance, nil, nil, "clusterTestName", nil, nil, notOpenshift,
+			&operator.Installation{Spec: operator.InstallationSpec{}}, nil,
+		)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 
 		// Should render the correct resource based on test case.

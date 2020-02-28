@@ -387,9 +387,9 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	// Select which image to use.
-	image := constructImage(TyphaImageNameCalico, c.cr.Spec.Registry)
+	image := constructImage(TyphaImageNameCalico, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = constructImage(TyphaImageNameTigera, c.cr.Spec.Registry)
+		image = constructImage(TyphaImageNameTigera, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 	return v1.Container{
 		Name:           "calico-typha",

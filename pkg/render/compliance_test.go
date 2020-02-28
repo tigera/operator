@@ -24,9 +24,14 @@ import (
 )
 
 var _ = Describe("compliance rendering tests", func() {
-	var registry string
+	var instance *operatorv1.Installation
 	BeforeEach(func() {
-		registry = "testregistry.com/"
+		instance = &operatorv1.Installation{
+			Spec: operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
+			},
+		}
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceBenchmarker})
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceController})
 		esusers.AddUser(elasticsearch.User{Username: render.ElasticsearchUserComplianceReporter})
@@ -45,7 +50,7 @@ var _ = Describe("compliance rendering tests", func() {
 			},
 		}
 
-		component := render.Compliance(ls, nil, registry, "clusterTestName", nil, notOpenshift)
+		component := render.Compliance(ls, nil, instance, "clusterTestName", nil, notOpenshift)
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(28))
 		ns := "tigera-compliance"

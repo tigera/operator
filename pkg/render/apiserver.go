@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -38,7 +39,7 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
+func APIServer(installation *operatorv1.Installation, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
 		var err error
@@ -64,18 +65,18 @@ func APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1
 	tlsSecrets = append(tlsSecrets, copy)
 
 	return &apiServerComponent{
-		registry:    registry,
-		tlsSecrets:  tlsSecrets,
-		pullSecrets: pullSecrets,
-		openshift:   openshift,
+		installation: installation,
+		tlsSecrets:   tlsSecrets,
+		pullSecrets:  pullSecrets,
+		openshift:    openshift,
 	}, nil
 }
 
 type apiServerComponent struct {
-	registry    string
-	tlsSecrets  []*corev1.Secret
-	pullSecrets []*corev1.Secret
-	openshift   bool
+	installation *operatorv1.Installation
+	tlsSecrets   []*corev1.Secret
+	pullSecrets  []*corev1.Secret
+	openshift    bool
 }
 
 func (c *apiServerComponent) Objects() []runtime.Object {
@@ -505,7 +506,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: constructImage(APIServerImageName, c.registry),
+		Image: constructImage(APIServerImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Args: []string{
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -535,7 +536,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
-	image := constructImage(QueryServerImageName, c.registry)
+	image := constructImage(QueryServerImageName, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,
@@ -642,7 +643,7 @@ func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-tier-getter",
+			Name: "tigera-tier-getter",
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
@@ -651,8 +652,8 @@ func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
 		},
 		Subjects: []rbacv1.Subject{
 			{
-				Kind:      "User",
-				Name:      "system:kube-controller-manager",
+				Kind:     "User",
+				Name:     "system:kube-controller-manager",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},

@@ -81,4 +81,9 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should not allow a relative path in FlexVolumePath", func() {
+		instance.Spec.FlexVolumePath = "foo/bar/baz"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
 })

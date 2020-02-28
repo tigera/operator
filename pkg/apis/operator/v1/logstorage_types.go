@@ -101,7 +101,7 @@ type Retention struct {
 
 // LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance
 // of this resource is supported. It must be named "tigera-secure". When created, this installs an Elasticsearch cluster for use by
-// Tigera Secure.
+// Calico Enterprise.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 type LogStorage struct {

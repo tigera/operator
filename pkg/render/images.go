@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tigera/operator/pkg/components"
 )
@@ -67,13 +68,9 @@ const (
 )
 
 // constructImage returns the fully qualified image to use, including registry and version.
-func constructImage(imageName string, registry string) string {
-	// If a user supplied a registry, use that for all images.
-	if registry != "" {
-		return fmt.Sprintf("%s%s", registry, imageName)
-	}
-
-	// Otherwise, default the registry based on component.
+func constructImage(imageName, registry, imagepath string) string {
+	// Default the registry based on component.
+	// Do this before adjusting the imageName for imagepath
 	reg := TigeraRegistry
 	switch imageName {
 	case NodeImageNameCalico,
@@ -86,5 +83,22 @@ func constructImage(imageName string, registry string) string {
 	case ECKElasticsearchImageName, ECKOperatorImageName:
 		reg = ECKRegistry
 	}
+
+	if imagepath != "" {
+		imageName = ReplaceImagePath(imageName, imagepath)
+	}
+
+	// If a user supplied a registry, use that for all images.
+	if registry != "" {
+		return fmt.Sprintf("%s%s", registry, imageName)
+	}
 	return fmt.Sprintf("%s%s", reg, imageName)
+}
+
+func ReplaceImagePath(image, imagepath string) string {
+	subs := strings.SplitAfterN(image, "/", 2)
+	if len(subs) == 2 {
+		return fmt.Sprintf("%s/%s", imagepath, subs[1])
+	}
+	return fmt.Sprintf("%s/%s", imagepath, subs[0])
 }

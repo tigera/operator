@@ -57,7 +57,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
@@ -324,7 +324,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when running on openshift", func() {
-		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.Spec.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
@@ -825,7 +825,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
-		defaultInstance.Spec.CalicoNetwork.FlexVolumePath = "None"
+		defaultInstance.Spec.FlexVolumePath = "None"
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))

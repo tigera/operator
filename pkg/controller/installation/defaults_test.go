@@ -105,9 +105,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
-					FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				},
 				NodeMetricsPort: &nodeMetricsPort,
+				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -200,34 +200,27 @@ var _ = Describe("Defaulting logic tests", func() {
 	table.DescribeTable("Test different values for FlexVolumePath",
 		func(i *operator.Installation, expectedFlexVolumePath string) {
 			Expect(fillDefaults(i)).To(BeNil())
-			Expect(i.Spec.CalicoNetwork).NotTo(BeNil())
-			Expect(i.Spec.CalicoNetwork.FlexVolumePath).To(Equal(expectedFlexVolumePath))
+			Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
 		},
 
 		table.Entry("FlexVolumePath set to None",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
-					CalicoNetwork: &operator.CalicoNetworkSpec{
-						FlexVolumePath: "None",
-					},
+					FlexVolumePath: "None",
 				},
 			}, "None",
 		),
 
 		table.Entry("FlexVolumePath left empty (default)",
 			&operator.Installation{
-				Spec: operator.InstallationSpec{
-					CalicoNetwork: &operator.CalicoNetworkSpec{},
-				},
+				Spec: operator.InstallationSpec{},
 			}, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		),
 
 		table.Entry("FlexVolumePath set to a custom path",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
-					CalicoNetwork: &operator.CalicoNetworkSpec{
-						FlexVolumePath: "/foo/bar/",
-					},
+					FlexVolumePath: "/foo/bar/",
 				},
 			}, "/foo/bar/",
 		),

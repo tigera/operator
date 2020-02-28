@@ -410,7 +410,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
 	initContainers := []v1.Container{}
-	if c.cr.Spec.CalicoNetwork.FlexVolumePath != "None" {
+	if c.cr.Spec.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
@@ -536,11 +536,11 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Create and append flexvolume
-	if c.cr.Spec.CalicoNetwork.FlexVolumePath != "None" {
+	if c.cr.Spec.FlexVolumePath != "None" {
 		volumes = append(volumes, v1.Volume{
 			Name: "flexvol-driver-host",
 			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.CalicoNetwork.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
+				HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
 			},
 		})
 	}

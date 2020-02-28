@@ -66,6 +66,12 @@ type InstallationSpec struct {
 	// NodeMetricsPort specifies which port calico/node serves metrics on. If omitted, then metrics are disabled.
 	// +optional
 	NodeMetricsPort *int32 `json:"nodeMetricsPort,omitempty"`
+
+	// FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be
+	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the k8s
+	// provider.
+	// +optional
+	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options
@@ -120,12 +126,6 @@ type CalicoNetworkSpec struct {
 	// IPv6 addresses will not be auto-detected.
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
-
-	// FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be
-	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the k8s
-	// provider.
-	// +optional
-	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

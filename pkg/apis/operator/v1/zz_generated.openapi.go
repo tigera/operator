@@ -290,14 +290,14 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 					},
 					"registry": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Registry is the default Docker registry used for component Docker images. If specified, all images will be pulled from this registry. If not specified then the default registries will be used. Image format:\n   <registry>/<imagePath>/<imageName>:<tag-name>\nThis option allows configuring the <registry> portion of the above format.",
+							Description: "Registry is the default Docker registry used for component Docker images. If specified, all images will be pulled from this registry. If not specified then the default registries will be used. Image format:\n\n   `<registry>/<imagePath>/<imageName>:<tag-name>`\n\nThis option allows configuring the `<registry>` portion of the above format.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"imagePath": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ImagePath allows for the path part of an image to be specified. If specified then the specified value will be used as the image path for each image. If not specified or empty, the default for each image will be used. Image format:\n   <registry>/<imagePath>/<imageName>:<tag-name>\nThis option allows configuring the <imagePath> portion of the above format.",
+							Description: "ImagePath allows for the path part of an image to be specified. If specified then the specified value will be used as the image path for each image. If not specified or empty, the default for each image will be used. Image format:\n\n   `<registry>/<imagePath>/<imageName>:<tag-name>`\n\nThis option allows configuring the `<imagePath>` portion of the above format.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

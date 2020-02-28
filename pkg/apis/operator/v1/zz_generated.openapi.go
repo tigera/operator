@@ -232,7 +232,7 @@ func schema_pkg_apis_operator_v1_Installation(ref common.ReferenceCallback) comm
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Installation configures an installation of Calico or Tigera Secure EE. At most one instance of this resource is supported. It must be named \"default\". The Installation API installs core networking and network policy components, and provides general install-time configuration.",
+				Description: "Installation configures an installation of Calico or Calico Enterprise. At most one instance of this resource is supported. It must be named \"default\". The Installation API installs core networking and network policy components, and provides general install-time configuration.",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -255,13 +255,13 @@ func schema_pkg_apis_operator_v1_Installation(ref common.ReferenceCallback) comm
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specification of the desired state for the Calico or Tigera Secure EE installation.",
+							Description: "Specification of the desired state for the Calico or Calico Enterprise installation.",
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.InstallationSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Most recently observed state for the Calico or Tigera Secure EE installation.",
+							Description: "Most recently observed state for the Calico or Calico Enterprise installation.",
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.InstallationStatus"),
 						},
 					},
@@ -277,7 +277,7 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "InstallationSpec defines configuration for a Calico or Tigera Secure EE installation.",
+				Description: "InstallationSpec defines configuration for a Calico or Calico Enterprise installation.",
 				Properties: map[string]spec.Schema{
 					"variant": {
 						SchemaProps: spec.SchemaProps{
@@ -288,14 +288,14 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 					},
 					"registry": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Registry is the default Docker registry used for component Docker images. If specified, all images will be pulled from this registry. If not specified then the default registries will be used. Image format:\n   <registry>/<imagePath>/<imageName>:<tag-name>\nThis option allows configuring the <registry> portion of the above format.",
+							Description: "Registry is the default Docker registry used for component Docker images. If specified, all images will be pulled from this registry. If not specified then the default registries will be used.\n\nImage format:\n   `<registry>/<imagePath>/<imageName>:<tag-name>`\n\nThis option allows configuring the `<registry>` portion of the above format.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"imagePath": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ImagePath allows for the path part of an image to be specified. If specified then the specified value will be used as the image path for each image. If not specified or empty, the default for each image will be used. Image format:\n   <registry>/<imagePath>/<imageName>:<tag-name>\nThis option allows configuring the <imagePath> portion of the above format.",
+							Description: "ImagePath allows for the path part of an image to be specified. If specified then the specified value will be used as the image path for each image. If not specified or empty, the default for each image will be used.\n\nImage format:\n   `<registry>/<imagePath>/<imageName>:<tag-name>`\n\nThis option allows configuring the `<imagePath>` portion of the above format.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -338,7 +338,7 @@ func schema_pkg_apis_operator_v1_InstallationStatus(ref common.ReferenceCallback
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "InstallationStatus defines the observed state of the Calico or Tigera Secure installation.",
+				Description: "InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.",
 				Properties: map[string]spec.Schema{
 					"variant": {
 						SchemaProps: spec.SchemaProps{
@@ -526,7 +526,7 @@ func schema_pkg_apis_operator_v1_LogStorage(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance of this resource is supported. It must be named \"tigera-secure\". When created, this installs an Elasticsearch cluster for use by Tigera Secure.",
+				Description: "LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance of this resource is supported. It must be named \"tigera-secure\". When created, this installs an Elasticsearch cluster for use by Calico Enterprise.",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -637,7 +637,7 @@ func schema_pkg_apis_operator_v1_Manager(ref common.ReferenceCallback) common.Op
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Manager installs the Tigera Secure manager graphical user interface. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
+				Description: "Manager installs the Calico Enterprise manager graphical user interface. At most one instance of this resource is supported. It must be named \"tigera-secure\".",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -660,13 +660,13 @@ func schema_pkg_apis_operator_v1_Manager(ref common.ReferenceCallback) common.Op
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specification of the desired state for the Tigera Secure EE manager.",
+							Description: "Specification of the desired state for the Calico Enterprise manager.",
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.ManagerSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Most recently observed state for the Tigera Secure EE manager.",
+							Description: "Most recently observed state for the Calico Enterprise manager.",
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.ManagerStatus"),
 						},
 					},
@@ -682,11 +682,11 @@ func schema_pkg_apis_operator_v1_ManagerSpec(ref common.ReferenceCallback) commo
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ManagerSpec defines configuration for the Tigera Secure manager GUI.",
+				Description: "ManagerSpec defines configuration for the Calico Enterprise manager GUI.",
 				Properties: map[string]spec.Schema{
 					"auth": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Auth defines the authentication strategy for the Tigera Secure manager GUI.",
+							Description: "Auth defines the authentication strategy for the Calico Enterprise manager GUI.",
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.Auth"),
 						},
 					},
@@ -702,7 +702,7 @@ func schema_pkg_apis_operator_v1_ManagerStatus(ref common.ReferenceCallback) com
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ManagerStatus defines the observed state of the Tigera Secure manager GUI.",
+				Description: "ManagerStatus defines the observed state of the Calico Enterprise manager GUI.",
 				Properties: map[string]spec.Schema{
 					"auth": {
 						SchemaProps: spec.SchemaProps{
@@ -757,7 +757,7 @@ func schema_pkg_apis_operator_v1_TigeraStatus(ref common.ReferenceCallback) comm
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "TigeraStatus represents the most recently observed status for Calico or a Tigera Secure EE functional area.",
+				Description: "TigeraStatus represents the most recently observed status for Calico or a Calico Enterprise functional area.",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{

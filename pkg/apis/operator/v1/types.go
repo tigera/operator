@@ -71,6 +71,7 @@ type InstallationSpec struct {
 	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the k8s
 	// provider.
 	// +optional
+	// +kubebuilder:validation:Pattern="None|^\/[\/\w]*"
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 }
 

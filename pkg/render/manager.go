@@ -67,7 +67,7 @@ func Manager(
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	registry string,
+	installation *operator.Installation,
 	oidcConfig *corev1.ConfigMap,
 	management bool,
 	tunnelSecret *corev1.Secret,
@@ -112,7 +112,7 @@ func Manager(
 		tlsSecrets:                 tlsSecrets,
 		pullSecrets:                pullSecrets,
 		openshift:                  openshift,
-		registry:                   registry,
+		installation:               installation,
 		oidcConfig:                 oidcConfig,
 		management:                 management,
 		tunnelSecrets:              tunnelSecrets,
@@ -128,7 +128,7 @@ type managerComponent struct {
 	tlsSecrets                 []*corev1.Secret
 	pullSecrets                []*corev1.Secret
 	openshift                  bool
-	registry                   string
+	installation               *operator.Installation
 	oidcConfig                 *corev1.ConfigMap
 	// If true, this is a management cluster.
 	management bool
@@ -376,7 +376,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
-		Image:           components.GetReference(components.ComponentManager, c.registry),
+		Image:           components.GetReference(components.ComponentManager, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
@@ -420,7 +420,7 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:  VoltronName,
-		Image: components.GetReference(components.ComponentManagerProxy, c.registry),
+		Image: components.GetReference(components.ComponentManagerProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env: []corev1.EnvVar{
 			{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
@@ -446,7 +446,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:            "tigera-es-proxy",
-		Image:           components.GetReference(components.ComponentEsProxy, c.registry),
+		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 	}

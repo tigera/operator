@@ -200,9 +200,9 @@ var _ = Describe("Defaulting logic tests", func() {
 	table.DescribeTable("Test different values for FlexVolumePath",
 		func(i *operator.Installation, expectErr bool, expectedFlexVolumePath string) {
 			if expectErr {
-				Expect(fillDefaults(i)).To(BeNil())
-			} else {
 				Expect(fillDefaults(i)).NotTo(BeNil())
+			} else {
+				Expect(fillDefaults(i)).To(BeNil())
 			}
 			Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
 		},

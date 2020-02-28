@@ -67,7 +67,7 @@ var (
 	
 	ComponentElasticTseeInstaller = component{
 		Version: "v2.7.0-0.dev-38-gbf021d6",
-		Digest:  "sha256:3fded7f9999c7b4547044da41c857e30e061b0680942efdd007dbd5214ab574b",
+		Digest:  "sha256:db5d3ee0a5c659337efaa1e48bd8716b913ace1e745a73de59cfad5d79cfaba3",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 	
@@ -108,15 +108,15 @@ var (
 	
 	
 	ComponentGuardian = component{
-		Version: "v2.7.0",
-		Digest:  "sha256:80db830bbac524904d6837ebdf66dadfe337c7ee26aabcf746fef1b7d82cb749",
+		Version: "v2.7.0-0.dev-50-g2b3fa78",
+		Digest:  "sha256:22928d9b9711004c65699eb6daff547ce92cd6bd31feb680faff58d0a2a06d24",
 		Image:   "tigera/guardian",
 	}
 	
 	
 	ComponentIntrusionDetectionController = component{
 		Version: "v2.7.0-0.dev-38-gbf021d6",
-		Digest:  "sha256:d91bc2a82527c14306e50c4682cf3ff681914c067547df5c500cb5760f5413d6",
+		Digest:  "sha256:11047f506a1db4d5295c1bd94afbdd2682c81cda9b9fccaafca4730f813bd4ee",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 	
@@ -136,8 +136,8 @@ var (
 	
 	
 	ComponentManagerProxy = component{
-		Version: "v2.7.0",
-		Digest:  "sha256:cd4540db662573a9f0383feff7686555f188233802476546e0b523104802e689",
+		Version: "v2.7.0-0.dev-50-g2b3fa78",
+		Digest:  "sha256:6ba6db0df465c06f64d1b241ed3b6e9bfa7a108a37851d45d13943d0bdbb6cff",
 		Image:   "tigera/voltron",
 	}
 	
@@ -150,8 +150,8 @@ var (
 	
 	
 	ComponentTigeraKubeControllers = component{
-		Version: "v2.7.0-0.dev-128-g3f4d4f5",
-		Digest:  "sha256:489115ecd0cdd249a7d321f79fa5bbfe8df2de5b07b2ce11f25337283490d4a1",
+		Version: "v2.7.0-0.dev-137-gb83b6cb",
+		Digest:  "sha256:4d5a34f669fddb96b8df52eef8f01a976aaa51318e9ca5f74f5546642559fb30",
 		Image:   "tigera/kube-controllers",
 	}
 	

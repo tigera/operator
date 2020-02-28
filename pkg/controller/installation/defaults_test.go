@@ -203,8 +203,8 @@ var _ = Describe("Defaulting logic tests", func() {
 				Expect(fillDefaults(i)).NotTo(BeNil())
 			} else {
 				Expect(fillDefaults(i)).To(BeNil())
+				Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
 			}
-			Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
 		},
 
 		table.Entry("FlexVolumePath set to None",

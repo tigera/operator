@@ -95,14 +95,26 @@ func (c *GuardianComponent) service() *corev1.Service {
 			Selector: map[string]string{
 				"k8s-app": GuardianName,
 			},
-			Ports: []corev1.ServicePort{{
-				Port: 9200,
-				TargetPort: intstr.IntOrString{
-					Type:   intstr.Int,
-					IntVal: 8080,
+			Ports: []corev1.ServicePort{
+				{
+					Name: "elasticsearch",
+					Port: 9200,
+					TargetPort: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8080,
+					},
+					Protocol: corev1.ProtocolTCP,
 				},
-				Protocol: corev1.ProtocolTCP,
-			}},
+				{
+					Name: "kibana",
+					Port: 5601,
+					TargetPort: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8080,
+					},
+					Protocol: corev1.ProtocolTCP,
+				},
+			},
 		},
 	}
 }

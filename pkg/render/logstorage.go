@@ -58,6 +58,7 @@ const (
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath         = "tigera-kibana"
+	KibanaServiceName      = "tigera-secure-kb-http"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -99,6 +100,7 @@ func LogStorage(
 	provider operatorv1.Provider,
 	curatorSecrets []*corev1.Secret,
 	esService *corev1.Service,
+	kbService *corev1.Service,
 	clusterDNS string) Component {
 
 	return &elasticsearchComponent{
@@ -114,6 +116,7 @@ func LogStorage(
 		pullSecrets:          pullSecrets,
 		provider:             provider,
 		esService:            esService,
+		kbService:            kbService,
 		clusterDNS:           clusterDNS,
 	}
 }
@@ -131,6 +134,7 @@ type elasticsearchComponent struct {
 	pullSecrets          []*corev1.Secret
 	provider             operatorv1.Provider
 	esService            *corev1.Service
+	kbService            *corev1.Service
 	clusterDNS           string
 }
 
@@ -235,10 +239,15 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		if es.esService != nil && es.esService.Spec.Type == corev1.ServiceTypeExternalName {
 			toDelete = append(toDelete, es.esService)
 		}
+		if es.kbService != nil && es.kbService.Spec.Type == corev1.ServiceTypeExternalName {
+			toDelete = append(toDelete, es.kbService)
+		}
 	} else {
 		toCreate = append(toCreate,
 			createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift),
-			es.elasticsearchExtrenalService(),
+			createNamespace(KibanaNamespace, es.provider == operatorv1.ProviderOpenShift),
+			es.elasticsearchExternalService(),
+			es.kibanaExternalService(),
 		)
 	}
 
@@ -249,12 +258,26 @@ func (es *elasticsearchComponent) Ready() bool {
 	return true
 }
 
-func (es elasticsearchComponent) elasticsearchExtrenalService() *corev1.Service {
+func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchServiceName,
 			Namespace: ElasticsearchNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.%s", GuardianServiceName, GuardianNamespace, es.clusterDNS),
+		},
+	}
+}
+
+func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KibanaServiceName,
+			Namespace: KibanaNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,

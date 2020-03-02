@@ -322,8 +322,6 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	fmt.Printf("--> %v --> ", instance.Spec.FlexVolumePath)
-
 	// If not specified by the user, set the flex volume plugin location based on platform.
 	if len(instance.Spec.FlexVolumePath) == 0 {
 		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
@@ -338,7 +336,6 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}
 	}
-	fmt.Printf("%v\n", instance.Spec.FlexVolumePath)
 
 	return nil
 }

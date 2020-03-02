@@ -138,12 +138,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	if len(instance.Spec.FlexVolumePath) != 0 && instance.Spec.FlexVolumePath != "None" {
-		// Simple check to make sure that the user provided a valid, absolute path to a directory.
-		if !path.IsAbs(instance.Spec.FlexVolumePath) {
-			return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
-				instance.Spec.FlexVolumePath)
-		}
+	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
+		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
+			instance.Spec.FlexVolumePath)
 	}
 
 	return nil

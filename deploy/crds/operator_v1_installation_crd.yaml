@@ -154,7 +154,6 @@ spec:
                 If not specified, FlexVolume will be enabled by default. If set to
                 'None', FlexVolume will be disabled. The default is based on the k8s
                 provider.
-              pattern: '"None|^\/[\/\w]*"'
               type: string
             imagePullSecrets:
               description: ImagePullSecrets is an array of references to container

@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// InstallationSpec defines configuration for a Calico or Tigera Secure EE installation.
+// InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
@@ -31,18 +31,22 @@ type InstallationSpec struct {
 	// Registry is the default Docker registry used for component Docker images. If specified,
 	// all images will be pulled from this registry. If not specified then the default registries
 	// will be used.
+	//
 	// Image format:
-	//    <registry>/<imagePath>/<imageName>:<tag-name>
-	// This option allows configuring the <registry> portion of the above format.
+	//    `<registry>/<imagePath>/<imageName>:<tag-name>`
+	//
+	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
 	Registry string `json:"registry,omitempty"`
 
 	// ImagePath allows for the path part of an image to be specified. If specified
 	// then the specified value will be used as the image path for each image. If not specified
 	// or empty, the default for each image will be used.
+	//
 	// Image format:
-	//    <registry>/<imagePath>/<imageName>:<tag-name>
-	// This option allows configuring the <imagePath> portion of the above format.
+	//    `<registry>/<imagePath>/<imageName>:<tag-name>`
+	//
+	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional
 	ImagePath string `json:"imagePath,omitempty"`
 
@@ -181,7 +185,7 @@ type IPPool struct {
 	BlockSize *int32 `json:"blockSize,omitempty"`
 }
 
-// InstallationStatus defines the observed state of the Calico or Tigera Secure installation.
+// InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 // +k8s:openapi-gen=true
 type InstallationStatus struct {
 	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
@@ -193,7 +197,7 @@ type InstallationStatus struct {
 // +genclient
 // +genclient:nonNamespaced
 
-// Installation configures an installation of Calico or Tigera Secure EE. At most one instance
+// Installation configures an installation of Calico or Calico Enterprise. At most one instance
 // of this resource is supported. It must be named "default". The Installation API installs core networking
 // and network policy components, and provides general install-time configuration.
 // +k8s:openapi-gen=true
@@ -202,10 +206,10 @@ type Installation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Specification of the desired state for the Calico or Tigera Secure EE installation.
+	// Specification of the desired state for the Calico or Calico Enterprise installation.
 	Spec InstallationSpec `json:"spec,omitempty"`
 
-	// Most recently observed state for the Calico or Tigera Secure EE installation.
+	// Most recently observed state for the Calico or Calico Enterprise installation.
 	Status InstallationStatus `json:"status,omitempty"`
 }
 

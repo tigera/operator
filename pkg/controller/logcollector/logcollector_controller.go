@@ -226,6 +226,23 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	var splunkCredential *render.SplunkCredential
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Splunk != nil {
+			splunkCredential, err = getSplunkCredential(r.client)
+			if err != nil {
+				log.Error(err, "Error with Splunk credential secret")
+				r.status.SetDegraded("Error with Splunk credential secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			if splunkCredential == nil {
+				log.Info("Splunk credential secret does not exist")
+				r.status.SetDegraded("Splunk credential secret does not exist", "")
+				return reconcile.Result{}, nil
+			}
+		}
+	}
+
 	filters, err := getFluentdFilters(r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Fluentd filters")
@@ -261,6 +278,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		esSecrets,
 		esClusterConfig,
 		s3Credential,
+		splunkCredential,
 		filters,
 		eksConfig,
 		pullSecrets,
@@ -319,6 +337,32 @@ func getS3Credential(client client.Client) (*render.S3Credential, error) {
 	return &render.S3Credential{
 		KeyId:     kId,
 		KeySecret: kSecret,
+	}, nil
+}
+
+func getSplunkCredential(client client.Client) (*render.SplunkCredential, error) {
+	secret := &corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{
+		Name:      render.SplunkFluentdSecretName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read secret %q: %s", render.SplunkFluentdSecretName, err)
+	}
+
+	var ok bool
+	var token []byte
+	if token, ok = secret.Data[render.SplunkFluentdSecretKey]; !ok || len(token) == 0 {
+		return nil, fmt.Errorf(
+			"Expected secret %q to have a field named %q",
+			render.SplunkFluentdSecretName, render.SplunkFluentdSecretKey)
+	}
+
+	return &render.SplunkCredential{
+		Token: token,
 	}, nil
 }
 

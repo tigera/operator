@@ -39,6 +39,7 @@ const (
 	elasticsearchSecretsAnnotation           = "hash.operator.tigera.io/elasticsearch-secrets"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
+	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentdDefaultFlush                      = "5s"
 	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
@@ -47,6 +48,8 @@ const (
 	EksLogForwarderAwsId                     = "aws-id"
 	EksLogForwarderAwsKey                    = "aws-key"
 	eksLogForwarderName                      = "eks-log-forwarder"
+	SplunkFluentdSecretName                  = "logcollector-splunk-credentials"
+	SplunkFluentdSecretKey                   = "token"
 )
 
 type FluentdFilters struct {
@@ -59,11 +62,16 @@ type S3Credential struct {
 	KeySecret []byte
 }
 
+type SplunkCredential struct {
+	Token     []byte
+}
+
 func Fluentd(
 	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
 	s3C *S3Credential,
+	spC *SplunkCredential,
 	f *FluentdFilters,
 	eksConfig *EksCloudwatchLogConfig,
 
@@ -75,6 +83,7 @@ func Fluentd(
 		esSecrets:       esSecrets,
 		esClusterConfig: esClusterConfig,
 		s3Credential:    s3C,
+		splkCredential:  spC,
 		filters:         f,
 		eksConfig:       eksConfig,
 		pullSecrets:     pullSecrets,
@@ -96,6 +105,7 @@ type fluentdComponent struct {
 	esSecrets       []*corev1.Secret
 	esClusterConfig *ElasticsearchClusterConfig
 	s3Credential    *S3Credential
+	splkCredential  *SplunkCredential
 	filters         *FluentdFilters
 	eksConfig       *EksCloudwatchLogConfig
 	pullSecrets     []*corev1.Secret
@@ -111,6 +121,9 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, LogCollectorNamespace)...)
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())
+	}
+	if c.splkCredential != nil {
+		objs = append(objs, c.splunkCredentialSecret())
 	}
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
@@ -165,6 +178,22 @@ func (c *fluentdComponent) filtersConfigMap() *corev1.ConfigMap {
 	}
 }
 
+func (c *fluentdComponent) splunkCredentialSecret() *corev1.Secret {
+	if c.splkCredential == nil {
+		return nil
+	}
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      SplunkFluentdSecretName,
+			Namespace: LogCollectorNamespace,
+		},
+		Data: map[string][]byte{
+			SplunkFluentdSecretKey:     c.splkCredential.Token,
+		},
+	}
+}
+
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
@@ -173,6 +202,9 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	annots := map[string]string{}
 	if c.s3Credential != nil {
 		annots[s3CredentialHashAnnotation] = AnnotationHash(c.s3Credential)
+	}
+	if c.splkCredential != nil {
+		annots[splunkCredentialHashAnnotation] = AnnotationHash(c.splkCredential)
 	}
 	if c.filters != nil {
 		annots[filterHashAnnotation] = AnnotationHash(c.filters)
@@ -331,6 +363,27 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					},
 				)
 			}
+		}
+		splunk := c.lc.Spec.AdditionalStores.Splunk
+		if splunk != nil {
+			proto, host, port, _ := ParseEndpoint(splunk.Endpoint)
+			envs = append(envs,
+				corev1.EnvVar{Name: "SPLUNK_HEC_TOKEN",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: SplunkFluentdSecretName,
+							},
+							Key: SplunkFluentdSecretKey,
+						},
+					}},
+				corev1.EnvVar{Name: "SPLUNK_FLOW_LOG", Value: "true"},
+				corev1.EnvVar{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
+				corev1.EnvVar{Name: "SPLUNK_HEC_HOST", Value: host},
+				corev1.EnvVar{Name: "SPLUNK_HEC_PORT", Value: port},
+				corev1.EnvVar{Name: "SPLUNK_PROTOCOL", Value: proto},
+				corev1.EnvVar{Name: "SPLUNK_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
+			)
 		}
 	}
 

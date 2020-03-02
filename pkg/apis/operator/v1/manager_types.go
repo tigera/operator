@@ -4,15 +4,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ManagerSpec defines configuration for the Tigera Secure manager GUI.
+// ManagerSpec defines configuration for the Calico Enterprise manager GUI.
 // +k8s:openapi-gen=true
 type ManagerSpec struct {
-	// Auth defines the authentication strategy for the Tigera Secure manager GUI.
+	// Auth defines the authentication strategy for the Calico Enterprise manager GUI.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 }
 
-// ManagerStatus defines the observed state of the Tigera Secure manager GUI.
+// ManagerStatus defines the observed state of the Calico Enterprise manager GUI.
 // +k8s:openapi-gen=true
 type ManagerStatus struct {
 	// The last successfully applied authentication configuration.
@@ -52,7 +52,7 @@ const (
 // +genclient
 // +genclient:nonNamespaced
 
-// Manager installs the Tigera Secure manager graphical user interface. At most one instance
+// Manager installs the Calico Enterprise manager graphical user interface. At most one instance
 // of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
@@ -60,10 +60,10 @@ type Manager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Specification of the desired state for the Tigera Secure EE manager.
+	// Specification of the desired state for the Calico Enterprise manager.
 	Spec ManagerSpec `json:"spec,omitempty"`
 
-	// Most recently observed state for the Tigera Secure EE manager.
+	// Most recently observed state for the Calico Enterprise manager.
 	Status ManagerStatus `json:"status,omitempty"`
 }
 

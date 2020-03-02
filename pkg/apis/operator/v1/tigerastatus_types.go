@@ -20,7 +20,7 @@ type TigeraStatusStatus struct {
 // +genclient
 // +genclient:nonNamespaced
 
-// TigeraStatus represents the most recently observed status for Calico or a Tigera Secure EE functional area.
+// TigeraStatus represents the most recently observed status for Calico or a Calico Enterprise functional area.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=="Available")].status",description="Whether the component running and stable."

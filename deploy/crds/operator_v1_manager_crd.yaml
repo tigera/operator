@@ -28,12 +28,12 @@ spec:
         metadata:
           type: object
         spec:
-          description: Specification of the desired state for the Tigera Secure EE
+          description: Specification of the desired state for the Calico Enterprise
             manager.
           properties:
             auth:
-              description: Auth defines the authentication strategy for the Tigera
-                Secure manager GUI.
+              description: Auth defines the authentication strategy for the Calico
+                Enterprise manager GUI.
               properties:
                 authority:
                   description: Authority configures the OAuth2/OIDC authority/issuer
@@ -55,7 +55,7 @@ spec:
               type: object
           type: object
         status:
-          description: Most recently observed state for the Tigera Secure EE manager.
+          description: Most recently observed state for the Calico Enterprise manager.
           properties:
             auth:
               description: The last successfully applied authentication configuration.

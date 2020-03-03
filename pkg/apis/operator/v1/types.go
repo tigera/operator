@@ -68,8 +68,8 @@ type InstallationSpec struct {
 	NodeMetricsPort *int32 `json:"nodeMetricsPort,omitempty"`
 
 	// FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be
-	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the k8s
-	// provider.
+	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the
+	// kubernetesProvider.
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 }

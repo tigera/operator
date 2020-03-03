@@ -15,6 +15,7 @@
 package render
 
 import (
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -37,7 +38,7 @@ const (
 func IntrusionDetection(
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
-	registry string,
+	installation *operator.Installation,
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -45,7 +46,7 @@ func IntrusionDetection(
 	return &intrusionDetectionComponent{
 		esSecrets:        esSecrets,
 		kibanaCertSecret: kibanaCertSecret,
-		registry:         registry,
+		installation:     installation,
 		esClusterConfig:  esClusterConfig,
 		pullSecrets:      pullSecrets,
 		openshift:        openshift,
@@ -55,7 +56,7 @@ func IntrusionDetection(
 type intrusionDetectionComponent struct {
 	esSecrets        []*corev1.Secret
 	kibanaCertSecret *corev1.Secret
-	registry         string
+	installation     *operator.Installation
 	esClusterConfig  *ElasticsearchClusterConfig
 	pullSecrets      []*corev1.Secret
 	openshift        bool
@@ -128,7 +129,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.registry),
+		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -323,7 +324,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
 	return corev1.Container{
 		Name:  "controller",
-		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.registry),
+		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_NAME",

@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// NOTE: Boilerplate only.  Ignore this file.
-
-// API Schema definitions for configuring the installation of Calico and Calico Enterprise
-// +k8s:deepcopy-gen=package,register
-// +groupName=operator.tigera.io
-package v1
+package components
 
 import (
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/scheme"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	"github.com/onsi/ginkgo/reporters"
 )
 
-var (
-	// SchemeGroupVersion is group version used to register these objects
-	SchemeGroupVersion = schema.GroupVersion{Group: "operator.tigera.io", Version: "v1"}
-
-	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
-	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
-)
+func TestStatus(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../report/components_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/components Suite", []Reporter{junitReporter})
+}

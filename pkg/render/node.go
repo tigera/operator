@@ -581,7 +581,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry),
+		Image:        components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -597,7 +597,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry),
+		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		VolumeMounts: flexVolumeMounts,
 	}
 }
@@ -635,9 +635,9 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 	isPrivileged := true
 
 	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoNode, c.cr.Spec.Registry)
+	image := components.GetReference(components.ComponentCalicoNode, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraNode, c.cr.Spec.Registry)
+		image = components.GetReference(components.ComponentTigeraNode, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 	return v1.Container{
 		Name:            "calico-node",

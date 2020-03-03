@@ -670,6 +670,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "policy.pod",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts on any changes to pods within the cluster",
 				Description: "[audit] [privileged access] change detected for pod ${objectRef.namespace}/${objectRef.name}",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
@@ -684,15 +685,16 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "policy.globalnetworkpolicy",
+				Name: "policy.networkpolicy",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts on any changes to network policies",
 				Description: "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
 				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
 				DataSet:     "audit",
-				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=globalnetworkpolicies",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=networkpolicies",
 				AggregateBy: []string{"objectRef.name", "objectRef.resource"},
 				Metric:      "count",
 				Condition:   "gt",
@@ -704,6 +706,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "policy.globalnetworkset",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts on any changes to global network sets",
 				Description: "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
@@ -721,6 +724,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "policy.serviceaccount",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts on any changes to service accounts within the cluster",
 				Description: "[audit] [privileged access] change detected for serviceaccount ${objectRef.namespace}/${objectRef.name}",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
@@ -738,6 +742,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "network.cloudapi",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts on access to cloud metadata APIs",
 				Description: "[flows] [cloud API] cloud metadata API accessed by ${source_namespace}/${source_name_aggr}",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
@@ -756,6 +761,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "network.ssh",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts on the use of ssh to and from a specific namespace (e.g. default)",
 				Description: "[flows] ssh flow in default namespace detected from ${source_namespace}/${source_name_aggr}",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
@@ -774,6 +780,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "network.lateral.access",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts when pods with a specific label (e.g. app=monitor) accessed by other workloads within the cluster",
 				Description: "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor is accessed",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},
@@ -792,6 +799,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 				Name: "network.lateral.originate",
 			},
 			Spec: v3.GlobalAlertSpec{
+				summary:     "Alerts when pods with a specific label (e.g. app=monitor) initiate connections to other workloads within the cluster",
 				Description: "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor initiated connection",
 				Severity:    100,
 				Period:      &metav1.Duration{Duration: 10 * time.Minute},

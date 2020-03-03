@@ -193,9 +193,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	// Pick which image to use based on variant.
-	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry)
+	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry)
+		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 
 	d := apps.Deployment{

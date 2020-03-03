@@ -410,6 +410,11 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 
+	initContainers := []v1.Container{}
+	if c.cr.Spec.FlexVolumePath != "None" {
+		initContainers = append(initContainers, c.flexVolumeContainer())
+	}
+
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -432,7 +437,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                []v1.Container{c.flexVolumeContainer()},
+					InitContainers:                initContainers,
 					Containers:                    []v1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
 				},
@@ -531,25 +536,15 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		volumes = append(volumes, calicoLogVol)
 	}
 
-	// Set the flex volume plugin location based on platform.
-	flexVolumePluginsPath := "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-	if c.provider == operator.ProviderOpenShift {
-		// In OpenShift 4.x, the location for flexvolume plugins has changed.
-		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
-		flexVolumePluginsPath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
-	} else if c.provider == operator.ProviderGKE {
-		flexVolumePluginsPath = "/home/kubernetes/flexvolume/"
-	} else if c.provider == operator.ProviderAKS {
-		flexVolumePluginsPath = "/etc/kubernetes/volumeplugins/"
-	}
-
 	// Create and append flexvolume
-	volumes = append(volumes, v1.Volume{
-		Name: "flexvol-driver-host",
-		VolumeSource: v1.VolumeSource{
-			HostPath: &v1.HostPathVolumeSource{Path: flexVolumePluginsPath + "nodeagent~uds", Type: &dirOrCreate},
-		},
-	})
+	if c.cr.Spec.FlexVolumePath != "None" {
+		volumes = append(volumes, v1.Volume{
+			Name: "flexvol-driver-host",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
+			},
+		})
+	}
 	if c.birdTemplates != nil {
 		volumes = append(volumes,
 			v1.Volume{

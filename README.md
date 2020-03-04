@@ -114,6 +114,9 @@ reconciliation it does, if a user makes direct changes to a resource the operato
 To enable the user to make temporary changes, an annotation can be added to any resource directly managed by
 the operator which will cause the operator to no longer update the resource.
 Adding the following as an annotation to any resource will prevent the operator from making any future updates to the annotated resource:
+
+  *This annotation should only be temporarily added since it blocks the operator from it intended purpose.*
+
   ```
   unsupported.operator.tigera.io/ignore: "true"
   ```
@@ -131,6 +134,7 @@ metadata:
   labels:
     k8s-app: calico-node
   annotations:
+    # You should NOT use this unless you want to block the operator from doing its job managing this resource.
     unsupported.operator.tigera.io/ignore: "true"
 spec:
   template:

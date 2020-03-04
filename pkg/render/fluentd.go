@@ -48,8 +48,14 @@ const (
 	EksLogForwarderAwsId                     = "aws-id"
 	EksLogForwarderAwsKey                    = "aws-key"
 	eksLogForwarderName                      = "eks-log-forwarder"
-	SplunkFluentdSecretName                  = "logcollector-splunk-credentials"
-	SplunkFluentdSecretKey                   = "token"
+	SplunkFluentdTokenSecretName             = "logcollector-splunk-credentials"
+	SplunkFluentdSecretTokenKey              = "token"
+	SplunkFluentdCertificateSecretName       = "logcollector-splunk-public-certificate"
+	SplunkFluentdSecretCertificateKey        = "ca.pem"
+	SplunkFluentdSecretsVolName              = "splunk-certificates"
+	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
+	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+
 )
 
 type FluentdFilters struct {
@@ -63,7 +69,8 @@ type S3Credential struct {
 }
 
 type SplunkCredential struct {
-	Token     []byte
+	Token       []byte
+	Certificate []byte
 }
 
 func Fluentd(
@@ -123,7 +130,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objs = append(objs, c.s3CredentialSecret())
 	}
 	if c.splkCredential != nil {
-		objs = append(objs, c.splunkCredentialSecret())
+		objs = append(objs, secretsToRuntimeObjects(CopySecrets(LogCollectorNamespace, c.splunkCredentialSecret()...)...)...)
 	}
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
@@ -178,20 +185,36 @@ func (c *fluentdComponent) filtersConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *fluentdComponent) splunkCredentialSecret() *corev1.Secret {
+func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 	if c.splkCredential == nil {
 		return nil
 	}
-	return &corev1.Secret{
+	var splunkSecrets []*corev1.Secret
+	token := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      SplunkFluentdSecretName,
+			Name:      SplunkFluentdTokenSecretName,
 			Namespace: LogCollectorNamespace,
 		},
 		Data: map[string][]byte{
-			SplunkFluentdSecretKey:     c.splkCredential.Token,
+			SplunkFluentdSecretTokenKey:     c.splkCredential.Token,
 		},
 	}
+
+	splunkSecrets = append(splunkSecrets, token)
+
+	certificate := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      SplunkFluentdCertificateSecretName,
+			Namespace: LogCollectorNamespace,
+		},
+		Data: map[string][]byte{
+			SplunkFluentdSecretCertificateKey:     c.splkCredential.Certificate,
+		},
+	}
+
+	return append(splunkSecrets, certificate)
 }
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
@@ -285,6 +308,14 @@ func (c *fluentdComponent) container() corev1.Container {
 		}
 	}
 
+	if c.splkCredential != nil && len(c.splkCredential.Certificate) != 0 {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:       SplunkFluentdSecretsVolName,
+				MountPath:  SplunkFluentdDefaultCertDir,
+			})
+	}
+
 	isPrivileged := true
 
 	return ElasticsearchContainerDecorateENVVars(corev1.Container{
@@ -372,9 +403,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: SplunkFluentdSecretName,
+								Name: SplunkFluentdTokenSecretName,
 							},
-							Key: SplunkFluentdSecretKey,
+							Key: SplunkFluentdSecretTokenKey,
 						},
 					}},
 				corev1.EnvVar{Name: "SPLUNK_FLOW_LOG", Value: "true"},
@@ -453,6 +484,21 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: FluentdFilterConfigMapName,
+						},
+					},
+				},
+			})
+	}
+
+	if c.splkCredential != nil && len(c.splkCredential.Certificate) != 0 {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: SplunkFluentdSecretsVolName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: SplunkFluentdCertificateSecretName,
+						Items: []corev1.KeyToPath{
+							{Key: SplunkFluentdSecretCertificateKey, Path: SplunkFluentdSecretCertificateKey},
 						},
 					},
 				},

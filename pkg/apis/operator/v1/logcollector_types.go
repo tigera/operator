@@ -42,6 +42,9 @@ type AdditionalLogStoreSpec struct {
 	// If specified, enables exporting of flow, audit, and DNS logs to syslog.
 	// +optional
 	Syslog *SyslogStoreSpec `json:"syslog,omitempty"`
+	// If specified, enables exporting of flow, audit, and DNS logs to splunk.
+	// +optional
+	Splunk *SplunkStoreSpec `json:"splunk,omitempty"`
 }
 
 type AdditionalLogSourceSpec struct {
@@ -64,7 +67,7 @@ type S3StoreSpec struct {
 	BucketPath string `json:"bucketPath"`
 }
 
-// SyslogStoreSpec defines configuration for exporting lgos to syslog.
+// SyslogStoreSpec defines configuration for exporting logs to syslog.
 type SyslogStoreSpec struct {
 	// Location of the syslog server. example: tcp://1.2.3.4:601
 	Endpoint string `json:"endpoint"`
@@ -74,6 +77,12 @@ type SyslogStoreSpec struct {
 	// Default: 1024
 	// +optional
 	PacketSize *int32 `json:"packetsize,omitempty"`
+}
+
+// SplunkStoreSpec defines configuration for exporting logs to splunk.
+type SplunkStoreSpec struct {
+	// Location for splunk's http event collector end point. example https://1.2.3.4:8088
+	Endpoint string `json:"endpoint"`
 }
 
 // EksConfigSpec defines configuration for fetching EKS audit logs.

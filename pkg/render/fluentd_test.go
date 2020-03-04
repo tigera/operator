@@ -17,11 +17,10 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	apps "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	apps "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
@@ -31,6 +30,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var eksConfig *render.EksCloudwatchLogConfig
 	var installation *operatorv1.Installation
 	var esConfigMap *render.ElasticsearchClusterConfig
+	var splkCreds *render.SplunkCredential
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -43,12 +43,13 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		s3Creds = nil
 		filters = nil
 		eksConfig = nil
+		splkCreds = nil
 
 		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -83,7 +84,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				BucketPath: "bucketpath",
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
@@ -149,7 +150,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				PacketSize: &ps,
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
 
@@ -213,11 +214,77 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	})
 
+	It("should render with splunk configuration", func() {
+		splkCreds := &render.SplunkCredential{
+			Token:     []byte("TokenForHEC"),
+		}
+		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Splunk: &operatorv1.SplunkStoreSpec{
+				Endpoint:    "https://1.2.3.4:8088",
+			},
+		}
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(3))
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		ds := resources[2].(*apps.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []struct {
+			name       string
+			val        string
+			secretName string
+			secretKey  string
+		}{
+			{"SPLUNK_FLOW_LOG", "true", "", ""},
+			{"SPLUNK_AUDIT_LOG", "true", "", ""},
+			{"SPLUNK_HEC_HOST", "1.2.3.4", "", ""},
+			{"SPLUNK_HEC_PORT", "8088", "", ""},
+			{"SPLUNK_PROTOCOL", "https", "", ""},
+			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
+			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
+		}
+		for _, expected := range expectedEnvs {
+			if expected.val != "" {
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			} else {
+				Expect(envs).To(ContainElement(corev1.EnvVar{
+					Name: expected.name,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+							Key:                  expected.secretKey,
+						}},
+				}))
+			}
+		}
+	})
+
 	It("should render with filter", func() {
 		filters = &render.FluentdFilters{
 			Flow: "flow-filter",
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(3))
 
@@ -262,7 +329,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				KubernetesProvider: operatorv1.ProviderEKS,
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, filters, eksConfig, nil, installation)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 

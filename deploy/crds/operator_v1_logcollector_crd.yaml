@@ -81,6 +81,17 @@ spec:
                   - bucketName
                   - bucketPath
                   type: object
+                splunk:
+                  description: If specified, enables exporting of flow, audit, and
+                    DNS logs to splunk.
+                  properties:
+                    endpoint:
+                      description: URI for splunk's http event collector end point.
+                        example https://1.2.3.4:8088
+                      type: string
+                  required:
+                  - endpoint
+                  type: object
                 syslog:
                   description: If specified, enables exporting of flow, audit, and
                     DNS logs to syslog.

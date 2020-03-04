@@ -343,26 +343,43 @@ func getS3Credential(client client.Client) (*render.S3Credential, error) {
 func getSplunkCredential(client client.Client) (*render.SplunkCredential, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
-		Name:      render.SplunkFluentdSecretName,
+		Name:      render.SplunkFluentdTokenSecretName,
 		Namespace: render.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("Failed to read secret %q: %s", render.SplunkFluentdSecretName, err)
+		return nil, fmt.Errorf("Failed to read secret %q: %s", render.SplunkFluentdTokenSecretName, err)
 	}
 
 	var ok bool
 	var token []byte
-	if token, ok = secret.Data[render.SplunkFluentdSecretKey]; !ok || len(token) == 0 {
+	if token, ok = secret.Data[render.SplunkFluentdSecretTokenKey]; !ok || len(token) == 0 {
 		return nil, fmt.Errorf(
 			"Expected secret %q to have a field named %q",
-			render.SplunkFluentdSecretName, render.SplunkFluentdSecretKey)
+			render.SplunkFluentdTokenSecretName, render.SplunkFluentdSecretTokenKey)
+	}
+
+	certificateSecret := &corev1.Secret{}
+	certificateSecretNamespacedName := types.NamespacedName{
+		Name:      render.SplunkFluentdCertificateSecretName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), certificateSecretNamespacedName, certificateSecret); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Splunk certificateSecret not provided. Assuming http or trusted CA ssl to exists")
+		}
+	}
+
+	var certificate []byte
+	if certificate, ok = certificateSecret.Data[render.SplunkFluentdSecretCertificateKey]; !ok || len(certificate) == 0 {
+		log.Info("Splunk certificateSecret not provided. Assuming http or trusted CA ssl to exists")
 	}
 
 	return &render.SplunkCredential{
-		Token: token,
+		Token:       token,
+		Certificate: certificate,
 	}, nil
 }
 

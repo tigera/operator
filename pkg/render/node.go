@@ -183,6 +183,12 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"patch"},
 			},
 			{
+				// Calico patches the allocated IP onto the pod.
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+			{
 				// For monitoring Calico-specific configuration.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{

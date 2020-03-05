@@ -100,6 +100,12 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"clusterinformations"},
 				Verbs:     []string{"get", "create", "update"},
 			},
+			{
+				// Needs to manage hostendpoints.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"hostendpoints"},
+				Verbs:     []string{"get", "list", "create", "update", "delete"},
+			},
 		},
 	}
 

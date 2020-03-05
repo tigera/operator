@@ -106,3 +106,5 @@ To run all the unit tests, run:
 To run a specific test or set of tests, use the `GINKGO_FOCUS` argument.
 
 	make test GINKGO_FOCUS="component function tests"
+
+# Don't merge

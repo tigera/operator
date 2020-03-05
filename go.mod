@@ -18,7 +18,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 
-	github.com/tigera/api v0.0.0-20200117234535-b3d9372ce711
+	github.com/tigera/api v0.0.0-20200304185505-af270f3c0f4f
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.17.2

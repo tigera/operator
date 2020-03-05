@@ -214,9 +214,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	})
 
-	It("should render with splunk configuration", func() {
+	FIt("should render with splunk configuration with ca", func() {
+		var certificate = []byte("Certificates")
 		splkCreds := &render.SplunkCredential{
-			Token:     []byte("TokenForHEC"),
+			Token:       []byte("TokenForHEC"),
+			Certificate: certificate,
 		}
 		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
@@ -225,7 +227,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(3))
+		Expect(len(resources)).To(Equal(4))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -237,6 +239,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "logcollector-splunk-public-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -246,7 +249,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[2].(*apps.DaemonSet)
+		ds := resources[3].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
@@ -263,6 +266,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SPLUNK_PROTOCOL", "https", "", ""},
 			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
 			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
+			{"SPLUNK_CA_FILE", "/etc/ssl/splunk/ca.pem", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

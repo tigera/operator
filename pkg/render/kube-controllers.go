@@ -135,12 +135,6 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
-				// Needs access to update clusterinformations.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "create", "update"},
-			},
-			{
 				// calico-kube-controllers requires tiers create
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"tiers"},

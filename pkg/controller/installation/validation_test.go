@@ -27,7 +27,8 @@ var _ = Describe("Installation validation tests", func() {
 	BeforeEach(func() {
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CalicoNetwork: &operator.CalicoNetworkSpec{},
+				CalicoNetwork:  &operator.CalicoNetworkSpec{},
+				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			},
 		}
 	})
@@ -81,4 +82,9 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should not allow a relative path in FlexVolumePath", func() {
+		instance.Spec.FlexVolumePath = "foo/bar/baz"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
 })

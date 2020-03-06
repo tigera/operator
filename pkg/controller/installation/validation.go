@@ -17,6 +17,7 @@ package installation
 import (
 	"fmt"
 	"net"
+	"path"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -135,6 +136,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return err
 			}
 		}
+	}
+
+	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
+		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
+			instance.Spec.FlexVolumePath)
 	}
 
 	return nil

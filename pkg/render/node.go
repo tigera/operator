@@ -178,6 +178,12 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"patch"},
 			},
 			{
+				// Calico needs to get configmaps for pool CIDR detection on kubeadm.
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+			{
 				// For monitoring Calico-specific configuration.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{

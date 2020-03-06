@@ -149,6 +149,12 @@ spec:
                 will be used.  Image format:    `<registry>/<imagePath>/<imageName>:<tag-name>`  This
                 option allows configuring the `<imagePath>` portion of the above format.'
               type: string
+            flexVolumePath:
+              description: FlexVolumePath optionally specifies a custom path for FlexVolume.
+                If not specified, FlexVolume will be enabled by default. If set to
+                'None', FlexVolume will be disabled. The default is based on the k8s
+                provider.
+              type: string
             imagePullSecrets:
               description: ImagePullSecrets is an array of references to container
                 registry pull secrets to use. These are applied to all images to be

@@ -105,6 +105,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						FirstFound: &false_,
 					},
 				},
+				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -171,7 +172,8 @@ var _ = Describe("Defaulting logic tests", func() {
 						{CIDR: "10.0.0.0/8"},
 					},
 				},
-			}),
+			},
+		),
 		table.Entry("CIDR specified from OS config and Calico config",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -189,6 +191,36 @@ var _ = Describe("Defaulting logic tests", func() {
 						{CIDR: "10.0.0.0/8"},
 					},
 				},
-			}),
+			},
+		),
+	)
+
+	table.DescribeTable("Test different values for FlexVolumePath",
+		func(i *operator.Installation, expectedFlexVolumePath string) {
+			Expect(fillDefaults(i)).To(BeNil())
+			Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
+		},
+
+		table.Entry("FlexVolumePath set to None",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					FlexVolumePath: "None",
+				},
+			}, "None",
+		),
+
+		table.Entry("FlexVolumePath left empty (default)",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{},
+			}, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+		),
+
+		table.Entry("FlexVolumePath set to a custom path",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					FlexVolumePath: "/foo/bar/",
+				},
+			}, "/foo/bar/",
+		),
 	)
 })

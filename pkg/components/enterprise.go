@@ -102,7 +102,7 @@ var (
 	
 	ComponentFluentd = component{
 		Version: "v2.7.0",
-		Digest:  "sha256:89ab6e0e35d113f3a000916b4f03f0b811504cdc701f7c92d8d83f054b1f3bcc",
+		Digest:  "sha256:b3921b735d220e10808362925e04500a19b1edc15a2c0108e5104a8317f51c52",
 		Image:   "tigera/fluentd",
 	}
 	
@@ -151,7 +151,7 @@ var (
 	
 	ComponentTigeraKubeControllers = component{
 		Version: "v2.7.0-0.dev-137-gb83b6cb",
-		Digest:  "sha256:4d5a34f669fddb96b8df52eef8f01a976aaa51318e9ca5f74f5546642559fb30",
+		Digest:  "sha256:0c3726d04590cd747a079f4dd3ce715e08baf00cfbf17b458cbf493161565043",
 		Image:   "tigera/kube-controllers",
 	}
 	

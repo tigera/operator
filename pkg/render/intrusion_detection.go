@@ -72,7 +72,9 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 		c.intrusionDetectionRole(),
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
-		c.intrusionDetectionElasticsearchJob())
+		c.elasticEnterpriseTrial(),
+	//c.intrusionDetectionElasticsearchJob(), // temporarily disabled.
+	)
 
 	return objs, nil
 }
@@ -353,4 +355,19 @@ func (c *intrusionDetectionComponent) imagePullSecrets() []runtime.Object {
 		secrets = append(secrets, s)
 	}
 	return secrets
+}
+
+func (c *intrusionDetectionComponent) elasticEnterpriseTrial() *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKEnterpriseTrial,
+			Namespace: ECKOperatorNamespace,
+			Labels: map[string]string{
+				"license.k8s.elastic.co/type": "enterprise-trial",
+			},
+			Annotations: map[string]string{
+				"elastic.co/eula": "accepted",
+			},
+		},
+	}
 }

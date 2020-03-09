@@ -15,8 +15,8 @@
 package apis
 
 import (
-	esalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -35,6 +35,6 @@ func init() {
 	AddToSchemes = append(AddToSchemes, apiextensions.AddToScheme)
 	AddToSchemes = append(AddToSchemes, tigera.AddToScheme)
 	AddToSchemes = append(AddToSchemes, ocsv1.AddToScheme)
-	AddToSchemes = append(AddToSchemes, esalpha1.SchemeBuilder.AddToScheme)
-	AddToSchemes = append(AddToSchemes, kibanaalpha1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, esv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, kbv1.SchemeBuilder.AddToScheme)
 }

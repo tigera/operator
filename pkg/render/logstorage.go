@@ -18,11 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-<<<<<<< HEAD:pkg/render/logstorage.go
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 
-=======
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -44,6 +41,8 @@ const (
 	ECKOperatorName      = "elastic-operator"
 	ECKOperatorNamespace = "tigera-eck-operator"
 	ECKWebhookSecretName = "elastic-webhook-server-cert"
+	ECKWebhookName       = "elastic-webhook-server"
+	ECKEnterpriseTrial   = "eck-trial-license"
 
 	ElasticsearchStorageClass  = "tigera-elasticsearch"
 	ElasticsearchNamespace     = "tigera-elasticsearch"
@@ -187,6 +186,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			es.eckOperatorClusterRole(),
 			es.eckOperatorClusterRoleBinding(),
 			es.eckOperatorServiceAccount(),
+			es.webhookService(),
 		)
 		// This is needed for the operator to be able to set privileged mode for pods.
 		// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
@@ -324,7 +324,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 			Requests: corev1.ResourceList{
 				"cpu":    resource.MustParse("1"),
-				"memory": resource.MustParse("4Gi"),
+				"memory": resource.MustParse("2Gi"),
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -334,13 +334,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			//
 			// Default values for Java Heap min and max taken from ECK docs:
 			// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
-			{Name: "ES_JAVA_OPTS", Value: "-Xms2G -Xmx2G"},
+			{Name: "ES_JAVA_OPTS", Value: "-Xms1G -Xmx1G"},
 		},
-		//VolumeMounts: []corev1.VolumeMount{
-		//	{Name: "configmap", MountPath: "/rene/proc/sys/vm/"},
-		//	{Name: "configmap2", MountPath: "/rene/etc/"},
-		//	{Name: "configmap2", MountPath: "/etc/"},
-		//},
 	}
 
 	// If the user has provided resource requirements, then use the user overrides instead
@@ -372,38 +367,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		Spec: corev1.PodSpec{
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-			//Volumes: []corev1.Volume{
-			//	{Name: "configmap", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-			//
-			//		LocalObjectReference: corev1.LocalObjectReference{Name: "memory"},
-			//		Items: []corev1.KeyToPath{
-			//			{
-			//				Key:  "max_map_count",
-			//				Path: "max_map_count",
-			//			},
-			//		},
-			//	}}},
-			//	{Name: "configmap2", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-			//
-			//		LocalObjectReference: corev1.LocalObjectReference{Name: "memory"},
-			//		Items: []corev1.KeyToPath{
-			//			{
-			//				Key:  "rc.local",
-			//				Path: "rc.local",
-			//			},
-			//		},
-			//	}}},
-			//	{Name: "configmap3", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-			//
-			//		LocalObjectReference: corev1.LocalObjectReference{Name: "memory"},
-			//		Items: []corev1.KeyToPath{
-			//			{
-			//				Key:  "sysctl.conf",
-			//				Path: "sysctl.conf",
-			//			},
-			//		},
-			//	}}},
-			//},
 		},
 	}
 
@@ -487,11 +450,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
 
 	return &esv1.Elasticsearch{
-<<<<<<< HEAD:pkg/render/logstorage.go
-		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1alpha1"},
-=======
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
@@ -500,13 +459,8 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 			},
 		},
 		Spec: esv1.ElasticsearchSpec{
-<<<<<<< HEAD:pkg/render/logstorage.go
 			Version: components.ComponentElasticsearch.Version,
 			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry),
-=======
-			Version: components.VersionECKElasticsearch,
-			Image:   constructImage(ECKElasticsearchImageName, es.registry),
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -514,16 +468,10 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 					},
 				},
 			},
-<<<<<<< HEAD:pkg/render/logstorage.go
-			Nodes: []esv1.NodeSpec{
-				{
-					NodeCount: int32(nodeConfig.Count),
-=======
 			NodeSets: []esv1.NodeSet{
 				{
 					Count: int32(nodeConfig.Count),
 					Name:  "es",
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
 					Config: &cmnv1.Config{
 						Data: map[string]interface{}{
 							"node.master":           "true",
@@ -699,7 +647,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 							},
 							{Name: "WEBHOOK_SECRET", Value: ECKWebhookSecretName},
 							{Name: "WEBHOOK_PODS_LABEL", Value: "elastic-operator"},
-							{Name: "OPERATOR_IMAGE", Value: constructImage(ECKOperatorImageName, es.registry)},
+							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry)},
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -738,18 +686,6 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	}
 }
 
-<<<<<<< HEAD:pkg/render/logstorage.go
-=======
-// Create resources needed to run a Kibana cluster (namespace, Kibana resource, secrets...)
-func (es elasticsearchComponent) kibana() []runtime.Object {
-	objs := []runtime.Object{createNamespace(KibanaNamespace, false)}
-	objs = append(objs, secretsToRuntimeObjects(copySecrets(KibanaNamespace, es.pullSecrets...)...)...)
-	objs = append(objs, es.kibanaCertSecrets...)
-	objs = append(objs, es.kibanaCR())
-	return objs
-}
-
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
 func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
@@ -763,13 +699,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			},
 		},
 		Spec: kbv1.KibanaSpec{
-<<<<<<< HEAD:pkg/render/logstorage.go
 			Version: components.ComponentEckKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
-=======
-			Version: components.VersionECKKibana,
-			//Image:   constructImage(KibanaImageName, es.registry),
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
+			//Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry),
 			Config: &cmnv1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -779,11 +710,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					"elasticsearch.ssl.verificationMode": "none",
 				},
 			},
-<<<<<<< HEAD:pkg/render/logstorage.go
-			NodeCount: 1,
-=======
 			Count: 1,
->>>>>>> first working eck commit:pkg/render/elasticsearch.go
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -891,7 +818,7 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 }
 
 // The ECK operator creates a webhook service that is not automatically removed.
-func (es elasticsearchManaged) webhookService() *corev1.Service {
+func (es elasticsearchComponent) webhookService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

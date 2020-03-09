@@ -29,21 +29,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-<<<<<<< HEAD
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
-	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-=======
+	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"github.com/go-logr/logr"
->>>>>>> first working eck commit
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,7 +142,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
-<<<<<<< HEAD
 	err = c.Watch(&source.Kind{
 		Type: &storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchStorageClass},
@@ -164,28 +157,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{
+	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{
+	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-=======
-	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &operatorv1.LogStorage{},
-	}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &operatorv1.LogStorage{},
-	}); err != nil {
->>>>>>> first working eck commit
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 
@@ -448,12 +428,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		if elasticsearch == nil || elasticsearch.Status.Phase != esalpha1.ElasticsearchOperationalPhase {
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
 		}
 
-		if kibana == nil || kibana.Status.AssociationStatus != cmneckalpha1.AssociationEstablished {
+		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, nil
 		}
@@ -535,8 +515,8 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	return secrets, nil
 }
 
-func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esalpha1.Elasticsearch, error) {
-	es := esalpha1.Elasticsearch{}
+func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {
+	es := esv1.Elasticsearch{}
 	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -559,8 +539,8 @@ func (r *ReconcileLogStorage) getElasticsearchService(ctx context.Context) (*cor
 	return &svc, nil
 }
 
-func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kibana, error) {
-	kb := kibanaalpha1.Kibana{}
+func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kbv1.Kibana, error) {
+	kb := kbv1.Kibana{}
 	err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, &kb)
 	if err != nil {
 		if errors.IsNotFound(err) {

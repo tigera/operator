@@ -195,7 +195,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	// Pick which image to use based on variant.
 	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry)
+		image = "gcr.io/tigera-dev/cnx/tigera/kube-controllers:eck101" //todo: revert
 	}
 
 	d := apps.Deployment{

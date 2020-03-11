@@ -115,8 +115,8 @@ To enable the user to make temporary changes, an annotation can be added to any 
 the operator which will cause the operator to no longer update the resource.
 Adding the following as an annotation to any resource will prevent the operator from making any future updates to the annotated resource:
 
-  *This annotation should only be temporarily added since it blocks the operator from it intended purpose.
-  You must remove this annotation before the operator can manage the resource again.*
+  *Do not use this unless you are a developer working on the operator. If you add this annotation,
+  you must remove it before the operator can manage the resource again.*
 
   ```
   unsupported.operator.tigera.io/ignore: "true"

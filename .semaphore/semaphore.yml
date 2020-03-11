@@ -21,13 +21,10 @@ blocks:
                 make maybe-build-release;
               fi
       secrets:
-        - name: private-repo
         - name: quay-robot-semaphore_v2
       prologue:
         commands:
           - checkout
-          - chmod 0600 ~/.keys/*
-          - ssh-add ~/.keys/*
           - >-
             if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then
               unset QUAY_USERNAME QUAY_TOKEN; docker logout; docker logout quay.io;

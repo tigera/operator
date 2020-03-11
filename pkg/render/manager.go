@@ -669,7 +669,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "policy.pod",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts on any changes to pods within the cluster",
 				Description: "[audit] [privileged access] change detected for pod ${objectRef.namespace}/${objectRef.name}",
 				Severity:    100,
@@ -687,7 +687,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "policy.globalnetworkpolicy",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts on any changes to network policies",
 				Description: "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
 				Severity:    100,
@@ -705,7 +705,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "policy.globalnetworkset",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts on any changes to global network sets",
 				Description: "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
 				Severity:    100,
@@ -723,7 +723,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "policy.serviceaccount",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts on any changes to service accounts within the cluster",
 				Description: "[audit] [privileged access] change detected for serviceaccount ${objectRef.namespace}/${objectRef.name}",
 				Severity:    100,
@@ -741,7 +741,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "network.cloudapi",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts on access to cloud metadata APIs",
 				Description: "[flows] [cloud API] cloud metadata API accessed by ${source_namespace}/${source_name_aggr}",
 				Severity:    100,
@@ -760,7 +760,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "network.ssh",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts on the use of ssh to and from a specific namespace (e.g. default)",
 				Description: "[flows] ssh flow in default namespace detected from ${source_namespace}/${source_name_aggr}",
 				Severity:    100,
@@ -779,7 +779,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "network.lateral.access",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts when pods with a specific label (e.g. app=monitor) accessed by other workloads within the cluster",
 				Description: "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor is accessed",
 				Severity:    100,
@@ -798,7 +798,7 @@ func (c *managerComponent) globalAlertTemplates() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "network.lateral.originate",
 			},
-			Spec: v3.GlobalAlertTemplateSpec{
+			Spec: v3.GlobalAlertSpec{
 				Summary:     "Alerts when pods with a specific label (e.g. app=monitor) initiate connections to other workloads within the cluster",
 				Description: "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor initiated connection",
 				Severity:    100,

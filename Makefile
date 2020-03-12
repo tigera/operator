@@ -201,6 +201,11 @@ ifeq ($(LOCAL_BUILD),true)
 	GIT_VERSION = $(shell git describe --tags --dirty --always)-dev-build
 endif
 
+# Override the git version
+ifdef OVERRIDE_VERSION
+	GIT_VERSION=$(OVERRIDE_VERSION)
+endif
+
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)

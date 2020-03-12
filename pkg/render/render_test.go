@@ -63,10 +63,9 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		// - 1 namespace
 		// - 1 PriorityClass
-		// - 14 custom resource definitions
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(37))
+		Expect(componentCount(c.Render())).To(Equal(5 + 4 + 2 + 6 + 4 + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -74,13 +73,12 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
 		// - 1 ns (tigera-prometheus)
-		// - 11 TSEE crds
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal((37 + 1 + 1 + 12)))
+		Expect(componentCount(c.Render())).To(Equal((37 + 1 + 1)))
 	})
 })
 

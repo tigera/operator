@@ -68,9 +68,6 @@ var (
 		Digest:  "sha256:9dd701842833e902c0ba2b5682e0b7b3cd32f08e94a637d87ebdcb730e0a101a",
 		Image:   "elasticsearch/elasticsearch",
 	}
-	//	Version: "7.6.0",
-	//	Digest:  "sha256:fb37d2e15d897b32bef18fed6050279f68a76d8c4ea54c75e37ecdbe7ca10b4b",
-	//	Image:   "elasticsearch/elasticsearch",
 
 	ComponentElasticsearchOperator = component{
 		Version: "1.0.1",
@@ -133,8 +130,8 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "eck101",
-		Digest:  "sha256:61a632958236520f6640be83c69f1f7b1d0f38dd282b1ea0171d9530cf6847a9",
+		Version: "v2.7.0-0.dev-149-g15a119d",
+		Digest:  "sha256:f283430ed06ddde0f23c61dba19f8959a06d2dc9e2cb0c78eb1951dc28c134ca",
 		Image:   "tigera/kube-controllers",
 	}
 

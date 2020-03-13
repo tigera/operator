@@ -144,6 +144,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 				Value: kScheme,
 			},
 			{
+				// We no longer need to start the xpack trial from the installer pod. Logstorage
+				// now takes care of this in combination with the ECK operator (v1).
 				Name:  "START_XPACK_TRIAL",
 				Value: "false",
 			},

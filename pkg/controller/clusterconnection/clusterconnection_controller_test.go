@@ -19,6 +19,7 @@ import (
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
 	"github.com/tigera/operator/pkg/render"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/tigera/operator/pkg/apis"
@@ -48,8 +49,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		scheme = runtime.NewScheme()
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		scheme.AddKnownTypes(schema.GroupVersion{Group: "apps", Version: "v1"}, &appsv1.Deployment{})
+		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.ClusterRole{})
+		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.ClusterRoleBinding{})
 		err = operatorv1.SchemeBuilder.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 		c = fake.NewFakeClientWithScheme(scheme)

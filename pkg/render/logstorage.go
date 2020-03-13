@@ -397,7 +397,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 	}
 
-	// Was already present, but hidden from view in ECK 0.9. We are investigating how to improve on this internally:
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	trueBool := true
 	var user int64 = 0
@@ -687,7 +686,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 						Name:  "manager",
-						Args:  []string{"manager", "--operator-roles", "all", "--log-verbosity=2"},
+						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
+						Args: []string{"manager", "--operator-roles", "all", "--log-verbosity=0"},
 						Env: []corev1.EnvVar{
 							{
 								Name: "OPERATOR_NAMESPACE",
@@ -869,7 +869,7 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 	}
 }
 
-// The ECK operator creates a webhook service that is not automatically removed.
+// This is a webhook service that helps with CR validations.
 func (es elasticsearchComponent) webhookService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},

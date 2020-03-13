@@ -389,7 +389,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		applyTrial, err = r.applyElasticTrialSecret(ctx)
+		applyTrial, err = r.shouldApplyElasticTrialSecret(ctx)
 		if err != nil {
 			r.status.SetDegraded("Failed to get eck trial license", err.Error())
 			return reconcile.Result{}, err
@@ -504,7 +504,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 }
 
 // Returns true if we want to apply a new trial license.
-func (r *ReconcileLogStorage) applyElasticTrialSecret(ctx context.Context) (bool, error) {
+func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context) (bool, error) {
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
 		if errors.IsNotFound(err) {
 			return true, nil

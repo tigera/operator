@@ -174,6 +174,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := resources[1].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -250,6 +251,14 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := resources[3].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		var volnames []string
+		for _, vol := range ds.Spec.Template.Spec.Volumes {
+			volnames = append(volnames, vol.Name)
+		}
+		Expect(volnames).To(ContainElement("splunk-certificates"))
+
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {

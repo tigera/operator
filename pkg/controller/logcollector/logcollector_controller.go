@@ -83,7 +83,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret} {
+		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
+	    render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
@@ -226,6 +227,23 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	var splunkCredential *render.SplunkCredential
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Splunk != nil {
+			splunkCredential, err = getSplunkCredential(r.client)
+			if err != nil {
+				log.Error(err, "Error with Splunk credential secret")
+				r.status.SetDegraded("Error with Splunk credential secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			if splunkCredential == nil {
+				log.Info("Splunk credential secret does not exist")
+				r.status.SetDegraded("Splunk credential secret does not exist", "")
+				return reconcile.Result{}, nil
+			}
+		}
+	}
+
 	filters, err := getFluentdFilters(r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Fluentd filters")
@@ -261,6 +279,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		esSecrets,
 		esClusterConfig,
 		s3Credential,
+		splunkCredential,
 		filters,
 		eksConfig,
 		pullSecrets,
@@ -319,6 +338,54 @@ func getS3Credential(client client.Client) (*render.S3Credential, error) {
 	return &render.S3Credential{
 		KeyId:     kId,
 		KeySecret: kSecret,
+	}, nil
+}
+
+func getSplunkCredential(client client.Client) (*render.SplunkCredential, error) {
+	tokenSecret := &corev1.Secret{}
+	tokenNamespacedName := types.NamespacedName{
+		Name:      render.SplunkFluentdTokenSecretName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), tokenNamespacedName, tokenSecret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read secret %q: %s", render.SplunkFluentdTokenSecretName, err)
+	}
+
+	var ok bool
+	var token []byte
+	if token, ok = tokenSecret.Data[render.SplunkFluentdSecretTokenKey]; !ok || len(token) == 0 {
+		return nil, fmt.Errorf(
+			"Expected secret %q to have a field named %q",
+			render.SplunkFluentdTokenSecretName, render.SplunkFluentdSecretTokenKey)
+	}
+
+	var certificate []byte
+	certificateSecret := &corev1.Secret{}
+	certificateNamespacedName := types.NamespacedName{
+		Name:      render.SplunkFluentdCertificateSecretName,
+		Namespace: render.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), certificateNamespacedName, certificateSecret); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info(fmt.Sprintf("Splunk certificate secret %v not provided. Assuming http protocol or trusted CA certificate.",
+				render.SplunkFluentdCertificateSecretName))
+		} else {
+			return nil, fmt.Errorf("Failed to read secret %q: %s", render.SplunkFluentdCertificateSecretName, err)
+		}
+	} else {
+		if certificate, ok = certificateSecret.Data[render.SplunkFluentdSecretCertificateKey]; !ok || len(certificate) == 0 {
+			return nil, fmt.Errorf("Expected secret %q to have a field named %q",
+				render.SplunkFluentdCertificateSecretName, render.SplunkFluentdSecretCertificateKey)
+		}
+	}
+
+	return &render.SplunkCredential{
+		Token:       token,
+		Certificate: certificate,
 	}, nil
 }
 

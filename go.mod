@@ -8,6 +8,7 @@ require (
 	github.com/elastic/go-ucfg v0.8.1 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
+	github.com/go-test/deep v1.0.5 // indirect
 	github.com/hashicorp/go-version v1.2.0
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.7.0

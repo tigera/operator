@@ -869,7 +869,7 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 	}
 }
 
-// The ECK operator creates a webhook service that is not automatically removed.
+// This is a webhook service that helps with CR validations.
 func (es elasticsearchComponent) webhookService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},

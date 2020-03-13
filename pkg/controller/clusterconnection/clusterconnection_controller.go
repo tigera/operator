@@ -17,6 +17,7 @@ package clusterconnection
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/controller/status"
 
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -36,9 +37,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("clusterconnection_controller")
-
 const controllerName = "clusterconnection-controller"
+
+var log = logf.Log.WithName(controllerName)
 
 // Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started. This controller is meant only for enterprise users.
@@ -52,11 +53,14 @@ func Add(mgr manager.Manager, p operatorv1.Provider, enterpriseEnabled bool) err
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, p operatorv1.Provider) reconcile.Reconciler {
-	return &ReconcileConnection{
+	c := &ReconcileConnection{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Provider: p,
+		Status:   status.New(mgr.GetClient(), "management-cluster-connection"),
 	}
+	c.Status.Run()
+	return c
 }
 
 // add adds a new controller to mgr with r as the reconcile.Reconciler
@@ -93,6 +97,13 @@ type ReconcileConnection struct {
 	Client   client.Client
 	Scheme   *runtime.Scheme
 	Provider operatorv1.Provider
+	Status   status.StatusManager
+}
+
+func GetClusterConnection(ctx context.Context, cli client.Client) (*operatorv1.ManagementClusterConnection, error) {
+	mcc := &operatorv1.ManagementClusterConnection{}
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, mcc)
+	return mcc, err
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -105,15 +116,13 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 	result := reconcile.Result{}
 
-	instl, err := installation.GetInstallation(context.Background(), r.Client, r.Provider)
+	instl, err := installation.GetInstallation(ctx, r.Client, r.Provider)
 	if err != nil {
 		return result, err
 	}
 
 	// Fetch the managementClusterConnection.
-	mcc := &operatorv1.ManagementClusterConnection{}
-	err = r.Client.Get(ctx, utils.DefaultTSEEInstanceKey, mcc)
-
+	mcc, err := GetClusterConnection(ctx, r.Client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// If the resource is not found, we will not return an error. Instead, the watch on the resource will
@@ -121,10 +130,14 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 			if instl.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
 				log.Error(err, "ManagementClusterConnection is a necessary resource for Managed clusters")
 			}
+			r.Status.OnCRNotFound()
 			return result, nil
 		}
+		r.Status.SetDegraded("Error querying Manager", err.Error())
 		return result, err
 	}
+	log.V(2).Info("Loaded config", "config", mcc)
+	r.Status.OnCRFound()
 
 	if instl.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		log.Info(fmt.Sprintf("Setting up management cluster connection, even though clusterType != %v",
@@ -134,6 +147,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
+		r.Status.SetDegraded("Error with Pull secrets", err.Error())
 		return result, err
 	}
 
@@ -141,6 +155,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	tunnelSecret := &corev1.Secret{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
+		r.Status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
 		if !errors.IsNotFound(err) {
 			return result, nil
 		}
@@ -156,9 +171,13 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		tunnelSecret,
 	)
 
-	if err := ch.CreateOrUpdate(ctx, component, nil); err != nil {
+	if err := ch.CreateOrUpdate(ctx, component, r.Status); err != nil {
+		r.Status.SetDegraded("Error creating or updating resource", err.Error())
 		return result, err
 	}
+
+	// Clear the degraded bit if we've reached this far.
+	r.Status.ClearDegraded()
 
 	//We should create the Guardian deployment.
 	return result, nil

@@ -276,6 +276,8 @@ cluster-create: kubectl
 
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
+		./kubectl apply -f deploy/crds/calico/ && \
+		./kubectl apply -f deploy/crds/enterprise/ && \
 		./kubectl apply -f deploy/crds/operator_v1_manager_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_logcollector_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_intrusiondetection_crd.yaml && \

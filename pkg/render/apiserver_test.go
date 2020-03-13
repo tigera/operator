@@ -59,11 +59,12 @@ var _ = Describe("API server rendering tests", func() {
 		// - 2 tiered policy passthru ClusterRole and binding
 		// - 1 delegate auth binding
 		// - 1 auth reader binding
+		// - 2 webhook reader ClusterRole and binding
 		// - 2 cert secrets
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -91,6 +92,8 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		i := 0
@@ -218,7 +221,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
@@ -231,7 +234,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 
 		// Should render the correct resources.
 		cr := resources[16].(*rbacv1.ClusterRole)
@@ -255,11 +258,38 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+	})
+
+	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
+		component, err := render.APIServer(instance, nil, nil, openshift)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		Expect(len(resources)).To(Equal(22))
+
+		// Should render the correct resources.
+		cr := resources[20].(*rbacv1.ClusterRole)
+		Expect(len(cr.Rules)).To(Equal(1))
+		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
+		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
+		Expect(cr.Rules[0].Resources[1]).To(Equal("validatingwebhookconfigurations"))
+		Expect(len(cr.Rules[0].Verbs)).To(Equal(3))
+		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
+		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
+		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
+
+		crb := resources[21].(*rbacv1.ClusterRoleBinding)
+		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
+		Expect(len(crb.Subjects)).To(Equal(1))
+		Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
+		Expect(crb.Subjects[0].Name).To(Equal("tigera-apiserver"))
+		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
 	})
 })
 

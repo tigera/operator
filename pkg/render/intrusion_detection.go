@@ -145,7 +145,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			},
 			{
 				Name:  "START_XPACK_TRIAL",
-				Value: "true",
+				Value: "false",
 			},
 			{
 				Name:      "USER",

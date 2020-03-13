@@ -34,12 +34,13 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
-	esv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	kbv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
+	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -77,6 +78,7 @@ var _ = Describe("LogStorage controller", func() {
 			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 			cli = fake.NewFakeClientWithScheme(scheme)
 		})
@@ -191,9 +193,9 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(result).Should(Equal(reconcile.Result{}))
 
 						By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
-						err = cli.Get(context.Background(), esObjKey, &esv1alpha1.Elasticsearch{})
+						err = cli.Get(context.Background(), esObjKey, &esv1.Elasticsearch{})
 						Expect(errors.IsNotFound(err)).Should(BeTrue())
-						err = cli.Get(context.Background(), kbObjKey, &kbv1alpha1.Kibana{})
+						err = cli.Get(context.Background(), kbObjKey, &kbv1.Kibana{})
 						Expect(errors.IsNotFound(err)).Should(BeTrue())
 
 						// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
@@ -278,16 +280,16 @@ var _ = Describe("LogStorage controller", func() {
 
 					Expect(cli.Get(ctx, eckOperatorObjKey, &appsv1.StatefulSet{})).ShouldNot(HaveOccurred())
 
-					es := &esv1alpha1.Elasticsearch{}
+					es := &esv1.Elasticsearch{}
 					Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
 
-					es.Status.Phase = esv1alpha1.ElasticsearchOperationalPhase
+					es.Status.Phase = esv1.ElasticsearchReadyPhase
 					Expect(cli.Update(ctx, es)).ShouldNot(HaveOccurred())
 
-					kb := &kbv1alpha1.Kibana{}
+					kb := &kbv1.Kibana{}
 					Expect(cli.Get(ctx, kbObjKey, kb)).ShouldNot(HaveOccurred())
 
-					kb.Status.AssociationStatus = cmneckalpha1.AssociationEstablished
+					kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 					Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esPublicCertObjMeta})).ShouldNot(HaveOccurred())
@@ -367,9 +369,9 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
-					err = cli.Get(context.Background(), esObjKey, &esv1alpha1.Elasticsearch{})
+					err = cli.Get(context.Background(), esObjKey, &esv1.Elasticsearch{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
-					err = cli.Get(context.Background(), kbObjKey, &kbv1alpha1.Kibana{})
+					err = cli.Get(context.Background(), kbObjKey, &kbv1.Kibana{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
 
 					// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
@@ -431,8 +433,8 @@ func setUpLogStorageComponents(cli client.Client) {
 				ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
 			},
 		},
-		&esv1alpha1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-		&kbv1alpha1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
+		&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+		&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		render.NewElasticsearchClusterConfig("cluster", 1, 1),
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -452,22 +454,22 @@ func setUpLogStorageComponents(cli client.Client) {
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local",
+		nil, nil, "cluster.local", true,
 	)
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {
 		switch obj.(type) {
-		case *esv1alpha1.Elasticsearch:
+		case *esv1.Elasticsearch:
 			By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
-			es := obj.(*esv1alpha1.Elasticsearch)
-			es.Status.Phase = esv1alpha1.ElasticsearchOperationalPhase
+			es := obj.(*esv1.Elasticsearch)
+			es.Status.Phase = esv1.ElasticsearchReadyPhase
 			obj = es
 
-		case *kbv1alpha1.Kibana:
+		case *kbv1.Kibana:
 			By("setting the Kibana status to operational so we pass the Kibana ready check")
-			kb := obj.(*kbv1alpha1.Kibana)
-			kb.Status.AssociationStatus = cmneckalpha1.AssociationEstablished
+			kb := obj.(*kbv1.Kibana)
+			kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 			obj = kb
 		}
 

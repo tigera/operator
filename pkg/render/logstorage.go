@@ -18,14 +18,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/elastic/cloud-on-k8s/operators/pkg/utils/stringsutil"
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
-	esv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	kbv1alpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
+	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
 	"gopkg.in/inf.v0"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -38,9 +39,12 @@ import (
 )
 
 const (
-	ECKOperatorName      = "elastic-operator"
-	ECKOperatorNamespace = "tigera-eck-operator"
-	ECKWebhookSecretName = "webhook-server-secret"
+	ECKOperatorName         = "elastic-operator"
+	ECKOperatorNamespace    = "tigera-eck-operator"
+	ECKWebhookSecretName    = "elastic-webhook-server-cert"
+	ECKWebhookName          = "elastic-webhook-server"
+	ECKEnterpriseTrial      = "eck-trial-license"
+	ECKWebhookConfiguration = "elastic-webhook.k8s.elastic.co"
 
 	ElasticsearchStorageClass  = "tigera-elasticsearch"
 	ElasticsearchNamespace     = "tigera-elasticsearch"
@@ -90,8 +94,8 @@ const (
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
 	installation *operatorv1.Installation,
-	elasticsearch *esv1alpha1.Elasticsearch,
-	kibana *kbv1alpha1.Kibana,
+	elasticsearch *esv1.Elasticsearch,
+	kibana *kbv1.Kibana,
 	clusterConfig *ElasticsearchClusterConfig,
 	elasticsearchSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
@@ -101,7 +105,8 @@ func LogStorage(
 	curatorSecrets []*corev1.Secret,
 	esService *corev1.Service,
 	kbService *corev1.Service,
-	clusterDNS string) Component {
+	clusterDNS string,
+	applyTrial bool) Component {
 
 	return &elasticsearchComponent{
 		logStorage:           logStorage,
@@ -118,14 +123,15 @@ func LogStorage(
 		esService:            esService,
 		kbService:            kbService,
 		clusterDNS:           clusterDNS,
+		applyTrial:           applyTrial,
 	}
 }
 
 type elasticsearchComponent struct {
 	logStorage           *operatorv1.LogStorage
 	installation         *operatorv1.Installation
-	elasticsearch        *esv1alpha1.Elasticsearch
-	kibana               *kbv1alpha1.Kibana
+	elasticsearch        *esv1.Elasticsearch
+	kibana               *kbv1.Kibana
 	clusterConfig        *ElasticsearchClusterConfig
 	elasticsearchSecrets []*corev1.Secret
 	kibanaSecrets        []*corev1.Secret
@@ -136,6 +142,7 @@ type elasticsearchComponent struct {
 	esService            *corev1.Service
 	kbService            *corev1.Service
 	clusterDNS           string
+	applyTrial           bool
 }
 
 func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -188,6 +195,8 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			es.eckOperatorClusterRole(),
 			es.eckOperatorClusterRoleBinding(),
 			es.eckOperatorServiceAccount(),
+			es.webhookService(),
+			es.elasticWebhookConfiguration(),
 		)
 		// This is needed for the operator to be able to set privileged mode for pods.
 		// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
@@ -234,11 +243,16 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, es.curatorCronJob())
 		}
 
+		if es.applyTrial {
+			toCreate = append(toCreate, es.elasticEnterpriseTrial())
+		}
+
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
 		// service as it differs between these cluster types
 		if es.esService != nil && es.esService.Spec.Type == corev1.ServiceTypeExternalName {
 			toDelete = append(toDelete, es.esService)
 		}
+
 		if es.kbService != nil && es.kbService.Spec.Type == corev1.ServiceTypeExternalName {
 			toDelete = append(toDelete, es.kbService)
 		}
@@ -383,8 +397,27 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 	}
 
+	// Was already present, but hidden from view in ECK 0.9. We are investigating how to improve on this internally:
+	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
+	trueBool := true
+	var user int64 = 0
+	initContainer := corev1.Container{
+		Name: "elastic-internal-init-os-settings",
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &trueBool,
+			RunAsUser:  &user,
+		},
+		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+		Command: []string{
+			"sysctl",
+			"-w",
+			"vm.max_map_count=262144",
+		},
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
+			InitContainers:   []corev1.Container{initContainer},
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
 		},
@@ -466,11 +499,11 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearch {
+func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
 
-	return &esv1alpha1.Elasticsearch{
-		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1alpha1"},
+	return &esv1.Elasticsearch{
+		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
@@ -478,20 +511,21 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1alpha1.Elasticsearc
 				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
 			},
 		},
-		Spec: esv1alpha1.ElasticsearchSpec{
+		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentElasticsearch.Version,
 			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
-			HTTP: cmneckalpha1.HTTPConfig{
-				TLS: cmneckalpha1.TLSOptions{
-					Certificate: cmneckalpha1.SecretRef{
+			HTTP: cmnv1.HTTPConfig{
+				TLS: cmnv1.TLSOptions{
+					Certificate: cmnv1.SecretRef{
 						SecretName: TigeraElasticsearchCertSecret,
 					},
 				},
 			},
-			Nodes: []esv1alpha1.NodeSpec{
+			NodeSets: []esv1.NodeSet{
 				{
-					NodeCount: int32(nodeConfig.Count),
-					Config: &cmneckalpha1.Config{
+					Count: int32(nodeConfig.Count),
+					Name:  "es",
+					Config: &cmnv1.Config{
 						Data: map[string]interface{}{
 							"node.master": "true",
 							"node.data":   "true",
@@ -528,7 +562,7 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 			},
 			{
 				APIGroups: []string{"apps"},
-				Resources: []string{"deployments"},
+				Resources: []string{"deployments", "statefulsets"},
 				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 			},
 			{
@@ -653,7 +687,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 						Name:  "manager",
-						Args:  []string{"manager", "--operator-roles", "all", "--enable-debug-logs=false"},
+						Args:  []string{"manager", "--operator-roles", "all", "--log-verbosity=2"},
 						Env: []corev1.EnvVar{
 							{
 								Name: "OPERATOR_NAMESPACE",
@@ -665,7 +699,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 							},
 							{Name: "WEBHOOK_SECRET", Value: ECKWebhookSecretName},
 							{Name: "WEBHOOK_PODS_LABEL", Value: "elastic-operator"},
-							{Name: "OPERATOR_IMAGE", Value: "docker.elastic.co/eck/eck-operator:0.9.0"},
+							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath)},
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -674,17 +708,17 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),
-								"memory": resource.MustParse("20Mi"),
+								"memory": resource.MustParse("50Mi"),
 							},
 						},
 						Ports: []corev1.ContainerPort{{
-							ContainerPort: 9876,
+							ContainerPort: 9443,
 							Name:          "webhook-server",
 							Protocol:      corev1.ProtocolTCP,
 						}},
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "cert",
-							MountPath: "/tmp/cert",
+							MountPath: "/tmp/k8s-webhook-server/serving-certs",
 							ReadOnly:  true,
 						}},
 					}},
@@ -704,8 +738,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	}
 }
 
-func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
-	return &kbv1alpha1.Kibana{
+func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
+	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
 			Namespace: KibanaNamespace,
@@ -716,26 +750,27 @@ func (es elasticsearchComponent) kibanaCR() *kbv1alpha1.Kibana {
 				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
 			},
 		},
-		Spec: kbv1alpha1.KibanaSpec{
+		Spec: kbv1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
 			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
-			Config: &cmneckalpha1.Config{
+			Config: &cmnv1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{
 						"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
 						"rewriteBasePath": true,
 					},
+					"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 				},
 			},
-			NodeCount: 1,
-			HTTP: cmneckalpha1.HTTPConfig{
-				TLS: cmneckalpha1.TLSOptions{
-					Certificate: cmneckalpha1.SecretRef{
+			Count: 1,
+			HTTP: cmnv1.HTTPConfig{
+				TLS: cmnv1.TLSOptions{
+					Certificate: cmnv1.SecretRef{
 						SecretName: TigeraKibanaCertSecret,
 					},
 				},
 			},
-			ElasticsearchRef: cmneckalpha1.ObjectSelector{
+			ElasticsearchRef: cmnv1.ObjectSelector{
 				Name:      ElasticsearchName,
 				Namespace: ElasticsearchNamespace,
 			},
@@ -831,5 +866,87 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.logStorage.Spec.Retention.ComplianceReports)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
+	}
+}
+
+// This is a webhook service that helps with CR validations.
+func (es elasticsearchComponent) webhookService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKWebhookName,
+			Namespace: ECKOperatorNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       ECKWebhookName,
+					Port:       443,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(9443),
+				},
+			},
+			Selector: map[string]string{"control-plane": ECKOperatorName, "k8s-app": ECKOperatorName},
+		},
+	}
+}
+
+// Applying this in the eck namespace will start a trial license for enterprise features.
+func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKEnterpriseTrial,
+			Namespace: ECKOperatorNamespace,
+			Labels: map[string]string{
+				"license.k8s.elastic.co/type": "enterprise-trial",
+			},
+			Annotations: map[string]string{
+				"elastic.co/eula": "accepted",
+			},
+		},
+	}
+}
+
+// A ValidatingWebhookConfiguration is used in order to validate changes made to the Kibana and ES CR's
+func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1.ValidatingWebhookConfiguration {
+	path := "/validate-elasticsearch-k8s-elastic-co-v1-elasticsearch"
+	failure := admissionv1beta1.Ignore
+	return &admissionv1beta1.ValidatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ECKWebhookConfiguration,
+		},
+		Webhooks: []admissionv1beta1.Webhook{
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &path,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-es-validation-v1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1",
+							},
+							Resources: []string{
+								"elasticsearches",
+							},
+							APIGroups: []string{
+								"elasticsearch.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }

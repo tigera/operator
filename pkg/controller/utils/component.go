@@ -21,8 +21,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 
-	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -233,10 +233,10 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 			dsa.Secrets = csa.Secrets
 		}
 		return dsa
-	case *esalpha1.Elasticsearch:
+	case *esv1.Elasticsearch:
 		// Only update if the spec has changed
-		csa := current.(*esalpha1.Elasticsearch)
-		dsa := desired.(*esalpha1.Elasticsearch)
+		csa := current.(*esv1.Elasticsearch)
+		dsa := desired.(*esv1.Elasticsearch)
 
 		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
 			return csa
@@ -249,10 +249,10 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		dsa.Finalizers = csa.Finalizers
 		dsa.Status = csa.Status
 		return dsa
-	case *kibanaalpha1.Kibana:
+	case *kbv1.Kibana:
 		// Only update if the spec has changed
-		csa := current.(*kibanaalpha1.Kibana)
-		dsa := desired.(*kibanaalpha1.Kibana)
+		csa := current.(*kbv1.Kibana)
+		dsa := desired.(*kbv1.Kibana)
 		if reflect.DeepEqual(csa.Spec, dsa.Spec) {
 			return csa
 		}
@@ -262,7 +262,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// or finalizers from Kibana.
 		dsa.Annotations = csa.Annotations
 		dsa.Finalizers = csa.Finalizers
-		dsa.Spec.Elasticsearch = csa.Spec.Elasticsearch
+		dsa.Spec.ElasticsearchRef = csa.Spec.ElasticsearchRef
 		dsa.Status = csa.Status
 		return dsa
 	default:

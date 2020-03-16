@@ -30,41 +30,41 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.7.1"
-	VersionTigeraTypha           = "v2.7.1"
-	VersionTigeraKubeControllers = "v2.7.1"
+	VersionTigeraNode            = "v2.7.3"
+	VersionTigeraTypha           = "v2.7.3"
+	VersionTigeraKubeControllers = "v2.7.3"
 
 	// API server images.
-	VersionAPIServer   = "v2.7.1"
-	VersionQueryServer = "v2.7.1"
+	VersionAPIServer   = "v2.7.3"
+	VersionQueryServer = "v2.7.3"
 
 	// Logging
-	VersionFluentd = "v2.7.1"
+	VersionFluentd = "v2.7.4"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.7.1"
-	VersionComplianceReporter    = "v2.7.1"
-	VersionComplianceServer      = "v2.7.1"
-	VersionComplianceSnapshotter = "v2.7.1"
-	VersionComplianceBenchmarker = "v2.7.1"
+	VersionComplianceController  = "v2.7.3"
+	VersionComplianceReporter    = "v2.7.3"
+	VersionComplianceServer      = "v2.7.3"
+	VersionComplianceSnapshotter = "v2.7.3"
+	VersionComplianceBenchmarker = "v2.7.3"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.7.1"
-	VersionIntrusionDetectionJobInstaller = "v2.7.1"
+	VersionIntrusionDetectionController   = "v2.7.3"
+	VersionIntrusionDetectionJobInstaller = "v2.7.3"
 
 	// Manager images.
-	VersionManager        = "v2.7.1"
-	VersionManagerProxy   = "v2.7.1"
-	VersionManagerEsProxy = "v2.7.1"
+	VersionManager        = "v2.7.3"
+	VersionManagerProxy   = "v2.7.3"
+	VersionManagerEsProxy = "v2.7.3"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "v2.7.1"
+	VersionEsCurator        = "v2.7.3"
 
-	VersionKibana = "v2.7.1"
+	VersionKibana = "v2.7.3"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "v2.7.1"
+	VersionGuardian = "v2.7.3"
 )

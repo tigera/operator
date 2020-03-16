@@ -153,6 +153,14 @@ func (m *statusManager) OnCRNotFound() {
 	m.clearProgressing()
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	// Remove status displayed for CR, if CR was available earlier but not now.
+	if m.enabled {
+		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+		err := m.client.Delete(context.TODO(), ts)
+		if err != nil {
+			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+		}
+	}
 	m.enabled = false
 	m.progressing = []string{}
 	m.failing = []string{}

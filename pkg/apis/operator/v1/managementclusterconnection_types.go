@@ -40,6 +40,8 @@ type ManagementClusterConnection struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec ManagementClusterConnectionSpec `json:"spec,omitempty"`
+
+	Status ManagementClusterConnectionStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -49,6 +51,12 @@ type ManagementClusterConnectionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ManagementClusterConnection `json:"items"`
+}
+
+// ManagementClusterConnectionStatus gives recently the observed state of tunnel between managed and management cluster
+// +k8s:openapi-gen=true
+type ManagementClusterConnectionStatus struct {
+	State string `json:"state,omitempty"`
 }
 
 func init() {

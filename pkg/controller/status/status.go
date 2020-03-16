@@ -28,6 +28,7 @@ import (
 	batch "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -153,14 +154,6 @@ func (m *statusManager) OnCRNotFound() {
 	m.clearProgressing()
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	// Remove status displayed for CR, if CR was available earlier but not now.
-	if m.enabled {
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-		err := m.client.Delete(context.TODO(), ts)
-		if err != nil {
-			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
-		}
-	}
 	m.enabled = false
 	m.progressing = []string{}
 	m.failing = []string{}
@@ -309,6 +302,17 @@ func (m *statusManager) syncState() bool {
 	defer m.lock.Unlock()
 	progressing := []string{}
 	failing := []string{}
+
+	// Remove status displayed for CR, if CR not found.
+	if !m.enabled {
+		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+		err := m.client.Delete(context.TODO(), ts)
+		if err != nil && !apierrs.IsNotFound(err){
+			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+		}
+		return false
+	}
+
 	// For each daemonset, check its rollout status.
 	for _, dsnn := range m.daemonsets {
 		ds := &appsv1.DaemonSet{}

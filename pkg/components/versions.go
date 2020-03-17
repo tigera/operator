@@ -39,7 +39,7 @@ const (
 	VersionQueryServer = "v2.7.3"
 
 	// Logging
-	VersionFluentd = "v2.7.4"
+	VersionFluentd = "v2.7.3"
 
 	// Compliance images.
 	VersionComplianceController  = "v2.7.3"

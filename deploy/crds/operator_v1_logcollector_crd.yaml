@@ -63,31 +63,13 @@ spec:
               description: Configuration for exporting flow, audit, and DNS logs to
                 external storage.
               properties:
-                s3:
-                  description: If specified, enables exporting of flow, audit, and
-                    DNS logs to Amazon S3 storage.
-                  properties:
-                    bucketName:
-                      description: Name of the S3 bucket to send logs
-                      type: string
-                    bucketPath:
-                      description: Path in the S3 bucket where to send logs
-                      type: string
-                    region:
-                      description: AWS Region of the S3 bucket
-                      type: string
-                  required:
-                  - region
-                  - bucketName
-                  - bucketPath
-                  type: object
                 splunk:
                   description: If specified, enables exporting of flow, audit, and
                     DNS logs to splunk.
                   properties:
                     endpoint:
-                      description: URI for splunk's http event collector end point.
-                        example https://1.2.3.4:8088
+                      description: Location for splunk's http event collector end
+                        point. example https://1.2.3.4:8088
                       type: string
                   required:
                   - endpoint

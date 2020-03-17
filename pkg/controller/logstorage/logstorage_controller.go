@@ -503,7 +503,9 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	return secrets, nil
 }
 
-// Returns true if we want to apply a new trial license.
+// Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.
+// Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
+// installs a valid Elastic license, the trial will be ignored.
 func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context) (bool, error) {
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
 		if errors.IsNotFound(err) {

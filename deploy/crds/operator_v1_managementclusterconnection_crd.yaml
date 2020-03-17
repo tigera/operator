@@ -10,6 +10,8 @@ spec:
     plural: managementclusterconnections
     singular: managementclusterconnection
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:

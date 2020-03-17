@@ -38,6 +38,12 @@ const (
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
 )
 
+var (
+	// The port used by calico/node to report Calico Enterprise internal metrics.
+	// This is separate from the calico/node prometheus metrics port, which is user configurable.
+	nodeReporterPort int32 = 9081
+)
+
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, migrate bool) Component {
 	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, migrationNeeded: migrate}
@@ -63,12 +69,7 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		metricsService := c.nodeMetricsService()
-		if c.cr.Spec.NodeMetricsPort != nil {
-			objsToCreate = append(objsToCreate, metricsService)
-		} else {
-			objsToDelete = append(objsToDelete, metricsService)
-		}
+		objs = append(objs, c.nodeMetricsService())
 	}
 
 	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
@@ -414,6 +415,12 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	}
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+
+	// Include annotation for prometheus scraping configuration.
+	if c.cr.Spec.NodeMetricsPort != nil {
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/port"] = fmt.Sprintf("%s", *c.cr.Spec.NodeMetricsPort)
+	}
 
 	initContainers := []v1.Container{}
 	if c.cr.Spec.FlexVolumePath != "None" {
@@ -862,6 +869,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -870,11 +878,16 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
+	}
 
-		if c.cr.Spec.NodeMetricsPort != nil {
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT",
-				Value: fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)})
+	if c.cr.Spec.NodeMetricsPort != nil {
+		// If a node metrics port was given, then enable felix prometheus metrics and set the port.
+		// Note that this takes precedence over any FelixConfiguration resources in the cluster.
+		extraNodeEnv := []v1.EnvVar{
+			{Name: "FELIX_PROMETHEUSMETRICSENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)},
 		}
+		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
 	// Configure provider specific environment variables here.
@@ -935,13 +948,10 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-// nodeMetricsService creates a Service which exposes the calico/node metrics reporting endpoint.
+// nodeMetricsService creates a Service which exposes the calico/node reporting endpoint.
+// This service is used internally by Calico Enterprise, and is separate from general prometheus
+// metrics which are user-configurable.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
-	var nodeMetricsPort int32 = 0
-	if c.cr.Spec.NodeMetricsPort != nil {
-		nodeMetricsPort = *c.cr.Spec.NodeMetricsPort
-	}
-
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -949,15 +959,14 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
-
 		Spec: v1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": "calico-node"},
 			Type:     v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
 				v1.ServicePort{
 					Name:       "calico-metrics-port",
-					Port:       nodeMetricsPort,
-					TargetPort: intstr.FromInt(int(nodeMetricsPort)),
+					Port:       nodeReporterPort,
+					TargetPort: intstr.FromInt(int(nodeReporterPort)),
 					Protocol:   v1.ProtocolTCP,
 				},
 			},

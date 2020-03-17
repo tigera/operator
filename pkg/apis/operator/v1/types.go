@@ -80,7 +80,9 @@ type InstallationSpec struct {
 	// +optional
 	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
 
-	// NodeMetricsPort specifies which port calico/node serves metrics on. If omitted, then metrics are disabled.
+	// NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
+	// If specified, this overrides any FelixConfiguration resources which may exist. If omitted, then
+	// prometheus metrics may still be configured through FelixConfiguration.
 	// +optional
 	NodeMetricsPort *int32 `json:"nodeMetricsPort,omitempty"`
 

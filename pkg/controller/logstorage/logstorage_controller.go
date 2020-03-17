@@ -29,15 +29,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	cmneckalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/common/v1alpha1"
-	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
+	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
-	kibanaalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/kibana/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -157,13 +157,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{
+	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &kibanaalpha1.Kibana{
+	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
@@ -342,6 +342,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
 	createWebhookSecret := false
+	applyTrial := false
 
 	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards)
@@ -387,6 +388,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
 			return reconcile.Result{}, err
 		}
+
+		applyTrial, err = r.shouldApplyElasticTrialSecret(ctx)
+		if err != nil {
+			r.status.SetDegraded("Failed to get eck trial license", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -427,6 +434,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		esService,
 		kbService,
 		r.localDNS,
+		applyTrial,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -436,12 +444,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		if elasticsearch == nil || elasticsearch.Status.Phase != esalpha1.ElasticsearchOperationalPhase {
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
 		}
 
-		if kibana == nil || kibana.Status.AssociationStatus != cmneckalpha1.AssociationEstablished {
+		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, nil
 		}
@@ -495,6 +503,19 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	return secrets, nil
 }
 
+// Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.
+// Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic.
+func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context) (bool, error) {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
+		if errors.IsNotFound(err) {
+			return true, nil
+		} else {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
 func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secret, error) {
 	var secrets []*corev1.Secret
 	secret := &corev1.Secret{}
@@ -523,8 +544,8 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	return secrets, nil
 }
 
-func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esalpha1.Elasticsearch, error) {
-	es := esalpha1.Elasticsearch{}
+func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {
+	es := esv1.Elasticsearch{}
 	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -547,8 +568,8 @@ func (r *ReconcileLogStorage) getElasticsearchService(ctx context.Context) (*cor
 	return &svc, nil
 }
 
-func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kibanaalpha1.Kibana, error) {
-	kb := kibanaalpha1.Kibana{}
+func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kbv1.Kibana, error) {
+	kb := kbv1.Kibana{}
 	err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, &kb)
 	if err != nil {
 		if errors.IsNotFound(err) {

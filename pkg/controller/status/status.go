@@ -28,6 +28,7 @@ import (
 	batch "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,6 +107,9 @@ func (m *statusManager) Run() {
 		// Loop forever, periodically checking dependent objects for their state.
 		for {
 			if !m.syncState() {
+				if !m.enabled {
+					m.crCleanup()
+				}
 				// Waiting to be in sync.
 				time.Sleep(5 * time.Second)
 				continue
@@ -129,6 +133,10 @@ func (m *statusManager) Run() {
 				m.setDegraded(m.degradedReason(), m.degradedMessage())
 			} else {
 				m.clearDegraded()
+			}
+
+			if !m.enabled {
+				m.crCleanup()
 			}
 
 			time.Sleep(5 * time.Second)
@@ -301,6 +309,7 @@ func (m *statusManager) syncState() bool {
 	defer m.lock.Unlock()
 	progressing := []string{}
 	failing := []string{}
+
 	// For each daemonset, check its rollout status.
 	for _, dsnn := range m.daemonsets {
 		ds := &appsv1.DaemonSet{}
@@ -405,6 +414,15 @@ func (m *statusManager) syncState() bool {
 	// we're not yet ready to report status. However, if we've been given an explicit degraded state, then
 	// we should report it.
 	return m.explicitDegradedReason != ""
+}
+
+// crCleanup removes the status displayed for CR in tigerastatus
+func (m *statusManager) crCleanup() {
+	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+	err := m.client.Delete(context.TODO(), ts)
+	if err != nil && !apierrs.IsNotFound(err) {
+		log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+	}
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined

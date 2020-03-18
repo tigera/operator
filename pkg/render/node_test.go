@@ -229,9 +229,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
-		var nodeMetricsPort int32 = 9081
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
 
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
@@ -442,9 +440,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
-		var nodeMetricsPort int32 = 9081
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
 
 		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
@@ -793,22 +789,26 @@ var _ = Describe("Node rendering tests", func() {
 			}),
 	)
 
-	It("should not export FELIX_PROMETHEUSREPORTERPORT if NodeMetricsPort is nil", func() {
+	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.Spec.NodeMetricsPort = nil
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
-		notExpectedEnvVar := v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT"}
+		notExpectedEnvVar := v1.EnvVar{Name: "FELIX_PROMETHEUSMETRICSPORT"}
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(notExpectedEnvVar))
+
+		// It should have the reporter port, though.
+		expected := v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT"}
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(expected))
 	})
 
-	It("should export FELIX_PROMETHEUSREPORTERPORT with a custom value if NodeMetricsPort is set", func() {
+	It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
@@ -819,9 +819,19 @@ var _ = Describe("Node rendering tests", func() {
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
-		expectedEnvVar := v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "1234"}
+		// Assert on expected env vars.
+		expectedEnvVars := []v1.EnvVar{
+			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: "1234"},
+			{Name: "FELIX_PROMETHEUSMETRICSENABLED", Value: "true"},
+		}
 		ds := dsResource.(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(expectedEnvVar))
+		for _, v := range expectedEnvVars {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
+		}
+
+		// Assert we set annotations properly.
+		Expect(ds.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+		Expect(ds.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
 	})
 
 	It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {

@@ -17,6 +17,7 @@ package v1
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
@@ -91,6 +92,11 @@ type InstallationSpec struct {
 	// kubernetesProvider.
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
+
+	// MaxUnavailable determines the max number of daemonset pods that can be unavailable during an update.
+	// Default: 1
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

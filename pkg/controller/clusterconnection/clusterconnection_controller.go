@@ -57,9 +57,9 @@ func newReconciler(mgr manager.Manager, p operatorv1.Provider) reconcile.Reconci
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Provider: p,
-		Status:   status.New(mgr.GetClient(), "management-cluster-connection"),
+		status:   status.New(mgr.GetClient(), "management-cluster-connection"),
 	}
-	c.Status.Run()
+	c.status.Run()
 	return c
 }
 
@@ -97,7 +97,7 @@ type ReconcileConnection struct {
 	Client   client.Client
 	Scheme   *runtime.Scheme
 	Provider operatorv1.Provider
-	Status   status.StatusManager
+	status   status.StatusManager
 }
 
 func GetClusterConnection(ctx context.Context, cli client.Client) (*operatorv1.ManagementClusterConnection, error) {
@@ -130,14 +130,14 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 			if instl.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
 				log.Error(err, "ManagementClusterConnection is a necessary resource for Managed clusters")
 			}
-			r.Status.OnCRNotFound()
+			r.status.OnCRNotFound()
 			return result, nil
 		}
-		r.Status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
+		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
 		return result, err
 	}
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", mcc)
-	r.Status.OnCRFound()
+	r.status.OnCRFound()
 
 	if instl.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		log.Info(fmt.Sprintf("Setting up management cluster connection, even though clusterType != %v",
@@ -147,7 +147,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
-		r.Status.SetDegraded("Error with Pull secrets", err.Error())
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return result, err
 	}
 
@@ -155,7 +155,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	tunnelSecret := &corev1.Secret{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
-		r.Status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
+		r.status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
 		if !errors.IsNotFound(err) {
 			return result, nil
 		}
@@ -171,13 +171,12 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		tunnelSecret,
 	)
 
-	if err := ch.CreateOrUpdate(ctx, component, r.Status); err != nil {
-		r.Status.SetDegraded("Error creating or updating resource", err.Error())
+	if err := ch.CreateOrUpdate(ctx, component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return result, err
 	}
 
-	// Clear the degraded bit if we've reached this far.
-	r.Status.ClearDegraded()
+	r.status.ClearDegraded()
 
 	//We should create the Guardian deployment.
 	return result, nil

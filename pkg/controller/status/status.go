@@ -106,10 +106,13 @@ func (m *statusManager) Run() {
 	go func() {
 		// Loop forever, periodically checking dependent objects for their state.
 		for {
+			if m.removeTigeraStatus() {
+				// Wait for CR to be available.
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
 			if !m.syncState() {
-				if !m.enabled {
-					m.crCleanup()
-				}
 				// Waiting to be in sync.
 				time.Sleep(5 * time.Second)
 				continue
@@ -133,10 +136,6 @@ func (m *statusManager) Run() {
 				m.setDegraded(m.degradedReason(), m.degradedMessage())
 			} else {
 				m.clearDegraded()
-			}
-
-			if !m.enabled {
-				m.crCleanup()
 			}
 
 			time.Sleep(5 * time.Second)
@@ -416,13 +415,19 @@ func (m *statusManager) syncState() bool {
 	return m.explicitDegradedReason != ""
 }
 
-// crCleanup removes the status displayed for CR in the TigeraStatus
-func (m *statusManager) crCleanup() {
-	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-	err := m.client.Delete(context.TODO(), ts)
-	if err != nil && !apierrs.IsNotFound(err) {
-		log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+// removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
+func (m *statusManager) removeTigeraStatus() bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if !m.enabled {
+		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+		err := m.client.Delete(context.TODO(), ts)
+		if err != nil && !apierrs.IsNotFound(err) {
+			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+		}
+		return true
 	}
+	return false
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined

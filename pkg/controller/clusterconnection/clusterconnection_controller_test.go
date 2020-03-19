@@ -61,7 +61,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Client:   c,
 			Scheme:   scheme,
 			Provider: operatorv1.ProviderNone,
-			Status:	status.New(c, "management-cluster-connection"),
+			status:	status.New(c, "management-cluster-connection"),
 		}
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

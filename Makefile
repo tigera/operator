@@ -404,6 +404,31 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
+## generate-csv generates a ClusterServiceVersion. requires operator-sdk version >= v0.15.0
+generate-csv:
+ifndef VERSION
+	$(error VERSION is undefined - run using make generate-csv VERSION=vX.Y.Z)
+endif
+	# We need a semver version string in some places.
+	$(eval SEMVER_VERSION := $(VERSION:v%=%))
+
+	# Generate the CSV.
+	operator-sdk generate csv --operator-name tigera-operator --csv-channel stable --csv-version $(SEMVER_VERSION)
+
+	# Merge in our CSV updates into the generated copy.
+	yq merge -i deploy/olm-catalog/tigera-operator/$(SEMVER_VERSION)/tigera-operator.$(VERSION).clusterserviceversion.yaml build/olm-bundle/csv-merge.yaml
+
+	# Overwrite our CSV updates.
+	yq write -i -s build/olm-bundle/csv-writes.yaml deploy/olm-catalog/tigera-operator/$(SEMVER_VERSION)/tigera-operator.$(VERSION).clusterserviceversion.yaml
+
+	# Copy the CSV, crds, and package.yaml to the bundle dir.
+	mkdir -p build/_output/bundle
+	cp deploy/olm-catalog/tigera-operator/$(SEMVER_VERSION)/tigera-operator.$(VERSION).clusterserviceversion.yaml build/_output/bundle/
+	find ./deploy/crds/ -iname '*_crd.yaml' | xargs -I{} cp {} build/_output/bundle/
+	cp deploy/olm-catalog/tigera-operator/tigera-operator.package.yaml build/_output/bundle/
+
+	zip -r --junk-paths build/_output/bundle.zip build/_output/bundle/*
+
 ###############################################################################
 # Utilities
 ###############################################################################

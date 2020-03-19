@@ -1,0 +1,9 @@
+- command: update
+  path: spec.description
+  value: "An operator which manages the lifecycle of a Calico or Calico Enterprise
+      installation on Kubernetes or OpenShift. Its goal is to make installation, upgrades,
+      and ongoing lifecycle management of Calico and Calico Enterprise as simple and
+      reliable as possible"
+- command: update
+  path: metadata.annotations.capabilities
+  value: "Seamless Upgrades"

@@ -81,6 +81,55 @@ spec:
                     for pods on the Calico network. Default: 1410'
                   format: int32
                   type: integer
+                nodeAddressAutodetectionV4:
+                  description: NodeAddressAutodetectionV4 specifies an approach to
+                    automatically detect node IPv4 addresses. If not specified, will
+                    use default auto-detection settings to acquire an IPv4 address
+                    for each node.
+                  properties:
+                    canReach:
+                      description: CanReach enables IP auto-detection based on which
+                        source address on the node is used to reach the specified
+                        IP or domain.
+                      type: string
+                    firstFound:
+                      description: FirstFound uses default interface matching parameters
+                        to select an interface, performing best-effort filtering based
+                        on well-known interface names.
+                      type: boolean
+                    interface:
+                      description: Interface enables IP auto-detection based on interfaces
+                        that match the given regex.
+                      type: string
+                    skipInterface:
+                      description: SkipInterface enables IP auto-detection based on
+                        interfaces that do not match the given regex.
+                      type: string
+                  type: object
+                nodeAddressAutodetectionV6:
+                  description: NodeAddressAutodetectionV6 specifies an approach to
+                    automatically detect node IPv4 addresses. If not specified, IPv6
+                    addresses will not be auto-detected.
+                  properties:
+                    canReach:
+                      description: CanReach enables IP auto-detection based on which
+                        source address on the node is used to reach the specified
+                        IP or domain.
+                      type: string
+                    firstFound:
+                      description: FirstFound uses default interface matching parameters
+                        to select an interface, performing best-effort filtering based
+                        on well-known interface names.
+                      type: boolean
+                    interface:
+                      description: Interface enables IP auto-detection based on interfaces
+                        that match the given regex.
+                      type: string
+                    skipInterface:
+                      description: SkipInterface enables IP auto-detection based on
+                        interfaces that do not match the given regex.
+                      type: string
+                  type: object
               type: object
             clusterManagementType:
               description: 'How the cluster is managed. Valid values for this field
@@ -142,6 +191,11 @@ spec:
                 omitted, then prometheus metrics may still be configured through FelixConfiguration.
               format: int32
               type: integer
+            nodeUpdateStrategy:
+              description: NodeUpdateStrategy can be used to customize the desired
+                update strategy, such as the MaxUnavailable field (which defaults
+                to a value of one).
+              type: object
             registry:
               description: 'Registry is the default Docker registry used for component
                 Docker images. If specified, all images will be pulled from this registry.

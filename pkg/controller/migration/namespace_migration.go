@@ -23,13 +23,14 @@ import (
 	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -469,17 +470,32 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 // kubernetes rolling update.
 func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 	return wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
-		ksD, ksR, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
+		ksD, ksR, ksMaxUnavailable, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
-		csD, csR, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
+		csD, csR, csMaxUnavailable, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
 
-		// TODO: When we support configuring adjusting the rolling update unavailable,
-		// we should use that configuration here.
+		// If MaxUnavailable has been configured in either case, decrement that from the number of desired
+		// pods. A simple way of reading this is that the number of desired pods allows some to be
+		// unavailable during an update.
+		if ksMaxUnavailable != nil {
+			n, err := intstr.GetValueFromIntOrPercent(ksMaxUnavailable, int(ksD), false)
+			if err != nil {
+				ksD -= int32(n)
+			}
+		}
+
+		if csMaxUnavailable != nil {
+			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(csD), false)
+			if err != nil {
+				csD -= int32(n)
+			}
+		}
+
 		if ksD == ksR && csD == csR {
 			// Desired pods are ready
 			return true, nil
@@ -491,13 +507,16 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 	})
 }
 
-func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, error) {
+func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, *intstr.IntOrString, error) {
 	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, nil, err
 	}
 
-	return ds.Status.DesiredNumberScheduled, ds.Status.NumberReady, nil
+	return ds.Status.DesiredNumberScheduled,
+		ds.Status.NumberReady,
+		ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable,
+		nil
 }
 
 // addNodeLabels adds the specified labels to the named node. Perform

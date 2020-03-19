@@ -106,10 +106,14 @@ func (m *statusManager) Run() {
 	go func() {
 		// Loop forever, periodically checking dependent objects for their state.
 		for {
+			if !m.enabled {
+				m.crCleanup()
+				// Wait for CR to be available.
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
 			if !m.syncState() {
-				if !m.enabled {
-					m.crCleanup()
-				}
 				// Waiting to be in sync.
 				time.Sleep(5 * time.Second)
 				continue
@@ -133,10 +137,6 @@ func (m *statusManager) Run() {
 				m.setDegraded(m.degradedReason(), m.degradedMessage())
 			} else {
 				m.clearDegraded()
-			}
-
-			if !m.enabled {
-				m.crCleanup()
 			}
 
 			time.Sleep(5 * time.Second)

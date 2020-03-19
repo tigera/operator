@@ -846,6 +846,21 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds).ToNot(BeNil())
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")).To(BeNil())
 	})
+
+	It("should render MaxUnavailable if a custom value was set", func() {
+		two := intstr.FromInt(2)
+		defaultInstance.Spec.MaxUnavailable = &two
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(5))
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+		Expect(ds).ToNot(BeNil())
+
+		Expect(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable).To(Equal(&two))
+	})
 })
 
 // verifyProbes asserts the expected node liveness and readiness probe.

@@ -23,6 +23,7 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
@@ -69,6 +70,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		var false_ = false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
+		var one intstr.IntOrString = intstr.FromInt(1)
+
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -108,6 +111,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				NodeMetricsPort: &nodeMetricsPort,
 				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				MaxUnavailable:  &one,
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)

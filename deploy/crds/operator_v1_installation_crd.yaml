@@ -184,12 +184,6 @@ spec:
               - OpenShift
               - DockerEnterprise
               type: string
-            maxUnavailable:
-              anyOf:
-              - type: string
-              - type: integer
-              description: 'MaxUnavailable determines the max number of daemonset
-                pods that can be unavailable during an update. Default: 1'
             nodeMetricsPort:
               description: NodeMetricsPort specifies which port calico/node serves
                 prometheus metrics on. By default, metrics are not enabled. If specified,
@@ -197,6 +191,8 @@ spec:
                 omitted, then prometheus metrics may still be configured through FelixConfiguration.
               format: int32
               type: integer
+            nodeUpdateStrategy:
+              type: object
             registry:
               description: 'Registry is the default Docker registry used for component
                 Docker images. If specified, all images will be pulled from this registry.

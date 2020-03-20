@@ -456,7 +456,7 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 			},
 			UpdateStrategy: apps.DaemonSetUpdateStrategy{
 				RollingUpdate: &apps.RollingUpdateDaemonSet{
-					MaxUnavailable: c.cr.Spec.MaxUnavailable,
+					MaxUnavailable: c.cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable,
 				},
 			},
 		},

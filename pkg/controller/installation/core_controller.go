@@ -338,9 +338,14 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	if instance.Spec.MaxUnavailable == nil {
-		var one = intstr.FromInt(1)
-		instance.Spec.MaxUnavailable = &one
+	var one = intstr.FromInt(1)
+
+	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{
+			MaxUnavailable: &one,
+		}
+	} else if instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &one
 	}
 
 	return nil

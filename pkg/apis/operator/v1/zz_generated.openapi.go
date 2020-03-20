@@ -363,17 +363,16 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 							Format:      "",
 						},
 					},
-					"maxUnavailable": {
+					"nodeUpdateStrategy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MaxUnavailable determines the max number of daemonset pods that can be unavailable during an update. Default: 1",
-							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+							Ref: ref("k8s.io/api/apps/v1.DaemonSetUpdateStrategy"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.CalicoNetworkSpec", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.CalicoNetworkSpec", "k8s.io/api/apps/v1.DaemonSetUpdateStrategy", "k8s.io/api/core/v1.LocalObjectReference"},
 	}
 }
 

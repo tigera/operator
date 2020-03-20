@@ -28,6 +28,7 @@ import (
 	batch "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -105,6 +106,12 @@ func (m *statusManager) Run() {
 	go func() {
 		// Loop forever, periodically checking dependent objects for their state.
 		for {
+			if m.removeTigeraStatus() {
+				// Wait for CR to be available.
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
 			if !m.syncState() {
 				// Waiting to be in sync.
 				time.Sleep(5 * time.Second)
@@ -301,6 +308,7 @@ func (m *statusManager) syncState() bool {
 	defer m.lock.Unlock()
 	progressing := []string{}
 	failing := []string{}
+
 	// For each daemonset, check its rollout status.
 	for _, dsnn := range m.daemonsets {
 		ds := &appsv1.DaemonSet{}
@@ -405,6 +413,21 @@ func (m *statusManager) syncState() bool {
 	// we're not yet ready to report status. However, if we've been given an explicit degraded state, then
 	// we should report it.
 	return m.explicitDegradedReason != ""
+}
+
+// removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
+func (m *statusManager) removeTigeraStatus() bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if !m.enabled {
+		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+		err := m.client.Delete(context.TODO(), ts)
+		if err != nil && !apierrs.IsNotFound(err) {
+			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+		}
+		return true
+	}
+	return false
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined

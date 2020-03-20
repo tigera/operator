@@ -479,24 +479,27 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 			return false, err
 		}
 
-		// If MaxUnavailable has been configured in either case, decrement that from the number of desired
-		// pods. A simple way of reading this is that the number of desired pods allows some to be
-		// unavailable during an update.
+		// MaxUnavailable represents the number of pods that are allowed to be down during an update. We
+		// decrement the number of desired pods by that value
 		if ksMaxUnavailable != nil {
 			n, err := intstr.GetValueFromIntOrPercent(ksMaxUnavailable, int(ksD), false)
 			if err != nil {
-				ksD -= int32(n)
+				if (ksD - int32(n)) >= 0 {
+					ksD -= int32(n)
+				}
 			}
 		}
 
 		if csMaxUnavailable != nil {
 			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(csD), false)
 			if err != nil {
-				csD -= int32(n)
+				if (csD - int32(n)) >= 0 {
+					csD -= int32(n)
+				}
 			}
 		}
 
-		if ksD == ksR && csD == csR {
+		if ksD <= ksR && csD <= csR {
 			// Desired pods are ready
 			return true, nil
 

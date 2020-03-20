@@ -272,7 +272,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 
-		Expect(len(resources)).To(Equal(tcValues.numResourcesCreated))
+		Expect(len(resources)).To(Equal(22))
 		expectedArgs := []string{
 			"--secure-port=5443",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",

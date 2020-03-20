@@ -41,6 +41,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -335,6 +336,16 @@ func fillDefaults(instance *operator.Installation) error {
 		} else {
 			instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}
+	}
+
+	var one = intstr.FromInt(1)
+
+	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{
+			MaxUnavailable: &one,
+		}
+	} else if instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &one
 	}
 
 	return nil

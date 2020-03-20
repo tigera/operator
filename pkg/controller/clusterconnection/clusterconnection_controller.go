@@ -48,16 +48,17 @@ func Add(mgr manager.Manager, p operatorv1.Provider, enterpriseEnabled bool) err
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, p))
+	statusManager := status.New(mgr.GetClient(), "management-cluster-connection")
+	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, p))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, p operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider) reconcile.Reconciler {
 	c := &ReconcileConnection{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		Client:   cli,
+		Scheme:   schema,
 		Provider: p,
-		status:   status.New(mgr.GetClient(), "management-cluster-connection"),
+		status:   statusMgr,
 	}
 	c.status.Run()
 	return c

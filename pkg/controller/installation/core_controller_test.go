@@ -69,6 +69,8 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 	var defaultMTU int32 = 1440
 	var twentySix int32 = 26
+	var hpEnabled operator.HostPortType = operator.HostPortEnabled
+	var hpDisabled operator.HostPortType = operator.HostPortDisabled
 	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
 		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
 			if expectSuccess {
@@ -94,6 +96,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			pool := i.Spec.CalicoNetwork.IPPools[0]
 			pExpect := calicoNet.IPPools[0]
 			Expect(pool).To(Equal(pExpect))
+			Expect(i.Spec.CalicoNetwork.HostPort).To(Equal(calicoNet.HostPort))
 		},
 
 		table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{}, &osconfigv1.Network{}, true,
@@ -107,7 +110,8 @@ var _ = Describe("Testing core-controller installation", func() {
 						BlockSize:     &twentySix,
 					},
 				},
-				MTU: &defaultMTU,
+				MTU:      &defaultMTU,
+				HostPort: &hpEnabled,
 			}),
 		table.Entry("Openshift only CIDR",
 			&operator.Installation{
@@ -131,7 +135,8 @@ var _ = Describe("Testing core-controller installation", func() {
 						BlockSize:     &twentySix,
 					},
 				},
-				MTU: &defaultMTU,
+				MTU:      &defaultMTU,
+				HostPort: &hpEnabled,
 			}),
 		table.Entry("CIDR specified from OpenShift config and Calico config",
 			&operator.Installation{
@@ -163,7 +168,8 @@ var _ = Describe("Testing core-controller installation", func() {
 						BlockSize:     &twentySix,
 					},
 				},
-				MTU: &defaultMTU,
+				MTU:      &defaultMTU,
+				HostPort: &hpEnabled,
 			}),
 		table.Entry("Failure when IPPool is smaller than OpenShift Network",
 			&operator.Installation{
@@ -200,8 +206,9 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}, true,
 			&operator.CalicoNetworkSpec{
-				IPPools: []operator.IPPool{},
-				MTU:     &defaultMTU,
+				IPPools:  []operator.IPPool{},
+				MTU:      &defaultMTU,
+				HostPort: &hpEnabled,
 			}),
 		table.Entry("Normal defaults with no IPPools",
 			&operator.Installation{
@@ -219,7 +226,29 @@ var _ = Describe("Testing core-controller installation", func() {
 						BlockSize:     &twentySix,
 					},
 				},
-				MTU: &defaultMTU,
+				MTU:      &defaultMTU,
+				HostPort: &hpEnabled,
+			}),
+		table.Entry("HostPort disabled",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						HostPort: &hpDisabled,
+					},
+				},
+			}, nil, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/16",
+						Encapsulation: "IPIP",
+						NATOutgoing:   "Enabled",
+						NodeSelector:  "all()",
+						BlockSize:     &twentySix,
+					},
+				},
+				MTU:      &defaultMTU,
+				HostPort: &hpDisabled,
 			}),
 	)
 })

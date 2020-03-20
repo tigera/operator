@@ -124,6 +124,27 @@ const (
 	ClusterManagementTypeManaged    ClusterManagementType = "Managed"
 )
 
+// HostPortType specifies if the HostPort plugin enabled status.
+type HostPortType string
+
+const (
+	HostPortEnabled  HostPortType = "Enabled"
+	HostPortDisabled HostPortType = "Disabled"
+)
+
+var HostPortTypes []HostPortType = []HostPortType{
+	HostPortEnabled,
+	HostPortDisabled,
+}
+var HostPortTypesString []string = []string{
+	HostPortEnabled.String(),
+	HostPortDisabled.String(),
+}
+
+func (nt HostPortType) String() string {
+	return string(nt)
+}
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
@@ -145,6 +166,12 @@ type CalicoNetworkSpec struct {
 	// IPv6 addresses will not be auto-detected.
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
+
+	// HostPort specifies if the plugin for HostPort will be configured as part of the CNI configuration.
+	// Default: Enabled
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled,Disabled
+	HostPort *HostPortType `json:"hostPort,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

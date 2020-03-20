@@ -320,6 +320,11 @@ func fillDefaults(instance *operator.Installation) error {
 				v6pool.BlockSize = &oneTwentyTwo
 			}
 		}
+
+		if instance.Spec.CalicoNetwork.HostPort == nil {
+			hp := operator.HostPortEnabled
+			instance.Spec.CalicoNetwork.HostPort = &hp
+		}
 	}
 
 	// If not specified by the user, set the flex volume plugin location based on platform.

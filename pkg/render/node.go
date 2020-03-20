@@ -320,6 +320,16 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		assign_ipv6 = "false"
 	}
 
+	var portmap string = ""
+	if c.cr.Spec.CalicoNetwork.HostPort != nil && *c.cr.Spec.CalicoNetwork.HostPort == operator.HostPortEnabled {
+		portmap = `,
+	{
+      "type": "portmap",
+      "snat": true,
+      "capabilities": {"portMappings": true}
+    }`
+	}
+
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -340,14 +350,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
-    },
-    {
-      "type": "portmap",
-      "snat": true,
-      "capabilities": {"portMappings": true}
-    }
+    }%s
   ]
-}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, portmap)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

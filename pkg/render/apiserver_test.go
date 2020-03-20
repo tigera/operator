@@ -59,7 +59,6 @@ var _ = Describe("API server rendering tests", func() {
 		// - 2 tiered policy passthru ClusterRole and binding
 		// - 1 delegate auth binding
 		// - 1 auth reader binding
-		// - 2 webhook reader ClusterRole and binding
 		// - 2 cert secrets
 		// - 1 api server
 		// - 1 service registration
@@ -92,8 +91,6 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		i := 0
@@ -161,6 +158,7 @@ var _ = Describe("API server rendering tests", func() {
 			"--secure-port=5443",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+			"--enable-admission-controller-support=false",
 		}
 		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 		Expect(len(d.Spec.Template.Spec.Containers[0].Env)).To(Equal(1))
@@ -265,31 +263,63 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
-	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift)
-		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+	It("should should handle tech preview annotation and render apiserver", func() {
+		testCaseValues := []struct {
+			annotationValue     string
+			includeAnnotation   bool
+			numResourcesCreated int
+			featureEnabed       bool
+		}{
+			{annotationValue: "Enabled", includeAnnotation: true, numResourcesCreated: 22, featureEnabed: true},
+			{annotationValue: "enabled", includeAnnotation: true, numResourcesCreated: 22, featureEnabed: true},
+			{annotationValue: "somethingelse", includeAnnotation: true, numResourcesCreated: 21, featureEnabed: false},
+			{annotationValue: "", includeAnnotation: false, numResourcesCreated: 21, featureEnabed: false},
+		}
+		i := 0
+		for _, tcValues := range testCaseValues {
+			if tcValues.includeAnnotation {
+				instance.ObjectMeta.Annotations = map[string]string{
+					"tech-preview.operator.tigera.io/admission-controller-support": tcValues.annotationValue,
+				}
+			}
+			component, err := render.APIServer(instance, nil, nil, openshift)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(22))
+			d := resources[13].(*v1.Deployment)
 
-		// Should render the correct resources.
-		cr := resources[20].(*rbacv1.ClusterRole)
-		Expect(len(cr.Rules)).To(Equal(1))
-		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
-		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
-		Expect(cr.Rules[0].Resources[1]).To(Equal("validatingwebhookconfigurations"))
-		Expect(len(cr.Rules[0].Verbs)).To(Equal(3))
-		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
-		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
-		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
+			Expect(d.Name).To(Equal("tigera-apiserver"))
 
-		crb := resources[21].(*rbacv1.ClusterRoleBinding)
-		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
-		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
-		Expect(len(crb.Subjects)).To(Equal(1))
-		Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-		Expect(crb.Subjects[0].Name).To(Equal("tigera-apiserver"))
-		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
+			Expect(len(resources)).To(Equal(tcValues.numResourcesCreated))
+			expectedArgs := []string{
+				"--secure-port=5443",
+				"--audit-policy-file=/etc/tigera/audit/policy.conf",
+				"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+				fmt.Sprintf("--enable-admission-controller-support=%t", tcValues.featureEnabed),
+			}
+			Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
+
+			if featureEnabed {
+				// Should render the correct resources.
+				cr := resources[20].(*rbacv1.ClusterRole)
+				Expect(len(cr.Rules)).To(Equal(1))
+				Expect(len(cr.Rules[0].Resources)).To(Equal(2))
+				Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
+				Expect(cr.Rules[0].Resources[1]).To(Equal("validatingwebhookconfigurations"))
+				Expect(len(cr.Rules[0].Verbs)).To(Equal(3))
+				Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
+				Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
+				Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
+
+				crb := resources[21].(*rbacv1.ClusterRoleBinding)
+				Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
+				Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
+				Expect(len(crb.Subjects)).To(Equal(1))
+				Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
+				Expect(crb.Subjects[0].Name).To(Equal("tigera-apiserver"))
+				Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
+			}
+		}
 	})
 })
 

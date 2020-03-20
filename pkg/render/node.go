@@ -36,6 +36,7 @@ const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
+	nodeCniConfigAnnotation    = "hash.operator.tigera.io/cni-config"
 )
 
 var (
@@ -72,7 +73,8 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objsToCreate = append(objsToCreate, c.nodeMetricsService())
 	}
 
-	if cniConfig := c.nodeCNIConfigMap(); cniConfig != nil {
+	cniConfig := c.nodeCNIConfigMap()
+	if cniConfig != nil {
 		objsToCreate = append(objsToCreate, cniConfig)
 	}
 
@@ -84,7 +86,7 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
-	objsToCreate = append(objsToCreate, c.nodeDaemonset())
+	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
 
 	return objsToCreate, objsToDelete
 }
@@ -320,6 +322,12 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		assign_ipv6 = "false"
 	}
 
+	var portmap string = ""
+	if c.cr.Spec.CalicoNetwork.HostPorts != nil && *c.cr.Spec.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
+		portmap = `,
+	{"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
+	}
+
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -340,14 +348,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
-    },
-    {
-      "type": "portmap",
-      "snat": true,
-      "capabilities": {"portMappings": true}
-    }
+    }%s
   ]
-}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, portmap)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -406,7 +409,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 }
 
 // nodeDaemonset creates the node damonset.
-func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
+func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 0
 
 	annotations := make(map[string]string)
@@ -415,6 +418,10 @@ func (c *nodeComponent) nodeDaemonset() *apps.DaemonSet {
 	}
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+
+	if cniCfgMap != nil {
+		annotations[nodeCniConfigAnnotation] = AnnotationHash(cniCfgMap.Data)
+	}
 
 	// Include annotation for prometheus scraping configuration.
 	if c.cr.Spec.NodeMetricsPort != nil {

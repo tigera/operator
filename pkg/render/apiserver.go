@@ -40,7 +40,7 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
+func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, enableAdmissionControllerSupport bool) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
 		var err error
@@ -67,18 +67,20 @@ func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, p
 	tlsSecrets = append(tlsSecrets, copy)
 
 	return &apiServerComponent{
-		installation: installation,
-		tlsSecrets:   tlsSecrets,
-		pullSecrets:  pullSecrets,
-		openshift:    openshift,
+		installation:                     installation,
+		tlsSecrets:                       tlsSecrets,
+		pullSecrets:                      pullSecrets,
+		openshift:                        openshift,
+		enableAdmissionControllerSupport: enableAdmissionControllerSupport,
 	}, nil
 }
 
 type apiServerComponent struct {
-	installation *operator.Installation
-	tlsSecrets   []*corev1.Secret
-	pullSecrets  []*corev1.Secret
-	openshift    bool
+	installation                     *operator.Installation
+	tlsSecrets                       []*corev1.Secret
+	pullSecrets                      []*corev1.Secret
+	openshift                        bool
+	enableAdmissionControllerSupport bool
 }
 
 func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -114,10 +116,12 @@ func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.tigeraNetworkAdminClusterRole(),
 	)
 
-	objs = append(objs,
-		c.webhookReaderClusterRole(),
-		c.webhookReaderClusterRoleBinding(),
-	)
+	if c.enableAdmissionControllerSupport {
+		objs = append(objs,
+			c.webhookReaderClusterRole(),
+			c.webhookReaderClusterRoleBinding(),
+		)
+	}
 
 	return objs, nil
 }
@@ -574,6 +578,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+			fmt.Sprintf("--enable-admission-controller-support=%t", c.enableAdmissionControllerSupport),
 		},
 		Env: []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},

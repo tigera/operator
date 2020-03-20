@@ -87,4 +87,25 @@ var _ = Describe("Installation validation tests", func() {
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("should validate HostPort", func() {
+		instance.Spec.CalicoNetwork.HostPort = nil
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp := operator.HostPortEnabled
+		instance.Spec.CalicoNetwork.HostPort = &hp
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp = operator.HostPortDisabled
+		instance.Spec.CalicoNetwork.HostPort = &hp
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp = "NotValid"
+		instance.Spec.CalicoNetwork.HostPort = &hp
+		err = validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
 })

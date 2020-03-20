@@ -180,7 +180,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(instance, network, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift, isAdmissionControllerSupportEnabled(instance))
+	component, err := render.APIServer(network, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift, isAdmissionControllerSupportEnabled(instance))
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

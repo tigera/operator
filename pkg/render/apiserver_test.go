@@ -63,7 +63,7 @@ var _ = Describe("API server rendering tests", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(20))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -219,7 +219,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(20))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
@@ -232,7 +232,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(20))
 
 		// Should render the correct resources.
 		cr := resources[16].(*rbacv1.ClusterRole)
@@ -256,7 +256,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(20))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
@@ -272,7 +272,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 
-		Expect(len(resources)).To(Equal(tcValues.numResourcesCreated))
+		Expect(len(resources)).To(Equal(22))
 		expectedArgs := []string{
 			"--secure-port=5443",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",

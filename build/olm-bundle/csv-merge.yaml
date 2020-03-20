@@ -2,7 +2,7 @@ metadata:
   annotations:
     categories: "Logging & Tracing, Monitoring, Networking, Security"
     certified: "true"
-    # The container image tag and timestamp are manually updated for each release.
+    # The container image tag and timestamp are updated for each release.
     containerImage: quay.io/tigera/operator:master
     createdAt: placeholder
     description: "An operator which manages the lifecycle of a Calico or Calico Enterprise installation on Kubernetes or OpenShift. Its goal is to make installation, upgrades, and ongoing lifecycle management of Calico and Calico Enterprise as simple and reliable as possible."

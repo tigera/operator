@@ -404,30 +404,67 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-## generate-csv generates a ClusterServiceVersion. requires operator-sdk version >= v0.15.0
-generate-csv:
+## metadata-bundle generates a new operator metadata bundle. requires operator-sdk version >= v0.15.0
+metadata-bundle:
 ifndef VERSION
-	$(error VERSION is undefined - run using make generate-csv VERSION=vX.Y.Z)
+	$(error VERSION is undefined - run using make bundle VERSION=vX.Y.Z PREV_VERSION=vD.E.F)
 endif
-	# We need a semver version string in some places.
-	$(eval SEMVER_VERSION := $(VERSION:v%=%))
+ifndef PREV_VERSION
+	$(error PREV_VERSION is undefined - run using make bundle VERSION=vX.Y.Z PREV_VERSION=vD.E.F)
+endif
+	@# We also need a semver version string.
+	$(eval SEMVER := $(VERSION:v%=%))
 
-	# Generate the CSV.
-	operator-sdk generate csv --operator-name tigera-operator --csv-channel stable --csv-version $(SEMVER_VERSION)
+	$(eval DEPLOY_CSV := deploy/olm-catalog/tigera-operator/$(SEMVER)/tigera-operator.$(VERSION).clusterserviceversion.yaml)
 
-	# Merge in our CSV updates into the generated copy.
-	yq merge -i deploy/olm-catalog/tigera-operator/$(SEMVER_VERSION)/tigera-operator.$(VERSION).clusterserviceversion.yaml build/olm-bundle/csv-merge.yaml
+	@# Generate the ClusterServiceVersion (CSV). This will update deploy/olm-catalog with new a ClusterServiceVersion.
+	operator-sdk generate csv --operator-name tigera-operator --csv-channel stable --csv-version $(SEMVER)
 
-	# Overwrite our CSV updates.
-	yq write -i -s build/olm-bundle/csv-writes.yaml deploy/olm-catalog/tigera-operator/$(SEMVER_VERSION)/tigera-operator.$(VERSION).clusterserviceversion.yaml
+	@# Merge in our custom CSV updates (metadata about our operator, icon, etc.) into the generated CSV.
+	yq merge -i $(DEPLOY_CSV)  build/olm-bundle/csv-merge.yaml
 
-	# Copy the CSV, crds, and package.yaml to the bundle dir.
-	mkdir -p build/_output/bundle
-	cp deploy/olm-catalog/tigera-operator/$(SEMVER_VERSION)/tigera-operator.$(VERSION).clusterserviceversion.yaml build/_output/bundle/
-	find ./deploy/crds/ -iname '*_crd.yaml' | xargs -I{} cp {} build/_output/bundle/
-	cp deploy/olm-catalog/tigera-operator/tigera-operator.package.yaml build/_output/bundle/
+	@# Overwrite a few keys in the CSV.
+	yq write -i -s build/olm-bundle/csv-writes.yaml $(DEPLOY_CSV)
 
-	zip -r --junk-paths build/_output/bundle.zip build/_output/bundle/*
+	@# Set the previous version of the operator that this version replaces.
+	yq write -i $(DEPLOY_CSV) spec.replaces tigera-operator.$(PREV_VERSION)
+
+	@# Set the operator image tag using this gnarly yq path expression.
+	yq write -i $(DEPLOY_CSV) spec.install.spec.deployments[0].spec.template.spec.containers[0].image quay.io/tigera/operator:$(VERSION)
+
+	@# Set the operator image metadata annotation.
+	yq write -i $(DEPLOY_CSV) metadata.annotations.containerImage quay.io/tigera/operator:$(VERSION)
+
+	@# Set the operator image creation timestamp annotation.
+	yq write -i $(DEPLOY_CSV) metadata.annotations.createdAt epoch
+
+	@# Copy the CSV, crds, and package.yaml to the bundle dir. Within bundle/,
+	@# every new version of the operator is in its own directory. The contents of
+	@# the bundle directory look something like this (assuming versions 1.3.0 and
+	@# 1.3.1 of the operator published):
+	@#
+	@# bundle/
+	@#   1.3.1/
+	@#     operator_v1_installation_crd.yaml
+	@#     operator_v1_logstorage_crd.yaml
+	@#     <remaining crds>
+	@#     tigera-operator.v1.3.1.clusterserviceversion.yaml
+	@#   1.3.0/
+	@#     operator_v1_installation_crd.yaml
+	@#     operator_v1_logstorage_crd.yaml
+	@#     <remaining crds>
+	@#     tigera-operator.v1.3.0.clusterserviceversion.yaml
+	@#   tigera-operator.package.yaml
+	@#
+	mkdir -p bundle/$(SEMVER)
+
+	@# Copy over the CSV we've been building in deploy/olm-catalog/ to bundle/
+	cp $(DEPLOY_CSV) bundle/$(SEMVER)
+
+	find ./deploy/crds/ -iname '*_crd.yaml' | xargs -I{} cp {} bundle/$(SEMVER)
+	cp deploy/olm-catalog/tigera-operator/tigera-operator.package.yaml bundle/
+	mkdir -p build/_output
+	cd bundle/ && zip -r ../build/_output/bundle-$(VERSION).zip . && cd -
 
 ###############################################################################
 # Utilities

@@ -99,7 +99,14 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(i.Spec.CalicoNetwork.HostPorts).To(Equal(calicoNet.HostPorts))
 		},
 
-		table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{}, &osconfigv1.Network{}, true,
+		table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{},
+			&osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "192.168.0.0/16"},
+					},
+				},
+			}, true,
 			&operator.CalicoNetworkSpec{
 				IPPools: []operator.IPPool{
 					{

@@ -15,6 +15,7 @@
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -91,6 +92,8 @@ type InstallationSpec struct {
 	// kubernetesProvider.
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
+
+	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

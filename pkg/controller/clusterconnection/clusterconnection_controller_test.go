@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/apis"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -41,9 +42,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	var c client.Client
 	var ctx context.Context
 	var cfg *operatorv1.ManagementClusterConnection
-	var r clusterconnection.ReconcileConnection
+	var r reconcile.Reconciler
 	var scheme *runtime.Scheme
 	var dpl *appsv1.Deployment
+	var mockStatus *status.MockStatus
 
 	BeforeSuite(func() {
 		// Create a Kubernetes client.
@@ -57,12 +59,17 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
-		r = clusterconnection.ReconcileConnection{
-			Client:   c,
-			Scheme:   scheme,
-			Provider: operatorv1.ProviderNone,
-			status:	status.New(c, "management-cluster-connection"),
-		}
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("Run").Return()
+
+		mockStatus.On("AddDaemonsets", mock.Anything)
+		mockStatus.On("AddDeployments", mock.Anything)
+		mockStatus.On("AddStatefulSets", mock.Anything)
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("ClearDegraded", mock.Anything)
+		mockStatus.On("OnCRFound").Return()
+
+		r = clusterconnection.NewReconcilerWithShims(c, scheme,mockStatus,operatorv1.ProviderNone)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{

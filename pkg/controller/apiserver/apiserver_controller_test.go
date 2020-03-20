@@ -44,4 +44,15 @@ var _ = Describe("APIServer controller tests", func() {
 		checkAnnotation("somethingelse", false)
 		checkAnnotation("", false)
 	})
+
+	It("should return false when annotation is not present", func() {
+		instance := &operatorv1.APIServer{
+			TypeMeta:   metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		By("Checking that a missing annotation is considered as support not enabled")
+		supportEnabled := isAdmissionControllerSupportEnabled(instance)
+		Expect(supportEnabled).To(Equal(false))
+	})
+
 })

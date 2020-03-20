@@ -14,7 +14,7 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: ut
+test: ut 
 
 # Both native and cross architecture builds are supported.
 # The target architecture is select by setting the ARCH variable.
@@ -264,6 +264,11 @@ run-uts:
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -r --skipPackage -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
+## Check that generated fiels are up to date
+generated-files-check:
+	$(MAKE) gen-files
+	git diff-index --quiet HEAD -- || echo "Generated files are out of date" && exit 1
+
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
 cluster-create: kubectl
@@ -330,7 +335,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean images test $(BINDIR)/gen-versions validate-gen-versions
+ci: clean images test $(BINDIR)/gen-versions validate-gen-versions generated-files-check
 
 validate-gen-versions:
 	./hack/gen-versions/validate.sh
@@ -412,10 +417,17 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
+SDK_VERSION=v0.10.1
+
 ## Generating code after API changes
-gen-files:
-	operator-sdk generate k8s
-	operator-sdk generate openapi
+gen-files: $(BINDIR)/operator-sdk.$(SDK_VERSION)
+	$(BINDIR)/operator-sdk.$(SDK_VERSION) generate k8s
+	$(BINDIR)/operator-sdk.$(SDK_VERSION) generate openapi
+
+$(BINDIR)/operator-sdk.$(SDK_VERSION):
+	mkdir -p $(BINDIR)
+	wget -O $@ https://github.com/operator-framework/operator-sdk/releases/download/${SDK_VERSION}/operator-sdk-${SDK_VERSION}-x86_64-linux-gnu
+	chmod +x $@
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml

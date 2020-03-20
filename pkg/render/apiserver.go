@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -39,6 +40,16 @@ const (
 )
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
+
+const (
+	// Use this annotation to enable support for admission controllers tech preview feature in the Tigera API server.
+	// "tech-preview.operator.tigera.io/admission-controller-support: Enabled"
+	techPreviewFeatureAdmissionControllerSupport = "tech-preview.operator.tigera.io/admission-controller-support"
+
+	// The lower case of the value that we look for to enable a tech preview feature.
+	// The feature is disabled for all other values.
+	techPreviewEnabledValue = "enabled"
+)
 
 func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
@@ -114,10 +125,12 @@ func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.tigeraNetworkAdminClusterRole(),
 	)
 
-	objs = append(objs,
-		c.webhookReaderClusterRole(),
-		c.webhookReaderClusterRoleBinding(),
-	)
+	if c.isAdmissionControllerSupportEnabled() {
+		objs = append(objs,
+			c.webhookReaderClusterRole(),
+			c.webhookReaderClusterRoleBinding(),
+		)
+	}
 
 	return objs, nil
 }
@@ -574,6 +587,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			fmt.Sprintf("--secure-port=%d", apiServerPort),
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+			fmt.Sprintf("--enable-admission-controller-support=%t", c.isAdmissionControllerSupportEnabled()),
 		},
 		Env: []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -952,4 +966,13 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 		Rules: rules,
 	}
+}
+
+func (c *apiServerComponent) isAdmissionControllerSupportEnabled() string {
+	supported := false
+	a := c.cr.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureAdmissionControllerSupport]; ok && strings.ToLower(val) == techPreviewEnabledValue {
+		supported = true
+	}
+	return supported
 }

@@ -17,6 +17,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -36,6 +37,16 @@ import (
 )
 
 var log = logf.Log.WithName("controller_apiserver")
+
+const (
+	// Use this annotation to enable support for admission controllers tech preview feature in the Tigera API server.
+	// "tech-preview.operator.tigera.io/admission-controller-support: Enabled"
+	techPreviewFeatureAdmissionControllerSupport = "tech-preview.operator.tigera.io/admission-controller-support"
+
+	// The lower case of the value that we look for to enable a tech preview feature.
+	// The feature is disabled for all other values.
+	techPreviewEnabledValue = "enabled"
+)
 
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -169,7 +180,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
+	component, err := render.APIServer(network, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift, isAdmissionControllerSupportEnabled(instance))
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())
@@ -196,4 +207,13 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func isAdmissionControllerSupportEnabled(cr *operatorv1.APIServer) bool {
+	enabled := false
+	a := cr.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureAdmissionControllerSupport]; ok && strings.ToLower(val) == techPreviewEnabledValue {
+		enabled = true
+	}
+	return enabled
 }

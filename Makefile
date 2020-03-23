@@ -194,9 +194,10 @@ sub-tag-images-%:
 .PHONY: build
 
 # Get version from git.
-GIT_VERSION:=$(shell git describe --tags --dirty --always)
 ifeq ($(LOCAL_BUILD),true)
-	GIT_VERSION = $(shell git describe --tags --dirty --always)-dev-build
+  GIT_VERSION?=$(shell git describe --tags --dirty --always)-dev-build
+else
+  GIT_VERSION?=$(shell git describe --tags --dirty --always)
 endif
 
 build: $(BINDIR)/operator-$(ARCH)

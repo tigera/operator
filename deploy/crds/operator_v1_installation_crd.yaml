@@ -192,6 +192,9 @@ spec:
               format: int32
               type: integer
             nodeUpdateStrategy:
+              description: NodeUpdateStrategy can be used to customize the desired
+                update strategy, such as the MaxUnavailable field (which defaults
+                to a value of one).
               type: object
             registry:
               description: 'Registry is the default Docker registry used for component

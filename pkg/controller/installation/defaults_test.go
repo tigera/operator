@@ -113,6 +113,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				NodeMetricsPort: &nodeMetricsPort,
 				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 						MaxUnavailable: &one,
 					},

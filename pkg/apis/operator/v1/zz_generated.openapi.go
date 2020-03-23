@@ -365,7 +365,8 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 					},
 					"nodeUpdateStrategy": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/api/apps/v1.DaemonSetUpdateStrategy"),
+							Description: "NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable field (which defaults to a value of one).",
+							Ref:         ref("k8s.io/api/apps/v1.DaemonSetUpdateStrategy"),
 						},
 					},
 				},

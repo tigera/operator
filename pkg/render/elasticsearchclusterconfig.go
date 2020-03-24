@@ -23,11 +23,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int) *ElasticsearchClusterConfig {
+func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int, flowShards int) *ElasticsearchClusterConfig {
 	return &ElasticsearchClusterConfig{
 		clusterName: clusterName,
 		replicas:    replicas,
 		shards:      shards,
+		flowShards:  flowShards,
 	}
 }
 
@@ -66,6 +67,7 @@ type ElasticsearchClusterConfig struct {
 	clusterName string
 	replicas    int
 	shards      int
+	flowShards  int
 }
 
 func (c ElasticsearchClusterConfig) ClusterName() string {

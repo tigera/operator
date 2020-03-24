@@ -79,7 +79,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
 				},
 			}
-			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 5)
+			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
 		})
 
 		Context("Initial creation", func() {
@@ -354,7 +354,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					ClusterManagementType: clusterType,
 				},
 			}
-			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 5)
+			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
 		})
 		It("returns Elasticsearch and Kibana CR's to delete and keeps the finalizers on the LogStorage CR", func() {
 			expectedCreateResources := []resourceTestObj{

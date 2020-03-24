@@ -96,6 +96,7 @@ func (c ElasticsearchClusterConfig) ConfigMap() *corev1.ConfigMap {
 			"clusterName": c.clusterName,
 			"replicas":    strconv.Itoa(c.replicas),
 			"shards":      strconv.Itoa(c.shards),
+			"flowShards":  strconv.Itoa(c.flowShards),
 		},
 	}
 }

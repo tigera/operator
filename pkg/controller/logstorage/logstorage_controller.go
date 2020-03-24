@@ -595,23 +595,22 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 	return &svc, nil
 }
 
-func calculateFlowShards(nodes *operatorv1.Nodes, defaultShards int) int {
-	if nodes == nil {
+func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {
+	if nodesSpecifications == nil || nodesSpecifications.ResourceRequirements == nil || nodesSpecifications.ResourceRequirements.Requests == nil {
 		return defaultShards
 	}
 
-	var nodesInt, coresInt, shardPerNode int
-	nodesInt = int(nodes.Count)
-	coresInt = int(nodes.ResourceRequirements.Requests.Cpu().AsInt64())
-	shardPerNode = coresInt / 4
+	var nodes = nodesSpecifications.Count
+	var cores, _ = nodesSpecifications.ResourceRequirements.Requests.Cpu().AsInt64()
+	var shardPerNode = int(cores) / 4
 
-	if nodesInt <= 0 || coresInt <= 0 || shardPerNode <= 0{
+	if nodes <= 0 || cores <= 0 || shardPerNode <= 0{
 		return defaultShards
 	}
 
 	if shardPerNode < defaultShards {
-		return nodesInt * defaultShards
+		return int(nodes) * defaultShards
 	}
 
-	return nodesInt * shardPerNode
+	return int(nodes) * shardPerNode
 }

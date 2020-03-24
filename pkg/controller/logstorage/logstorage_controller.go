@@ -57,7 +57,7 @@ const (
 	defaultResolveConfPath             = "/etc/resolv.conf"
 	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
-	defaultElasticsearchShards         = 5
+	defaultElasticsearchShards         = 1
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller

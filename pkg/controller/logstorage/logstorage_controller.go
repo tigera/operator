@@ -345,7 +345,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	applyTrial := false
 
 	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards)
+
+		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
+		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards, flowShards)
 		if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
 				err := fmt.Errorf("couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass)
@@ -591,4 +593,25 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 		return nil, err
 	}
 	return &svc, nil
+}
+
+func calculateFlowShards(nodes *operatorv1.Nodes, defaultShards int) int {
+	if nodes == nil {
+		return defaultShards
+	}
+
+	var nodesInt, coresInt, shardPerNode int
+	nodesInt = int(nodes.Count)
+	coresInt = int(nodes.ResourceRequirements.Requests.Cpu().AsInt64())
+	shardPerNode = coresInt / 4
+
+	if nodesInt <= 0 || coresInt <= 0 || shardPerNode <= 0{
+		return defaultShards
+	}
+
+	if shardPerNode < defaultShards {
+		return nodesInt * defaultShards
+	}
+
+	return nodesInt * shardPerNode
 }

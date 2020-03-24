@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-        "k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
 var _ = Describe("Mainline component function tests", func() {
@@ -60,25 +60,15 @@ var _ = Describe("Mainline component function tests", func() {
 	})
 
 	AfterEach(func() {
-		// Delete any CRD that might have been created by the test.
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-		}
-		err := c.Get(context.Background(), client.ObjectKey{Name: "default"}, instance)
-		Expect(err).NotTo(HaveOccurred())
-		err = c.Delete(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
-
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
-                        patchF := func(n *corev1.Node) {
-                               for k, _ := range n.ObjectMeta.Annotations {
-                                        if strings.Contains(k, "projectcalico") {
-                                                delete(n.ObjectMeta.Annotations, k)
-                                        }
-                                }
-                       }
+			patchF := func(n *corev1.Node) {
+				for k, _ := range n.ObjectMeta.Annotations {
+					if strings.Contains(k, "projectcalico") {
+						delete(n.ObjectMeta.Annotations, k)
+					}
+				}
+			}
 
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 			nodes, err := cs.CoreV1().Nodes().List(metav1.ListOptions{})
@@ -118,59 +108,47 @@ var _ = Describe("Mainline component function tests", func() {
 		}, 240*time.Second).ShouldNot(BeNil())
 	})
 
-	It("Should install resources for a CRD", func() {
-		By("Creating a CRD")
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-		}
-		err := c.Create(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
+	Describe("Installing CRD", func() {
 
-		By("Running the operator")
-		stopChan := RunOperator(mgr)
-		defer close(stopChan)
+		AfterEach(func() {
+			// Delete any CRD that might have been created by the test.
+			instance := &operator.Installation{
+				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			}
+			err := c.Get(context.Background(), client.ObjectKey{Name: "default"}, instance)
+			Expect(err).NotTo(HaveOccurred())
+			err = c.Delete(context.Background(), instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		By("Verifying the resources were created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, ds)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, kc)
+		It("Should install resources for a CRD", func() {
+			stopChan := installResourceCRD(c, mgr)
+			defer close(stopChan)
+		})
+	})
 
-		By("Verifying the resources are ready")
-		Eventually(func() error {
-			err = GetResource(c, ds)
-			if err != nil {
+	Describe("Deleting CR", func() {
+
+		It("Should delete TigeraStatus for deleted CR", func() {
+			instance := &operator.Installation{
+				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			}
+
+			stopChan := installResourceCRD(c, mgr)
+			defer close(stopChan)
+
+			By("Deleting CR after its tigera status becomes available")
+			err := c.Delete(context.Background(), instance)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the tigera status is removed for deleted CR")
+			Eventually(func() error {
+				_, err := getTigeraStatus(c, "calico")
 				return err
-			}
-			if ds.Status.NumberAvailable == 0 {
-				return fmt.Errorf("No node pods running")
-			}
-			if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
-				return nil
-			}
-			return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
-		}, 240*time.Second).Should(BeNil())
-
-		Eventually(func() error {
-			err = GetResource(c, kc)
-			if err != nil {
-				return err
-			}
-			if kc.Status.AvailableReplicas == 1 {
-				return nil
-			}
-			return fmt.Errorf("kube-controllers not yet ready")
-		}, 240*time.Second).Should(BeNil())
-
-		By("Verifying the tigera status CRD is updated")
-		Eventually(func() error {
-			ts, err := getTigeraStatus(c, "calico")
-			if err != nil {
-				return err
-			}
-			return assertAvailable(ts)
-		}, 60*time.Second).Should(BeNil())
+			}, 120*time.Second).ShouldNot(BeNil())
+		})
 	})
 })
 
@@ -258,4 +236,60 @@ func setupManager() (client.Client, manager.Manager) {
 	err = controller.AddToManager(mgr, operator.ProviderNone, runTSEEControllers)
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr
+}
+
+func installResourceCRD(c client.Client, mgr manager.Manager) chan struct{} {
+	By("Creating a CRD")
+	instance := &operator.Installation{
+		TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+	}
+	err := c.Create(context.Background(), instance)
+	Expect(err).NotTo(HaveOccurred())
+
+	By("Running the operator")
+	stopChan := RunOperator(mgr)
+
+	By("Verifying the resources were created")
+	ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
+	ExpectResourceCreated(c, ds)
+	kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
+	ExpectResourceCreated(c, kc)
+
+	By("Verifying the resources are ready")
+	Eventually(func() error {
+		err = GetResource(c, ds)
+		if err != nil {
+			return err
+		}
+		if ds.Status.NumberAvailable == 0 {
+			return fmt.Errorf("No node pods running")
+		}
+		if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
+			return nil
+		}
+		return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
+	}, 240*time.Second).Should(BeNil())
+
+	Eventually(func() error {
+		err = GetResource(c, kc)
+		if err != nil {
+			return err
+		}
+		if kc.Status.AvailableReplicas == 1 {
+			return nil
+		}
+		return fmt.Errorf("kube-controllers not yet ready")
+	}, 240*time.Second).Should(BeNil())
+
+	By("Verifying the tigera status CRD is updated")
+	Eventually(func() error {
+		ts, err := getTigeraStatus(c, "calico")
+		if err != nil {
+			return err
+		}
+		return assertAvailable(ts)
+	}, 60*time.Second).Should(BeNil())
+
+	return stopChan
 }

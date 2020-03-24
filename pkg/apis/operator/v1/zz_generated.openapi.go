@@ -337,7 +337,7 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 					},
 					"flexVolumePath": {
 						SchemaProps: spec.SchemaProps{
-							Description: "FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the k8s provider.",
+							Description: "FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the kubernetesProvider.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

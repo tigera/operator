@@ -213,7 +213,7 @@ func validateSecret(voltronSecret *corev1.Secret) {
 }
 
 func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []runtime.Object {
-	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
+	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(instance,
 		nil,
 		nil,

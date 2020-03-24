@@ -435,7 +435,7 @@ func setUpLogStorageComponents(cli client.Client) {
 		},
 		&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 		&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
-		render.NewElasticsearchClusterConfig("cluster", 1, 1),
+		render.NewElasticsearchClusterConfig("cluster", 1, 1, 1),
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
 			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},

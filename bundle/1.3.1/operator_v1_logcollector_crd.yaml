@@ -1,0 +1,113 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: logcollectors.operator.tigera.io
+spec:
+  group: operator.tigera.io
+  names:
+    kind: LogCollector
+    listKind: LogCollectorList
+    plural: logcollectors
+    singular: logcollector
+  scope: Cluster
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: Specification of the desired state for Tigera log collection.
+          properties:
+            additionalSources:
+              description: Configuration for importing audit logs from managed kubernetes
+                cluster log sources.
+              properties:
+                eksCloudwatchLog:
+                  description: If specified with EKS Provider in Installation, enables
+                    fetching EKS audit logs.
+                  properties:
+                    fetchInterval:
+                      description: 'Cloudwatch audit logs fetching interval in seconds.
+                        Default: 600'
+                      format: int32
+                      type: integer
+                    groupName:
+                      description: Cloudwatch log-group name containing EKS audit
+                        logs.
+                      type: string
+                    region:
+                      description: AWS Region EKS cluster is hosted in.
+                      type: string
+                    streamPrefix:
+                      description: 'Prefix of Cloudwatch log stream containing EKS
+                        audit logs in the log-group. Default: kube-apiserver-audit-'
+                      type: string
+                  required:
+                  - region
+                  - groupName
+                  type: object
+              type: object
+            additionalStores:
+              description: Configuration for exporting flow, audit, and DNS logs to
+                external storage.
+              properties:
+                s3:
+                  description: If specified, enables exporting of flow, audit, and
+                    DNS logs to Amazon S3 storage.
+                  properties:
+                    bucketName:
+                      description: Name of the S3 bucket to send logs
+                      type: string
+                    bucketPath:
+                      description: Path in the S3 bucket where to send logs
+                      type: string
+                    region:
+                      description: AWS Region of the S3 bucket
+                      type: string
+                  required:
+                  - region
+                  - bucketName
+                  - bucketPath
+                  type: object
+                syslog:
+                  description: If specified, enables exporting of flow, audit, and
+                    DNS logs to syslog.
+                  properties:
+                    endpoint:
+                      description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
+                      type: string
+                    packetsize:
+                      description: 'PacketSize defines the maximum size of packets
+                        to send to syslog. In general this is only needed if you notice
+                        long logs being truncated. Default: 1024'
+                      format: int32
+                      type: integer
+                  required:
+                  - endpoint
+                  type: object
+              type: object
+          type: object
+        status:
+          description: Most recently observed state for Tigera log collection.
+          properties:
+            state:
+              description: State provides user-readable status.
+              type: string
+          type: object
+  version: v1
+  versions:
+  - name: v1
+    served: true
+    storage: true

@@ -219,10 +219,18 @@ func (m *CoreNamespaceMigration) Run(log logr.Logger) error {
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
-	if err := m.migrateEachNode(log); err != nil {
+
+	maxUnavailable, err := m.getMaxUnavailable(common.CalicoNamespace, nodeDaemonSetName)
+	if err != nil {
+		maxUnavailable = 1
+	}
+	polledPods := make(chan interface{}, maxUnavailable)
+
+	if err := m.migrateEachNode(log, polledPods); err != nil {
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
 	log.V(1).Info("Nodes migrated")
+
 	if err := m.deleteKubeSystemCalicoNode(); err != nil {
 		return fmt.Errorf("failed to delete kube-system node DaemonSet: %s", err.Error())
 	}
@@ -416,11 +424,17 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet
 	return nil
 }
 
+func (m *CoreNamespaceMigration) pollPod(log logr.Logger, polledPods chan interface{}, node *v1.Node) {
+	log.V(1).Info("Waiting for new calico pod to start and be healthy")
+	m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
+	polledPods <- nil
+}
+
 // migrateEachNode ensures that the calico-node pods are ready and then update
 // the label on one node at a time, ensuring pod becomes ready before starting
 // the cycle again. Once the nodes are updated we will get the list of nodes
 // that need to be migrated in case there were more added.
-func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
+func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger, polledPods chan interface{}) error {
 	nodes := m.getNodesToMigrate()
 	for len(nodes) > 0 {
 		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")
@@ -437,8 +451,10 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 				if err != nil {
 					return fmt.Errorf("setting label on node %s failed; %s", node.Name, err)
 				}
-				log.V(1).Info("Waiting for new calico pod to start and be healthy")
-				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
+				if len(polledPods) > 0 {
+					<-polledPods
+					go m.pollPod(log, polledPods, node)
+				}
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
@@ -470,39 +486,18 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 // kubernetes rolling update.
 func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 	return wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
-		ksD, ksR, ksMaxUnavailable, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
+		ksD, ksR, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
-		csD, csR, csMaxUnavailable, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
+		csD, csR, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
 
-		// MaxUnavailable represents the number of pods that are allowed to be down during an update. We
-		// decrement the number of desired pods by that value
-		if ksMaxUnavailable != nil {
-			n, err := intstr.GetValueFromIntOrPercent(ksMaxUnavailable, int(ksD), false)
-			if err != nil {
-				if (ksD - int32(n)) >= 0 {
-					ksD -= int32(n)
-				}
-			}
-		}
-
-		if csMaxUnavailable != nil {
-			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(csD), false)
-			if err != nil {
-				if (csD - int32(n)) >= 0 {
-					csD -= int32(n)
-				}
-			}
-		}
-
-		if ksD <= ksR && csD <= csR {
+		if ksD == ksR && csD == csR {
 			// Desired pods are ready
 			return true, nil
-
 		}
 
 		// Wait for counts to equal
@@ -510,16 +505,28 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 	})
 }
 
-func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, *intstr.IntOrString, error) {
+func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, error) {
 	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
 	if err != nil {
-		return 0, 0, nil, err
+		return 0, 0, err
 	}
 
-	return ds.Status.DesiredNumberScheduled,
-		ds.Status.NumberReady,
-		ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable,
-		nil
+	return ds.Status.DesiredNumberScheduled, ds.Status.NumberReady, nil
+}
+
+func (m *CoreNamespaceMigration) getMaxUnavailable(namespace, daemonset string) (int, error) {
+	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	maxUnavailable, err := intstr.GetValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable,
+		int(ds.Status.DesiredNumberScheduled), false)
+	if err != nil {
+		return 0, err
+	}
+
+	return maxUnavailable, nil
 }
 
 // addNodeLabels adds the specified labels to the named node. Perform

@@ -604,12 +604,8 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	var cores, _ = nodesSpecifications.ResourceRequirements.Requests.Cpu().AsInt64()
 	var shardPerNode = int(cores) / 4
 
-	if nodes <= 0 || cores <= 0 || shardPerNode <= 0{
+	if nodes <= 0 || shardPerNode <= 0 {
 		return defaultShards
-	}
-
-	if shardPerNode < defaultShards {
-		return int(nodes) * defaultShards
 	}
 
 	return int(nodes) * shardPerNode

@@ -82,6 +82,10 @@ func (c ElasticsearchClusterConfig) Shards() int {
 	return c.shards
 }
 
+func (c ElasticsearchClusterConfig) FlowShards() int {
+	return c.flowShards
+}
+
 func (c ElasticsearchClusterConfig) Annotation() string {
 	return AnnotationHash(c)
 }

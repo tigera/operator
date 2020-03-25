@@ -440,7 +440,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
 
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.FlowShards())},
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
 	)

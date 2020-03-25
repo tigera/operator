@@ -7,3 +7,6 @@
 - command: update
   path: metadata.annotations.capabilities
   value: "Seamless Upgrades"
+- command: update
+  path: spec.maturity
+  value: stable

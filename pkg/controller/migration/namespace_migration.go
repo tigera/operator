@@ -23,13 +23,14 @@ import (
 	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -218,10 +219,18 @@ func (m *CoreNamespaceMigration) Run(log logr.Logger) error {
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
-	if err := m.migrateEachNode(log); err != nil {
+
+	maxUnavailable, err := m.getMaxUnavailable(common.CalicoNamespace, nodeDaemonSetName)
+	if err != nil {
+		maxUnavailable = 1
+	}
+	polledPods := make(chan interface{}, maxUnavailable)
+
+	if err := m.migrateEachNode(log, polledPods); err != nil {
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
 	log.V(1).Info("Nodes migrated")
+
 	if err := m.deleteKubeSystemCalicoNode(); err != nil {
 		return fmt.Errorf("failed to delete kube-system node DaemonSet: %s", err.Error())
 	}
@@ -415,11 +424,17 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet
 	return nil
 }
 
+func (m *CoreNamespaceMigration) pollPod(log logr.Logger, polledPods chan interface{}, node *v1.Node) {
+	log.V(1).Info("Waiting for new calico pod to start and be healthy")
+	m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
+	polledPods <- nil
+}
+
 // migrateEachNode ensures that the calico-node pods are ready and then update
 // the label on one node at a time, ensuring pod becomes ready before starting
 // the cycle again. Once the nodes are updated we will get the list of nodes
 // that need to be migrated in case there were more added.
-func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
+func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger, polledPods chan interface{}) error {
 	nodes := m.getNodesToMigrate()
 	for len(nodes) > 0 {
 		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")
@@ -436,8 +451,10 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 				if err != nil {
 					return fmt.Errorf("setting label on node %s failed; %s", node.Name, err)
 				}
-				log.V(1).Info("Waiting for new calico pod to start and be healthy")
-				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
+				if len(polledPods) > 0 {
+					<-polledPods
+					go m.pollPod(log, polledPods, node)
+				}
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
@@ -478,12 +495,9 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 			return false, err
 		}
 
-		// TODO: When we support configuring adjusting the rolling update unavailable,
-		// we should use that configuration here.
 		if ksD == ksR && csD == csR {
 			// Desired pods are ready
 			return true, nil
-
 		}
 
 		// Wait for counts to equal
@@ -498,6 +512,21 @@ func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset 
 	}
 
 	return ds.Status.DesiredNumberScheduled, ds.Status.NumberReady, nil
+}
+
+func (m *CoreNamespaceMigration) getMaxUnavailable(namespace, daemonset string) (int, error) {
+	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	maxUnavailable, err := intstr.GetValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable,
+		int(ds.Status.DesiredNumberScheduled), false)
+	if err != nil {
+		return 0, err
+	}
+
+	return maxUnavailable, nil
 }
 
 // addNodeLabels adds the specified labels to the named node. Perform

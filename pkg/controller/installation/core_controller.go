@@ -35,12 +35,14 @@ import (
 
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -335,6 +337,18 @@ func fillDefaults(instance *operator.Installation) error {
 		} else {
 			instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}
+	}
+
+	instance.Spec.NodeUpdateStrategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
+
+	var one = intstr.FromInt(1)
+
+	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{
+			MaxUnavailable: &one,
+		}
+	} else if instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &one
 	}
 
 	return nil

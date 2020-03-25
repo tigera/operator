@@ -143,6 +143,13 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			instance.Spec.FlexVolumePath)
 	}
 
+	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+		// Validation specific to TigeraSecureEnterprise.
+		if instance.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeStandalone {
+			return fmt.Errorf("Calico clusters must be clusterManagementType 'Standalone'")
+		}
+	}
+
 	return nil
 }
 

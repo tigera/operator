@@ -45,7 +45,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		eksConfig = nil
 		splkCreds = nil
 
-		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
+		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	})
 
 	It("should render all resources for a default configuration", func() {

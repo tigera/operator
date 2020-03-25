@@ -57,7 +57,7 @@ const (
 	defaultResolveConfPath             = "/etc/resolv.conf"
 	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
-	defaultElasticsearchShards         = 5
+	defaultElasticsearchShards         = 1
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -345,7 +345,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	applyTrial := false
 
 	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards)
+
+		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
+		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards, flowShards)
 		if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
 				err := fmt.Errorf("couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass)
@@ -591,4 +593,24 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 		return nil, err
 	}
 	return &svc, nil
+}
+
+func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {
+	if nodesSpecifications == nil || nodesSpecifications.ResourceRequirements == nil || nodesSpecifications.ResourceRequirements.Requests == nil {
+		return defaultShards
+	}
+
+	var nodes = nodesSpecifications.Count
+	var cores, _ = nodesSpecifications.ResourceRequirements.Requests.Cpu().AsInt64()
+	var shardPerNode = int(cores) / 4
+
+	if nodes <= 0 || cores <= 0 || shardPerNode <= 0{
+		return defaultShards
+	}
+
+	if shardPerNode < defaultShards {
+		return int(nodes) * defaultShards
+	}
+
+	return int(nodes) * shardPerNode
 }

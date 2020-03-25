@@ -31,7 +31,7 @@ var _ = Describe("compliance rendering tests", func() {
 					Registry:              "testregistry.com/",
 					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
 				},
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -98,7 +98,7 @@ var _ = Describe("compliance rendering tests", func() {
 					Registry:              "testregistry.com/",
 					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
 				},
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1), nil, notOpenshift)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 

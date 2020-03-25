@@ -23,11 +23,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int) *ElasticsearchClusterConfig {
+func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int, flowShards int) *ElasticsearchClusterConfig {
 	return &ElasticsearchClusterConfig{
 		clusterName: clusterName,
 		replicas:    replicas,
 		shards:      shards,
+		flowShards:  flowShards,
 	}
 }
 
@@ -66,6 +67,7 @@ type ElasticsearchClusterConfig struct {
 	clusterName string
 	replicas    int
 	shards      int
+	flowShards  int
 }
 
 func (c ElasticsearchClusterConfig) ClusterName() string {
@@ -78,6 +80,10 @@ func (c ElasticsearchClusterConfig) Replicas() int {
 
 func (c ElasticsearchClusterConfig) Shards() int {
 	return c.shards
+}
+
+func (c ElasticsearchClusterConfig) FlowShards() int {
+	return c.flowShards
 }
 
 func (c ElasticsearchClusterConfig) Annotation() string {
@@ -94,6 +100,7 @@ func (c ElasticsearchClusterConfig) ConfigMap() *corev1.ConfigMap {
 			"clusterName": c.clusterName,
 			"replicas":    strconv.Itoa(c.replicas),
 			"shards":      strconv.Itoa(c.shards),
+			"flowShards":  strconv.Itoa(c.flowShards),
 		},
 	}
 }

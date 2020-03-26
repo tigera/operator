@@ -87,6 +87,7 @@ var _ = Describe("Compliance controller tests", func() {
 				"clusterName": "cluster",
 				"shards":      "2",
 				"replicas":    "1",
+				"flowShards":  "2",
 			}})).NotTo(HaveOccurred())
 
 		// Create a bunch of empty secrets, such that the reconcile loop will make it to the render functionality.

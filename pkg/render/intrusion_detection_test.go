@@ -25,7 +25,7 @@ import (
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
-		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
+		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 
 		component := render.IntrusionDetection(
 			nil,

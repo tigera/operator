@@ -95,7 +95,7 @@ type InstallationSpec struct {
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
-	// field (which defaults to a value of one).
+	// field.
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 }

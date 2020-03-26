@@ -33,7 +33,7 @@ func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int,
 }
 
 func NewElasticsearchClusterConfigFromConfigMap(configMap *corev1.ConfigMap) (*ElasticsearchClusterConfig, error) {
-	var replicas, shards int
+	var replicas, shards, flowShards int
 	var err error
 
 	if configMap.Data["clusterName"] == "" {
@@ -56,10 +56,19 @@ func NewElasticsearchClusterConfigFromConfigMap(configMap *corev1.ConfigMap) (*E
 		}
 	}
 
+	if configMap.Data["flowShards"] == "" {
+		return nil, fmt.Errorf("'flowShards' is not set")
+	} else {
+		if flowShards, err = strconv.Atoi(configMap.Data["flowShards"]); err != nil {
+			return nil, errors.Wrap(err, "'flowShards' must be an integer")
+		}
+	}
+
 	return &ElasticsearchClusterConfig{
 		clusterName: configMap.Data["clusterName"],
 		replicas:    replicas,
 		shards:      shards,
+		flowShards: flowShards,
 	}, nil
 }
 

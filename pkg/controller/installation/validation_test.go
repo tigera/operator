@@ -29,6 +29,7 @@ var _ = Describe("Installation validation tests", func() {
 			Spec: operator.InstallationSpec{
 				CalicoNetwork:  &operator.CalicoNetworkSpec{},
 				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				Variant:        operator.Calico,
 			},
 		}
 	})

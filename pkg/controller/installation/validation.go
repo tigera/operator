@@ -136,6 +136,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return err
 			}
 		}
+		if instance.Spec.CalicoNetwork.HostPorts != nil {
+			err := validateHostPorts(instance.Spec.CalicoNetwork.HostPorts)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
@@ -172,5 +178,24 @@ func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error
 	if numEnabled > 1 {
 		return fmt.Errorf("no more than one node address autodetection method can be specified per-family")
 	}
+	return nil
+}
+
+func validateHostPorts(hp *operatorv1.HostPortsType) error {
+	if hp == nil {
+		return fmt.Errorf("HostPorts must be set, it should be one of %s",
+			strings.Join(operatorv1.HostPortsTypesString, ","))
+	}
+	valid := false
+	for _, t := range operatorv1.HostPortsTypes {
+		if *hp == t {
+			valid = true
+		}
+	}
+	if !valid {
+		return fmt.Errorf("%s is invalid for HostPorts, it should be one of %s",
+			hp, strings.Join(operatorv1.HostPortsTypesString, ","))
+	}
+
 	return nil
 }

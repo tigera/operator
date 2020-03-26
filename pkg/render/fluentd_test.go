@@ -269,6 +269,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{"SPLUNK_FLOW_LOG", "true", "", ""},
 			{"SPLUNK_AUDIT_LOG", "true", "", ""},
+			{"SPLUNK_DNS_LOG", "true", "", ""},
 			{"SPLUNK_HEC_HOST", "1.2.3.4", "", ""},
 			{"SPLUNK_HEC_PORT", "8088", "", ""},
 			{"SPLUNK_PROTOCOL", "https", "", ""},
@@ -336,6 +337,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{"SPLUNK_FLOW_LOG", "true", "", ""},
 			{"SPLUNK_AUDIT_LOG", "true", "", ""},
+			{"SPLUNK_DNS_LOG", "true", "", ""},
 			{"SPLUNK_HEC_HOST", "1.2.3.4", "", ""},
 			{"SPLUNK_HEC_PORT", "8088", "", ""},
 			{"SPLUNK_PROTOCOL", "https", "", ""},

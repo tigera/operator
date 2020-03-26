@@ -45,7 +45,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		eksConfig = nil
 		splkCreds = nil
 
-		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1)
+		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -269,6 +269,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{"SPLUNK_FLOW_LOG", "true", "", ""},
 			{"SPLUNK_AUDIT_LOG", "true", "", ""},
+			{"SPLUNK_DNS_LOG", "true", "", ""},
 			{"SPLUNK_HEC_HOST", "1.2.3.4", "", ""},
 			{"SPLUNK_HEC_PORT", "8088", "", ""},
 			{"SPLUNK_PROTOCOL", "https", "", ""},
@@ -336,6 +337,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{"SPLUNK_FLOW_LOG", "true", "", ""},
 			{"SPLUNK_AUDIT_LOG", "true", "", ""},
+			{"SPLUNK_DNS_LOG", "true", "", ""},
 			{"SPLUNK_HEC_HOST", "1.2.3.4", "", ""},
 			{"SPLUNK_HEC_PORT", "8088", "", ""},
 			{"SPLUNK_PROTOCOL", "https", "", ""},

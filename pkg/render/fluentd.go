@@ -335,8 +335,6 @@ func (c *fluentdComponent) container() corev1.Container {
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "FLUENT_UID", Value: "0"},
-		{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: "5"},
-		{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: "5"},
 		{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 		{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
@@ -413,6 +411,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}},
 				corev1.EnvVar{Name: "SPLUNK_FLOW_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
+				corev1.EnvVar{Name: "SPLUNK_DNS_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_HEC_HOST", Value: host},
 				corev1.EnvVar{Name: "SPLUNK_HEC_PORT", Value: port},
 				corev1.EnvVar{Name: "SPLUNK_PROTOCOL", Value: proto},
@@ -442,7 +441,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
 
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.FlowShards())},
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.esClusterConfig.Shards())},
 	)

@@ -71,6 +71,7 @@ type InstallationSpec struct {
 	// How the cluster is managed. Valid values for this field are: Standalone, Management, Managed.
 	// Standalone clusters are fully self-contained installations of Calico Enterprise. Management clusters provide
 	// a single view to manage any number of Managed clusters, which are a lighter weight installation.
+	// This option is applicable only when variant is TigeraSecureEnterprise.
 	// Default: Standalone
 	// +optional
 	// +kubebuilder:validation:Enum=Standalone,Management,Managed
@@ -130,6 +131,27 @@ const (
 	ClusterManagementTypeManaged    ClusterManagementType = "Managed"
 )
 
+// HostPortsType specifies if the HostPorts plugin enabled status.
+type HostPortsType string
+
+const (
+	HostPortsEnabled  HostPortsType = "Enabled"
+	HostPortsDisabled HostPortsType = "Disabled"
+)
+
+var HostPortsTypes []HostPortsType = []HostPortsType{
+	HostPortsEnabled,
+	HostPortsDisabled,
+}
+var HostPortsTypesString []string = []string{
+	HostPortsEnabled.String(),
+	HostPortsDisabled.String(),
+}
+
+func (nt HostPortsType) String() string {
+	return string(nt)
+}
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
@@ -151,6 +173,12 @@ type CalicoNetworkSpec struct {
 	// IPv6 addresses will not be auto-detected.
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
+
+	// HostPorts configures whether or not Calico will support Kubernetes HostPorts.
+	// Default: Enabled
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled,Disabled
+	HostPorts *HostPortsType `json:"hostPorts,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

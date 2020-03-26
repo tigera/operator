@@ -33,6 +33,8 @@ var _ = Describe("Installation validation tests", func() {
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				},
+				Variant:        operator.Calico,
+
 			},
 		}
 	})
@@ -89,6 +91,40 @@ var _ = Describe("Installation validation tests", func() {
 	It("should not allow a relative path in FlexVolumePath", func() {
 		instance.Spec.FlexVolumePath = "foo/bar/baz"
 		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow a cluster management type for Calico", func() {
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManaged
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should allow a cluster management type for Calico Enterprise", func() {
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManaged
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should validate HostPorts", func() {
+		instance.Spec.CalicoNetwork.HostPorts = nil
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp := operator.HostPortsEnabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp = operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp = "NotValid"
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err = validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
 })

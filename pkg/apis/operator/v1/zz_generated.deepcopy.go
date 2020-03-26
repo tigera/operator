@@ -195,6 +195,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(NodeAddressAutodetection)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.HostPorts != nil {
+		in, out := &in.HostPorts, &out.HostPorts
+		*out = new(HostPortsType)
+		**out = **in
+	}
 	return
 }
 

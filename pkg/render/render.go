@@ -191,7 +191,6 @@ type calicoRenderer struct {
 func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, PriorityClassDefinitions(r.installation))
-	components = appendNotNil(components, Namespaces(r.installation, r.provider == operator.ProviderOpenShift, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.upgrade))

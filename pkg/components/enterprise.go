@@ -101,8 +101,8 @@ var (
 	
 	
 	ComponentFluentd = component{
-		Version: "v2.7.0-0.dev-11-ge26adbb",
-		Digest:  "sha256:1ab8c0a65fc7a5f34af1fed90811938b1794a19866ab28ee032361b22fb6c03b",
+		Version: "v3.0.0-0.dev-1-ge3d709f",
+		Digest:  "sha256:af99ee4357236c8bd4082b1df3e5b99f3f5ccf8af45c2bc3813aae9240efa30d",
 		Image:   "tigera/fluentd",
 	}
 	

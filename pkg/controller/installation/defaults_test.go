@@ -69,6 +69,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var false_ = false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
+		hpEnabled := operator.HostPortsEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -105,6 +106,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
+					HostPorts: &hpEnabled,
 				},
 				NodeMetricsPort: &nodeMetricsPort,
 				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
@@ -162,7 +164,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 		},
 
-		table.Entry("Empty config defaults IPPool", &operator.Installation{}, &osconfigv1.Network{}),
+		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil),
 		table.Entry("Openshift only CIDR",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{

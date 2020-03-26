@@ -28,7 +28,6 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -439,9 +438,6 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 				}
 				// Pause for a little bit to give a chance for the label changes to propagate.
 				time.Sleep(500 * time.Millisecond)
-
-				log.V(1).Info("Waiting for new calico pod to start and be healthy")
-				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
@@ -613,42 +609,6 @@ func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
 
 		// no update needed
 		return true, nil
-	})
-}
-
-// waitCalicoPodReadyForNode waits for the calico-node pod in the calico-system
-// namespace to become ready on a node.
-func (m *CoreNamespaceMigration) waitCalicoPodReadyForNode(nodeName string, interval, timeout time.Duration, label map[string]string) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		podList, err := m.client.CoreV1().Pods(common.CalicoNamespace).List(
-			metav1.ListOptions{
-				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
-				LabelSelector: labels.SelectorFromSet(label).String(),
-			},
-		)
-		if err != nil {
-			// Something wrong, stop waiting
-			return true, err
-		}
-
-		if len(podList.Items) == 0 {
-			// No pod yet, retry
-			return false, nil
-		}
-
-		if len(podList.Items) > 1 {
-			// Multiple pods, stop waiting
-			return true, fmt.Errorf("getting multiple pod with label %v on node %s", label, nodeName)
-		}
-
-		pod := podList.Items[0]
-		if isPodRunningAndReady(pod) {
-			// Pod running and ready, stop waiting
-			return true, nil
-		}
-
-		// Pod not ready yet, retry
-		return false, nil
 	})
 }
 

@@ -330,7 +330,7 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 					},
 					"clusterManagementType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "How the cluster is managed. Valid values for this field are: Standalone, Management, Managed. Standalone clusters are fully self-contained installations of Calico Enterprise. Management clusters provide a single view to manage any number of Managed clusters, which are a lighter weight installation. Default: Standalone",
+							Description: "How the cluster is managed. Valid values for this field are: Standalone, Management, Managed. Standalone clusters are fully self-contained installations of Calico Enterprise. Management clusters provide a single view to manage any number of Managed clusters, which are a lighter weight installation. This option is applicable only when variant is TigeraSecureEnterprise. Default: Standalone",
 							Type:        []string{"string"},
 							Format:      "",
 						},

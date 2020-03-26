@@ -23,13 +23,13 @@ import (
 	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -436,8 +436,8 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 				if err != nil {
 					return fmt.Errorf("setting label on node %s failed; %s", node.Name, err)
 				}
-				log.V(1).Info("Waiting for new calico pod to start and be healthy")
-				m.waitCalicoPodReadyForNode(node.Name, 1*time.Second, 3*time.Minute, calicoPodLabel)
+				// Pause for a little bit to give a chance for the label changes to propagate.
+				time.Sleep(500 * time.Millisecond)
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
@@ -469,21 +469,27 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 // kubernetes rolling update.
 func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 	return wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
-		ksD, ksR, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
+		ksD, ksR, _, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
-		csD, csR, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
+		csD, csR, csMaxUnavailable, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
 
-		// TODO: When we support configuring adjusting the rolling update unavailable,
-		// we should use that configuration here.
-		if ksD == ksR && csD == csR {
+		var maxUnavailable int32
+
+		if csMaxUnavailable != nil {
+			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
+			if err != nil {
+				maxUnavailable = int32(n)
+			}
+		}
+
+		if (ksR + csR + maxUnavailable) >= (ksD + csD) {
 			// Desired pods are ready
 			return true, nil
-
 		}
 
 		// Wait for counts to equal
@@ -491,13 +497,16 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 	})
 }
 
-func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, error) {
+func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, *intstr.IntOrString, error) {
 	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, nil, err
 	}
 
-	return ds.Status.DesiredNumberScheduled, ds.Status.NumberReady, nil
+	return ds.Status.DesiredNumberScheduled,
+		ds.Status.NumberReady,
+		ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable,
+		nil
 }
 
 // addNodeLabels adds the specified labels to the named node. Perform
@@ -598,42 +607,6 @@ func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
 
 		// no update needed
 		return true, nil
-	})
-}
-
-// waitCalicoPodReadyForNode waits for the calico-node pod in the calico-system
-// namespace to become ready on a node.
-func (m *CoreNamespaceMigration) waitCalicoPodReadyForNode(nodeName string, interval, timeout time.Duration, label map[string]string) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		podList, err := m.client.CoreV1().Pods(common.CalicoNamespace).List(
-			metav1.ListOptions{
-				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
-				LabelSelector: labels.SelectorFromSet(label).String(),
-			},
-		)
-		if err != nil {
-			// Something wrong, stop waiting
-			return true, err
-		}
-
-		if len(podList.Items) == 0 {
-			// No pod yet, retry
-			return false, nil
-		}
-
-		if len(podList.Items) > 1 {
-			// Multiple pods, stop waiting
-			return true, fmt.Errorf("getting multiple pod with label %v on node %s", label, nodeName)
-		}
-
-		pod := podList.Items[0]
-		if isPodRunningAndReady(pod) {
-			// Pod running and ready, stop waiting
-			return true, nil
-		}
-
-		// Pod not ready yet, retry
-		return false, nil
 	})
 }
 

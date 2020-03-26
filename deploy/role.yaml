@@ -132,7 +132,7 @@ rules:
       - elasticsearch.k8s.elastic.co
     resources:
       - elasticsearches
-    verbs:::
+    verbs:
       - '*'
   - apiGroups:
       - storage.k8s.io

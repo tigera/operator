@@ -478,8 +478,6 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 			return false, err
 		}
 
-		// MaxUnavailable represents the number of pods that are allowed to be down during an update. We
-		// decrement the number of desired pods by that value.
 		var maxUnavailable int32
 
 		if csMaxUnavailable != nil {

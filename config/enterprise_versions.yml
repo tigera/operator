@@ -22,7 +22,7 @@ components:
     version: v2.7.0-0.dev-300-ge5619d5
   fluentd:
     image: tigera/fluentd
-    version: v2.7.0-0.dev-11-ge26adbb
+    version: v3.0.0-0.dev-1-ge3d709f
   es-proxy:
     image: tigera/es-proxy
     version: v2.7.0-0.dev-111-g3d1305c

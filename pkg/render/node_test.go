@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
@@ -38,6 +39,7 @@ var (
 var _ = Describe("Node rendering tests", func() {
 	var defaultInstance *operator.Installation
 	var typhaNodeTLS *render.TyphaNodeTLS
+	one := intstr.FromInt(1)
 
 	BeforeEach(func() {
 		ff := true
@@ -48,6 +50,11 @@ var _ = Describe("Node rendering tests", func() {
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
 					HostPorts:                  &hp,
+				},
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &one,
+					},
 				},
 			},
 		}
@@ -873,6 +880,21 @@ var _ = Describe("Node rendering tests", func() {
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds).ToNot(BeNil())
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")).To(BeNil())
+	})
+
+	It("should render MaxUnavailable if a custom value was set", func() {
+		two := intstr.FromInt(2)
+		defaultInstance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(5))
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+		Expect(ds).ToNot(BeNil())
+
+		Expect(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable).To(Equal(&two))
 	})
 
 	It("should render cni config without portmap when HostPorts disabled", func() {

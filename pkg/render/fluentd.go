@@ -413,6 +413,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}},
 				corev1.EnvVar{Name: "SPLUNK_FLOW_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
+				corev1.EnvVar{Name: "SPLUNK_DNS_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_HEC_HOST", Value: host},
 				corev1.EnvVar{Name: "SPLUNK_HEC_PORT", Value: port},
 				corev1.EnvVar{Name: "SPLUNK_PROTOCOL", Value: proto},

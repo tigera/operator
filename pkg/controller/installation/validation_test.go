@@ -87,4 +87,38 @@ var _ = Describe("Installation validation tests", func() {
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("should not allow a cluster management type for Calico", func() {
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManaged
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should allow a cluster management type for Calico Enterprise", func() {
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManaged
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should validate HostPorts", func() {
+		instance.Spec.CalicoNetwork.HostPorts = nil
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp := operator.HostPortsEnabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp = operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		hp = "NotValid"
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err = validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
 })

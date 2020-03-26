@@ -17,50 +17,7 @@ package render
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/common"
 )
-
-const (
-	TigeraPrometheusNamespace = "tigera-prometheus"
-)
-
-func Namespaces(cr *operator.Installation, openshift bool, pullSecrets []*corev1.Secret) Component {
-	return &namespaceComponent{
-		cr:          cr,
-		openshift:   openshift,
-		pullSecrets: pullSecrets,
-	}
-}
-
-type namespaceComponent struct {
-	cr          *operator.Installation
-	openshift   bool
-	pullSecrets []*corev1.Secret
-}
-
-func (c *namespaceComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	ns := []runtime.Object{
-		createNamespace(common.CalicoNamespace, c.openshift),
-	}
-	if len(c.pullSecrets) > 0 {
-		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
-	}
-
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		ns = append(ns, createNamespace(TigeraPrometheusNamespace, c.openshift))
-		if len(c.pullSecrets) > 0 {
-			ns = append(ns, copyImagePullSecrets(c.pullSecrets, TigeraPrometheusNamespace)...)
-		}
-	}
-	return ns, nil
-}
-
-func (c *namespaceComponent) Ready() bool {
-	return true
-}
 
 func createNamespace(name string, openshift bool) *corev1.Namespace {
 	ns := &corev1.Namespace{

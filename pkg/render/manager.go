@@ -167,6 +167,13 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, c.managerDeployment())
 	objs = append(objs, c.globalAlertTemplates()...)
 
+	// TODO: create openshift resources as part of real openshift controller
+	const TigeraPrometheusNamespace = "tigera-prometheus"
+	objs = append(objs, createNamespace(TigeraPrometheusNamespace, c.openshift))
+	if len(c.pullSecrets) > 0 {
+		objs = append(objs, copyImagePullSecrets(c.pullSecrets, TigeraPrometheusNamespace)...)
+	}
+
 	return objs, nil
 }
 

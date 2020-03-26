@@ -25,6 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration"
 
 	apps "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,11 +56,17 @@ type nodeComponent struct {
 	provider        operator.Provider
 	netConfig       NetworkConfig
 	birdTemplates   map[string]string
+	pullSecrets     []*corev1.Secret
 	typhaNodeTLS    *TyphaNodeTLS
 	migrationNeeded bool
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	objs := []runtime.Object{
+		createNamespace(common.CalicoNamespace, c.cr.Spec.KubernetesProvider == operator.ProviderOpenShift),
+	}
+	objs = append(objs, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
+
 	objsToCreate := []runtime.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),

@@ -24,13 +24,13 @@ var _ = Describe("No registry override", func() {
 		Expect(GetReference(ComponentCalicoNode, "", "")).To(Equal("docker.io/calico/node@" + ComponentCalicoNode.Digest))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(GetReference(ComponentTigeraNode, "", "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-node@" + ComponentTigeraNode.Digest))
+		Expect(GetReference(ComponentTigeraNode, "", "")).To(Equal("quay.io/tigera/cnx-node@" + ComponentTigeraNode.Digest))
 	})
 	It("should render an ECK image correctly", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "", "")).To(Equal("docker.elastic.co/eck/eck-operator@" + ComponentElasticsearchOperator.Digest))
 	})
 	It("should render an operator init image correctly", func() {
-		Expect(GetOperatorInitReference("", "")).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/operator-init:" + ComponentOperatorInit.Version))
+		Expect(GetOperatorInitReference("", "")).To(Equal("quay.io/tigera/operator-init:" + ComponentOperatorInit.Version))
 	})
 })
 
@@ -53,13 +53,13 @@ var _ = Describe("imagepath override", func() {
 		Expect(GetReference(ComponentCalicoNode, "", "userpath")).To(Equal("docker.io/userpath/node@" + ComponentCalicoNode.Digest))
 	})
 	It("should render a tigera image correctly", func() {
-		Expect(GetReference(ComponentTigeraNode, "", "userpath")).To(Equal("gcr.io/unique-caldron-775/cnx/userpath/cnx-node@" + ComponentTigeraNode.Digest))
+		Expect(GetReference(ComponentTigeraNode, "", "userpath")).To(Equal("quay.io/userpath/cnx-node@" + ComponentTigeraNode.Digest))
 	})
 	It("should render an ECK image correctly", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "", "userpath")).To(Equal("docker.elastic.co/userpath/eck-operator@" + ComponentElasticsearchOperator.Digest))
 	})
 	It("should render an operator init image correctly", func() {
-		Expect(GetOperatorInitReference("", "userpath")).To(Equal("gcr.io/unique-caldron-775/cnx/userpath/operator-init:" + ComponentOperatorInit.Version))
+		Expect(GetOperatorInitReference("", "userpath")).To(Equal("quay.io/userpath/operator-init:" + ComponentOperatorInit.Version))
 	})
 })
 var _ = Describe("registry and imagepath override", func() {

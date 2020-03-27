@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/cloudflare/cfssl v1.4.1
-	github.com/elastic/cloud-on-k8s v1.0.1
+	github.com/elastic/cloud-on-k8s v0.0.0-20200204083752-bcb7468838a8
 	github.com/elastic/go-ucfg v0.8.1 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
@@ -37,6 +37,7 @@ require (
 // Pinned to kubernetes-1.14.1
 replace (
 	git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
+	// This is cloud-on-k8s 1.0.1 tag
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200204083752-bcb7468838a8
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	k8s.io/api => k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b

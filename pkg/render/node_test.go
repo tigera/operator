@@ -92,7 +92,7 @@ var _ = Describe("Node rendering tests", func() {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
     },
-	{"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]
 }`))
 		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())

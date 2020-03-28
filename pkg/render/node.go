@@ -325,7 +325,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 	var portmap string = ""
 	if c.cr.Spec.CalicoNetwork.HostPorts != nil && *c.cr.Spec.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
 		portmap = `,
-	{"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
 	var config = fmt.Sprintf(`{

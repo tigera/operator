@@ -437,7 +437,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 					return fmt.Errorf("setting label on node %s failed; %s", node.Name, err)
 				}
 				// Pause for a little bit to give a chance for the label changes to propagate.
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1 * time.Second)
 			} else {
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
@@ -468,7 +468,7 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 // We want this to ensure we are only updating one pod at a time like a regular
 // kubernetes rolling update.
 func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
-	return wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		ksD, ksR, _, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
 		if err != nil {
 			return false, err
@@ -482,7 +482,7 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 
 		if csMaxUnavailable != nil {
 			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
-			if err != nil {
+			if err == nil {
 				maxUnavailable = int32(n)
 			}
 		}

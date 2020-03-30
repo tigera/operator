@@ -198,6 +198,10 @@ spec:
                 omitted, then prometheus metrics may still be configured through FelixConfiguration.
               format: int32
               type: integer
+            nodeUpdateStrategy:
+              description: NodeUpdateStrategy can be used to customize the desired
+                update strategy, such as the MaxUnavailable field.
+              type: object
             registry:
               description: 'Registry is the default Docker registry used for component
                 Docker images. If specified, all images will be pulled from this registry.

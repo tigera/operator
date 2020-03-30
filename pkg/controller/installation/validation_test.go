@@ -17,6 +17,7 @@ package installation
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 )
@@ -29,6 +30,11 @@ var _ = Describe("Installation validation tests", func() {
 			Spec: operator.InstallationSpec{
 				CalicoNetwork:  &operator.CalicoNetworkSpec{},
 				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+				},
+				Variant:        operator.Calico,
+
 			},
 		}
 	})

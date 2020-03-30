@@ -33,8 +33,6 @@ var _ = Describe("Installation validation tests", func() {
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				},
-				Variant:        operator.Calico,
-
 			},
 		}
 	})

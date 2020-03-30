@@ -838,7 +838,7 @@ var _ = Describe("Node rendering tests", func() {
 		two := intstr.FromInt(2)
 		defaultInstance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
-		resources, _ := component.Objects()
+		resources := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")

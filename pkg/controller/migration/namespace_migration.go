@@ -474,7 +474,7 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated() error {
 			return false, err
 		}
 
-		var maxUnavailable int32
+		var maxUnavailable int32 = 1
 
 		if csMaxUnavailable != nil {
 			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
@@ -483,9 +483,8 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated() error {
 			}
 		}
 
-		// Notice that we're checking if the number of ready plus maxUnavailable pods is greater than the
-		// number of desired pods (instead of equal or greater). This prvents us from returning a little
-		// too early and resulting in an additional node being allowed to migrate when before its time.
+		// Check that ready pods plus maxUnavailable is MORE than the desired pods so when we migrate
+		// one more node we won't go over the maxUnavailable with unready pods.
 		if (ksR + csR + maxUnavailable) > (ksD + csD) {
 			// Desired pods are ready
 			return true, nil

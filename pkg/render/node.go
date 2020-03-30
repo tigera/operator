@@ -461,11 +461,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Volumes:                       c.nodeVolumes(),
 				},
 			},
-			UpdateStrategy: apps.DaemonSetUpdateStrategy{
-				RollingUpdate: &apps.RollingUpdateDaemonSet{
-					MaxUnavailable: c.cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable,
-				},
-			},
+			UpdateStrategy: c.cr.Spec.NodeUpdateStrategy,
 		},
 	}
 

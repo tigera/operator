@@ -429,7 +429,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 			// to come up. Also if the operator crashed we don't want to continue
 			// updating if the pods are not healthy.
 			log.V(1).Info("Waiting for new calico pods to be healthy")
-			err := m.waitForCalicoPodsHealthy()
+			err := m.waitUntilNodeCanBeMigrated()
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
 				err = m.addNodeLabel(node.Name, nodeSelectorKey, nodeSelectorValuePost)
@@ -461,13 +461,9 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 	return nodes
 }
 
-// waitForCalicoPodsHealthy waits for all calico pods to be healthy. If all pods
-// are not ready then an error is returned.
-// The function checks both the daemonset in kube-system and the calico-system
-// to see if the number of desired pods matches the number of ready pods.
-// We want this to ensure we are only updating one pod at a time like a regular
-// kubernetes rolling update.
-func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
+// waitUntilNodeCanBeMigrated checks the number of desired and ready pods in the kube-system and calico-system
+// daemonsets to make sure we don't simultaneously migrate more pods than allowed.
+func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated() error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		ksD, ksR, _, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
 		if err != nil {
@@ -487,7 +483,10 @@ func (m *CoreNamespaceMigration) waitForCalicoPodsHealthy() error {
 			}
 		}
 
-		if (ksR + csR + maxUnavailable) >= (ksD + csD) {
+		// Notice that we're checking if the number of ready plus maxUnavailable pods is greater than the
+		// number of desired pods (instead of equal or greater). This prvents us from returning a little
+		// too early and resulting in an additional node being allowed to migrate when before its time.
+		if (ksR + csR + maxUnavailable) > (ksD + csD) {
 			// Desired pods are ready
 			return true, nil
 		}

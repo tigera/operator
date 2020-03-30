@@ -22,6 +22,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -147,6 +148,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
 		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
 			instance.Spec.FlexVolumePath)
+	}
+
+	if instance.Spec.NodeUpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
+		return fmt.Errorf("Installation spec.NodeUpdateStrategy.type '%s' is not supported",
+			instance.Spec.NodeUpdateStrategy.RollingUpdate)
 	}
 
 	return nil

@@ -450,6 +450,7 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	in.NodeUpdateStrategy.DeepCopyInto(&out.NodeUpdateStrategy)
 	return
 }
 

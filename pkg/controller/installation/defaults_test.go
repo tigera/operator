@@ -22,7 +22,9 @@ import (
 	osconfigv1 "github.com/openshift/api/config/v1"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
@@ -69,7 +71,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		var false_ = false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
+		var one intstr.IntOrString = intstr.FromInt(1)
+
 		hpEnabled := operator.HostPortsEnabled
+
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -110,6 +115,12 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				NodeMetricsPort: &nodeMetricsPort,
 				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &one,
+					},
+				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)

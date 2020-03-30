@@ -21,6 +21,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -32,6 +34,7 @@ var _ = Describe("Rendering tests", func() {
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
+	one := intstr.FromInt(1)
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -39,6 +42,11 @@ var _ = Describe("Rendering tests", func() {
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{IPPools: []operator.IPPool{{CIDR: "192.168.1.0/16"}}},
 				Registry:      "test-reg/",
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &one,
+					},
+				},
 			},
 		}
 

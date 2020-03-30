@@ -342,11 +342,17 @@ func schema_pkg_apis_operator_v1_InstallationSpec(ref common.ReferenceCallback) 
 							Format:      "",
 						},
 					},
+					"nodeUpdateStrategy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable field.",
+							Ref:         ref("k8s.io/api/apps/v1.DaemonSetUpdateStrategy"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1.CalicoNetworkSpec", "k8s.io/api/core/v1.LocalObjectReference"},
+			"github.com/tigera/operator/pkg/apis/operator/v1.CalicoNetworkSpec", "k8s.io/api/apps/v1.DaemonSetUpdateStrategy", "k8s.io/api/core/v1.LocalObjectReference"},
 	}
 }
 

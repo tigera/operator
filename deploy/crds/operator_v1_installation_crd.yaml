@@ -143,12 +143,20 @@ spec:
                 are: Standalone, Management, Managed. Standalone clusters are fully
                 self-contained installations of Calico Enterprise. Management clusters
                 provide a single view to manage any number of Managed clusters, which
-                are a lighter weight installation. Default: Standalone'
+                are a lighter weight installation. This option is applicable only
+                when variant is TigeraSecureEnterprise. Default: Standalone'
               enum:
               - Standalone
               - Management
               - Managed
               type: string
+            controlPlaneNodeSelector:
+              additionalProperties:
+                type: string
+              description: ControlPlaneNodeSelector is used to select control plane
+                nodes on which to run specific Calico components. This currently only
+                applies to kube-controllers and the apiserver.
+              type: object
             flexVolumePath:
               description: FlexVolumePath optionally specifies a custom path for FlexVolume.
                 If not specified, FlexVolume will be enabled by default. If set to
@@ -158,7 +166,7 @@ spec:
               description: 'ImagePath allows for the path part of an image to be specified.
                 If specified then the specified value will be used as the image path
                 for each image. If not specified or empty, the default for each image
-                will be used.  Image format:    `<registry>/<imagePath>/<imageName>:<tag-name>`  This
+                will be used.  Image format:    `<registry>/<imagePath>/<imageName>@sha256:<image-sha>`  This
                 option allows configuring the `<imagePath>` portion of the above format.'
               type: string
             imagePullSecrets:
@@ -170,22 +178,37 @@ spec:
               type: array
             kubernetesProvider:
               description: KubernetesProvider specifies a particular provider of the
-                Kubernetes platform. This is often auto-detected. If specified, this
-                enables provider-specific configuration and must match the auto-detected
-                value (if any).
+                Kubernetes platform and enables provider-specific configuration. If
+                the specified value is empty, the Operator will attempt to automatically
+                determine the current provider. If the specified value is not empty,
+                the Operator will still attempt auto-detection, but will additionally
+                compare the auto-detected value to the specified value to confirm
+                they match.
               enum:
+              - ""
               - EKS
               - GKE
               - AKS
               - OpenShift
               - DockerEnterprise
               type: string
+            nodeMetricsPort:
+              description: NodeMetricsPort specifies which port calico/node serves
+                prometheus metrics on. By default, metrics are not enabled. If specified,
+                this overrides any FelixConfiguration resources which may exist. If
+                omitted, then prometheus metrics may still be configured through FelixConfiguration.
+              format: int32
+              type: integer
+            nodeUpdateStrategy:
+              description: NodeUpdateStrategy can be used to customize the desired
+                update strategy, such as the MaxUnavailable field.
+              type: object
             registry:
               description: 'Registry is the default Docker registry used for component
                 Docker images. If specified, all images will be pulled from this registry.
                 If not specified then the default registries will be used.  Image
-                format:    `<registry>/<imagePath>/<imageName>:<tag-name>`  This option
-                allows configuring the `<registry>` portion of the above format.'
+                format:    `<registry>/<imagePath>/<imageName>@sha256:<image-sha>`  This
+                option allows configuring the `<registry>` portion of the above format.'
               type: string
             variant:
               description: 'Variant is the product to install - one of Calico or TigeraSecureEnterprise

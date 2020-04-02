@@ -58,6 +58,7 @@ const (
 	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
+	defaultElasticsearchStorageClass   = "tigera-elasticsearch"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -142,11 +143,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
+	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err = c.Watch(&source.Kind{
-		Type: &storagev1.StorageClass{
-			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchStorageClass},
-		},
-	}, &handler.EnqueueRequestForObject{})
+		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %v", err)
 	}
@@ -348,9 +347,17 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
 		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards, flowShards)
-		if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
+
+		// Check if there is a StorageClass available to run Elasticsearch on.
+		scn := ls.Spec.StorageClassName
+		if scn == "" {
+			ls.Spec.StorageClassName = defaultElasticsearchStorageClass
+			scn = defaultElasticsearchStorageClass
+		}
+
+		if err := r.client.Get(ctx, client.ObjectKey{Name: scn}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
-				err := fmt.Errorf("couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass)
+				err := fmt.Errorf("couldn't find storage class %s, this must be provided", scn)
 				log.Error(err, err.Error())
 				r.status.SetDegraded("Failed to get storage class", err.Error())
 				return reconcile.Result{}, nil

@@ -15,6 +15,7 @@
 package render
 
 import (
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,6 +25,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"time"
 )
 
 const (
@@ -74,6 +76,7 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
 		c.intrusionDetectionElasticsearchJob())
+	objs = append(objs, c.globalAlertTemplates()...)
 
 	return objs, nil
 }
@@ -356,4 +359,189 @@ func (c *intrusionDetectionComponent) imagePullSecrets() []runtime.Object {
 		secrets = append(secrets, s)
 	}
 	return secrets
+}
+
+func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
+	return []runtime.Object{
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.pod",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts on any changes to pods within the cluster",
+				Summary:     "[audit] [privileged access] change detected for pod ${objectRef.namespace}/${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=pods",
+				AggregateBy: []string{"objectRef.name", "objectRef.namespace"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.globalnetworkpolicy",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts on any changes to network policies",
+				Summary:     "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=globalnetworkpolicies",
+				AggregateBy: []string{"objectRef.name", "objectRef.resource"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.globalnetworkset",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts on any changes to global network sets",
+				Summary:     "[audit] [privileged access] change detected for ${objectRef.resource} ${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'=globalnetworksets",
+				AggregateBy: []string{"objectRef.resource", "objectRef.name"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "policy.serviceaccount",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts on any changes to service accounts within the cluster",
+				Summary:     "[audit] [privileged access] change detected for serviceaccount ${objectRef.namespace}/${objectRef.name}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "audit",
+				Query:       "(verb=create OR verb=update OR verb=delete OR verb=patch) AND 'objectRef.resource'='serviceaccounts'",
+				AggregateBy: []string{"objectRef.namespace", "objectRef.name"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.cloudapi",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts on access to cloud metadata APIs",
+				Summary:     "[flows] [cloud API] cloud metadata API accessed by ${source_namespace}/${source_name_aggr}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "(dest_name_aggr='metadata-api' OR dest_ip='169.254.169.254' OR dest_name_aggr='kse.kubernetes') AND proto='tcp' AND action='allow' AND reporter=src AND (source_namespace='default')",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.ssh",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts on the use of ssh to and from a specific namespace (e.g. default)",
+				Summary:     "[flows] ssh flow in default namespace detected from ${source_namespace}/${source_name_aggr}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "proto='tcp' AND action='allow' AND dest_port='22' AND (source_namespace='default' OR dest_namespace='default') AND reporter=src",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.lateral.access",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts when pods with a specific label (e.g. app=monitor) accessed by other workloads within the cluster",
+				Summary:     "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor is accessed",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "'source_labels.labels'='app=monitor' AND proto=tcp AND action=allow AND reporter=dst",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "network.lateral.originate",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts when pods with a specific label (e.g. app=monitor) initiate connections to other workloads within the cluster",
+				Summary:     "[flows] [lateral movement] ${source_namespace}/${source_name_aggr} with label app=monitor initiated connection",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "flows",
+				Query:       "'source_labels.labels'='app=monitor' AND proto=tcp AND action=allow AND reporter=src AND NOT dest_name_aggr='metadata-api' AND NOT dest_name_aggr='pub' AND NOT dest_name_aggr='kse.kubernetes'",
+				AggregateBy: []string{"source_namespace", "source_name_aggr"},
+				Field:       "num_flows",
+				Metric:      "sum",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+	}
 }

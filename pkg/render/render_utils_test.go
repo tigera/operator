@@ -74,6 +74,14 @@ func ExpectGlobalReportType(resource runtime.Object, name string) {
 	}
 }
 
+func ExpectGlobalAlertTemplateToBePopulated(resource runtime.Object) {
+	v, ok := resource.(*v3.GlobalAlertTemplate)
+	Expect(ok).To(BeTrue(), fmt.Sprintf("resource (%v) should convert to GlobalAlertTemplate", resource))
+	Expect(v.Spec.Description).ToNot(BeEmpty(), fmt.Sprintf("Description should not be empty for resource (%v)", resource))
+	Expect(v.Spec.Severity).ToNot(BeNumerically("==", 0), fmt.Sprintf("Severity should not be empty for resource (%v)", resource))
+	Expect(v.Spec.DataSet).ToNot(BeEmpty(), fmt.Sprintf("DataSet should not be empty for resource (%v)", resource))
+}
+
 func ExpectEnv(env []v1.EnvVar, key, value string) {
 	for _, e := range env {
 		if e.Name == key {

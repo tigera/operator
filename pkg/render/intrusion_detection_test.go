@@ -34,7 +34,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			esConfigMap, nil, notOpenshift,
 		)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(9))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -53,12 +52,24 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Deployment"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
+			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 		}
 
-		i := 0
-		for _, expectedRes := range expectedResources {
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+
+		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
+			if expectedRes.kind == "GlobalAlertTemplate" {
+				ExpectGlobalAlertTemplateToBePopulated(resources[i])
+			}
 		}
 	})
 })

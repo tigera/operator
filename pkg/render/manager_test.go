@@ -54,9 +54,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 
+	const expectedResourcesNumber = 13
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(21))
+		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -95,7 +96,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(21))
+		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
 		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
@@ -119,7 +120,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 		// Should render the correct resource based on test case.
 		resources := renderObjects(instance, oidcConfig)
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1))
 
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
 		d := resources[13].(*v1.Deployment)
@@ -147,7 +148,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		// Should render the correct resource based on test case.
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(21))
+		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := resources[12].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
@@ -157,7 +158,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should render multicluster settings properly", func() {
 		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(21))
+		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		By("creating a valid self-signed cert")
 		// Use the x509 package to validate that the cert was signed with the privatekey

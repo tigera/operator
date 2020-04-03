@@ -248,6 +248,7 @@ clean:
 	rm -rf build/_output
 	rm -rf build/init/bin
 	rm -rf .go-pkg-cache
+	rm -f *-release-notes.md
 	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
 
 ###############################################################################

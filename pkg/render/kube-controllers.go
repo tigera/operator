@@ -100,6 +100,12 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"clusterinformations"},
 				Verbs:     []string{"get", "create", "update"},
 			},
+			{
+				// Needs to manage hostendpoints.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"hostendpoints"},
+				Verbs:     []string{"get", "list", "create", "update", "delete"},
+			},
 		},
 	}
 
@@ -119,12 +125,6 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
-				// Needs access to update clusterinformations.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "create", "update"},
 			},
 			{
 				// calico-kube-controllers requires tiers create

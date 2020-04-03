@@ -26,5 +26,10 @@ You should have no local changes and tests should be passing.
 
 1. Log in to semaphore and trigger a build on the tagged commit. Semaphore will build, test, and publish the release.
 
-1. Create a github release and add notes for the changes that have gone in since the previous tag. Include the versions
-   of Calico and Enterprise components that are in the release.
+1. Run the following command to generate release notes for the release
+
+   ```
+   GITHUB_TOKEN=<access-token> VERSION=<TAG> ./generate-release-notes.py
+   ```
+
+1. Go to https://github.com/tigera/operator/releases and edit the release tag to include the generated release notes, and update the title.

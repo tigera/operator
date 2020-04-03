@@ -61,6 +61,7 @@ var (
 	esPublicCertObjMeta     = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
 	kbPublicCertObjMeta     = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
 	curatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
+	storageClassName        = "test-storage-class"
 )
 
 var _ = Describe("LogStorage controller", func() {
@@ -154,7 +155,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				Context("LogStorage exists", func() {
 					BeforeEach(func() {
-						setUpLogStorageComponents(cli)
+						setUpLogStorageComponents(cli, storageClassName)
 						mockStatus.On("OnCRFound").Return()
 					})
 
@@ -249,7 +250,7 @@ var _ = Describe("LogStorage controller", func() {
 					ctx := context.Background()
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
-							Name: render.ElasticsearchStorageClass,
+							Name: storageClassName,
 						},
 					})).ShouldNot(HaveOccurred())
 
@@ -261,6 +262,7 @@ var _ = Describe("LogStorage controller", func() {
 							Nodes: &operatorv1.Nodes{
 								Count: int64(1),
 							},
+							StorageClassName: storageClassName,
 						},
 					})).ShouldNot(HaveOccurred())
 
@@ -277,6 +279,7 @@ var _ = Describe("LogStorage controller", func() {
 					ls := &operatorv1.LogStorage{}
 					Expect(cli.Get(context.Background(), types.NamespacedName{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
+					Expect(ls.Spec.StorageClassName).To(Equal(storageClassName))
 
 					Expect(cli.Get(ctx, eckOperatorObjKey, &appsv1.StatefulSet{})).ShouldNot(HaveOccurred())
 
@@ -333,7 +336,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					})).ShouldNot(HaveOccurred())
 
-					setUpLogStorageComponents(cli)
+					setUpLogStorageComponents(cli, "")
 
 					mockStatus = &status.MockStatus{}
 					mockStatus.On("Run").Return()
@@ -363,6 +366,7 @@ var _ = Describe("LogStorage controller", func() {
 					now := metav1.Now()
 					ls.DeletionTimestamp = &now
 					Expect(cli.Update(context.Background(), ls)).ShouldNot(HaveOccurred())
+					Expect(ls.Spec.StorageClassName).To(Equal(logstorage.DefaultElasticsearchStorageClass))
 
 					result, err = r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
@@ -398,11 +402,14 @@ var _ = Describe("LogStorage controller", func() {
 })
 var log = logf.Log.WithName("controller_logstorage")
 
-func setUpLogStorageComponents(cli client.Client) {
+func setUpLogStorageComponents(cli client.Client, storageClass string) {
 	ctx := context.Background()
+	if storageClass == "" {
+		storageClass = logstorage.DefaultElasticsearchStorageClass
+	}
 	Expect(cli.Create(ctx, &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: render.ElasticsearchStorageClass,
+			Name: storageClass,
 		},
 	})).ShouldNot(HaveOccurred())
 	retention := int32(1)
@@ -420,6 +427,7 @@ func setUpLogStorageComponents(cli client.Client) {
 				Snapshots:         &retention,
 				ComplianceReports: &retention,
 			},
+			StorageClassName: storageClass,
 		},
 	}
 

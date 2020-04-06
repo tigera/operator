@@ -100,6 +100,14 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"clusterinformations"},
 				Verbs:     []string{"get", "create", "update"},
 			},
+			{
+				// Needs to manipulate kubecontrollersconfiguration, which contains
+				// its config.  It creates a default if none exists, and updates status
+				// as well.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"kubecontrollersconfigurations"},
+				Verbs:     []string{"get", "create", "update", "watch"},
+			},
 		},
 	}
 

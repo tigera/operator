@@ -135,7 +135,7 @@ var _ = Describe("Log storage controller", func() {
 			})).ShouldNot(HaveOccurred())
 			Expect(cli.Create(ctx, &storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: render.ElasticsearchStorageClass,
+					Name: "my-storage-class",
 				},
 			})).ShouldNot(HaveOccurred())
 
@@ -147,6 +147,7 @@ var _ = Describe("Log storage controller", func() {
 					Nodes: &operatorv1.Nodes{
 						Count: int64(1),
 					},
+					StorageClassName: "my-storage-class",
 				},
 			})).ShouldNot(HaveOccurred())
 		})

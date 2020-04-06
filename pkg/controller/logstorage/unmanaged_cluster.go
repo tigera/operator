@@ -92,8 +92,8 @@ func (r *ReconcileLogStorage) reconcileUnmanaged(ctx context.Context, network *o
 		return reconcile.Result{}, err
 	}
 
-	if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
-		r.setDegraded(ctx, reqLogger, ls, fmt.Sprintf("Couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass), err)
+	if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
+		r.setDegraded(ctx, reqLogger, ls, fmt.Sprintf("Couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName), err)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

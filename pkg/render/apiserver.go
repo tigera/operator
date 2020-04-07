@@ -113,6 +113,11 @@ func (c *apiServerComponent) Objects() []runtime.Object {
 		c.tigeraNetworkAdminClusterRole(),
 	)
 
+	objs = append(objs,
+		c.webhookReaderClusterRole(),
+		c.webhookReaderClusterRoleBinding(),
+	)
+
 	return objs
 }
 
@@ -375,6 +380,53 @@ func (c *apiServerComponent) authClusterRoleBinding() *rbacv1.ClusterRoleBinding
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "tigera-extension-apiserver-auth-access",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+}
+
+// webhookReaderClusterRole returns a ClusterRole to read MutatingWebhookConfigurations and ValidatingWebhookConfigurations
+func (c *apiServerComponent) webhookReaderClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-webhook-reader",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{
+					"admissionregistration.k8s.io",
+				},
+				Resources: []string{
+					"mutatingwebhookconfigurations", "validatingwebhookconfigurations",
+				},
+				Verbs: []string{
+					"get",
+					"list",
+					"watch",
+				},
+			},
+		},
+	}
+}
+
+// webhookReaderClusterRoleBinding binds the tigera-apiserver ServiceAccount to the tigera-webhook-reader
+func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-apiserver-webhook-reader",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-apiserver",
+				Namespace: APIServerNamespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "tigera-webhook-reader",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

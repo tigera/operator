@@ -22,37 +22,14 @@ import (
 )
 
 var _ = Describe("APIServer controller tests", func() {
-	checkAnnotation := func(annotationValue string, expectedResult bool) {
-		By("Creating a CRD")
-		instance := &operatorv1.APIServer{
-			TypeMeta: metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-secure",
-				Annotations: map[string]string{
-					"tech-preview.operator.tigera.io/admission-controller-support": annotationValue,
-				},
-			},
-		}
-		By("Checking that the annotation is parsed")
-		supportEnabled := isAdmissionControllerSupportEnabled(instance)
-		Expect(supportEnabled).To(Equal(expectedResult))
-	}
-
-	It("should parse tech-preview annotation", func() {
-		checkAnnotation("enabled", true)
-		checkAnnotation("Enabled", true)
-		checkAnnotation("somethingelse", false)
-		checkAnnotation("", false)
-	})
-
-	It("should return false when annotation is not present", func() {
+	It("should have dynamic admission control enabled", func() {
 		instance := &operatorv1.APIServer{
 			TypeMeta:   metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}
-		By("Checking that a missing annotation is considered as support not enabled")
+		By("Checking that dynamic admission control is enabled")
 		supportEnabled := isAdmissionControllerSupportEnabled(instance)
-		Expect(supportEnabled).To(Equal(false))
+		Expect(supportEnabled).To(Equal(true))
 	})
 
 })

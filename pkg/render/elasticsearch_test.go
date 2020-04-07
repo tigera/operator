@@ -15,6 +15,7 @@
 package render_test
 
 import (
+	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -38,6 +39,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 				Indices: &operator.Indices{
 					Replicas: &replicas,
+				},
+				DataNodeSelector: map[string]string{
+					"label": "value",
 				},
 			},
 			Status: operator.LogStorageStatus{
@@ -79,6 +83,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Verify that the node selectors are passed into the Elasticsearch pod spec.
+		Expect(resources[9].(*esalpha1.Elasticsearch).Spec.Nodes[0].PodTemplate.Spec.NodeSelector["label"]).To(Equal("value"))
 
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)

@@ -61,11 +61,11 @@ type LogStorageSpec struct {
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
 
-	// NodeSelector gives you more control over the node that Elasticsearch will run on. The contents of NodeSelector will
+	// DataNodeSelector gives you more control over the node that Elasticsearch will run on. The contents of DataNodeSelector will
 	// be added to the PodSpec of the Elasticsearch nodes. For the pod to be eligible to run on a node, the node must have
-	// each of the indicated key-value pairs as labels.
+	// each of the indicated key-value pairs as labels as well as access to the specified StorageClassName.
 	// +optional
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 }
 
 // Nodes defines the configuration for a set of identical Elasticsearch cluster nodes, each of type master, data, and ingest.

@@ -38,7 +38,6 @@ const (
 	ECKOperatorNamespace = "tigera-eck-operator"
 	ECKWebhookSecretName = "webhook-server-secret"
 
-	ElasticsearchStorageClass  = "tigera-elasticsearch"
 	ElasticsearchNamespace     = "tigera-elasticsearch"
 	ElasticsearchHTTPURL       = "tigera-secure-es-http.tigera-elasticsearch.svc"
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
@@ -144,7 +143,6 @@ func (es *elasticsearchComponent) Ready() bool {
 
 // generate the PVC required for the Elasticsearch nodes
 func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
-	storageClassName := ElasticsearchStorageClass
 	pvcTemplate := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elasticsearch-data", // ECK requires this name
@@ -162,7 +160,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 					"storage": resource.MustParse("10Gi"),
 				},
 			},
-			StorageClassName: &storageClassName,
+			StorageClassName: &es.logStorage.Spec.StorageClassName,
 		},
 	}
 

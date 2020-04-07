@@ -600,6 +600,13 @@ func schema_pkg_apis_operator_v1_LogStorageSpec(ref common.ReferenceCallback) co
 							Ref:         ref("github.com/tigera/operator/pkg/apis/operator/v1.Retention"),
 						},
 					},
+					"storageClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks to the Tigera Elasticsearch cluster. The StorageClassName should only be modified when no LogStorage is currently active. We recommend choosing a storage class dedicated to Tigera LogStorage only. Otherwise, data retention cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions. Default: tigera-elasticsearch",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},

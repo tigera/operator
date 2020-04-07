@@ -40,7 +40,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Indices: &operator.Indices{
 					Replicas: &replicas,
 				},
-				NodeSelector: map[string]string{
+				DataNodeSelector: map[string]string{
 					"label": "value",
 				},
 			},

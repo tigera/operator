@@ -66,7 +66,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
 					},
-					NodeSelector: map[string]string{
+					DataNodeSelector: map[string]string{
 						"label": "value",
 					},
 				},

@@ -66,6 +66,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
 					},
+					NodeSelector: map[string]string{
+						"label": "value",
+					},
 				},
 				Status: operator.LogStorageStatus{
 					State: "",
@@ -132,6 +135,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
+
+				// Verify that the node selectors are passed into the Elasticsearch pod spec.
+				Expect(createResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector["label"]).To(Equal("value"))
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{

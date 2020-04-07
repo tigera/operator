@@ -15,6 +15,7 @@
 package render_test
 
 import (
+	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -79,6 +80,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Verify that the node selectors are passed into the Elasticsearch pod spec.
+		Expect(resources[9].(*esalpha1.Elasticsearch).Spec.Nodes[0].PodTemplate.Spec.NodeSelector["label"]).To(BeEmpty())
 
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -231,4 +235,20 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
+
+	It("should render DataNodeSelectors are defined in the LogStorage CR", func() {
+		logStorage.Spec.DataNodeSelector = map[string]string{
+			"k1": "v1",
+			"k2": "v2",
+		}
+		component, err := render.Elasticsearch(logStorage, esConfig, nil, nil, false, nil, operator.ProviderNone,
+			&operator.Installation{Spec: operator.InstallationSpec{}},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		// Verify that the node selectors are passed into the Elasticsearch pod spec.
+		nodeSelectors := component.Objects()[9].(*esalpha1.Elasticsearch).Spec.Nodes[0].PodTemplate.Spec.NodeSelector
+		Expect(nodeSelectors["k1"]).To(Equal("v1"))
+		Expect(nodeSelectors["k2"]).To(Equal("v2"))
+	})
+
 })

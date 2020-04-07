@@ -738,6 +738,13 @@ func (in *LogStorageSpec) DeepCopyInto(out *LogStorageSpec) {
 		*out = new(Retention)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.DataNodeSelector != nil {
+		in, out := &in.DataNodeSelector, &out.DataNodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	return
 }
 

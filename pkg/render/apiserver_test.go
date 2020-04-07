@@ -45,7 +45,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should render an API server with default configuration", func() {
 		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, enableAdmissionControllerSupport bool
-		component, err := render.APIServer(instance, nil, nil, openshift, false)
+		component, err := render.APIServer(instance, nil, nil, openshift, true)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -63,7 +63,8 @@ var _ = Describe("API server rendering tests", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(len(resources)).To(Equal(20))
+		// - 1 ClusterRole and 1 ClusterRoleBinding for dynamic admission webhook
+		Expect(len(resources)).To(Equal(22))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -91,6 +92,8 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		i := 0
@@ -158,7 +161,7 @@ var _ = Describe("API server rendering tests", func() {
 			"--secure-port=5443",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
-			"--enable-admission-controller-support=false",
+			"--enable-admission-controller-support=true",
 		}
 		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 		Expect(len(d.Spec.Template.Spec.Containers[0].Env)).To(Equal(1))
@@ -210,16 +213,33 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Key).To(Equal("config"))
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
 		Expect(len(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items)).To(Equal(1))
+
+		cr := resources[20].(*rbacv1.ClusterRole)
+		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
+		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
+		Expect(cr.Rules[0].Resources[1]).To(Equal("validatingwebhookconfigurations"))
+		Expect(len(cr.Rules[0].Verbs)).To(Equal(3))
+		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
+		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
+		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
+
+		crb := resources[21].(*rbacv1.ClusterRoleBinding)
+		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
+		Expect(len(crb.Subjects)).To(Equal(1))
+		Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
+		Expect(crb.Subjects[0].Name).To(Equal("tigera-apiserver"))
+		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
 	})
 
 	It("should render an API server with custom configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift, false)
+		component, err := render.APIServer(instance, nil, nil, openshift, true)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
@@ -228,11 +248,11 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift, false)
+		component, err := render.APIServer(instance, nil, nil, openshift, true)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 
 		// Should render the correct resources.
 		cr := resources[16].(*rbacv1.ClusterRole)
@@ -252,19 +272,19 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(instance, nil, nil, openshift, false)
+		component, err := render.APIServer(instance, nil, nil, openshift, true)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(20))
+		Expect(len(resources)).To(Equal(22))
 		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 
 		d := resources[13].(*v1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
-	It("should render apiserver RBAC for reading webhooks and enable admission control support parameters when requested", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift, true)
+	It("should not render apiserver RBAC for reading webhooks and enable admission control support parameters when requested", func() {
+		component, err := render.APIServer(instance, nil, nil, openshift, false)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -272,33 +292,14 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(20))
 		expectedArgs := []string{
 			"--secure-port=5443",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
-			"--enable-admission-controller-support=true",
+			"--enable-admission-controller-support=false",
 		}
 		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
-
-		// Should render the correct resources.
-		cr := resources[20].(*rbacv1.ClusterRole)
-		Expect(len(cr.Rules)).To(Equal(1))
-		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
-		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
-		Expect(cr.Rules[0].Resources[1]).To(Equal("validatingwebhookconfigurations"))
-		Expect(len(cr.Rules[0].Verbs)).To(Equal(3))
-		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
-		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
-		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
-
-		crb := resources[21].(*rbacv1.ClusterRoleBinding)
-		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
-		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
-		Expect(len(crb.Subjects)).To(Equal(1))
-		Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-		Expect(crb.Subjects[0].Name).To(Equal("tigera-apiserver"))
-		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
 	})
 })
 

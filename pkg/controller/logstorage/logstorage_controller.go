@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,6 +51,7 @@ const (
 	defaultResolveConfPath             = "/etc/resolv.conf"
 	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
+	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -134,6 +136,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
+	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
+	err = c.Watch(&source.Kind{
+		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %v", err)
+	}
 	if err = c.Watch(&source.Kind{Type: &esalpha1.Elasticsearch{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &operatorv1.LogStorage{},
@@ -243,6 +251,10 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Indices.Replicas == nil {
 		var replicas int32 = render.DefaultElasticsearchReplicas
 		opr.Spec.Indices.Replicas = &replicas
+	}
+
+	if opr.Spec.StorageClassName == "" {
+		opr.Spec.StorageClassName = DefaultElasticsearchStorageClass
 	}
 }
 

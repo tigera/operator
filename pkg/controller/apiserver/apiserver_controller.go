@@ -17,7 +17,6 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -39,10 +38,6 @@ import (
 var log = logf.Log.WithName("controller_apiserver")
 
 const (
-	// Use this annotation to enable support for admission controllers tech preview feature in the Tigera API server.
-	// "tech-preview.operator.tigera.io/admission-controller-support: Enabled"
-	techPreviewFeatureAdmissionControllerSupport = "tech-preview.operator.tigera.io/admission-controller-support"
-
 	// The lower case of the value that we look for to enable a tech preview feature.
 	// The feature is disabled for all other values.
 	techPreviewEnabledValue = "enabled"
@@ -210,10 +205,5 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 }
 
 func isAdmissionControllerSupportEnabled(cr *operatorv1.APIServer) bool {
-	enabled := false
-	a := cr.GetObjectMeta().GetAnnotations()
-	if val, ok := a[techPreviewFeatureAdmissionControllerSupport]; ok && strings.ToLower(val) == techPreviewEnabledValue {
-		enabled = true
-	}
-	return enabled
+	return true // Not tech preview anymore
 }

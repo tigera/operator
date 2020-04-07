@@ -118,7 +118,7 @@ func (c *apiServerComponent) Objects() []runtime.Object {
 		c.webhookReaderClusterRoleBinding(),
 	)
 
-	return objs, nil
+	return objs
 }
 
 func (c *apiServerComponent) Ready() bool {

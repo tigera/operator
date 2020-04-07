@@ -247,23 +247,10 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(crb.Subjects[0].Name).To(Equal("system:kube-controller-manager"))
 	})
 
-	It("should include a ControlPlaneNodeSelector when specified", func() {
-		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(instance, nil, nil, openshift)
-		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
-
-		Expect(len(resources)).To(Equal(22))
-		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
-
-		d := resources[13].(*v1.Deployment)
-		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
-	})
-
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
 		component, err := render.APIServer(instance, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources := component.Objects()
 
 		Expect(len(resources)).To(Equal(22))
 

@@ -66,9 +66,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
 					},
-					DataNodeSelector: map[string]string{
-						"label": "value",
-					},
 				},
 				Status: operator.LogStorageStatus{
 					State: "",
@@ -136,8 +133,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
 
-				// Verify that the node selectors are passed into the Elasticsearch pod spec.
-				Expect(createResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector["label"]).To(Equal("value"))
+				// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
+				Expect(createResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector).To(BeEmpty())
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{
@@ -269,6 +266,33 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 
 		Context("Deleting LogStorage", deleteLogStorageTests(operatorv1.ClusterManagementTypeStandalone))
+
+		It("should render DataNodeSelectors defined in the LogStorage CR", func() {
+			logStorage.Spec.DataNodeSelector = map[string]string{
+				"k1": "v1",
+				"k2": "v2",
+			}
+			component := render.LogStorage(
+				logStorage,
+				installation, nil, nil,
+				esConfig,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+				}, true,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+			// Verify that the node selectors are passed into the Elasticsearch pod spec.
+			createResouces, _ := component.Objects()
+			nodeSelectors := createResouces[15].(*esv1.Elasticsearch).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
+			Expect(nodeSelectors["k1"]).To(Equal("v1"))
+			Expect(nodeSelectors["k2"]).To(Equal("v2"))
+		})
 	})
 
 	Context("Managed cluster", func() {

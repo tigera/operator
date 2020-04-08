@@ -417,6 +417,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitContainers:   []corev1.Container{initContainer},
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+			NodeSelector:     es.logStorage.Spec.DataNodeSelector,
 		},
 	}
 

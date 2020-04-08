@@ -60,6 +60,12 @@ type LogStorageSpec struct {
 	// Default: tigera-elasticsearch
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// DataNodeSelector gives you more control over the node that Elasticsearch will run on. The contents of DataNodeSelector will
+	// be added to the PodSpec of the Elasticsearch nodes. For the pod to be eligible to run on a node, the node must have
+	// each of the indicated key-value pairs as labels as well as access to the specified StorageClassName.
+	// +optional
+	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 }
 
 // Nodes defines the configuration for a set of identical Elasticsearch cluster nodes, each of type master, data, and ingest.

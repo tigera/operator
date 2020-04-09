@@ -46,7 +46,6 @@ const (
 	ECKEnterpriseTrial      = "eck-trial-license"
 	ECKWebhookConfiguration = "elastic-webhook.k8s.elastic.co"
 
-	ElasticsearchStorageClass  = "tigera-elasticsearch"
 	ElasticsearchNamespace     = "tigera-elasticsearch"
 	ElasticsearchHTTPURL       = "tigera-secure-es-http.tigera-elasticsearch.svc"
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
@@ -302,7 +301,6 @@ func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
 
 // generate the PVC required for the Elasticsearch nodes
 func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
-	storageClassName := ElasticsearchStorageClass
 	pvcTemplate := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elasticsearch-data", // ECK requires this name
@@ -320,7 +318,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 					"storage": resource.MustParse("10Gi"),
 				},
 			},
-			StorageClassName: &storageClassName,
+			StorageClassName: &es.logStorage.Spec.StorageClassName,
 		},
 	}
 
@@ -419,6 +417,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitContainers:   []corev1.Container{initContainer},
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+			NodeSelector:     es.logStorage.Spec.DataNodeSelector,
 		},
 	}
 

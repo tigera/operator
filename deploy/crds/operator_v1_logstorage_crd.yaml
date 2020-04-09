@@ -30,6 +30,15 @@ spec:
         spec:
           description: Specification of the desired state for Tigera log storage.
           properties:
+            dataNodeSelector:
+              additionalProperties:
+                type: string
+              description: DataNodeSelector gives you more control over the node that
+                Elasticsearch will run on. The contents of DataNodeSelector will be
+                added to the PodSpec of the Elasticsearch nodes. For the pod to be
+                eligible to run on a node, the node must have each of the indicated
+                key-value pairs as labels as well as access to the specified StorageClassName.
+              type: object
             indices:
               description: Index defines the configuration for the indices in the
                 Elasticsearch cluster.

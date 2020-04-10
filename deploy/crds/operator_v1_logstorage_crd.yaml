@@ -30,6 +30,15 @@ spec:
         spec:
           description: Specification of the desired state for Tigera log storage.
           properties:
+            dataNodeSelector:
+              additionalProperties:
+                type: string
+              description: DataNodeSelector gives you more control over the node that
+                Elasticsearch will run on. The contents of DataNodeSelector will be
+                added to the PodSpec of the Elasticsearch nodes. For the pod to be
+                eligible to run on a node, the node must have each of the indicated
+                key-value pairs as labels as well as access to the specified StorageClassName.
+              type: object
             indices:
               description: Index defines the configuration for the indices in the
                 Elasticsearch cluster.
@@ -98,6 +107,15 @@ spec:
               - snapshots
               - complianceReports
               type: object
+            storageClassName:
+              description: 'StorageClassName will populate the PersistentVolumeClaim.StorageClassName
+                that is used to provision disks to the Tigera Elasticsearch cluster.
+                The StorageClassName should only be modified when no LogStorage is
+                currently active. We recommend choosing a storage class dedicated
+                to Tigera LogStorage only. Otherwise, data retention cannot be guaranteed
+                during upgrades. See https://docs.tigera.io/maintenance/upgrading
+                for up-to-date instructions. Default: tigera-elasticsearch'
+              type: string
           type: object
         status:
           description: Most recently observed state for Tigera log storage.

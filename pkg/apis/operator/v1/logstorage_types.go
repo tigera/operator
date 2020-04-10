@@ -52,6 +52,20 @@ type LogStorageSpec struct {
 	// Retention defines how long data is retained in the Elasticsearch cluster before it is cleared.
 	// +optional
 	Retention *Retention `json:"retention,omitempty"`
+
+	// StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks to the
+	// Tigera Elasticsearch cluster. The StorageClassName should only be modified when no LogStorage is currently
+	// active. We recommend choosing a storage class dedicated to Tigera LogStorage only. Otherwise, data retention
+	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
+	// Default: tigera-elasticsearch
+	// +optional
+	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// DataNodeSelector gives you more control over the node that Elasticsearch will run on. The contents of DataNodeSelector will
+	// be added to the PodSpec of the Elasticsearch nodes. For the pod to be eligible to run on a node, the node must have
+	// each of the indicated key-value pairs as labels as well as access to the specified StorageClassName.
+	// +optional
+	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 }
 
 // Nodes defines the configuration for a set of identical Elasticsearch cluster nodes, each of type master, data, and ingest.

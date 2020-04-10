@@ -58,6 +58,7 @@ const (
 	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 5
+	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -142,11 +143,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
 	}
 
+	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err = c.Watch(&source.Kind{
-		Type: &storagev1.StorageClass{
-			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchStorageClass},
-		},
-	}, &handler.EnqueueRequestForObject{})
+		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %v", err)
 	}
@@ -265,6 +264,10 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		var replicas int32 = render.DefaultElasticsearchReplicas
 		opr.Spec.Indices.Replicas = &replicas
 	}
+
+	if opr.Spec.StorageClassName == "" {
+		opr.Spec.StorageClassName = DefaultElasticsearchStorageClass
+	}
 }
 
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
@@ -346,9 +349,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
 		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards)
-		if err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchStorageClass}, &storagev1.StorageClass{}); err != nil {
+		if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
-				err := fmt.Errorf("couldn't find storage class %s, this must be provided", render.ElasticsearchStorageClass)
+				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
 				log.Error(err, err.Error())
 				r.status.SetDegraded("Failed to get storage class", err.Error())
 				return reconcile.Result{}, nil

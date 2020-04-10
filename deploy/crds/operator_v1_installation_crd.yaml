@@ -88,6 +88,14 @@ spec:
                     for pods on the Calico network. Default: 1410'
                   format: int32
                   type: integer
+                multiInterfaceMode:
+                  description: 'MultiInterfaceMode configures what will configure
+                    multiple interface per pod. Only valid for EE installations. Default:
+                    None'
+                  enum:
+                  - None
+                  - Multus
+                  type: string
                 nodeAddressAutodetectionV4:
                   description: NodeAddressAutodetectionV4 specifies an approach to
                     automatically detect node IPv4 addresses. If not specified, will

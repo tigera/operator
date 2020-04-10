@@ -15,6 +15,8 @@
 package v1
 
 import (
+	"strings"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,6 +150,17 @@ var HostPortsTypesString []string = []string{
 	HostPortsDisabled.String(),
 }
 
+type MultiInterfaceMode string
+
+func (m MultiInterfaceMode) Value() string {
+	return strings.ToLower(string(m))
+}
+
+const (
+	MultiInterfaceModeNone   MultiInterfaceMode = "None"
+	MultiInterfaceModeMultus MultiInterfaceMode = "Multus"
+)
+
 func (nt HostPortsType) String() string {
 	return string(nt)
 }
@@ -179,6 +192,12 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled,Disabled
 	HostPorts *HostPortsType `json:"hostPorts,omitempty"`
+
+	// MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for EE installations.
+	// Default: None
+	// +optional
+	// +kubebuilder:validation:Enum=None,Multus
+	MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

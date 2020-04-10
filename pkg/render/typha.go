@@ -458,6 +458,12 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
+			typhaEnv = append(typhaEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+	}
+
 	return typhaEnv
 }
 

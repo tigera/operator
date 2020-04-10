@@ -74,7 +74,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var one intstr.IntOrString = intstr.FromInt(1)
 
 		hpEnabled := operator.HostPortsEnabled
-
+		miMode := operator.MultiInterfaceModeNone
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -111,7 +111,8 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
-					HostPorts: &hpEnabled,
+					HostPorts:          &hpEnabled,
+					MultiInterfaceMode: &miMode,
 				},
 				NodeMetricsPort: &nodeMetricsPort,
 				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",

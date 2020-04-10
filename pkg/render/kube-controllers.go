@@ -196,6 +196,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		if c.cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
+
+		if c.cr.Spec.CalicoNetwork != nil {
+			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
 	}
 
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})

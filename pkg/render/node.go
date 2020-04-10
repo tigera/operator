@@ -619,7 +619,7 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 	// Determine directories to use for CNI artifacts based on the provider.
 	cniNetDir, _ := c.cniDirectories()
 
-	return []v1.EnvVar{
+	envVars := []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
@@ -635,6 +635,12 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 			},
 		},
 	}
+
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise && c.cr.Spec.CalicoNetwork != nil {
+		envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	return envVars
 }
 
 // nodeContainer creates the main node container.
@@ -882,6 +888,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
+
+		if c.cr.Spec.CalicoNetwork != nil {
+			extraNodeEnv = append(extraNodeEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 

@@ -44,12 +44,14 @@ var _ = Describe("Node rendering tests", func() {
 	BeforeEach(func() {
 		ff := true
 		hp := operator.HostPortsEnabled
+		miMode := operator.MultiInterfaceModeNone
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
 					HostPorts:                  &hp,
+					MultiInterfaceMode:         &miMode,
 				},
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{

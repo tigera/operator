@@ -35,13 +35,18 @@ var _ = Describe("Rendering tests", func() {
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
 	one := intstr.FromInt(1)
+	miMode := operator.MultiInterfaceModeNone
+
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CalicoNetwork: &operator.CalicoNetworkSpec{IPPools: []operator.IPPool{{CIDR: "192.168.1.0/16"}}},
-				Registry:      "test-reg/",
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+					MultiInterfaceMode: &miMode,
+				},
+				Registry: "test-reg/",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 						MaxUnavailable: &one,

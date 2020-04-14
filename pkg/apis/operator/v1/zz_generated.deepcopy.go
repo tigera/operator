@@ -200,6 +200,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(HostPortsType)
 		**out = **in
 	}
+	if in.MultiInterfaceMode != nil {
+		in, out := &in.MultiInterfaceMode, &out.MultiInterfaceMode
+		*out = new(MultiInterfaceMode)
+		**out = **in
+	}
 	return
 }
 

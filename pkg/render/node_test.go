@@ -44,12 +44,14 @@ var _ = Describe("Node rendering tests", func() {
 	BeforeEach(func() {
 		ff := true
 		hp := operator.HostPortsEnabled
+		miMode := operator.MultiInterfaceModeNone
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
 					HostPorts:                  &hp,
+					MultiInterfaceMode:         &miMode,
 				},
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -348,6 +350,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
@@ -564,6 +567,7 @@ var _ = Describe("Node rendering tests", func() {
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
+			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))

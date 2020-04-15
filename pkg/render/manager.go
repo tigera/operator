@@ -95,12 +95,6 @@ func Manager(
 
 	var tunnelSecrets []*corev1.Secret
 	if management {
-		// If there is no secret create one and add it to the operator namespace.
-		if tunnelSecret == nil {
-			tunnelSecret = voltronTunnelSecret()
-			tunnelSecrets = append(tunnelSecrets, tunnelSecret)
-		}
-
 		tunnelSecrets = append(tunnelSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
 	}
 	return &managerComponent{

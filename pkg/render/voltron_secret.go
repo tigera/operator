@@ -14,19 +14,6 @@
 
 package render
 
-import (
-	"bytes"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
-	"time"
-
-	"github.com/openshift/library-go/pkg/crypto"
-)
-
 // Voltron related constants.
 const (
 	VoltronDnsName      = "voltron"
@@ -35,6 +22,7 @@ const (
 	blockTypeCert       = "CERTIFICATE"
 )
 
+/*
 // Secrets to establish a tunnel between Voltron and Guardian
 // Differs from other secrets in the way that it needs a DNS name and KeyUsage.
 func ceateSelfSignedVoltronSecret() (string, string) {
@@ -75,4 +63,4 @@ func template() *x509.Certificate {
 		NotAfter: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays),
 		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment,
 	}
-}
+}*/

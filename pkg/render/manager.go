@@ -94,12 +94,6 @@ func Manager(
 
 	var tunnelSecrets []*corev1.Secret
 	if management {
-		// If there is no secret create one and add it to the operator namespace.
-		if tunnelSecret == nil {
-			tunnelSecret = voltronTunnelSecret()
-			tunnelSecrets = append(tunnelSecrets, tunnelSecret)
-		}
-
 		tunnelSecrets = append(tunnelSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
 	}
 	return &managerComponent{
@@ -487,22 +481,6 @@ func (c *managerComponent) managerService() *v1.Service {
 			Selector: map[string]string{
 				"k8s-app": "tigera-manager",
 			},
-		},
-	}
-}
-
-// managerService returns the service exposing the Tigera Secure web app.
-func voltronTunnelSecret() *v1.Secret {
-	key, cert := ceateSelfSignedVoltronSecret()
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronTunnelSecretName,
-			Namespace: OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			"cert": []byte(cert),
-			"key":  []byte(key),
 		},
 	}
 }

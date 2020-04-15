@@ -300,7 +300,8 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				tunnelSecret = nil
+				r.status.SetDegraded("No secret management-cluster-connection was provided", err.Error())
+				return reconcile.Result{}, nil
 			} else {
 				r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
 				return reconcile.Result{}, nil

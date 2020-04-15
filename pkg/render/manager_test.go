@@ -15,16 +15,10 @@
 package render_test
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
-	"time"
-
 	"github.com/tigera/operator/pkg/components"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/openshift/library-go/pkg/crypto"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,6 +49,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	const expectedResourcesNumber = 13
+	const indexOfDeploymentResource = 12
+
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(instance, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
@@ -76,7 +72,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
-			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
+			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
@@ -88,7 +84,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			i++
 		}
 
-		deployment := resources[12].(*appsv1.Deployment)
+		deployment := resources[indexOfDeploymentResource].(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-manager@" + components.ComponentManager.Digest))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy@" + components.ComponentEsProxy.Digest))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron@" + components.ComponentManagerProxy.Digest))
@@ -101,7 +97,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-		d := resources[12].(*v1.Deployment)
+		d := resources[indexOfDeploymentResource].(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
@@ -149,7 +145,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		resources := renderObjects(instance, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
-		d := resources[12].(*v1.Deployment)
+		d := resources[indexOfDeploymentResource].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
@@ -160,58 +156,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(instance, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
-		By("creating a valid self-signed cert")
-		// Use the x509 package to validate that the cert was signed with the privatekey
-		validateSecret(resources[10].(*corev1.Secret))
-		validateSecret(resources[11].(*corev1.Secret))
-
 		By("configuring the manager deployment")
-		manager := resources[12].(*v1.Deployment).Spec.Template.Spec.Containers[0]
+		manager := resources[indexOfDeploymentResource].(*v1.Deployment).Spec.Template.Spec.Containers[0]
 		Expect(manager.Name).To(Equal("tigera-manager"))
 		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
-		voltron := resources[12].(*v1.Deployment).Spec.Template.Spec.Containers[2]
+		voltron := resources[indexOfDeploymentResource].(*v1.Deployment).Spec.Template.Spec.Containers[2]
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 	})
 })
-
-func validateSecret(voltronSecret *corev1.Secret) {
-	var newCert *x509.Certificate
-
-	cert := voltronSecret.Data["cert"]
-	key := voltronSecret.Data["key"]
-	_, err := tls.X509KeyPair(cert, key)
-	Expect(err).ShouldNot(HaveOccurred())
-
-	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM([]byte(cert))
-	Expect(ok).To(BeTrue())
-
-	block, _ := pem.Decode([]byte(cert))
-	Expect(err).ShouldNot(HaveOccurred())
-	Expect(block).To(Not(BeNil()))
-
-	newCert, err = x509.ParseCertificate(block.Bytes)
-	Expect(err).ShouldNot(HaveOccurred())
-
-	opts := x509.VerifyOptions{
-		DNSName: render.VoltronDnsName,
-		Roots:   roots,
-	}
-
-	_, err = newCert.Verify(opts)
-	Expect(err).ShouldNot(HaveOccurred())
-
-	opts = x509.VerifyOptions{
-		DNSName:     render.VoltronDnsName,
-		Roots:       x509.NewCertPool(),
-		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
-	}
-	_, err = newCert.Verify(opts)
-	Expect(err).Should(HaveOccurred())
-
-}
 
 func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []runtime.Object {
 	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
@@ -219,6 +173,10 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []r
 		nil,
 		nil,
 		&corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Secret",
+				APIVersion: "v1",
+			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ComplianceServerCertSecret,
 				Namespace: render.OperatorNamespace(),
@@ -235,7 +193,20 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []r
 		&operator.Installation{Spec: operator.InstallationSpec{}},
 		oidcConfig,
 		true,
-		nil)
+		&corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Secret",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.VoltronTunnelSecretName,
+				Namespace: render.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"tls.crt": []byte("crt"),
+				"tls.key": []byte("crt"),
+			},
+		})
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources, _ := component.Objects()
 	return resources

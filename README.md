@@ -122,7 +122,7 @@ Adding the following as an annotation to any resource will prevent the operator 
   unsupported.operator.tigera.io/ignore: "true"
   ```
 
-#### Example update to calico-node DaemonSet 
+#### Example update to calico-node DaemonSet
 
 Notice that the annotation is added in the top level metadata (not in the spec.template.metadata).
 (note the below is not a valid manifest but just an example)
@@ -149,3 +149,6 @@ spec:
         - name: calico-node
           image: calico/node:my-special-tag
 ```
+
+
+Trivial change

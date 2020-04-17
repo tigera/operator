@@ -68,3 +68,6 @@ components:
   guardian:
     image: tigera/guardian
     version: v2.7.0-0.dev-61-g73e2b02
+  cni:
+    image: tigera/cni
+    version: v3.0.0-0.dev-39-g3f96541

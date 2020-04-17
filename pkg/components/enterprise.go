@@ -102,7 +102,7 @@ var (
 	
 	ComponentFluentd = component{
 		Version: "v3.0.0-0.dev-1-ge3d709f",
-		Digest:  "sha256:af99ee4357236c8bd4082b1df3e5b99f3f5ccf8af45c2bc3813aae9240efa30d",
+		Digest:  "sha256:84208c8d0946b23d28148f61a70f924b1a13738c9f0949656937acdd0b5d3cf6",
 		Image:   "tigera/fluentd",
 	}
 	
@@ -169,4 +169,11 @@ var (
 		Image:   "tigera/typha",
 	}
 	
+	
+    ComponentTigeraCNI = component{
+        Version: "v3.0.0-0.dev-39-g3f96541",
+        Digest:  "sha256:b3cc46ace05218b55a07b9351fe206e1a4398ab227c36bdde6ca84a076100cb9",
+        Image:   "tigera/cni",
+    }
+    
 )

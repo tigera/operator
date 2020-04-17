@@ -587,9 +587,14 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
+	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	}
+
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
+		Image:        image,
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,

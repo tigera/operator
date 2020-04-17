@@ -48,7 +48,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	})
 
-	It("should render all resources for a default configuration", func() {
+	It("should render with a default configuration", func() {
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
@@ -69,6 +69,28 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
+		}
+
+		ds := resources[1].(*apps.DaemonSet)
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []corev1.EnvVar{
+			{Name: "FLUENT_UID", Value: "0"},
+			{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
+			{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
+			{Name: "FLUENTD_ES_SECURE", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+		}
+
+		for _, expected := range expectedEnvs {
+
+			Expect(envs).To(ContainElement(
+				expected))
 		}
 	})
 

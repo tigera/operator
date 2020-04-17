@@ -34,6 +34,7 @@ var defaultImages = map[string]string{
 	"typha":                   "calico/typha",
 	"eck-kibana":              "tigera/kibana",
 	"guardian":                "tigera/guardian",
+	"tigera-cni":              "tigera/cni",
 }
 
 type Components map[string]*Component

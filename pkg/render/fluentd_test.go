@@ -86,11 +86,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 		}
-
 		for _, expected := range expectedEnvs {
-
-			Expect(envs).To(ContainElement(
-				expected))
+			Expect(envs).To(ContainElement(expected))
 		}
 	})
 

@@ -50,7 +50,7 @@ func GetReference(c component, registry, imagepath string) string {
 		image = ReplaceImagePath(image, imagepath)
 	}
 
-	return fmt.Sprintf("%s%s@%s", registry, image, c.Digest)
+	return fmt.Sprintf("%s%s:%s", registry, image, c.Version)
 }
 
 func ReplaceImagePath(image, imagepath string) string {

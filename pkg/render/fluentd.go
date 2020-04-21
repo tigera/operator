@@ -338,6 +338,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 		{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
+		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 	}
 
 	if c.lc.Spec.AdditionalStores != nil {

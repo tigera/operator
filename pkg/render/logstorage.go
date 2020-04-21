@@ -805,6 +805,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 
 func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 	var f = false
+	var t = true
 	var elasticCuratorLivenessProbe = &corev1.Probe{
 		Handler: corev1.Handler{
 			Exec: &corev1.ExecAction{
@@ -842,7 +843,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 									Env:           es.curatorEnvVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{
-										RunAsNonRoot:             &f,
+										RunAsNonRoot:             &t,
 										AllowPrivilegeEscalation: &f,
 									},
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret),

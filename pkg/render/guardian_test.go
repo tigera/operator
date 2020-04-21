@@ -83,7 +83,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		deployment := resources[5].(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian@" + components.ComponentGuardian.Digest))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
 	})
 
 })

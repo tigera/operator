@@ -169,4 +169,11 @@ var (
 		Image:   "{{ .Image }}",
 	}
 	{{ end }}
+	{{ with index . "tigera-cni" }}
+    ComponentTigeraCNI = component{
+        Version: "{{ .Version }}",
+        Digest:  "{{ .Digest }}",
+        Image:   "{{ .Image }}",
+    }
+    {{ end }}
 )

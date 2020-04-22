@@ -453,6 +453,25 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	log.Info("Creating secret in core_controller")
+
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise && instance.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+		// Generate CA and TLS certificate for tigera-manager
+		_, err = render.CreateOperatorTLSSecret(nil,
+			render.ManagerTLSSecretName,
+			render.ManagerSecretKeyName,
+			render.ManagerSecretCertName,
+			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			nil,
+			render.ManagerServiceExternalDNS,
+			render.ManagerServiceInternalDNS,
+		)
+		if err != nil {
+			r.SetDegraded("Error generating self signed certificates for tigera-manager", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")

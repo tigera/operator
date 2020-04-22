@@ -18,4 +18,6 @@ const (
 	CalicoNamespace     = "calico-system"
 	TyphaDeploymentName = "calico-typha"
 	NodeDaemonSetName   = "calico-node"
+
+	TigeraPrometheusNamespace = "tigera-prometheus"
 )

@@ -91,7 +91,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(((5 + 4 + 2 + 6 + 4 + 1 + 1) + 1 + 1)))
+		Expect(componentCount(c.Render())).To(Equal(((5 + 4 + 2 + 6 + 4 + 1) + 1 + 1)))
 	})
 })
 

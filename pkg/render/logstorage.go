@@ -15,6 +15,9 @@
 package render
 
 import (
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -499,6 +502,7 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
 func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
+	pvcTemplate := es.pvcTemplate()
 
 	return &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
@@ -522,7 +526,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 			NodeSets: []esv1.NodeSet{
 				{
 					Count: int32(nodeConfig.Count),
-					Name:  "es",
+					Name: "es-" + nodeSetNameSuffix(pvcTemplate),
 					Config: &cmnv1.Config{
 						Data: map[string]interface{}{
 							"node.master": "true",
@@ -530,7 +534,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 							"node.ingest": "true",
 						},
 					},
-					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{es.pvcTemplate()},
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{pvcTemplate},
 					PodTemplate:          es.podTemplate(),
 				},
 			},
@@ -538,6 +542,16 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	}
 }
 
+// nodeSetNameSuffix returns thumbprint of PersistentVolumeClaim object as string.
+// As storage requirements of NodeSets are immutable,
+// renaming a NodeSet automatically creates a new StatefulSet with new PersistentVolumeClaim.
+func nodeSetNameSuffix(pvcTemplate corev1.PersistentVolumeClaim) string{
+	pvcTemplateHash := md5.New()
+	templateBytes, _ := json.Marshal(pvcTemplate)
+	pvcTemplateHash.Write(templateBytes)
+	// Slice to fit NodeSets Name's max length of 23 char
+	return hex.EncodeToString(pvcTemplateHash.Sum(nil))[:20]
+}
 func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

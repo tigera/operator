@@ -17,8 +17,8 @@ package components
 var (
 	
 	ComponentAPIServer = component{
-		Version: "v2.7.0-0.dev-70-gcf61025a",
-		Digest:  "sha256:99001709c7e9079bd41f466ff75bfac87369c84b4096994a04fbceaf3c447c85",
+		Version: "v3.0.0-0.dev-29-g11260416",
+		Digest:  "sha256:9162e4a672b82e91776f2b477cb5306dd42f8e0d784c1962e8dd1954018f5900",
 		Image:   "tigera/cnx-apiserver",
 	}
 	
@@ -164,8 +164,8 @@ var (
 	
 	
 	ComponentTigeraTypha = component{
-		Version: "v2.7.0-18-ge12d757",
-		Digest:  "sha256:ee2690f1ed54e3836e0004b16ab7a9c60e071a0c7cd5233a430a5a4a28560348",
+		Version: "v3.0.0-0.dev-23-g664fa65",
+		Digest:  "sha256:596fa5fe7f80d1af871f705ff586e71761bbc0b12ae7522169a179ce24543271",
 		Image:   "tigera/typha",
 	}
 	

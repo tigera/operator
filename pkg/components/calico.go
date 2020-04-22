@@ -19,36 +19,36 @@ import "github.com/tigera/operator/version"
 var (
 	
 	ComponentCalicoCNI = component{
-		Version: "v3.13.1",
-		Digest:  "sha256:9b7c143fb84bf79a27cdd285468dcf85b7e1afaae340b0f41ea5fb5b8eb4d4fe",
+		Version: "v3.13.3",
+		Digest:  "sha256:b32128da90c5cd71de77ffb6dec53d603ee4cd5d2e803ada93bce427310bc1dc",
 		Image:   "calico/cni",
 	}
 	
 	
 	ComponentCalicoKubeControllers = component{
-		Version: "v3.13.1",
-		Digest:  "sha256:8ecfefc1a9df7ed266e570e8000067575d0ba1b2cb10ec5d9ca8b7adcc96d95f",
+		Version: "v3.13.3",
+		Digest:  "sha256:372afbd3e1a1a8259c85f754be6af41c8213b49d332b775c300c21c57b20c20a",
 		Image:   "calico/kube-controllers",
 	}
 	
 	
 	ComponentCalicoNode = component{
-		Version: "v3.13.1",
-		Digest:  "sha256:cbd5bf2ed8cb93595d358b6f23d3937da1620e8a600c93efbb29f689790b882b",
+		Version: "v3.13.3",
+		Digest:  "sha256:e97e334f42670dcae613d0220b739b1c214c7d2961db8e6a8d7682013b0cdce2",
 		Image:   "calico/node",
 	}
 	
 	
 	ComponentCalicoTypha = component{
-		Version: "v3.13.1",
-		Digest:  "sha256:94242f0d638ea920ec7f4040730422d359447a31e4c6ef4f3269196d85ea2370",
+		Version: "v3.13.3",
+		Digest:  "sha256:7b1e3ffb7f130d4cee1e3882f18cfe323ffa391422d5609987189455b7b8bba2",
 		Image:   "calico/typha",
 	}
 	
 	
 	ComponentFlexVolume = component{
-		Version: "v3.13.1",
-		Digest:  "sha256:6d1095d343386940a04a672fbe5c5375d48dd237bcfaaa12f68f1a945edec43d",
+		Version: "v3.13.3",
+		Digest:  "sha256:b87afc5d16d70b6be78a5765f157e958b16f8c0d822339e9f7515dbe8711d304",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 	

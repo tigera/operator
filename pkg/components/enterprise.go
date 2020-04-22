@@ -45,8 +45,8 @@ var (
 	
 	
 	ComponentComplianceServer = component{
-		Version: "v2.7.0-0.dev-81-g41d5d65",
-		Digest:  "sha256:30b82e739fc2e392a814c07827a58f9cd7f8807b3b334ce1aeda575a13ce1036",
+		Version: "v3.0.0-0.dev-22-gf550e29",
+		Digest:  "sha256:6c6297a9cc9983aee84516f5e068a431d3b8d42cd6caa7649f5362d0eb83c099",
 		Image:   "tigera/compliance-server",
 	}
 	
@@ -150,8 +150,8 @@ var (
 	
 	
 	ComponentTigeraKubeControllers = component{
-		Version: "v2.7.0-0.dev-176-g68be5b8",
-		Digest:  "sha256:8f7400037804f3ae80168df50e6479ffba4998662f089984f3a5a92fe8b775a8",
+		Version: "v3.0.0-0.dev-66-gb52ab60",
+		Digest:  "sha256:5423330661c2d482812e2de7c82bc0c841c26d819e26265863daceff66fe3e3e",
 		Image:   "tigera/kube-controllers",
 	}
 	

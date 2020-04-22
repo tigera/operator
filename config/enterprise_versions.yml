@@ -7,7 +7,7 @@ components:
     version: v2.7.0-0.dev-61-g73e2b02
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v2.7.0-0.dev-70-gcf61025a
+    version: v3.0.0-0.dev-29-g11260416
   cnx-queryserver:
     image: tigera/cnx-queryserver
     version: v2.7.0-0.dev-74-g6ce4ce4

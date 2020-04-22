@@ -17,8 +17,8 @@ package components
 var (
 	
 	ComponentAPIServer = component{
-		Version: "v2.7.0-0.dev-70-gcf61025a",
-		Digest:  "sha256:99001709c7e9079bd41f466ff75bfac87369c84b4096994a04fbceaf3c447c85",
+		Version: "v3.0.0-0.dev-29-g11260416",
+		Digest:  "sha256:9162e4a672b82e91776f2b477cb5306dd42f8e0d784c1962e8dd1954018f5900",
 		Image:   "tigera/cnx-apiserver",
 	}
 	

@@ -45,25 +45,6 @@ var _ = Describe("Namespace rendering tests", func() {
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 	})
 
-	It("should render an additional namespace if this is Tigera Secure", func() {
-		// We expect calico-system and tigera-prometheus.
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.Namespaces(instance, notOpenshift, nil)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(2))
-		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
-		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
-		Expect(meta.GetLabels()["name"]).To(Equal("calico-system"))
-		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
-		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
-
-		ExpectResource(resources[1], "tigera-prometheus", "", "", "v1", "Namespace")
-		meta = resources[1].(metav1.ObjectMetaAccessor).GetObjectMeta()
-		Expect(meta.GetLabels()["name"]).To(Equal("tigera-prometheus"))
-		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
-		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
-	})
-
 	It("should render a namespace for openshift", func() {
 		component := render.Namespaces(instance, openshift, nil)
 		resources, _ := component.Objects()

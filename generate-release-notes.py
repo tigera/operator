@@ -29,10 +29,12 @@ def issues_in_milestone():
         if m.title == MILESTONE:
             # Found the milestone in this repo - look for issues (but only
             # ones that have been closed!)
-            # TODO: Assert that the PR has been merged somehow?
             issues = []
             for i in repo.get_issues(milestone=m, state="closed"):
-                issues.append(i)
+                pr = i.as_pull_request()
+                if pr.merged:
+                    # Filter out PRs which are closed but not merged.
+                    issues.append(i)
             return issues
     raise Exception("Unable to find issues in milestone")
 

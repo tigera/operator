@@ -17,8 +17,8 @@ package components
 var (
 	
 	ComponentAPIServer = component{
-		Version: "v2.7.0-0.dev-70-gcf61025a",
-		Digest:  "sha256:99001709c7e9079bd41f466ff75bfac87369c84b4096994a04fbceaf3c447c85",
+		Version: "v3.0.0-0.dev-29-g11260416",
+		Digest:  "sha256:9162e4a672b82e91776f2b477cb5306dd42f8e0d784c1962e8dd1954018f5900",
 		Image:   "tigera/cnx-apiserver",
 	}
 	
@@ -129,11 +129,11 @@ var (
 	
 	
 	ComponentManager = component{
-		Version: "v2.7.0-0.dev-598-g5f43270b",
-		Digest:  "sha256:24fbd97411f81cd530ee749c42916d15698744b7664f3e9f7e12768c995a9008",
+		Version: "v3.0.0-0.dev-37-g29a4e524",
+		Digest:  "sha256:fd9237857347b26d6f543d37c1c1ddc79da5ddb5babb04785125a5420abeff4a",
 		Image:   "tigera/cnx-manager",
 	}
-	
+
 	
 	ComponentManagerProxy = component{
 		Version: "v2.7.0-0.dev-61-g73e2b02",

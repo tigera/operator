@@ -1,13 +1,13 @@
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v2.7.0-0.dev-598-g5f43270b
+    version: v3.0.0-0.dev-37-g29a4e524
   voltron:
     image: tigera/voltron
     version: v2.7.0-0.dev-61-g73e2b02
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v2.7.0-0.dev-70-gcf61025a
+    version: v3.0.0-0.dev-29-g11260416
   cnx-queryserver:
     image: tigera/cnx-queryserver
     version: v2.7.0-0.dev-74-g6ce4ce4

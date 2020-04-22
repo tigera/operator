@@ -41,7 +41,10 @@ def issues_in_milestone():
 # If not, then it simply returns the title.
 def extract_release_notes(issue):
     # Look for a release note section in the body.
-    matches = re.findall(r'```release-note(.*?)```', issue.body, re.DOTALL)
+    matches = None
+    if issue.body:
+        matches = re.findall(r'```release-note(.*?)```', issue.body, re.DOTALL)
+
     if matches:
         return [m.strip() for m in matches]
     else:

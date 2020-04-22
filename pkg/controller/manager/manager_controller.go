@@ -205,6 +205,20 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
+	// If it does not exist then this function returns a nil secret but no error and a self-signed
+	// certificate will be generated when rendering below.
+	tlsSecret, err := utils.ValidateCertPair(r.client,
+		render.ManagerTLSSecretName,
+		render.ManagerSecretKeyName,
+		render.ManagerSecretCertName,
+	)
+	if err != nil {
+		log.Error(err, "Invalid TLS Cert")
+		r.status.SetDegraded("Error validating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Check that compliance is running.
 	compliance, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil {
@@ -231,19 +245,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function returns a nil secret but no error and a self-signed
-	// certificate will be generated when rendering below.
-	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.ManagerTLSSecretName,
-		render.ManagerSecretKeyName,
-		render.ManagerSecretCertName,
-	)
-	if err != nil {
-		log.Error(err, "Invalid TLS Cert")
-		r.status.SetDegraded("Error validating TLS certificate", err.Error())
-		return reconcile.Result{}, err
-	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {

@@ -453,6 +453,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	var managerTLSSecret *corev1.Secret
+	managerTLSSecret, err = utils.ValidateCertPair(r.client,
+		render.ManagerTLSSecretName,
+		render.ManagerSecretKeyName,
+		render.ManagerSecretCertName,
+	)
+
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
@@ -497,6 +504,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance,
 		pullSecrets,
 		typhaNodeTLS,
+		managerTLSSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,

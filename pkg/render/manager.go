@@ -20,6 +20,7 @@ import (
 	"time"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -140,6 +141,12 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		createNamespace(ManagerNamespace, c.openshift),
 	}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
+	// TODO: move copying of imagePullSecrets for prometheus into a dedicated prometheus controller
+	// once it's introduced.
+	// note that the TigeraPrometheusNamespace is not created by the operator but rather a dependency
+	// (as is all prometheus resources).
+	objs = append(objs, copyImagePullSecrets(c.pullSecrets, common.TigeraPrometheusNamespace)...)
+
 	objs = append(objs,
 		c.managerServiceAccount(),
 		c.managerClusterRole(),
@@ -354,7 +361,7 @@ func (c *managerComponent) managerProxyProbe() *v1.Probe {
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	envs := []v1.EnvVar{
-		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", TigeraPrometheusNamespace)},
+		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},

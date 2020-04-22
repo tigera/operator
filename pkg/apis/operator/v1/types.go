@@ -36,7 +36,7 @@ type InstallationSpec struct {
 	// will be used.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imageName>@sha256:<image-sha>`
+	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
@@ -47,7 +47,7 @@ type InstallationSpec struct {
 	// or empty, the default for each image will be used.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imageName>@sha256:<image-sha>`
+	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional

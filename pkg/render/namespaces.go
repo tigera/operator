@@ -23,10 +23,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 )
 
-const (
-	TigeraPrometheusNamespace = "tigera-prometheus"
-)
-
 func Namespaces(cr *operator.Installation, openshift bool, pullSecrets []*corev1.Secret) Component {
 	return &namespaceComponent{
 		cr:          cr,
@@ -49,12 +45,6 @@ func (c *namespaceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
 	}
 
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		ns = append(ns, createNamespace(TigeraPrometheusNamespace, c.openshift))
-		if len(c.pullSecrets) > 0 {
-			ns = append(ns, copyImagePullSecrets(c.pullSecrets, TigeraPrometheusNamespace)...)
-		}
-	}
 	return ns, nil
 }
 

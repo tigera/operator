@@ -546,12 +546,17 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 // As storage requirements of NodeSets are immutable,
 // renaming a NodeSet automatically creates a new StatefulSet with new PersistentVolumeClaim.
 // https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-orchestration.html#k8s-orchestration-limitations
-func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string{
+func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
 	pvcTemplateHash := fnv.New64a()
-	templateBytes, _ := json.Marshal(pvcTemplate)
+	templateBytes, err := json.Marshal(pvcTemplate)
+	if err != nil {
+		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
+		return "es"
+	}
 	pvcTemplateHash.Write(templateBytes)
 	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
 }
+
 func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

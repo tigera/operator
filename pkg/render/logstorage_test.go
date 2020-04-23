@@ -16,7 +16,6 @@ package render_test
 
 import (
 	"fmt"
-
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	. "github.com/onsi/ginkgo"
@@ -29,6 +28,7 @@ import (
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -266,6 +266,104 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 
 		Context("Deleting LogStorage", deleteLogStorageTests(operatorv1.ClusterManagementTypeStandalone))
+
+		Context("Updating LogStorage resource", func() {
+			It("should create new NodeSet", func() {
+				ls := &operator.LogStorage{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operator.LogStorageSpec{
+						Nodes: &operator.Nodes{
+							Count: 1,
+							ResourceRequirements: &corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									"cpu":    resource.MustParse("1"),
+									"memory": resource.MustParse("150Mi"),
+								},
+								Requests: corev1.ResourceList{
+									"cpu":     resource.MustParse("1"),
+									"memory":  resource.MustParse("150Mi"),
+									"storage": resource.MustParse("10Gi"),
+								},
+							},
+						},
+						Indices: &operator.Indices{
+							Replicas: &replicas,
+						},
+						Retention: &operatorv1.Retention{
+							Flows:             &retention,
+							AuditReports:      &retention,
+							Snapshots:         &retention,
+							ComplianceReports: &retention,
+						},
+					},
+					Status: operator.LogStorageStatus{
+						State: "",
+					},
+				}
+
+				es := &esv1.Elasticsearch{}
+
+				component := render.LogStorage(
+					ls,
+					installation, es, nil,
+					esConfig,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+					}, true,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+				createResources, _ := component.Objects()
+
+				oldNodeSetName := createResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+
+				// update resource requirements
+				ls.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						"cpu":    resource.MustParse("1"),
+						"memory": resource.MustParse("150Mi"),
+					},
+					Requests: corev1.ResourceList{
+						"cpu":     resource.MustParse("1"),
+						"memory":  resource.MustParse("2Gi"),
+						"storage": resource.MustParse("5Gi"),
+					},
+				}
+
+				updatedComponent := render.LogStorage(
+					ls,
+					installation, es, nil,
+					esConfig,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+					}, true,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+				updatedResources, _ := updatedComponent.Objects()
+
+				// Check updates to storage requirements are reflected
+				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
+					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
+				
+				newNodeName := updatedResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
+			})
+		})
 
 		It("should render DataNodeSelectors defined in the LogStorage CR", func() {
 			logStorage.Spec.DataNodeSelector = map[string]string{

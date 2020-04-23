@@ -99,7 +99,7 @@ type EksCloudwatchLogsSpec struct {
 	StreamPrefix string `json:"streamPrefix,omitempty"`
 
 	// Cloudwatch audit logs fetching interval in seconds.
-	// Default: 600
+	// Default: 60
 	// +optional
 	FetchInterval int32 `json:"fetchInterval,omitempty"`
 }

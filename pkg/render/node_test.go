@@ -976,6 +976,20 @@ var _ = Describe("Node rendering tests", func() {
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	})
+
+	It("should render seccomp profiles", func() {
+		seccompProf := "localhost/calico-node-v1"
+		defaultInstance.ObjectMeta.Annotations["tech-preview.operator.tigera.io/node-apparmor-profile"] = seccompProf
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		resources, _ := component.Objects()
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+		Expect(ds).ToNot(BeNil())
+
+		Expect(ds.Spec.Template.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(seccompProf))
+	})
 })
 
 // verifyProbes asserts the expected node liveness and readiness probe.

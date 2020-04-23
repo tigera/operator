@@ -15,7 +15,10 @@
 package render
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
@@ -499,6 +502,7 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
 func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	nodeConfig := es.logStorage.Spec.Nodes
+	pvcTemplate := es.pvcTemplate()
 
 	return &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
@@ -522,7 +526,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 			NodeSets: []esv1.NodeSet{
 				{
 					Count: int32(nodeConfig.Count),
-					Name:  "es",
+					Name: nodeSetName(pvcTemplate),
 					Config: &cmnv1.Config{
 						Data: map[string]interface{}{
 							"node.master": "true",
@@ -530,12 +534,27 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 							"node.ingest": "true",
 						},
 					},
-					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{es.pvcTemplate()},
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{pvcTemplate},
 					PodTemplate:          es.podTemplate(),
 				},
 			},
 		},
 	}
+}
+
+// nodeSetName returns thumbprint of PersistentVolumeClaim object as string.
+// As storage requirements of NodeSets are immutable,
+// renaming a NodeSet automatically creates a new StatefulSet with new PersistentVolumeClaim.
+// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-orchestration.html#k8s-orchestration-limitations
+func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
+	pvcTemplateHash := fnv.New64a()
+	templateBytes, err := json.Marshal(pvcTemplate)
+	if err != nil {
+		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
+		return "es"
+	}
+	pvcTemplateHash.Write(templateBytes)
+	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
 }
 
 func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {

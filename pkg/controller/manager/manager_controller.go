@@ -114,6 +114,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch Network resource: %v", err)
 	}
 
+	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
+		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %v", common.TigeraPrometheusNamespace, err)
+	}
+
 	return nil
 }
 

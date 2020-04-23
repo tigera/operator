@@ -53,6 +53,7 @@ const (
 
 func Compliance(
 	esSecrets []*corev1.Secret,
+	managerSecret *corev1.Secret,
 	installation *operatorv1.Installation,
 	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
@@ -79,6 +80,7 @@ func Compliance(
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
+		managerSecret:               managerSecret,
 		installation:                installation,
 		esClusterConfig:             esClusterConfig,
 		pullSecrets:                 pullSecrets,
@@ -89,6 +91,7 @@ func Compliance(
 
 type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
+	managerSecret               *corev1.Secret
 	installation                *operatorv1.Installation
 	esClusterConfig             *ElasticsearchClusterConfig
 	pullSecrets                 []*corev1.Secret
@@ -156,6 +159,9 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	}
 
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
+	if c.managerSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
+	}
 
 	return complianceObjs, objsToDelete
 }
@@ -522,6 +528,7 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 }
 
 func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
+	var optional = true
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
@@ -581,6 +588,11 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						Name:      "cert",
 						MountPath: "/code/apiserver.local.config/certificates",
 						ReadOnly:  true,
+					},
+					{
+						Name:      "manager-cert",
+						MountPath: "/manager-tls/",
+						ReadOnly:  true,
 					}},
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
@@ -601,8 +613,28 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 							},
 						},
 					},
+				}},
+				{
+					Name: "manager-cert",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							DefaultMode: &defaultMode,
+							SecretName:  ManagerTLSSecretName,
+							Optional:   &optional,
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "cert",
+									Path: "cert",
+								},
+								{
+									Key:  "key",
+									Path: "key",
+								},
+							},
+						},
+					},
 				},
-			}},
+			},
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 

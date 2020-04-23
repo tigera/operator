@@ -36,6 +36,8 @@ const (
 	managerPort             = 9443
 	managerTargetPort       = 9443
 	ManagerNamespace        = "tigera-manager"
+	ManagerServiceDNS       = "tigera-manager.tigera-manager.svc"
+	ManagerServiceIP        = "localhost"
 	ManagerTLSSecretName    = "manager-tls"
 	ManagerSecretKeyName    = "key"
 	ManagerSecretCertName   = "cert"
@@ -80,6 +82,8 @@ func Manager(
 			ManagerSecretCertName,
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
+			ManagerServiceIP,
+			ManagerServiceDNS,
 		)
 		if err != nil {
 			return nil, err
@@ -660,5 +664,3 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 
 	return objs
 }
-
-

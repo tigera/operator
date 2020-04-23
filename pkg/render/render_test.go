@@ -18,6 +18,10 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -76,7 +80,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(5 + 4 + 2 + 6 + 4 + 1 + 1))
 	})
@@ -89,9 +93,83 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(((5 + 4 + 2 + 6 + 4 + 1 + 1) + 1 + 1)))
+	})
+
+	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
+		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
+		// - X Same as default config
+		// - 1 Service to expose calico/node metrics.
+		// - 1 ns (tigera-prometheus)
+		// - pass in managerTLSSecret
+		var nodeMetricsPort int32 = 9081
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
+		instance.Spec.NodeMetricsPort = &nodeMetricsPort
+		var managerTLSSecret = corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Secret",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ManagerTLSSecretName,
+				Namespace: render.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"cert": []byte("cert"),
+				"key":  []byte("key"),
+			},
+		}
+		c, err := render.Calico(instance, nil, typhaNodeTLS, &managerTLSSecret, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{render.PriorityClassName, "", "scheduling.k8s.io", "v1beta1", "PriorityClass"},
+			{common.CalicoNamespace, "", "", "v1", "Namespace"},
+			{render.TigeraPrometheusNamespace, "", "", "v1", "Namespace"},
+			{render.TyphaCAConfigMapName, render.OperatorNamespace(), "", "v1", "ConfigMap"},
+			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{render.TyphaTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.NodeTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment"},
+			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
+			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1beta1", "PodDisruptionBudget"},
+			{"calico-node", common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
+			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
+			{"calico-kube-controllers", common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{"calico-kube-controllers", common.CalicoNamespace, "apps", "v1", "Deployment"},
+			{render.ManagerTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+		}
+
+		var resources []runtime.Object
+		for _, component := range c.Render() {
+			var toCreate, _ = component.Objects()
+			resources = append(resources, toCreate...)
+		}
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
 	})
 })
 

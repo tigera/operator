@@ -116,7 +116,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		err := c.Create(ctx, typha)
 		Expect(err).To(BeNil())
 
-		statusManager.On("SetDegraded", "Failed to autoscale typha", "not enough linux nodes to schedule typha pods on, require 4 and have 2")
+		statusManager.On("SetDegraded", "Failed to autoscale typha", "not enough linux nodes to schedule typha pods on, require 3 and have 2")
 
 		// Create a few nodes
 		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})

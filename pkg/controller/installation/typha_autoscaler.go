@@ -38,17 +38,20 @@ const (
 )
 
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
-// The number of Typha replicas depends on the number of nodes:
+// Number of replicas should be at least (1 typha for every 200 nodes) + 1 but the number of typhas
+// cannot exceed the number of nodes+masters.
 // Nodes       Replicas
 //     1              1
 //     2              2
-//     3              3
-//   250              4
-//   500              5
-//  1000              6
-//  1500              7
-//  2000              8
-//  2000+            10
+//  <200              3
+//  >400              4
+//  >600              5
+//  >800              6
+// >1000              7
+//    .....
+// >2000              12
+//    .....
+// >3600             20
 type typhaAutoscaler struct {
 	client         client.Client
 	syncPeriod     time.Duration

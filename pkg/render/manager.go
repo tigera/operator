@@ -33,15 +33,17 @@ import (
 )
 
 const (
-	managerPort             = 9443
-	managerTargetPort       = 9443
-	ManagerNamespace        = "tigera-manager"
-	ManagerTLSSecretName    = "manager-tls"
-	ManagerSecretKeyName    = "key"
-	ManagerSecretCertName   = "cert"
-	ManagerOIDCConfig       = "tigera-manager-oidc-config"
-	ManagerOIDCWellknownURI = "/usr/share/nginx/html/.well-known"
-	ManagerOIDCJwksURI      = "/usr/share/nginx/html/discovery"
+	managerPort               = 9443
+	managerTargetPort         = 9443
+	ManagerNamespace          = "tigera-manager"
+	ManagerServiceInternalDNS = "tigera-manager.tigera-manager.svc"
+	ManagerServiceExternalDNS = "localhost"
+	ManagerTLSSecretName      = "manager-tls"
+	ManagerSecretKeyName      = "key"
+	ManagerSecretCertName     = "cert"
+	ManagerOIDCConfig         = "tigera-manager-oidc-config"
+	ManagerOIDCWellknownURI   = "/usr/share/nginx/html/.well-known"
+	ManagerOIDCJwksURI        = "/usr/share/nginx/html/discovery"
 
 	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation        = "hash.operator.tigera.io/tls-secret"
@@ -80,6 +82,7 @@ func Manager(
 			ManagerSecretCertName,
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
+			ManagerServiceExternalDNS, ManagerServiceInternalDNS,
 		)
 		if err != nil {
 			return nil, err
@@ -660,5 +663,3 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 
 	return objs
 }
-
-

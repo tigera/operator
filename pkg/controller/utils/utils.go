@@ -76,6 +76,16 @@ func AddComplianceWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
 }
 
+func AddNamespaceWatch(c controller.Controller, name string) error {
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+
+	return c.Watch(&source.Kind{Type: ns}, &handler.EnqueueRequestForObject{})
+}
+
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {

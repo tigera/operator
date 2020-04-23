@@ -838,7 +838,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Spec.Registry, es.installation.Spec.Registry),
+									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 									Env:           es.curatorEnvVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{

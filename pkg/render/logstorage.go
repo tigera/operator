@@ -15,10 +15,10 @@
 package render
 
 import (
-	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
@@ -547,11 +547,10 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 // renaming a NodeSet automatically creates a new StatefulSet with new PersistentVolumeClaim.
 // https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-orchestration.html#k8s-orchestration-limitations
 func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string{
-	pvcTemplateHash := md5.New()
+	pvcTemplateHash := fnv.New64a()
 	templateBytes, _ := json.Marshal(pvcTemplate)
 	pvcTemplateHash.Write(templateBytes)
-	// Slice to fit NodeSets Name's max length of 23 char
-	return hex.EncodeToString(pvcTemplateHash.Sum(nil))[:23]
+	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
 }
 func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
 	return &corev1.Secret{

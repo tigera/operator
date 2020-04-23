@@ -46,7 +46,7 @@ func SetTestLogger(l logr.Logger) {
 }
 
 func setCriticalPod(t *v1.PodTemplateSpec) {
-	t.Spec.PriorityClassName = priorityClassName
+	t.Spec.PriorityClassName = PriorityClassName
 }
 
 // envVarSourceFromConfigmap returns an EnvVarSource using the given configmap name and configmap key.

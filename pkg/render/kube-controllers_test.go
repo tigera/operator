@@ -48,7 +48,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all resources for a custom configuration", func() {
-		component := render.KubeControllers(instance)
+		component := render.KubeControllers(instance, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
@@ -84,7 +84,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance)
+		component := render.KubeControllers(instance, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
@@ -103,7 +103,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.KubeControllers(instance)
+		component := render.KubeControllers(instance, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 

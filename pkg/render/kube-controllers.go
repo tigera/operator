@@ -30,23 +30,30 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation) *kubeControllersComponent {
+func KubeControllers(cr *operator.Installation, managerSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr: cr,
+		managerSecret: managerSecret,
 	}
 }
 
 type kubeControllersComponent struct {
 	cr *operator.Installation
+	managerSecret *v1.Secret
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	return []runtime.Object{
+	kubeControllerObjects := []runtime.Object{
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),
 		c.controllersDeployment(),
-	}, nil
+	}
+	if c.managerSecret != nil {
+		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerSecret)...)...)
+	}
+
+	return kubeControllerObjects, nil
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -210,6 +217,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 
+	defaultMode := int32(420)
+	optional := true
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -255,6 +265,33 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 										Command: []string{
 											"/usr/bin/check-status",
 											"-r",
+										},
+									},
+								},
+							},
+							VolumeMounts: []v1.VolumeMount{{
+								Name:      "manager-cert",
+								MountPath: "/manager-tls",
+								ReadOnly:  true,
+							}},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "manager-cert",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									DefaultMode: &defaultMode,
+									SecretName:  ManagerTLSSecretName,
+									Optional:   &optional,
+									Items: []v1.KeyToPath{
+										{
+											Key:  "cert",
+											Path: "cert",
+										},
+										{
+											Key:  "key",
+											Path: "key",
 										},
 									},
 								},

@@ -40,7 +40,7 @@ spec:
                   properties:
                     fetchInterval:
                       description: 'Cloudwatch audit logs fetching interval in seconds.
-                        Default: 600'
+                        Default: 60'
                       format: int32
                       type: integer
                     groupName:

@@ -7,7 +7,7 @@ components:
     version: v2.7.0-0.dev-61-g73e2b02
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v2.7.0-0.dev-70-gcf61025a
+    version: v3.0.0-0.dev-29-g11260416
   cnx-queryserver:
     image: tigera/cnx-queryserver
     version: v2.7.0-0.dev-74-g6ce4ce4
@@ -16,7 +16,7 @@ components:
     version: v2.7.0-0.dev-176-g68be5b8
   typha:
     image: tigera/typha
-    version: v2.7.0-18-ge12d757
+    version: v3.0.0-0.dev-23-g664fa65
   cnx-node:
     image: tigera/cnx-node
     version: v2.7.0-0.dev-300-ge5619d5

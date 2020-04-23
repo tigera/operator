@@ -62,6 +62,7 @@ func Calico(
 	cr *operator.Installation,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
+	managerTLSSecret *corev1.Secret,
 	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
@@ -108,15 +109,16 @@ func Calico(
 	tss = append(tss, ts, ns)
 
 	return calicoRenderer{
-		installation:  cr,
-		pullSecrets:   pullSecrets,
-		typhaNodeTLS:  typhaNodeTLS,
-		tlsConfigMaps: tcms,
-		tlsSecrets:    tss,
-		birdTemplates: bt,
-		provider:      p,
-		networkConfig: nc,
-		upgrade:       up,
+		installation:    cr,
+		pullSecrets:     pullSecrets,
+		typhaNodeTLS:    typhaNodeTLS,
+		tlsConfigMaps:   tcms,
+		tlsSecrets:      tss,
+		managerTLSecret: managerTLSSecret,
+		birdTemplates:   bt,
+		provider:        p,
+		networkConfig:   nc,
+		upgrade:         up,
 	}, nil
 }
 
@@ -177,15 +179,16 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	installation  *operator.Installation
-	pullSecrets   []*corev1.Secret
-	typhaNodeTLS  *TyphaNodeTLS
-	tlsConfigMaps []*corev1.ConfigMap
-	tlsSecrets    []*corev1.Secret
-	birdTemplates map[string]string
-	provider      operator.Provider
-	networkConfig NetworkConfig
-	upgrade       bool
+	installation    *operator.Installation
+	pullSecrets     []*corev1.Secret
+	typhaNodeTLS    *TyphaNodeTLS
+	tlsConfigMaps   []*corev1.ConfigMap
+	tlsSecrets      []*corev1.Secret
+	managerTLSecret *corev1.Secret
+	birdTemplates   map[string]string
+	provider        operator.Provider
+	networkConfig   NetworkConfig
+	upgrade         bool
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -196,7 +199,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.upgrade))
 	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation))
+	components = appendNotNil(components, KubeControllers(r.installation, r.managerTLSecret))
 	return components
 }
 

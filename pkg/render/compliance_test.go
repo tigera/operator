@@ -95,7 +95,7 @@ var _ = Describe("compliance rendering tests", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(nil, &corev1.Secret{
 				TypeMeta: metav1.TypeMeta{
-					Kind: "Secret",
+					Kind:       "Secret",
 					APIVersion: "v1",
 				},
 				ObjectMeta: metav1.ObjectMeta{
@@ -104,7 +104,7 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 				Data: map[string][]byte{
 					"cert": []byte("cert"),
-					"key": []byte("key"),
+					"key":  []byte("key"),
 				},
 			}, &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{

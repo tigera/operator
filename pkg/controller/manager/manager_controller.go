@@ -20,6 +20,7 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -111,6 +112,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Network resource: %v", err)
+	}
+
+	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
+		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %v", common.TigeraPrometheusNamespace, err)
 	}
 
 	return nil
@@ -213,6 +218,17 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	if compliance.Status.State != operatorv1.ComplianceStatusReady {
 		r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
 		return reconcile.Result{}, nil
+	}
+
+	// check that prometheus is running
+	ns := &corev1.Namespace{}
+	if err = r.client.Get(ctx, client.ObjectKey{Name: common.TigeraPrometheusNamespace}, ns); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("prometheus namespace does not exist", "Dependency on tigera-prometheus not satisfied")
+		} else {
+			r.status.SetDegraded("Error querying prometheus", err.Error())
+		}
+		return reconcile.Result{}, err
 	}
 
 	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)

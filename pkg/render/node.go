@@ -37,6 +37,8 @@ const (
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation    = "hash.operator.tigera.io/cni-config"
+
+	techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
 )
 
 var (
@@ -427,6 +429,12 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	if c.cr.Spec.NodeMetricsPort != nil {
 		annotations["prometheus.io/scrape"] = "true"
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)
+	}
+
+	// check tech preview annotation for calico-node apparmor profile
+	a := c.cr.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
+		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = val
 	}
 
 	initContainers := []v1.Container{}

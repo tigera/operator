@@ -5,10 +5,8 @@ go 1.12
 require (
 	github.com/cloudflare/cfssl v1.4.1
 	github.com/elastic/cloud-on-k8s v1.0.1
-	github.com/elastic/go-ucfg v0.8.1 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
-	github.com/go-test/deep v1.0.5 // indirect
 	github.com/hashicorp/go-version v1.2.0
 	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.7.0
@@ -21,13 +19,13 @@ require (
 
 	github.com/tigera/api v0.0.0-20200311151854-a6d8502444cd
 	gopkg.in/inf.v0 v0.9.1
-	gopkg.in/yaml.v2 v2.2.4
-	k8s.io/api v0.17.2
+	gopkg.in/yaml.v2 v2.2.8
+	k8s.io/api v0.18.2
 	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783
-	k8s.io/apimachinery v0.17.2
+	k8s.io/apimachinery v0.18.2
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
-	k8s.io/cluster-bootstrap v0.17.2 // indirect
-	k8s.io/component-base v0.17.2 // indirect
+	k8s.io/cluster-bootstrap v0.18.2 // indirect
+	k8s.io/component-base v0.18.2 // indirect
 	k8s.io/kube-aggregator v0.0.0-20190404125450-f5e124c822d6
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.14.2

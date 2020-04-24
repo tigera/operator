@@ -305,6 +305,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 					"bgpconfigurations",
 					"bgppeers",
 					"felixconfigurations",
+					"kubecontrollersconfigurations",
 					"ippools",
 					"ipamblocks",
 					"blockaffinities",

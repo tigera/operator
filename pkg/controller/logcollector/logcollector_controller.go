@@ -422,7 +422,7 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 	}
 
 	if interval == 0 {
-		interval = 600
+		interval = 60
 	}
 
 	secret := &corev1.Secret{}

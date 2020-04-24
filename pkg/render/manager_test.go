@@ -67,17 +67,19 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-manager", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
-			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
-			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
-			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
-			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
+			{name: render.ManagerTLSSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
+			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "", kind: ""},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Deployment"},
 		}
 
 		i := 0
@@ -86,7 +88,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			i++
 		}
 
-		deployment := resources[expectedResourcesNumber - 1].(*appsv1.Deployment)
+		deployment := resources[expectedResourcesNumber-1].(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron:" + components.ComponentManagerProxy.Version))
@@ -99,7 +101,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-		d := resources[expectedResourcesNumber - 1].(*v1.Deployment)
+		d := resources[expectedResourcesNumber-1].(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
@@ -132,9 +134,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerOIDCConfig))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(render.ManagerOIDCJwksURI))
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(6))
-		Expect(d.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Volumes[4].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(7))
+		Expect(d.Spec.Template.Spec.Volumes[5].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Volumes[5].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
@@ -147,9 +149,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		resources := renderObjects(instance, nil, false, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
-		d := resources[expectedResourcesNumber - 1].(*v1.Deployment)
+		d := resources[expectedResourcesNumber-1].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(6))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
@@ -157,7 +159,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	It("should render multicluster settings properly", func() {
 		resources := renderObjects(instance, nil, true, &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "Secret",
+				Kind:       "Secret",
 				APIVersion: "v1",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -166,7 +168,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			Data: map[string][]byte{
 				"cert": []byte("cert"),
-				"key": []byte("key"),
+				"key":  []byte("key"),
 			},
 		})
 

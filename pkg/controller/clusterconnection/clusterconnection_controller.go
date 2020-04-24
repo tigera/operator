@@ -16,16 +16,19 @@ package clusterconnection
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/controller/status"
 
 	"github.com/tigera/operator/pkg/controller/installation"
+	controllermanager "github.com/tigera/operator/pkg/controller/manager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -87,6 +90,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Network resource: %v", controllerName, err)
 	}
 
+	// Watch for changes to primary resource Manager
+	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -125,7 +134,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	// Fetch the managementClusterConnection.
 	mcc, err := GetClusterConnection(ctx, r.Client)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// If the resource is not found, we will not return an error. Instead, the watch on the resource will
 			// re-trigger the reconcile function when the situation changes.
 			if instl.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
@@ -145,6 +154,21 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 			operatorv1.ClusterManagementTypeManaged))
 	}
 
+	// Verify that the manager is not running.
+	_, err = controllermanager.GetManager(ctx, r.Client)
+	if err == nil {
+		// No error means that a manager was found. We do not allow both manager and guardian in the same cluster as
+		// they create overlapping resources. (The ns and sa for Guardian's impersonation).
+		err = errors.New("manager and management cluster connection should not be present at the same time")
+		log.Error(err, "")
+		r.status.SetDegraded("Manager and management cluster connection should not be present at the same time", err.Error())
+		return reconcile.Result{}, err
+	} else if !k8serrors.IsNotFound(err) {
+		log.Error(err, "Error querying Manager")
+		r.status.SetDegraded("Error querying Manager", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
@@ -157,7 +181,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
 		r.status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
-		if !errors.IsNotFound(err) {
+		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}
 		return result, err

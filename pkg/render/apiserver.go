@@ -565,7 +565,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "tigera-apiserver-certs", MountPath: "/code/apiserver.local.config/certificates"},
 	}
 
-	isPrivileged := true
+	isPrivileged := false
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",

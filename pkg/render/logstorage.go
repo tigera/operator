@@ -197,6 +197,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			es.eckOperatorClusterRole(),
 			es.eckOperatorClusterRoleBinding(),
 			es.eckOperatorServiceAccount(),
+			es.esCuratorServiceAccount(),
 			es.webhookService(),
 			es.elasticWebhookConfiguration(),
 		)
@@ -670,6 +671,15 @@ func (es elasticsearchComponent) eckOperatorServiceAccount() *corev1.ServiceAcco
 	}
 }
 
+func (es elasticsearchComponent) esCuratorServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsCuratorName,
+			Namespace: ElasticsearchNamespace,
+		},
+	}
+}
+
 func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	gracePeriod := int64(10)
 	defaultMode := int32(420)
@@ -869,6 +879,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							},
 							ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
 							RestartPolicy:    corev1.RestartPolicyOnFailure,
+							ServiceAccountName: EsCuratorName,
 						}),
 					},
 				},

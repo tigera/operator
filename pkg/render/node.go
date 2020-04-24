@@ -43,6 +43,9 @@ var (
 	// The port used by calico/node to report Calico Enterprise internal metrics.
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	nodeReporterPort int32 = 9081
+	// The port used by calico/node to report Calico Enterprise BGP metrics.
+	// This is currently not intended to be user configurable.
+	nodeBGPReporterPort int32 = 9900
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -971,9 +974,10 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-// nodeMetricsService creates a Service which exposes the calico/node reporting endpoint.
-// This service is used internally by Calico Enterprise, and is separate from general prometheus
-// metrics which are user-configurable.
+// nodeMetricsService creates a Service which exposes two endpoints on calico/node for
+// reporting Prometheus metrics (for policy enforcement activity and BGP stats).
+// This service is used internally by Calico Enterprise and is separate from general
+// Prometheus metrics which are user-configurable.
 func (c *nodeComponent) nodeMetricsService() *v1.Service {
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -990,6 +994,12 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 					Name:       "calico-metrics-port",
 					Port:       nodeReporterPort,
 					TargetPort: intstr.FromInt(int(nodeReporterPort)),
+					Protocol:   v1.ProtocolTCP,
+				},
+				v1.ServicePort{
+					Name:       "calico-bgp-metrics-port",
+					Port:       nodeBGPReporterPort,
+					TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
 					Protocol:   v1.ProtocolTCP,
 				},
 			},

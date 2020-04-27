@@ -34,15 +34,19 @@ import (
 )
 
 const (
-	managerPort             = 9443
-	managerTargetPort       = 9443
-	ManagerNamespace        = "tigera-manager"
-	ManagerTLSSecretName    = "manager-tls"
-	ManagerSecretKeyName    = "key"
-	ManagerSecretCertName   = "cert"
-	ManagerOIDCConfig       = "tigera-manager-oidc-config"
-	ManagerOIDCWellknownURI = "/usr/share/nginx/html/.well-known"
-	ManagerOIDCJwksURI      = "/usr/share/nginx/html/discovery"
+	managerPort               = 9443
+	managerTargetPort         = 9443
+	ManagerNamespace          = "tigera-manager"
+	ManagerServiceAccount     = "tigera-manager"
+	ManagerClusterRole        = "tigera-manager-role"
+	ManagerClusterRoleBinding = "tigera-manager-binding"
+	ManagerTLSSecretName      = "manager-tls"
+	ManagerTLSSecretCertName  = "manager-tls-cert"
+	ManagerSecretKeyName      = "key"
+	ManagerSecretCertName     = "cert"
+	ManagerOIDCConfig         = "tigera-manager-oidc-config"
+	ManagerOIDCWellknownURI   = "/usr/share/nginx/html/.well-known"
+	ManagerOIDCJwksURI        = "/usr/share/nginx/html/discovery"
 
 	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation        = "hash.operator.tigera.io/tls-secret"
@@ -215,7 +219,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			NodeSelector: map[string]string{
 				"beta.kubernetes.io/os": "linux",
 			},
-			ServiceAccountName: "tigera-manager",
+			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
@@ -261,6 +265,21 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
 					SecretName: ManagerTLSSecretName,
+				},
+			},
+		},
+		{
+			// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
+			Name: ManagerTLSSecretCertName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: ManagerTLSSecretName,
+					Items: []v1.KeyToPath{
+						{
+							Key:  "cert",
+							Path: "cert",
+						},
+					},
 				},
 			},
 		},
@@ -455,6 +474,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
+		},
 	}
 
 	return apiServer
@@ -519,7 +541,7 @@ func voltronTunnelSecret() *v1.Secret {
 func (c *managerComponent) managerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: ManagerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
 	}
 }
 
@@ -528,7 +550,7 @@ func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-manager-role",
+			Name: ManagerClusterRole,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -555,16 +577,16 @@ func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
 func (c *managerComponent) managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tigera-manager-role",
+			Name:     ManagerClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-manager",
+				Name:      ManagerServiceAccount,
 				Namespace: ManagerNamespace,
 			},
 		},
@@ -629,7 +651,7 @@ func (c *managerComponent) managerPolicyImpactPreviewClusterRoleBinding() *rbacv
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-manager",
+				Name:      ManagerServiceAccount,
 				Namespace: ManagerNamespace,
 			},
 		},

@@ -16,6 +16,7 @@ package clusterconnection_test
 
 import (
 	"context"
+
 	"github.com/tigera/operator/pkg/controller/status"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
@@ -69,7 +70,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("ClearDegraded", mock.Anything)
 		mockStatus.On("OnCRFound").Return()
 
-		r = clusterconnection.NewReconcilerWithShims(c, scheme,mockStatus,operatorv1.ProviderNone)
+		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -108,7 +109,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Spec: operatorv1.InstallationSpec{
 					Registry: "my-reg",
 					// The test is provider agnostic.
-					KubernetesProvider: operatorv1.ProviderNone,
+					KubernetesProvider:    operatorv1.ProviderNone,
+					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			})

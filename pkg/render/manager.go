@@ -467,7 +467,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls"},
+			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
 		},
 	}
 

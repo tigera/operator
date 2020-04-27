@@ -233,6 +233,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 					{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 				}
 
 				component := render.LogStorage(
@@ -612,6 +613,7 @@ func compareResources(resources []runtime.Object, expectedResources []resourceTe
 		resource := resources[i]
 		actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 		actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
+		fmt.Println(actualName, actualNS, expectedResource.name, expectedResource.ns)
 
 		Expect(actualName).To(Equal(expectedResource.name), fmt.Sprintf("Rendered resource has wrong name (position %d, name %s, namespace %s)", i, actualName, actualNS))
 		Expect(actualNS).To(Equal(expectedResource.ns), fmt.Sprintf("Rendered resource has wrong namespace (position %d, name %s, namespace %s)", i, actualName, actualNS))

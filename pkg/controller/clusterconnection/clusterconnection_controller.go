@@ -22,7 +22,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 
 	"github.com/tigera/operator/pkg/controller/installation"
-	controllermanager "github.com/tigera/operator/pkg/controller/manager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
@@ -90,12 +89,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Network resource: %v", controllerName, err)
 	}
 
-	// Watch for changes to primary resource Manager
-	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("%v failed to watch primary resource: %v", controllerName, err)
-	}
-
 	return nil
 }
 
@@ -150,22 +143,10 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	r.status.OnCRFound()
 
 	if instl.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		log.Info(fmt.Sprintf("Setting up management cluster connection, even though clusterType != %v",
+		err = errors.New(fmt.Sprintf("Cannot establish tunnel unless Installation.clusterManagementType = %v",
 			operatorv1.ClusterManagementTypeManaged))
-	}
-
-	// Verify that the manager is not running.
-	_, err = controllermanager.GetManager(ctx, r.Client)
-	if err == nil {
-		// No error means that a manager was found. We do not allow both manager and guardian in the same cluster as
-		// they create overlapping resources. (The ns and sa for Guardian's impersonation).
-		err = errors.New("manager and management cluster connection should not be present at the same time")
 		log.Error(err, "")
-		r.status.SetDegraded("Manager and management cluster connection should not be present at the same time", err.Error())
-		return reconcile.Result{}, err
-	} else if !k8serrors.IsNotFound(err) {
-		log.Error(err, "Error querying Manager")
-		r.status.SetDegraded("Error querying Manager", err.Error())
+		r.status.SetDegraded(err.Error(), err.Error())
 		return reconcile.Result{}, err
 	}
 

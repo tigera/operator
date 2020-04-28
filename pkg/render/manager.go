@@ -16,13 +16,12 @@ package render
 
 import (
 	"fmt"
-	"strconv"
-	"time"
-
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"strconv"
+	"time"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,6 +36,8 @@ const (
 	managerPort             = 9443
 	managerTargetPort       = 9443
 	ManagerNamespace        = "tigera-manager"
+	ManagerServiceDNS       = "tigera-manager.tigera-manager.svc"
+	ManagerServiceIP        = "localhost"
 	ManagerTLSSecretName    = "manager-tls"
 	ManagerSecretKeyName    = "key"
 	ManagerSecretCertName   = "cert"
@@ -73,7 +74,8 @@ func Manager(
 	tunnelSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
-	if tlsKeyPair == nil {
+
+	if tlsKeyPair == nil && !management {
 		var err error
 		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			ManagerTLSSecretName,
@@ -87,12 +89,8 @@ func Manager(
 		}
 		tlsSecrets = []*corev1.Secret{tlsKeyPair}
 	}
-	copy := tlsKeyPair.DeepCopy()
-	// Overwrite the ObjectMeta to ensure we do not keep the resourceVersion or any other information
-	// that should not be set on a new object.
-	copy.ObjectMeta = metav1.ObjectMeta{Name: ManagerTLSSecretName, Namespace: ManagerNamespace}
-	tlsSecrets = append(tlsSecrets, copy)
 
+	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
 	var tunnelSecrets []*corev1.Secret
 	if management {
 		// If there is no secret create one and add it to the operator namespace.

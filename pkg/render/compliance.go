@@ -139,6 +139,10 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
+	if c.managerSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
+	}
+
 	var objsToDelete []runtime.Object
 	// Compliance server is only for Standalone or Management clusters
 	if c.installation.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
@@ -160,9 +164,6 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	}
 
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
-	if c.managerSecret != nil {
-		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
-	}
 
 	return complianceObjs, objsToDelete
 }
@@ -647,7 +648,7 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 			},
 		}}}
 
-	if managerSecret == nil {
+	if managerSecret != nil {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: "manager-cert",
@@ -672,7 +673,6 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 func complianceAnnotations(c *complianceComponent) map[string]string {
 	var annotations = map[string]string{
 		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
-		ManagerTLSHashAnnotation:          AnnotationHash(c.managerSecret),
 	}
 
 	if c.managerSecret != nil {

@@ -460,6 +460,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		render.ManagerSecretCertName,
 	)
 
+	if instance.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+		if managerTLSSecret == nil {
+			err = fmt.Errorf("invalid manager TLS Secret")
+		}
+		if err != nil {
+			log.Error(err, "Invalid manager TLS Cert")
+			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")

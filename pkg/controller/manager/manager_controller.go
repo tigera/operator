@@ -97,7 +97,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
 			}
 		}
 	}
@@ -213,10 +213,16 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
 	)
-	if err != nil {
-		log.Error(err, "Invalid TLS Cert")
-		r.status.SetDegraded("Error validating TLS certificate", err.Error())
-		return reconcile.Result{}, err
+
+	if installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
+		if tlsSecret == nil {
+			err = fmt.Errorf("invalid manager TLS Secret")
+		}
+		if err != nil {
+			log.Error(err, "Invalid manager TLS Cert")
+			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Check that compliance is running.

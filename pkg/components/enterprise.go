@@ -18,7 +18,7 @@ var (
 	
 	ComponentAPIServer = component{
 		Version: "v3.0.0-0.dev-29-g11260416",
-		Digest:  "sha256:9162e4a672b82e91776f2b477cb5306dd42f8e0d784c1962e8dd1954018f5900",
+		Digest:  "sha256:b8a1e376eb52e8add42d93fc975ff3550136afa436c3a414f89f588b1393ecea",
 		Image:   "tigera/cnx-apiserver",
 	}
 	
@@ -157,8 +157,8 @@ var (
 	
 	
 	ComponentTigeraNode = component{
-		Version: "v2.7.0-0.dev-300-ge5619d5",
-		Digest:  "sha256:2b7434aedd81e84b9dccc14608f0af099c4f1e6926375b8ca0c8b646934ad064",
+		Version: "v3.0.0-0.dev-79-gccc948e",
+		Digest:  "sha256:00901a322278c0a7abdd07bf3665e4779e9327d1103e0cdd9fe1066d104254ca",
 		Image:   "tigera/cnx-node",
 	}
 	

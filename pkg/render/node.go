@@ -953,9 +953,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(9099)
-	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
+	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 
-	// if not using calico networking, don't check bird status.
+	// if not using calico networking, don't check bird status (or bgp metrics server).
 	if c.netConfig.CNI != CNICalico {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}

@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	priorityClassName = "calico-priority"
+	PriorityClassName = "calico-priority"
 )
 
 func PriorityClassDefinitions(cr *operator.Installation) Component {
@@ -44,7 +44,7 @@ func (c *priorityClassComponent) calicoPriority() *schedv1beta.PriorityClass {
 	return &schedv1beta.PriorityClass{
 		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: priorityClassName,
+			Name: PriorityClassName,
 		},
 		// We would prefer to use the same value as system-node-critical (2000001000)
 		// but the highest value setable by a user is 1000000000

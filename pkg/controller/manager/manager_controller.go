@@ -214,6 +214,19 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		render.ManagerSecretCertName,
 	)
 
+	// An error is returned in case the read cannot be performed of the secret does not match the expected format
+	// In case the secret is not found, the error and the secret will be nil. This check needs to be done for all
+	// cluster types. For management cluster, we also need to check if the secret was created before hand.
+	if err != nil || (installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement && tlsSecret == nil) {
+		if tlsSecret == nil && err == nil {
+			err = fmt.Errorf("invalid manager TLS Secret")
+		}
+
+		log.Error(err, "Invalid manager TLS Cert")
+		r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
 		if tlsSecret == nil {
 			err = fmt.Errorf("invalid manager TLS Secret")

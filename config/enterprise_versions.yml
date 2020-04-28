@@ -13,7 +13,7 @@ components:
     version: v2.7.0-0.dev-74-g6ce4ce4
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v2.7.0-0.dev-176-g68be5b8
+    version: v3.0.0-0.dev-66-gb52ab60
   typha:
     image: tigera/typha
     version: v3.0.0-0.dev-23-g664fa65
@@ -59,7 +59,7 @@ components:
     version: v2.7.0-0.dev-81-g41d5d65
   compliance-server:
     image: tigera/compliance-server
-    version: v2.7.0-0.dev-81-g41d5d65
+    version: v3.0.0-0.dev-22-gf550e29
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
     version: v2.7.0-0.dev-81-g41d5d65

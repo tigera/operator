@@ -152,12 +152,12 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{render.ManagerTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
-				{render.ManagerTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -171,7 +171,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
-			var dpComplianceServer = resources[len(expectedResources) - 2].(*v1.Deployment)
+			var dpComplianceServer = resources[len(expectedResources) - 1].(*v1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
@@ -180,6 +180,14 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
+
+			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal("cert"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal("manager-cert"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 		})
 	})
 

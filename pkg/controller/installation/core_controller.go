@@ -453,6 +453,24 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	var managerTLSSecret *corev1.Secret
+	managerTLSSecret, err = utils.ValidateCertPair(r.client,
+		render.ManagerTLSSecretName,
+		render.ManagerSecretKeyName,
+		render.ManagerSecretCertName,
+	)
+
+	if instance.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+		if managerTLSSecret == nil {
+			err = fmt.Errorf("invalid manager TLS Secret")
+		}
+		if err != nil {
+			log.Error(err, "Invalid manager TLS Cert")
+			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
@@ -497,6 +515,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance,
 		pullSecrets,
 		typhaNodeTLS,
+		managerTLSSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,

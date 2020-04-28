@@ -30,23 +30,30 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation) *kubeControllersComponent {
+func KubeControllers(cr *operator.Installation, managerSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr: cr,
+		managerSecret: managerSecret,
 	}
 }
 
 type kubeControllersComponent struct {
 	cr *operator.Installation
+	managerSecret *v1.Secret
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	return []runtime.Object{
+	kubeControllerObjects := []runtime.Object{
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),
 		c.controllersDeployment(),
-	}, nil
+	}
+	if c.managerSecret != nil {
+		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerSecret)...)...)
+	}
+
+	return kubeControllerObjects, nil
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -210,6 +217,8 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 
+	defaultMode := int32(420)
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -236,6 +245,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Labels: map[string]string{
 						"k8s-app": "calico-kube-controllers",
 					},
+					Annotations: kubeControllerAnnotations(c),
 				},
 				Spec: v1.PodSpec{
 					NodeSelector: map[string]string{
@@ -259,8 +269,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 									},
 								},
 							},
+							VolumeMounts: kubeControllersVolumeMounts(c.managerSecret),
 						},
 					},
+					Volumes: kubeControllersVolumes(defaultMode, c.managerSecret),
 				},
 			},
 		},
@@ -273,4 +285,51 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	return &d
+}
+
+func kubeControllerAnnotations(c *kubeControllersComponent) map[string]string {
+	var annotations = make(map[string]string)
+
+	if c.managerSecret != nil {
+		annotations[ManagerTLSHashAnnotation] = AnnotationHash(c.managerSecret)
+	}
+
+	return annotations
+}
+
+func kubeControllersVolumeMounts(managerSecret *v1.Secret) []v1.VolumeMount {
+	if managerSecret != nil {
+		return []v1.VolumeMount{{
+			Name:      "manager-cert",
+			MountPath: "/manager-tls",
+			ReadOnly:  true,
+		}}
+	}
+
+	return []v1.VolumeMount{}
+}
+
+func kubeControllersVolumes(defaultMode int32, managerSecret *v1.Secret) []v1.Volume {
+	if managerSecret != nil {
+
+		return []v1.Volume{
+			{
+				Name: "manager-cert",
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						DefaultMode: &defaultMode,
+						SecretName:  ManagerTLSSecretName,
+						Items: []v1.KeyToPath{
+							{
+								Key:  "cert",
+								Path: "cert",
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	return []v1.Volume{}
 }

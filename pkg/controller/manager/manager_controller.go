@@ -97,7 +97,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
 			}
 		}
 	}
@@ -205,6 +205,39 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
+	// If it does not exist then this function returns a nil secret but no error and a self-signed
+	// certificate will be generated when rendering below.
+	tlsSecret, err := utils.ValidateCertPair(r.client,
+		render.ManagerTLSSecretName,
+		render.ManagerSecretKeyName,
+		render.ManagerSecretCertName,
+	)
+
+	// An error is returned in case the read cannot be performed of the secret does not match the expected format
+	// In case the secret is not found, the error and the secret will be nil. This check needs to be done for all
+	// cluster types. For management cluster, we also need to check if the secret was created before hand.
+	if err != nil || (installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement && tlsSecret == nil) {
+		if tlsSecret == nil && err == nil {
+			err = fmt.Errorf("invalid manager TLS Secret")
+		}
+
+		log.Error(err, "Invalid manager TLS Cert")
+		r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
+		if tlsSecret == nil {
+			err = fmt.Errorf("invalid manager TLS Secret")
+		}
+		if err != nil {
+			log.Error(err, "Invalid manager TLS Cert")
+			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Check that compliance is running.
 	compliance, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil {
@@ -231,19 +264,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function returns a nil secret but no error and a self-signed
-	// certificate will be generated when rendering below.
-	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.ManagerTLSSecretName,
-		render.ManagerSecretKeyName,
-		render.ManagerSecretCertName,
-	)
-	if err != nil {
-		log.Error(err, "Invalid TLS Cert")
-		r.status.SetDegraded("Error validating TLS certificate", err.Error())
-		return reconcile.Result{}, err
-	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {

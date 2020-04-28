@@ -49,10 +49,12 @@ const (
 	ComplianceServerKeyName    = "tls.key"
 
 	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
+	ManagerTLSHashAnnotation          = "hash.operator.tigera.io/manager-certificate"
 )
 
 func Compliance(
 	esSecrets []*corev1.Secret,
+	managerSecret *corev1.Secret,
 	installation *operatorv1.Installation,
 	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
@@ -79,6 +81,7 @@ func Compliance(
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
+		managerSecret:               managerSecret,
 		installation:                installation,
 		esClusterConfig:             esClusterConfig,
 		pullSecrets:                 pullSecrets,
@@ -89,6 +92,7 @@ func Compliance(
 
 type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
+	managerSecret               *corev1.Secret
 	installation                *operatorv1.Installation
 	esClusterConfig             *ElasticsearchClusterConfig
 	pullSecrets                 []*corev1.Secret
@@ -156,6 +160,9 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	}
 
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
+	if c.managerSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
+	}
 
 	return complianceObjs, objsToDelete
 }
@@ -534,9 +541,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Labels: map[string]string{
 				"k8s-app": ComplianceServerName,
 			},
-			Annotations: map[string]string{
-				complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
-			},
+			Annotations: complianceAnnotations(c),
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			NodeSelector:       map[string]string{"beta.kubernetes.io/os": "linux"},
@@ -577,32 +582,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "cert",
-						MountPath: "/code/apiserver.local.config/certificates",
-						ReadOnly:  true,
-					}},
+					VolumeMounts: complianceVolumeMounts(c.managerSecret),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: []corev1.Volume{{
-				Name: "cert",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  ComplianceServerCertSecret,
-						Items: []corev1.KeyToPath{
-							{
-								Key:  "tls.crt",
-								Path: "apiserver.crt",
-							},
-							{
-								Key:  "tls.key",
-								Path: "apiserver.key",
-							},
-						},
-					},
-				},
-			}},
+			Volumes: complianceVolumes(defaultMode, c.managerSecret),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -624,6 +607,79 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Template: *podTemplate,
 		},
 	}
+}
+
+func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
+	var mounts = []corev1.VolumeMount{{
+		Name:      "cert",
+		MountPath: "/code/apiserver.local.config/certificates",
+		ReadOnly:  true,
+	}}
+
+	if managerSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      "manager-cert",
+			MountPath: "/manager-tls",
+			ReadOnly:  true,
+		})
+	}
+
+	return mounts
+}
+
+func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1.Volume {
+	var volumes = []corev1.Volume{{
+		Name: "cert",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				DefaultMode: &defaultMode,
+				SecretName:  ComplianceServerCertSecret,
+				Items: []corev1.KeyToPath{
+					{
+						Key:  "tls.crt",
+						Path: "apiserver.crt",
+					},
+					{
+						Key:  "tls.key",
+						Path: "apiserver.key",
+					},
+				},
+			},
+		}}}
+
+	if managerSecret == nil {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: "manager-cert",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &defaultMode,
+						SecretName:  ManagerTLSSecretName,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  "cert",
+								Path: "cert",
+							},
+						},
+					},
+				},
+			})
+	}
+
+	return volumes
+}
+
+func complianceAnnotations(c *complianceComponent) map[string]string {
+	var annotations = map[string]string{
+		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
+		ManagerTLSHashAnnotation:          AnnotationHash(c.managerSecret),
+	}
+
+	if c.managerSecret != nil {
+		annotations[ManagerTLSHashAnnotation] = AnnotationHash(c.managerSecret)
+	}
+
+	return annotations
 }
 
 func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.ServiceAccount {

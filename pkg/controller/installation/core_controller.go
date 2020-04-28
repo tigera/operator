@@ -461,9 +461,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	)
 
 	if instance.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
-		if managerTLSSecret == nil {
-			err = fmt.Errorf("invalid manager TLS Secret")
-		}
 		if err != nil {
 			log.Error(err, "Invalid manager TLS Cert")
 			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())

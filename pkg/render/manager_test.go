@@ -54,9 +54,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 
-	const expectedResourcesNumber = 13
+	const expectedResourcesNumber = 11
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(instance, nil)
+		resources := renderObjects(instance, nil, false, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resources.
@@ -77,8 +77,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -88,20 +86,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			i++
 		}
 
-		deployment := resources[12].(*appsv1.Deployment)
+		deployment := resources[expectedResourcesNumber - 1].(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron:" + components.ComponentManagerProxy.Version))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(instance, nil)
+		resources := renderObjects(instance, nil, false, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
 		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-		d := resources[12].(*v1.Deployment)
+		d := resources[expectedResourcesNumber - 1].(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
@@ -119,11 +117,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 		}
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, oidcConfig)
+		resources := renderObjects(instance, oidcConfig, false, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1))
 
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
-		d := resources[13].(*v1.Deployment)
+		d := resources[expectedResourcesNumber].(*v1.Deployment)
 
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 
@@ -147,9 +145,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, nil)
+		resources := renderObjects(instance, nil, false, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
-		d := resources[12].(*v1.Deployment)
+		d := resources[expectedResourcesNumber - 1].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
@@ -157,20 +155,62 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(instance, nil)
-		Expect(len(resources)).To(Equal(expectedResourcesNumber))
+		resources := renderObjects(instance, nil, true, &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Secret",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ManagerTLSSecretName,
+				Namespace: render.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"cert": []byte("cert"),
+				"key": []byte("key"),
+			},
+		})
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-manager", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
+			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
+		}
+
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
 
 		By("creating a valid self-signed cert")
 		// Use the x509 package to validate that the cert was signed with the privatekey
+		validateSecret(resources[9].(*corev1.Secret))
 		validateSecret(resources[10].(*corev1.Secret))
-		validateSecret(resources[11].(*corev1.Secret))
 
 		By("configuring the manager deployment")
-		manager := resources[12].(*v1.Deployment).Spec.Template.Spec.Containers[0]
+		manager := resources[11].(*v1.Deployment).Spec.Template.Spec.Containers[0]
 		Expect(manager.Name).To(Equal("tigera-manager"))
 		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
-		voltron := resources[12].(*v1.Deployment).Spec.Template.Spec.Containers[2]
+		voltron := resources[11].(*v1.Deployment).Spec.Template.Spec.Containers[2]
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 	})
@@ -213,7 +253,7 @@ func validateSecret(voltronSecret *corev1.Secret) {
 
 }
 
-func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []runtime.Object {
+func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, isManagement bool, tlsSecret *corev1.Secret) []runtime.Object {
 	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(instance,
 		nil,
@@ -229,12 +269,12 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap) []r
 			},
 		},
 		esConfigMap,
-		nil,
+		tlsSecret,
 		nil,
 		false,
 		&operator.Installation{Spec: operator.InstallationSpec{}},
 		oidcConfig,
-		true,
+		isManagement,
 		nil)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources, _ := component.Objects()

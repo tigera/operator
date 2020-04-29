@@ -568,6 +568,14 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	isPrivileged := true
 
+	env := []corev1.EnvVar{
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
 		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
@@ -576,9 +584,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 		},
-		Env: []corev1.EnvVar{
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		},
+		Env: env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -613,15 +619,21 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
+	env := []corev1.EnvVar{
+		// Set queryserver logging to "info"
+		{Name: "LOGLEVEL", Value: "info"},
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
 	image := components.GetReference(components.ComponentQueryServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,
-		Env: []corev1.EnvVar{
-			// Set queryserver logging to "info"
-			{Name: "LOGLEVEL", Value: "info"},
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		},
+		Env:   env,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{

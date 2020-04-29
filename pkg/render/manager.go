@@ -152,9 +152,9 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, common.TigeraPrometheusNamespace)...)
 
 	objs = append(objs,
-		c.managerServiceAccount(),
-		c.managerClusterRole(),
-		c.managerClusterRoleBinding(),
+		managerServiceAccount(),
+		managerClusterRole(false),
+		managerClusterRoleBinding(),
 		c.managerPolicyImpactPreviewClusterRole(),
 		c.managerPolicyImpactPreviewClusterRoleBinding(),
 	)
@@ -268,21 +268,6 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			},
 		},
 		{
-			// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
-			Name: ManagerTLSSecretCertName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: ManagerTLSSecretName,
-					Items: []v1.KeyToPath{
-						{
-							Key:  "cert",
-							Path: "cert",
-						},
-					},
-				},
-			},
-		},
-		{
 			Name: KibanaPublicCertSecret,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
@@ -313,6 +298,25 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		},
 	}
 
+	if c.management {
+		v = append(v,
+			v1.Volume{
+				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
+				Name: ManagerTLSSecretCertName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: ManagerTLSSecretName,
+						Items: []v1.KeyToPath{
+							{
+								Key:  "cert",
+								Path: "cert",
+							},
+						},
+					},
+				},
+			},
+		)
+	}
 	if c.oidcConfig != nil {
 		defaultMode := int32(420)
 		v = append(v,
@@ -473,11 +477,12 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
-		},
 	}
-
+	if c.management {
+		apiServer.VolumeMounts = []corev1.VolumeMount{
+			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
+		}
+	}
 	return apiServer
 }
 
@@ -537,7 +542,7 @@ func voltronTunnelSecret() *v1.Secret {
 }
 
 // managerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-func (c *managerComponent) managerServiceAccount() *v1.ServiceAccount {
+func managerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
@@ -545,35 +550,44 @@ func (c *managerComponent) managerServiceAccount() *v1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+// This role can be used in mcm for impersonation purposes only.
+func managerClusterRole(impersonationOnly bool) *rbacv1.ClusterRole {
+	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ManagerClusterRole,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"authentication.k8s.io"},
-				Resources: []string{"tokenreviews"},
-				Verbs:     []string{"create"},
-			},
-			{
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
-			{
+		},
+	}
+
+	if !impersonationOnly {
+		cr.Rules = append(cr.Rules,
+			rbacv1.PolicyRule{
+
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch", "update"},
 			},
-		},
+		)
 	}
+
+	return cr
 }
 
 // managerClusterRoleBinding returns a clusterrolebinding that gives the tigera-manager serviceaccount
 // the permissions in the tigera-manager-role.
-func (c *managerComponent) managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},

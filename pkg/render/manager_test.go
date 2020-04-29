@@ -77,8 +77,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "", kind: ""},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -134,9 +132,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerOIDCConfig))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(render.ManagerOIDCJwksURI))
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(7))
-		Expect(d.Spec.Template.Spec.Volumes[5].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Volumes[5].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(6))
+		Expect(d.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.ManagerOIDCConfig))
+		Expect(d.Spec.Template.Spec.Volumes[4].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
@@ -151,7 +149,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := resources[expectedResourcesNumber-1].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(6))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})

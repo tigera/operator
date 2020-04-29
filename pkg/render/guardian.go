@@ -79,9 +79,9 @@ func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
 		// Add tigera-manager service account for impersonation
 		createNamespace(ManagerNamespace, c.openshift),
-		c.managerImpersonationServiceAccount(),
-		c.managerImpersonationClusterRole(),
-		c.managerImpersonationClusterRoleBinding(),
+		managerServiceAccount(),
+		managerClusterRole(true),
+		managerClusterRoleBinding(),
 	)
 
 	return objs, nil
@@ -279,54 +279,6 @@ func (c *GuardianComponent) container() []v1.Container {
 				PeriodSeconds:       5,
 			},
 			SecurityContext: securityContext(),
-		},
-	}
-}
-
-// This is a service account that is being impersonated when calls are made from the management cluster to do
-// subject access reviews in a managed cluster.
-func (c *GuardianComponent) managerImpersonationServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
-		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
-	}
-}
-
-// The manager sa is being impersonated when calls are made from the management cluster to do
-// subject access reviews in a managed cluster.
-func (c *GuardianComponent) managerImpersonationClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ManagerClusterRole,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"subjectaccessreviews"},
-				Verbs:     []string{"create"},
-			},
-		},
-	}
-}
-
-// The manager sa is being impersonated when calls are made from the management cluster to do
-// subject access reviews in a managed cluster.
-func (c *GuardianComponent) managerImpersonationClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ManagerClusterRole,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ManagerServiceAccount,
-				Namespace: ManagerNamespace,
-			},
 		},
 	}
 }

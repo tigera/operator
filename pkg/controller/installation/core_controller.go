@@ -328,9 +328,14 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.CalicoNetwork.HostPorts = &hp
 		}
 
-		if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
-			mm := operator.MultiInterfaceModeNone
-			instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
+		if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+			if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
+				mm := operator.MultiInterfaceModeNone
+				instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
+			}
+		} else {
+			// MultiInterfaceMode is only valid for EE
+			instance.Spec.CalicoNetwork.MultiInterfaceMode = nil
 		}
 	}
 

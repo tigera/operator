@@ -157,8 +157,8 @@ var (
 	
 	
 	ComponentTigeraNode = component{
-		Version: "v3.0.0-0.dev-79-gccc948e",
-		Digest:  "sha256:00901a322278c0a7abdd07bf3665e4779e9327d1103e0cdd9fe1066d104254ca",
+		Version: "v3.0.0-0.dev-80-g032b7f3",
+		Digest:  "sha256:6272729e8e1c4b625eca37e58bb8e1eb2a715388e133b38142553160bc357257",
 		Image:   "tigera/cnx-node",
 	}
 	

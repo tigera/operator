@@ -13,13 +13,13 @@ components:
     version: v3.0.0-0.dev-27-gd8468ea
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.0.0-0.dev-69-gb7d1f80
+    version: v3.0.0-0.dev-70-gae8763c
   typha:
     image: tigera/typha
     version: v3.0.0-0.dev-52-g8aa41da
   cnx-node:
     image: tigera/cnx-node
-    version: v3.0.0-0.dev-80-g032b7f3
+    version: v3.0.0-0.dev-82-gd804d79
   fluentd:
     image: tigera/fluentd
     version: v3.0.0-0.dev-12-g63e0f79

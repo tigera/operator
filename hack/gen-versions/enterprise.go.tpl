@@ -15,7 +15,7 @@
 package components
 
 var (
-{{ with index . "cnx-apiserver" }}
+{{- with index . "cnx-apiserver" }}
 	ComponentAPIServer = component{
 		Version: "{{ .Version }}",
 		Digest:  "{{ .Digest }}",

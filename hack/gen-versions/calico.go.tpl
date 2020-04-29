@@ -23,35 +23,36 @@ var (
 		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
-	{{ end }}
+	{{- end }}
 	{{ with index . "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version: "{{ .Version }}",
 		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
-	{{ end }}
+	{{- end }}
 	{{ with index . "calico/node" }}
 	ComponentCalicoNode = component{
 		Version: "{{ .Version }}",
 		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
-	{{ end }}
+	{{- end }}
 	{{ with .typha }}
 	ComponentCalicoTypha = component{
 		Version: "{{ .Version }}",
 		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
-	{{ end }}
+	{{- end }}
 	{{ with .flexvol }}
 	ComponentFlexVolume = component{
 		Version: "{{ .Version }}",
 		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
-	{{ end }}
+	{{- end }}
+
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator-init",

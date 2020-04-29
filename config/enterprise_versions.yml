@@ -1,36 +1,36 @@
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v2.7.0-0.dev-598-g5f43270b
+    version: v3.0.0-0.dev-138-g711599c3
   voltron:
     image: tigera/voltron
-    version: v2.7.0-0.dev-61-g73e2b02
+    version: v3.0.0-0.dev-8-g4197ee4
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v3.0.0-0.dev-29-g11260416
+    version: v3.0.0-0.dev-32-g771e07c7
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: v2.7.0-0.dev-74-g6ce4ce4
+    version: v3.0.0-0.dev-27-gd8468ea
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.0.0-0.dev-66-gb52ab60
+    version: v3.0.0-0.dev-69-gb7d1f80
   typha:
     image: tigera/typha
-    version: v3.0.0-0.dev-23-g664fa65
+    version: v3.0.0-0.dev-52-g8aa41da
   cnx-node:
     image: tigera/cnx-node
     version: v3.0.0-0.dev-80-g032b7f3
   fluentd:
     image: tigera/fluentd
-    version: v3.0.0-0.dev-1-ge3d709f
+    version: v3.0.0-0.dev-12-g63e0f79
   es-proxy:
     image: tigera/es-proxy
-    version: v2.7.0-0.dev-111-g3d1305c
+    version: v3.0.0-0.dev-29-gfe7b046
   eck-kibana:
     version: 7.3.2
   kibana:
     image: tigera/kibana
-    version: v2.7.3-0-g99fc114
+    version: v3.0.0-0.dev-0-gddc3967
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
@@ -41,33 +41,33 @@ components:
     version: 7.3.2
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v2.7.0-0.dev-63-g8591567
+    version: v3.0.0-0.dev-15-g466c351
   es-curator:
     image: tigera/es-curator
-    version: v2.8.0-0.dev-0-gd026b79
+    version: v3.0.0-0.dev-10-gf2e83fb
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v2.7.0-0.dev-63-g8591567
+    version: v3.0.0-0.dev-15-g466c351
   compliance-controller:
     image: tigera/compliance-controller
-    version: v2.7.0-0.dev-81-g41d5d65
+    version: v3.0.0-0.dev-23-gd7abd7d
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v2.7.0-0.dev-81-g41d5d65
+    version: v3.0.0-0.dev-23-gd7abd7d
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v2.7.0-0.dev-81-g41d5d65
+    version: v3.0.0-0.dev-23-gd7abd7d
   compliance-server:
     image: tigera/compliance-server
-    version: v3.0.0-0.dev-22-gf550e29
+    version: v3.0.0-0.dev-23-gd7abd7d
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v2.7.0-0.dev-81-g41d5d65
+    version: v3.0.0-0.dev-23-gd7abd7d
   # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
   # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
-    version: v2.7.0-0.dev-61-g73e2b02
+    version: v3.0.0-0.dev-8-g4197ee4
   tigera-cni:
     image: tigera/cni
-    version: v3.0.0-0.dev-39-g3f96541
+    version: v3.0.0-0.dev-53-gb3668d9

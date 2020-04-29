@@ -245,7 +245,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Labels: map[string]string{
 						"k8s-app": "calico-kube-controllers",
 					},
-					Annotations: kubeControllerAnnotations(c),
 				},
 				Spec: v1.PodSpec{
 					NodeSelector: map[string]string{
@@ -285,16 +284,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	return &d
-}
-
-func kubeControllerAnnotations(c *kubeControllersComponent) map[string]string {
-	var annotations = make(map[string]string)
-
-	if c.managerSecret != nil {
-		annotations[ManagerTLSHashAnnotation] = AnnotationHash(c.managerSecret)
-	}
-
-	return annotations
 }
 
 func kubeControllersVolumeMounts(managerSecret *v1.Secret) []v1.VolumeMount {

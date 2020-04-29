@@ -152,12 +152,12 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{render.ManagerTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
-				{render.ManagerTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -171,7 +171,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
-			var dpComplianceServer = resources[len(expectedResources) - 2].(*v1.Deployment)
+			var dpComplianceServer = resources[len(expectedResources) - 1].(*v1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))

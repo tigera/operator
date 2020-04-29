@@ -262,7 +262,7 @@ var _ = Describe("Node rendering tests", func() {
 		}
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
-		verifyProbes(ds, false)
+		verifyProbes(ds, false, false)
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
@@ -356,7 +356,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyProbes(ds, false)
+		verifyProbes(ds, false, true)
 	})
 
 	It("should render all resources when running on openshift", func() {
@@ -474,7 +474,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyProbes(ds, true)
+		verifyProbes(ds, true, false)
 	})
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
@@ -573,7 +573,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyProbes(ds, true)
+		verifyProbes(ds, true, true)
 	})
 
 	It("should render volumes and node volumemounts when bird templates are provided", func() {
@@ -994,7 +994,7 @@ var _ = Describe("Node rendering tests", func() {
 })
 
 // verifyProbes asserts the expected node liveness and readiness probe.
-func verifyProbes(ds *apps.DaemonSet, isOpenshift bool) {
+func verifyProbes(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
 	expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}}}
 	expectedLiveness := &v1.Probe{Handler: v1.Handler{
@@ -1004,9 +1004,15 @@ func verifyProbes(ds *apps.DaemonSet, isOpenshift bool) {
 			Port: intstr.FromInt(9099),
 		}}}
 
-	if isOpenshift {
+	switch {
+	case isOpenshift && isEnterprise:
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-bgp-metrics-ready"}
+		expectedLiveness.HTTPGet.Port = intstr.FromInt(9199)
+	case isOpenshift && !isEnterprise:
 		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready"}
 		expectedLiveness.HTTPGet.Port = intstr.FromInt(9199)
+	case !isOpenshift && isEnterprise:
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 	Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
 	Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))

@@ -955,7 +955,12 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 
-	// if not using calico networking, don't check bird status.
+	// want to check for BGP metrics server if this is enterprise
+	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
+	}
+
+	// if not using calico networking, don't check bird status (or bgp metrics server).
 	if c.netConfig.CNI != CNICalico {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
@@ -965,7 +970,12 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		// Additionally, since the node readiness probe doesn't yet support
 		// custom ports, we need to disable felix readiness for now.
 		livenessPort = intstr.FromInt(9199)
-		readinessCmd = []string{"/bin/calico-node", "-bird-ready"}
+
+		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+			readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-bgp-metrics-ready"}
+		} else {
+			readinessCmd = []string{"/bin/calico-node", "-bird-ready"}
+		}
 	}
 	lp := &v1.Probe{
 		Handler: v1.Handler{

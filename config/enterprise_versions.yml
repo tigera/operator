@@ -19,7 +19,7 @@ components:
     version: v3.0.0-0.dev-23-g664fa65
   cnx-node:
     image: tigera/cnx-node
-    version: v2.7.0-0.dev-300-ge5619d5
+    version: v3.0.0-0.dev-80-g032b7f3
   fluentd:
     image: tigera/fluentd
     version: v3.0.0-0.dev-1-ge3d709f

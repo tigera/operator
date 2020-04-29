@@ -16,12 +16,13 @@ package render
 
 import (
 	"fmt"
+	"strconv"
+	"time"
+
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"strconv"
-	"time"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,17 +34,21 @@ import (
 )
 
 const (
-	managerPort             = 9443
-	managerTargetPort       = 9443
-	ManagerNamespace        = "tigera-manager"
-	ManagerServiceDNS       = "tigera-manager.tigera-manager.svc"
-	ManagerServiceIP        = "localhost"
-	ManagerTLSSecretName    = "manager-tls"
-	ManagerSecretKeyName    = "key"
-	ManagerSecretCertName   = "cert"
-	ManagerOIDCConfig       = "tigera-manager-oidc-config"
-	ManagerOIDCWellknownURI = "/usr/share/nginx/html/.well-known"
-	ManagerOIDCJwksURI      = "/usr/share/nginx/html/discovery"
+	managerPort               = 9443
+	managerTargetPort         = 9443
+	ManagerNamespace          = "tigera-manager"
+	ManagerServiceDNS         = "tigera-manager.tigera-manager.svc"
+	ManagerServiceIP          = "localhost"
+	ManagerServiceAccount     = "tigera-manager"
+	ManagerClusterRole        = "tigera-manager-role"
+	ManagerClusterRoleBinding = "tigera-manager-binding"
+	ManagerTLSSecretName      = "manager-tls"
+	ManagerTLSSecretCertName  = "manager-tls-cert"
+	ManagerSecretKeyName      = "key"
+	ManagerSecretCertName     = "cert"
+	ManagerOIDCConfig         = "tigera-manager-oidc-config"
+	ManagerOIDCWellknownURI   = "/usr/share/nginx/html/.well-known"
+	ManagerOIDCJwksURI        = "/usr/share/nginx/html/discovery"
 
 	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation        = "hash.operator.tigera.io/tls-secret"
@@ -147,9 +152,9 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, common.TigeraPrometheusNamespace)...)
 
 	objs = append(objs,
-		c.managerServiceAccount(),
-		c.managerClusterRole(),
-		c.managerClusterRoleBinding(),
+		managerServiceAccount(),
+		managerClusterRole(false),
+		managerClusterRoleBinding(),
 		c.managerPolicyImpactPreviewClusterRole(),
 		c.managerPolicyImpactPreviewClusterRoleBinding(),
 	)
@@ -213,7 +218,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			NodeSelector: map[string]string{
 				"beta.kubernetes.io/os": "linux",
 			},
-			ServiceAccountName: "tigera-manager",
+			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
@@ -293,6 +298,25 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		},
 	}
 
+	if c.management {
+		v = append(v,
+			v1.Volume{
+				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
+				Name: ManagerTLSSecretCertName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: ManagerTLSSecretName,
+						Items: []v1.KeyToPath{
+							{
+								Key:  "cert",
+								Path: "cert",
+							},
+						},
+					},
+				},
+			},
+		)
+	}
 	if c.oidcConfig != nil {
 		defaultMode := int32(420)
 		v = append(v,
@@ -454,7 +478,11 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 	}
-
+	if c.management {
+		apiServer.VolumeMounts = []corev1.VolumeMount{
+			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
+		}
+	}
 	return apiServer
 }
 
@@ -514,55 +542,64 @@ func voltronTunnelSecret() *v1.Secret {
 }
 
 // managerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-func (c *managerComponent) managerServiceAccount() *v1.ServiceAccount {
+func managerServiceAccount() *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: ManagerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
 	}
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func (c *managerComponent) managerClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+// This role can be used in mcm for impersonation purposes only.
+func managerClusterRole(impersonationOnly bool) *rbacv1.ClusterRole {
+	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-manager-role",
+			Name: ManagerClusterRole,
 		},
 		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"authentication.k8s.io"},
-				Resources: []string{"tokenreviews"},
-				Verbs:     []string{"create"},
-			},
 			{
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
-			{
+		},
+	}
+
+	if !impersonationOnly {
+		cr.Rules = append(cr.Rules,
+			rbacv1.PolicyRule{
+
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch", "update"},
 			},
-		},
+		)
 	}
+
+	return cr
 }
 
 // managerClusterRoleBinding returns a clusterrolebinding that gives the tigera-manager serviceaccount
 // the permissions in the tigera-manager-role.
-func (c *managerComponent) managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tigera-manager-role",
+			Name:     ManagerClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-manager",
+				Name:      ManagerServiceAccount,
 				Namespace: ManagerNamespace,
 			},
 		},
@@ -627,7 +664,7 @@ func (c *managerComponent) managerPolicyImpactPreviewClusterRoleBinding() *rbacv
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-manager",
+				Name:      ManagerServiceAccount,
 				Namespace: ManagerNamespace,
 			},
 		},

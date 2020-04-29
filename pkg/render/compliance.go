@@ -675,10 +675,6 @@ func complianceAnnotations(c *complianceComponent) map[string]string {
 		ManagerTLSHashAnnotation:          AnnotationHash(c.managerSecret),
 	}
 
-	if c.managerSecret != nil {
-		annotations[ManagerTLSHashAnnotation] = AnnotationHash(c.managerSecret)
-	}
-
 	return annotations
 }
 

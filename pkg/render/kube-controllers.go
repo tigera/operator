@@ -290,10 +290,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 func kubeControllerAnnotations(c *kubeControllersComponent) map[string]string {
 	var annotations = make(map[string]string)
 
-	if c.managerSecret != nil {
-		annotations[ManagerTLSHashAnnotation] = AnnotationHash(c.managerSecret)
-	}
-
 	return annotations
 }
 

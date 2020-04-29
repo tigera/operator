@@ -46,7 +46,7 @@ var (
 	
 	ComponentComplianceServer = component{
 		Version: "v3.0.0-0.dev-22-gf550e29",
-		Digest:  "sha256:6c6297a9cc9983aee84516f5e068a431d3b8d42cd6caa7649f5362d0eb83c099",
+		Digest:  "sha256:b0d5a8debe212820bddb234c580cd72db2120a391b69da49569b3d273f49ea65",
 		Image:   "tigera/compliance-server",
 	}
 	
@@ -150,29 +150,29 @@ var (
 	
 	
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.0.0-0.dev-66-gb52ab60",
-		Digest:  "sha256:5423330661c2d482812e2de7c82bc0c841c26d819e26265863daceff66fe3e3e",
+		Version: "v3.0.0-0.dev-70-gae8763c",
+		Digest:  "sha256:56be38018ed124fd459a2f537ee0e921e87efcfcb140c0d1083591140d30a851",
 		Image:   "tigera/kube-controllers",
 	}
 	
 	
 	ComponentTigeraNode = component{
-		Version: "v3.0.0-0.dev-80-g032b7f3",
-		Digest:  "sha256:6272729e8e1c4b625eca37e58bb8e1eb2a715388e133b38142553160bc357257",
+		Version: "v3.0.0-0.dev-82-gd804d79",
+		Digest:  "sha256:7a758c4c0323b57d34b0d7c1388ebc3dff87f870eff3facc6da8f0b60c74b2ef",
 		Image:   "tigera/cnx-node",
 	}
 	
 	
 	ComponentTigeraTypha = component{
-		Version: "v3.0.0-0.dev-23-g664fa65",
-		Digest:  "sha256:596fa5fe7f80d1af871f705ff586e71761bbc0b12ae7522169a179ce24543271",
+		Version: "v3.0.0-0.dev-52-g8aa41da",
+		Digest:  "sha256:81fe44b7253f50dc7ede0475802898d0f953bf4a64619fd933b9dc10edab1d31",
 		Image:   "tigera/typha",
 	}
 	
 	
     ComponentTigeraCNI = component{
-        Version: "v3.0.0-0.dev-39-g3f96541",
-        Digest:  "sha256:b3cc46ace05218b55a07b9351fe206e1a4398ab227c36bdde6ca84a076100cb9",
+        Version: "v3.0.0-0.dev-53-gb3668d9",
+        Digest:  "sha256:717d24e4111ed42dd158ca9d622b43f4e80de3385b336cd254507166a9681694",
         Image:   "tigera/cni",
     }
     

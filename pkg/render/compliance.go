@@ -672,11 +672,6 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 func complianceAnnotations(c *complianceComponent) map[string]string {
 	var annotations = map[string]string{
 		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
-		ManagerTLSHashAnnotation:          AnnotationHash(c.managerSecret),
-	}
-
-	if c.managerSecret != nil {
-		annotations[ManagerTLSHashAnnotation] = AnnotationHash(c.managerSecret)
 	}
 
 	return annotations

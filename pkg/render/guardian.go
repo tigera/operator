@@ -77,6 +77,11 @@ func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.deployment(),
 		c.service(),
 		CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
+		// Add tigera-manager service account for impersonation
+		createNamespace(ManagerNamespace, c.openshift),
+		managerServiceAccount(),
+		managerClusterRole(true),
+		managerClusterRoleBinding(),
 	)
 
 	return objs, nil

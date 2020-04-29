@@ -16,7 +16,9 @@ package clusterconnection
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/controller/status"
 
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -25,7 +27,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -125,7 +127,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	// Fetch the managementClusterConnection.
 	mcc, err := GetClusterConnection(ctx, r.Client)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// If the resource is not found, we will not return an error. Instead, the watch on the resource will
 			// re-trigger the reconcile function when the situation changes.
 			if instl.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
@@ -141,8 +143,11 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	r.status.OnCRFound()
 
 	if instl.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		log.Info(fmt.Sprintf("Setting up management cluster connection, even though clusterType != %v",
+		err = errors.New(fmt.Sprintf("Cannot establish tunnel unless Installation.clusterManagementType = %v",
 			operatorv1.ClusterManagementTypeManaged))
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), err.Error())
+		return reconcile.Result{}, err
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
@@ -157,7 +162,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
 		r.status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
-		if !errors.IsNotFound(err) {
+		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}
 		return result, err

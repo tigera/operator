@@ -42,7 +42,6 @@ type Components map[string]*Component
 type Component struct {
 	Version  string `json:"version"`
 	Registry string `json:"registry"`
-	Digest   string `json:"digest"`
 	Image    string `json:"image"`
 }
 

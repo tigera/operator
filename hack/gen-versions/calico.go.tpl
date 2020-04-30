@@ -20,35 +20,30 @@ var (
 {{- with index . "calico/cni" }}
 	ComponentCalicoCNI = component{
 		Version: "{{ .Version }}",
-		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index . "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version: "{{ .Version }}",
-		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index . "calico/node" }}
 	ComponentCalicoNode = component{
 		Version: "{{ .Version }}",
-		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with .typha }}
 	ComponentCalicoTypha = component{
 		Version: "{{ .Version }}",
-		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with .flexvol }}
 	ComponentFlexVolume = component{
 		Version: "{{ .Version }}",
-		Digest:  "{{ .Digest }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}

@@ -4,7 +4,7 @@ components:
     version: v3.0.0-0.dev-138-g711599c3
   voltron:
     image: tigera/voltron
-    version: v3.0.0-0.dev-8-g4197ee4
+    version: v3.0.0-0.dev-9-ge9b5d1c
   cnx-apiserver:
     image: tigera/cnx-apiserver
     version: v3.0.0-0.dev-32-g771e07c7

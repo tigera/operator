@@ -16,7 +16,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -35,7 +34,6 @@ const (
 var (
 	templateDir    string
 	debug          bool
-	digests        bool
 	eeVersionsPath string
 	osVersionsPath string
 	gcrBearer      string
@@ -44,7 +42,6 @@ var (
 func main() {
 	flag.StringVar(&templateDir, "template-dir", "hack/gen-versions/", "path to directory containing templates files named calico.go.tpl and enterprise.go.tpl")
 	flag.BoolVar(&debug, "debug", false, "enable debug logging")
-	flag.BoolVar(&digests, "digests", true, "get digests")
 	flag.StringVar(&eeVersionsPath, "ee-versions", "", "path to calico versions file")
 	flag.StringVar(&osVersionsPath, "os-versions", "", "path to enterprise versions file")
 	flag.StringVar(&gcrBearer, "gcr-bearer", "", "output of 'gcloud auth print-access-token")
@@ -59,14 +56,6 @@ func main() {
 		log.Println("must only set one of either -os-versions or -ee-versions")
 		flag.PrintDefaults()
 		os.Exit(1)
-	}
-
-	if digests && gcrBearer == "" {
-		log.Print("no gcr bearer token passed. grabbing from current gcloud account...")
-		gcrBearer = getGcrBearer()
-		if gcrBearer == "" {
-			log.Fatalln("failed to get gcloud bearer token. Are you signed into gcloud cli?")
-		}
 	}
 
 	if osVersionsPath != "" {
@@ -88,12 +77,6 @@ func run(versionsPath, tpl, defaultRegistry string) error {
 	vz, err := GetComponents(versionsPath)
 	if err != nil {
 		return err
-	}
-
-	if digests {
-		if err := updateDigests(vz, defaultRegistry); err != nil {
-			return fmt.Errorf("failed to get digest for components: %v", err)
-		}
 	}
 
 	return render(tpl, vz)

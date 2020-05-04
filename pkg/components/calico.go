@@ -20,35 +20,30 @@ var (
 	
 	ComponentCalicoCNI = component{
 		Version: "v3.14.0-0.dev-24-g0cab7f2",
-		Digest:  "",
 		Image:   "calico/cni",
 	}
 	
 	
 	ComponentCalicoKubeControllers = component{
 		Version: "v3.14.0-0.dev-30-g947e802",
-		Digest:  "",
 		Image:   "calico/kube-controllers",
 	}
 	
 	
 	ComponentCalicoNode = component{
 		Version: "v3.14.0-0.dev-41-g28bcc6a",
-		Digest:  "",
 		Image:   "calico/node",
 	}
 	
 	
 	ComponentCalicoTypha = component{
 		Version: "v3.14.0-0.dev-22-g303330a",
-		Digest:  "",
 		Image:   "calico/typha",
 	}
 	
 	
 	ComponentFlexVolume = component{
 		Version: "v3.14.0-0.dev-0-g07caa12",
-		Digest:  "",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 	

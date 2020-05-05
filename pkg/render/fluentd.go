@@ -319,7 +319,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	isPrivileged := true
+	isPrivileged := false
 
 	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",

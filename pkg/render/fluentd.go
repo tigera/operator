@@ -45,17 +45,17 @@ const (
 	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
 	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
-	EksLogForwarderAwsId                     = "aws-id"
-	EksLogForwarderAwsKey                    = "aws-key"
-	eksLogForwarderName                      = "eks-log-forwarder"
-	SplunkFluentdTokenSecretName             = "logcollector-splunk-credentials"
-	SplunkFluentdSecretTokenKey              = "token"
-	SplunkFluentdCertificateSecretName       = "logcollector-splunk-public-certificate"
-	SplunkFluentdSecretCertificateKey        = "ca.pem"
-	SplunkFluentdSecretsVolName              = "splunk-certificates"
-	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
-	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
-
+	EksLogForwarderAwsId               = "aws-id"
+	EksLogForwarderAwsKey              = "aws-key"
+	eksLogForwarderName                = "eks-log-forwarder"
+	SplunkFluentdTokenSecretName       = "logcollector-splunk-credentials"
+	SplunkFluentdSecretTokenKey        = "token"
+	SplunkFluentdCertificateSecretName = "logcollector-splunk-public-certificate"
+	SplunkFluentdSecretCertificateKey  = "ca.pem"
+	SplunkFluentdSecretsVolName        = "splunk-certificates"
+	SplunkFluentdDefaultCertDir        = "/etc/ssl/splunk/"
+	SplunkFluentdDefaultCertPath       = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+	ProbeTimeoutSeconds                = 5
 )
 
 type FluentdFilters struct {
@@ -197,7 +197,7 @@ func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 			Namespace: LogCollectorNamespace,
 		},
 		Data: map[string][]byte{
-			SplunkFluentdSecretTokenKey:     c.splkCredential.Token,
+			SplunkFluentdSecretTokenKey: c.splkCredential.Token,
 		},
 	}
 
@@ -211,7 +211,7 @@ func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 				Namespace: LogCollectorNamespace,
 			},
 			Data: map[string][]byte{
-				SplunkFluentdSecretCertificateKey:     c.splkCredential.Certificate,
+				SplunkFluentdSecretCertificateKey: c.splkCredential.Certificate,
 			},
 		}
 		splunkSecrets = append(splunkSecrets, certificate)
@@ -314,8 +314,8 @@ func (c *fluentdComponent) container() corev1.Container {
 	if c.splkCredential != nil && len(c.splkCredential.Certificate) != 0 {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
-				Name:       SplunkFluentdSecretsVolName,
-				MountPath:  SplunkFluentdDefaultCertDir,
+				Name:      SplunkFluentdSecretsVolName,
+				MountPath: SplunkFluentdDefaultCertDir,
 			})
 	}
 
@@ -457,6 +457,7 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: []string{"sh", "-c", "/bin/liveness.sh"},
 			},
 		},
+		TimeoutSeconds: ProbeTimeoutSeconds,
 	}
 }
 
@@ -467,6 +468,7 @@ func (c *fluentdComponent) readiness() *corev1.Probe {
 				Command: []string{"sh", "-c", "/bin/readiness.sh"},
 			},
 		},
+		TimeoutSeconds: ProbeTimeoutSeconds,
 	}
 }
 

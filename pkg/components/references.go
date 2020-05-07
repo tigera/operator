@@ -22,7 +22,6 @@ type component struct {
 	// Image is the full image path and name for this component (e.g., tigera/cnx-node, calico/cni)
 	Image   string
 	Version string
-	Digest  string
 }
 
 // GetReference returns the fully qualified image to use, including registry and version.

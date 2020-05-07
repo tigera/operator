@@ -42,7 +42,6 @@ var log = logf.Log.WithName("cmd")
 // kubeconfig but should use the in-cluster service account
 var urlOnlyKubeconfig string
 var showVersion bool
-var showDigest bool
 
 func init() {
 	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",

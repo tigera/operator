@@ -545,7 +545,6 @@ func (m *statusManager) setDegraded(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentDegraded, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.degraded = true
 	m.set(conditions...)
 }
 

@@ -26,19 +26,6 @@ components:
   es-proxy:
     image: tigera/es-proxy
     version: v3.0.0-0.dev-29-gfe7b046
-  eck-kibana:
-    version: 7.3.2
-  kibana:
-    image: tigera/kibana
-    version: v3.0.0-0.dev-0-gddc3967
-  elasticsearch-operator:
-    registry: docker.elastic.co
-    image: eck/eck-operator
-    version: 1.0.1
-  elasticsearch:
-    registry: docker.elastic.co
-    image: elasticsearch/elasticsearch
-    version: 7.3.2
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
     version: v3.0.0-0.dev-15-g466c351
@@ -63,11 +50,24 @@ components:
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
     version: v3.0.0-0.dev-23-gd7abd7d
-  # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
-  # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
     version: v3.0.0-0.dev-8-g4197ee4
   tigera-cni:
     image: tigera/cni
     version: v3.0.0-0.dev-53-gb3668d9
+  kibana:
+    image: tigera/kibana
+    version: v3.0.0-0.dev-0-gddc3967
+  eck-kibana:
+    version: 7.3.2
+  # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
+  # to the docs & manifest tooling not to default to the tigera registry.
+  elasticsearch-operator:
+    registry: docker.elastic.co
+    image: eck/eck-operator
+    version: 1.0.1
+  elasticsearch:
+    registry: docker.elastic.co
+    image: elasticsearch/elasticsearch
+    version: 7.3.2

@@ -76,7 +76,7 @@ type SyslogStoreSpec struct {
 	// In general this is only needed if you notice long logs being truncated.
 	// Default: 1024
 	// +optional
-	PacketSize *int32 `json:"packetsize,omitempty"`
+	PacketSize *int32 `json:"packetSize,omitempty"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.

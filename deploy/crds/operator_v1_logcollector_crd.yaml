@@ -99,7 +99,7 @@ spec:
                     endpoint:
                       description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
                       type: string
-                    packetsize:
+                    packetSize:
                       description: 'PacketSize defines the maximum size of packets
                         to send to syslog. In general this is only needed if you notice
                         long logs being truncated. Default: 1024'

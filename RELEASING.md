@@ -6,7 +6,8 @@ Checkout the branch from which you want to release. For a major or minor release
 you will need to create a new `release-vX.Y` branch based on the target minor version.
 
 Make sure the appropriate versions have been updated in `config/ee_versions.yaml` or `config/os_versions.yaml`
-and then `make gen-versions` has been ran and the resulting updates have been committed.
+and then `make gen-versions` has been ran and the resulting updates have been committed. When updating versions
+for enterprise, if necessary also update the `TigeraRegistry` field in `pkg/components/images.go`.
 
 Make sure the branch is in a good state, e.g. Update any pins in go.mod, create PR, ensure tests pass and merge.
 

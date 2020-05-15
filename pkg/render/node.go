@@ -274,13 +274,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{common.NodeDaemonSetName},
-			},
 		},
 	}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
@@ -308,6 +301,15 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
+	}
+	if c.provider != operator.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{common.NodeDaemonSetName},
+		})
 	}
 	return role
 }

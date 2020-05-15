@@ -203,28 +203,33 @@ func (c *complianceComponent) complianceControllerServiceAccount() *corev1.Servi
 }
 
 func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"batch"},
+			Resources: []string{"jobs"},
+			Verbs:     []string{"create", "list", "get", "delete"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"podtemplates"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	if !c.openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ComplianceControllerName},
+		})
+	}
+
 	return &rbacv1.Role{
 		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: ComplianceNamespace},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"batch"},
-				Resources: []string{"jobs"},
-				Verbs:     []string{"create", "list", "get", "delete"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"podtemplates"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{ComplianceControllerName},
-			},
-		},
+		Rules:      rules,
 	}
 }
 
@@ -421,23 +426,27 @@ func (c *complianceComponent) complianceReporterServiceAccount() *corev1.Service
 }
 
 func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreporttypes", "globalreports"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	if !c.openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"compliance-reporter"},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalreporttypes", "globalreports"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"compliance-reporter"},
-			},
-		},
+		Rules:      rules,
 	}
 }
 
@@ -638,6 +647,17 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 			Verbs:     []string{"create"},
 		})
 	}
+
+	if !c.openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ComplianceServerName},
+		})
+	}
+
 	return clusterRole
 }
 
@@ -922,35 +942,38 @@ func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.Serv
 }
 
 func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
+			Resources: []string{"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
+				"endpoints", "services"},
+			Verbs: []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalnetworkpolicies", "tier.globalnetworkpolicies",
+				"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
+				"networkpolicies", "tier.networkpolicies",
+				"stagednetworkpolicies", "tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"tiers", "hostendpoints",
+				"globalnetworksets", "networksets"},
+			Verbs: []string{"get", "list"},
+		},
+	}
+
+	if !c.openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ComplianceSnapshotterName},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
-				Resources: []string{"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
-					"endpoints", "services"},
-				Verbs: []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalnetworkpolicies", "tier.globalnetworkpolicies",
-					"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
-					"networkpolicies", "tier.networkpolicies",
-					"stagednetworkpolicies", "tier.stagednetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"tiers", "hostendpoints",
-					"globalnetworksets", "networksets"},
-				Verbs: []string{"get", "list"},
-			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{ComplianceSnapshotterName},
-			},
-		},
+		Rules:      rules,
 	}
 }
 
@@ -1104,28 +1127,31 @@ func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.Serv
 }
 
 func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	if !c.openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"compliance-benchmarker"},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods"},
-				Verbs:     []string{"list"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"nodes"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"compliance-benchmarker"},
-			},
-		},
+		Rules:      rules,
 	}
 }
 

@@ -162,7 +162,7 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.installation.Spec.ClusterManagementType),
+		managerClusterRole(c.installation.Spec.ClusterManagementType, c.openshift),
 		managerClusterRoleBinding(),
 		c.managerPolicyImpactPreviewClusterRole(),
 		c.managerPolicyImpactPreviewClusterRoleBinding(),
@@ -565,7 +565,7 @@ func managerServiceAccount() *v1.ServiceAccount {
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 // This role can also be used in mcm for impersonation purposes only.
-func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.ClusterRole {
+func managerClusterRole(clusterType operator.ClusterManagementType, openshift bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -576,13 +576,6 @@ func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.Clus
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
-			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-manager"},
 			},
 		},
 	}
@@ -607,6 +600,19 @@ func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.Clus
 			Verbs:     []string{"create"},
 		})
 	}
+
+	if !openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		cr.Rules = append(cr.Rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"tigera-manager"},
+			},
+		)
+	}
+
 	return cr
 }
 

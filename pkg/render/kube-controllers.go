@@ -126,13 +126,6 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"kubecontrollersconfigurations"},
 				Verbs:     []string{"get", "create", "update", "watch"},
 			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"calico-kube-controllers"},
-			},
 		},
 	}
 
@@ -191,6 +184,17 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			})
 		}
 	}
+
+	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"calico-kube-controllers"},
+		})
+	}
+
 	return role
 }
 

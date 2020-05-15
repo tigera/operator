@@ -27,6 +27,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -101,6 +102,10 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	if c.cr.Spec.KubernetesProvider == operator.ProviderDockerEE {
 		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
+	}
+
+	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+		objsToCreate = append(objsToCreate, c.nodePodSecurityPolicy())
 	}
 
 	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
@@ -306,6 +311,15 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
+	}
+	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{common.NodeDaemonSetName},
+		})
 	}
 	return role
 }
@@ -622,6 +636,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 // cniContainer creates the node's init container that installs CNI.
 func (c *nodeComponent) cniContainer() v1.Container {
+	t := true
 	// Determine environment to pass to the CNI init container.
 	cniEnv := c.cniEnvvars()
 	cniVolumeMounts := []v1.VolumeMount{
@@ -640,12 +655,16 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &t,
+		},
 	}
 }
 
 // flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
 func (c *nodeComponent) flexVolumeContainer() v1.Container {
+	t := true
 	flexVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
@@ -654,6 +673,9 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		Name:         "flexvol-driver",
 		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		VolumeMounts: flexVolumeMounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &t,
+		},
 	}
 }
 
@@ -1077,6 +1099,19 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			},
 		},
 	}
+}
+
+func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	trueBool := true
+	ptrBoolTrue := &trueBool
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
+	psp.Spec.Privileged = true
+	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.HostNetwork = true
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

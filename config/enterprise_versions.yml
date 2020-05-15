@@ -27,10 +27,10 @@ components:
     image: tigera/es-proxy
     version: v3.0.0-0.dev-29-gfe7b046
   eck-kibana:
-    version: 7.3.2
+    version: 7.6.2
   kibana:
-    image: tigera/kibana
-    version: v3.0.0-0.dev-0-gddc3967
+    image: kibana/kibana
+    version: 7.6.2
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
@@ -38,7 +38,7 @@ components:
   elasticsearch:
     registry: docker.elastic.co
     image: elasticsearch/elasticsearch
-    version: 7.3.2
+    version: 7.6.2
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
     version: v3.0.0-0.dev-15-g466c351

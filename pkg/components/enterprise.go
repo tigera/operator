@@ -46,8 +46,8 @@ var (
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.3.2",
-		Image:   "tigera/kibana",
+		Version: "7.6.2",
+		Image:   "kibana/kibana",
 	}
 
 	ComponentElasticTseeInstaller = component{
@@ -56,7 +56,7 @@ var (
 	}
 
 	ComponentElasticsearch = component{
-		Version: "7.3.2",
+		Version: "7.6.2",
 		Image:   "elasticsearch/elasticsearch",
 	}
 
@@ -91,8 +91,8 @@ var (
 	}
 
 	ComponentKibana = component{
-		Version: "v3.0.0-0.dev-0-gddc3967",
-		Image:   "tigera/kibana",
+		Version: "7.6.2",
+		Image:   "kibana/kibana",
 	}
 
 	ComponentManager = component{
@@ -125,8 +125,8 @@ var (
 		Image:   "tigera/typha",
 	}
 
-    ComponentTigeraCNI = component{
+	ComponentTigeraCNI = component{
 		Version: "v3.0.0-0.dev-53-gb3668d9",
 		Image:   "tigera/cni",
-    }
+	}
 )

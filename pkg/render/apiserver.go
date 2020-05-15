@@ -21,6 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -138,6 +139,10 @@ func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.webhookReaderClusterRole(),
 		c.webhookReaderClusterRoleBinding(),
 	)
+
+	if !c.openshift {
+		objs = append(objs, c.apiServerPodSecurityPolicy())
+	}
 
 	return objs, nil
 }
@@ -278,63 +283,74 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 // apiServiceAccountClusterRole creates a clusterrole that gives permissions to access backing CRDs and
 // k8s networkpolicies.
 func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{
+				"extensions",
+				"networking.k8s.io",
+				"",
+			},
+			Resources: []string{
+				"networkpolicies",
+				"nodes",
+				"namespaces",
+				"pods",
+				"serviceaccounts",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{
+				"globalnetworkpolicies",
+				"networkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"stagednetworkpolicies",
+				"stagedglobalnetworkpolicies",
+				"tiers",
+				"clusterinformations",
+				"hostendpoints",
+				"licensekeys",
+				"globalnetworksets",
+				"networksets",
+				"globalalerts",
+				"globalalerttemplates",
+				"globalthreatfeeds",
+				"globalreporttypes",
+				"globalreports",
+				"bgpconfigurations",
+				"bgppeers",
+				"felixconfigurations",
+				"kubecontrollersconfigurations",
+				"ippools",
+				"ipamblocks",
+				"blockaffinities",
+				"remoteclusterconfigurations",
+				"managedclusters",
+			},
+			Verbs: []string{"*"},
+		},
+	}
+	if !c.openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"tigera-apiserver"},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-crds",
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{
-					"extensions",
-					"networking.k8s.io",
-					"",
-				},
-				Resources: []string{
-					"networkpolicies",
-					"nodes",
-					"namespaces",
-					"pods",
-					"serviceaccounts",
-				},
-				Verbs: []string{
-					"get",
-					"list",
-					"watch",
-				},
-			},
-			{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"globalnetworkpolicies",
-					"networkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
-					"stagedglobalnetworkpolicies",
-					"tiers",
-					"clusterinformations",
-					"hostendpoints",
-					"licensekeys",
-					"globalnetworksets",
-					"networksets",
-					"globalalerts",
-					"globalalerttemplates",
-					"globalthreatfeeds",
-					"globalreporttypes",
-					"globalreports",
-					"bgpconfigurations",
-					"bgppeers",
-					"felixconfigurations",
-					"kubecontrollersconfigurations",
-					"ippools",
-					"ipamblocks",
-					"blockaffinities",
-					"remoteclusterconfigurations",
-					"managedclusters",
-				},
-				Verbs: []string{"*"},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -594,8 +610,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	isPrivileged := false
 	//On OpenShift apiserver needs privileged access to write audit logs to host path volume
+	isPrivileged := false
 	if c.openshift {
 		isPrivileged = true
 	}
@@ -1039,4 +1055,16 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 		Rules: rules,
 	}
+}
+
+func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	trueBool := true
+	ptrBoolTrue := &trueBool
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("tigera-apiserver")
+	psp.Spec.Privileged = true
+	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
 }

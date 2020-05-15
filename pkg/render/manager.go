@@ -28,6 +28,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -174,6 +175,9 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.openshift {
 		objs = append(objs, c.securityContextConstraints())
+	} else {
+		// If we're not running openshift, we need to add pod security policies.
+		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
@@ -573,6 +577,13 @@ func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.Clus
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"tigera-manager"},
+			},
 		},
 	}
 
@@ -716,4 +727,68 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 	}
 
 	return objs
+}
+
+func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	falseBool := false
+	ptrBoolFalse := &falseBool
+	return &policyv1beta1.PodSecurityPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-manager",
+			Namespace: ManagerNamespace,
+			Annotations: map[string]string{
+				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
+			},
+		},
+		Spec: policyv1beta1.PodSecurityPolicySpec{
+			Privileged:               false,
+			AllowPrivilegeEscalation: ptrBoolFalse,
+			RequiredDropCapabilities: []v1.Capability{
+				v1.Capability("ALL"),
+			},
+			Volumes: []policyv1beta1.FSType{
+				policyv1beta1.ConfigMap,
+				policyv1beta1.EmptyDir,
+				policyv1beta1.Projected,
+				policyv1beta1.Secret,
+				policyv1beta1.DownwardAPI,
+				policyv1beta1.PersistentVolumeClaim,
+			},
+			HostNetwork: false,
+			HostPorts: []policyv1beta1.HostPortRange{
+				policyv1beta1.HostPortRange{
+					Min: int32(0),
+					Max: int32(65535),
+				},
+			},
+			HostIPC: false,
+			HostPID: false,
+			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
+				Rule: policyv1beta1.RunAsUserStrategyMustRunAsNonRoot,
+			},
+			SELinux: policyv1beta1.SELinuxStrategyOptions{
+				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
+			},
+			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
+				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
+				Ranges: []policyv1beta1.IDRange{
+					{
+						Min: int64(1),
+						Max: int64(65535),
+					},
+				},
+			},
+			FSGroup: policyv1beta1.FSGroupStrategyOptions{
+				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
+				Ranges: []policyv1beta1.IDRange{
+					{
+						Min: int64(1),
+						Max: int64(65535),
+					},
+				},
+			},
+			ReadOnlyRootFilesystem: false,
+		},
+	}
 }

@@ -73,7 +73,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
@@ -106,6 +106,7 @@ var _ = Describe("Node rendering tests", func() {
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]
 }`))
+		Expect(GetResource(resources, "calico-node", "", "policy", "v1beta1", "PodSecurityPolicy")).ToNot(BeNil())
 		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -276,13 +277,14 @@ var _ = Describe("Node rendering tests", func() {
 
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(7))
 
 		// Should render the correct resources.
 		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
 		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(GetResource(resources, "calico-node", "", "policy", "v1beta1", "PodSecurityPolicy")).ToNot(BeNil())
 		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
 		Expect(GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service")).ToNot(BeNil())
 
@@ -636,7 +638,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
-			Expect(len(resources)).To(Equal(5))
+			Expect(len(resources)).To(Equal(6))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
@@ -651,7 +653,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
-			Expect(len(resources)).To(Equal(5))
+			Expect(len(resources)).To(Equal(6))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
@@ -666,7 +668,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
-			Expect(len(resources)).To(Equal(5))
+			Expect(len(resources)).To(Equal(6))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
@@ -715,7 +717,7 @@ var _ = Describe("Node rendering tests", func() {
 			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
 			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
-			Expect(len(resources)).To(Equal(5))
+			Expect(len(resources)).To(Equal(6))
 
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
@@ -842,7 +844,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.NodeMetricsPort = nil
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(7))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -862,7 +864,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(7))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -886,7 +888,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.FlexVolumePath = "None"
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -900,7 +902,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -916,7 +918,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.CalicoNetwork.HostPorts = &hpd
 		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")

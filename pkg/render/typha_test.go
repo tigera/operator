@@ -53,7 +53,7 @@ var _ = Describe("Typha rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
 		component := render.Typha(installation, provider, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(7))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -70,6 +70,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
+			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		i := 0
@@ -91,7 +92,7 @@ var _ = Describe("Typha rendering tests", func() {
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
 		component := render.Typha(installation, provider, typhaNodeTLS, nil, true)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(7))
 
 		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
@@ -116,7 +117,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 		component := render.Typha(installation, provider, typhaNodeTLS, aci, true)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(7))
 
 		deploymentResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())

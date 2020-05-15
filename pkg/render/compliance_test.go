@@ -75,6 +75,11 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -99,6 +104,12 @@ var _ = Describe("compliance rendering tests", func() {
 					APIGroups: []string{"authorization.k8s.io"},
 					Resources: []string{"subjectaccessreviews"},
 					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"compliance-server"},
 				},
 			}))
 		})
@@ -157,6 +168,11 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -170,7 +186,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
-			var dpComplianceServer = resources[len(expectedResources)-1].(*v1.Deployment)
+			var dpComplianceServer = resources[len(expectedResources)-6].(*v1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
@@ -204,6 +220,12 @@ var _ = Describe("compliance rendering tests", func() {
 					APIGroups: []string{"projectcalico.org"},
 					Resources: []string{"authenticationreviews"},
 					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"compliance-server"},
 				},
 			}))
 		})
@@ -256,6 +278,11 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))

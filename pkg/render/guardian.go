@@ -80,7 +80,7 @@ func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		// Add tigera-manager service account for impersonation
 		createNamespace(ManagerNamespace, c.openshift),
 		managerServiceAccount(),
-		managerClusterRole(false, true),
+		managerClusterRole(false, true, c.openshift),
 		managerClusterRoleBinding(),
 	)
 

@@ -57,14 +57,20 @@ type typhaComponent struct {
 }
 
 func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	return []runtime.Object{
+	objs := []runtime.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
 		c.typhaDeployment(),
 		c.typhaService(),
 		c.typhaPodDisruptionBudget(),
-	}, nil
+	}
+
+	if c.provider != operator.ProviderOpenShift {
+		objs = append(objs, c.typhaPodSecurityPolicy())
+	}
+
+	return objs, nil
 }
 
 func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1beta1.PodDisruptionBudget {
@@ -265,6 +271,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
+	}
+	if c.provider != operator.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{common.TyphaDeploymentName},
+		})
 	}
 	return role
 }
@@ -519,4 +533,11 @@ func (c *typhaComponent) typhaService() *v1.Service {
 			},
 		},
 	}
+}
+
+func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
+	psp.Spec.HostNetwork = true
+	return psp
 }

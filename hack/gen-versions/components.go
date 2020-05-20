@@ -32,7 +32,7 @@ var defaultImages = map[string]string{
 	"flannel":                 "coreos/flannel",
 	"flexvol":                 "calico/pod2daemon-flexvol",
 	"typha":                   "calico/typha",
-	"eck-kibana":              "kibana/kibana",
+	"eck-kibana":              "tigera/kibana",
 	"guardian":                "tigera/guardian",
 	"tigera-cni":              "tigera/cni",
 }

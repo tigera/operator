@@ -19,6 +19,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 
 	github.com/tigera/api v0.0.0-20200311151854-a6d8502444cd
+	google.golang.org/grpc v1.22.0
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.2

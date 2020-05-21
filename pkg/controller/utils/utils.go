@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -230,4 +231,16 @@ func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*c
 	}
 
 	return secrets, nil
+}
+
+// GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
+func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1beta1.AmazonCloudIntegration, error) {
+	// Fetch the Installation instance. We only support a single instance named "tsee-secure".
+	instance := &operatorv1beta1.AmazonCloudIntegration{}
+	err := client.Get(ctx, DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
 }

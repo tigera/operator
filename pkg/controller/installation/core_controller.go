@@ -82,7 +82,7 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (
 		status:               status.New(mgr.GetClient(), "calico"),
 		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
 		namespaceMigration:   nm,
-		requiresTSEE:         tsee,
+		tseeAPIAvailable:     tsee,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()
@@ -186,7 +186,7 @@ type ReconcileInstallation struct {
 	status               status.StatusManager
 	typhaAutoscaler      *typhaAutoscaler
 	namespaceMigration   *migration.CoreNamespaceMigration
-	requiresTSEE         bool
+	tseeAPIAvailable     bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
@@ -424,7 +424,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
 	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
-	if !r.requiresTSEE && instance.Spec.Variant == operator.TigeraSecureEnterprise {
+	if !r.tseeAPIAvailable && instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
 		b, err := utils.RequiresTigeraSecure(r.config)

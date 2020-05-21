@@ -47,7 +47,7 @@ var (
 
 	ComponentEckKibana = component{
 		Version: "7.6.2",
-		Image:   "kibana/kibana",
+		Image:   "tigera/kibana",
 	}
 
 	ComponentElasticTseeInstaller = component{
@@ -91,8 +91,8 @@ var (
 	}
 
 	ComponentKibana = component{
-		Version: "7.6.2",
-		Image:   "kibana/kibana",
+		Version: "v3.1.0.calient-0.dev-3-g3c84c12",
+		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{

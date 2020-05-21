@@ -1,14 +1,31 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package amazoncloudintegration
 
 import (
 	"context"
+	"fmt"
+	"time"
+
+	"google.golang.org/grpc/status"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,20 +38,26 @@ import (
 
 var log = logf.Log.WithName("controller_amazoncloudintegration")
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 // Add creates a new AmazonCloudIntegration Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
+	if !tsee {
+		// No need to start this controller.
+		return nil
+	}
+	return add(mgr, newReconciler(mgr, provider))
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileAmazonCloudIntegration{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	r := &ReconcileAmazonCloudIntegration{
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		provider: provider,
+		status:   status.New(mgr.GetClient(), "amazoncloudintegration"),
+	}
+	r.status.Run()
+	return r
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -42,25 +65,22 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("amazoncloudintegration-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create amazoncloudintegration-controller: %v", err)
 	}
 
 	// Watch for changes to primary resource AmazonCloudIntegration
 	err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
+		return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner AmazonCloudIntegration
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &operatorv1.AmazonCloudIntegration{},
-	})
-	if err != nil {
-		return err
+	if err = utils.AddNetworkWatch(c); err != nil {
+		log.V(5).Info("Failed to create network watch", "err", err)
+		return fmt.Errorf("amazoncloudintegration-controller failed to watch Tigera network resource: %v", err)
 	}
 
+	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
 
@@ -71,14 +91,31 @@ var _ reconcile.Reconciler = &ReconcileAmazonCloudIntegration{}
 type ReconcileAmazonCloudIntegration struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client   client.Client
+	scheme   *runtime.Scheme
+	provider operatorv1.Provider
+	status   status.StatusManager
+}
+
+// GetAmazonCloudIntegration returns the default installation instance with defaults populated.
+func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
+	// Fetch the AmazonCloudIntegration instance. We only support a single instance named "tigera-secure".
+	instance := &operatorv1.AmazonCloudIntegration{}
+	err := client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	err = validateCustomResource(instance)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
 }
 
 // Reconcile reads that state of the cluster for a AmazonCloudIntegration object and makes changes based on the state read
 // and what is in the AmazonCloudIntegration.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -86,68 +123,84 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling AmazonCloudIntegration")
 
+	ctx := context.Background()
+
 	// Fetch the AmazonCloudIntegration instance
-	instance := &operatorv1.AmazonCloudIntegration{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	instance, err := GetAmazonCloudIntegration(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			reqLogger.V(5).Info("AmazonCloudIntegration CR not found", "err", err)
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
+		reqLogger.V(5).Info("failed to get AmazonCloudIntegration CR", "err", err)
+		r.status.SetDegraded("Error querying AmazonCloudIntegration", err.Error())
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
-	// Define a new Pod object
-	pod := newPodForCR(instance)
+	r.status.OnCRFound()
+	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Set AmazonCloudIntegration instance as the owner and controller
 	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-		err = r.client.Create(context.TODO(), pod)
-		if err != nil {
+	// Query for the installation object.
+	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, err
 		}
-
-		// Pod created successfully - don't requeue
+		r.status.SetDegraded("Error querying installation", err.Error())
+		return reconcile.Result{}, err
+	}
+	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
+		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
-	} else if err != nil {
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	if err != nil {
+		log.Error(err, "Error retrieving Pull secrets")
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	// Pod already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
-	return reconcile.Result{}, nil
-}
+	// Create a component handler to manage the rendered component.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-// newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *operatorv1.AmazonCloudIntegration) *corev1.Pod {
-	labels := map[string]string{
-		"app": cr.Name,
+	// Render the desired objects from the CRD and create or update them.
+	reqLogger.V(3).Info("rendering components")
+	component, err := render.AmazonCloudIntegration(instance, network, pullSecrets)
+	if err != nil {
+		log.Error(err, "Error rendering AmazonCloudIntegration")
+		r.status.SetDegraded("Error rendering AmazonCloudIntegration", err.Error())
+		return reconcile.Result{}, err
 	}
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
+
+	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
 	}
+
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+
+	if !r.status.IsAvailable() {
+		// Schedule a kick to check again in the near future. Hopefully by then
+		// things will be available.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Everything is available - update the CRD status.
+	instance.Status.State = operatorv1.AmazonCloudIntegrationStatusReady
+	if err = r.client.Status().Update(ctx, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
 }

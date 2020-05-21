@@ -1,0 +1,5 @@
+apiVersion: operator.tigera.io/v1beta1
+kind: AmazonCloudIntegration
+metadata:
+  name: tigera-secure
+spec: {}

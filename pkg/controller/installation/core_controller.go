@@ -26,6 +26,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -83,7 +84,7 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (
 		status:               status.New(mgr.GetClient(), "calico"),
 		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
 		namespaceMigration:   nm,
-		requiresTSEE:         tsee,
+		enterpriseCRDsExist:  tsee,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()
@@ -128,6 +129,15 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	cm := render.BirdTemplatesConfigMapName
 	if err = utils.AddConfigMapWatch(c, cm, render.OperatorNamespace()); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %v", cm, err)
+	}
+
+	// Only watch the AmazonCloudIntegration if the tsee API is available
+	if r.enterpriseCRDsExist {
+		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
+			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	for _, t := range secondaryResources() {
@@ -187,7 +197,7 @@ type ReconcileInstallation struct {
 	status               status.StatusManager
 	typhaAutoscaler      *typhaAutoscaler
 	namespaceMigration   *migration.CoreNamespaceMigration
-	requiresTSEE         bool
+	enterpriseCRDsExist  bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
@@ -445,7 +455,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
 	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
-	if !r.requiresTSEE && instance.Spec.Variant == operator.TigeraSecureEnterprise {
+	if !r.enterpriseCRDsExist && instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
 		b, err := utils.RequiresTigeraSecure(r.config)
@@ -524,6 +534,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	var aci *operatorv1beta1.AmazonCloudIntegration
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
+		if apierrors.IsNotFound(err) {
+			aci = nil
+		} else if err != nil {
+			log.Error(err, "Error reading AmazonCloudIntegration")
+			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -537,6 +559,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
+		aci,
 		needNsMigration,
 	)
 	if err != nil {

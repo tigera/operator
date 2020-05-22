@@ -129,6 +129,15 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %v", cm, err)
 	}
 
+	// Only watch the AmazonCloudIntegration if the tsee API is available
+	if r.tseeAPIAvailable {
+		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
+			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
+		}
+	}
+
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -503,6 +512,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	var aci *operator.AmazonCloudIntegration
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
+		if apierrors.IsNotFound(err) {
+			aci = nil
+		} else if err != nil {
+			log.Error(err, "Error reading AmazonCloudIntegration")
+			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -516,6 +537,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,
+		aci,
 		needNsMigration,
 	)
 	if err != nil {

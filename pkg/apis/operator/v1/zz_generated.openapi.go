@@ -170,7 +170,72 @@ func schema_pkg_apis_operator_v1_AmazonCloudIntegrationSpec(ref common.Reference
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "AmazonCloudIntegrationSpec defines the desired state of AmazonCloudIntegration",
-				Properties:  map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"defaultPodMetadataAccess": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DefaultPodMetadataAccess defines what the default behavior will be for accessing metadata from a pod. Default: Denied",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"nodeSecurityGroupIds": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"podSecurityGroupId": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"vpcs": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"sqsUrl": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"awsRegion": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"enforcedSecurityGroupId": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"trustEnforcedSecurityGroupId": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+				Required: []string{"trustEnforcedSecurityGroupId"},
 			},
 		},
 		Dependencies: []string{},
@@ -182,7 +247,15 @@ func schema_pkg_apis_operator_v1_AmazonCloudIntegrationStatus(ref common.Referen
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration",
-				Properties:  map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State provides user-readable status.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
 			},
 		},
 		Dependencies: []string{},

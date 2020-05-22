@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	CloudIntegrationStatusReady = "Ready"
+	AmazonCloudIntegrationStatusReady = "Ready"
 )
 
 // MetadataAccessAllowedType
@@ -38,7 +38,7 @@ type AmazonCloudIntegrationSpec struct {
 	// Default: Denied
 	// +optional
 	// +kubebuilder:validation:Enum=Allowed,Denied
-	DefaultPodMetadataAccess string `json:defaultPodMetadataAccess,omitempty"`
+	DefaultPodMetadataAccess string `json:"defaultPodMetadataAccess,omitempty"`
 
 	NodeSecurityGroupIds         []string `json:"nodeSecurityGroupIds,omitempty"`
 	PodSecurityGroupId           string   `json:"podSecurityGroupId,omitempty"`
@@ -48,6 +48,10 @@ type AmazonCloudIntegrationSpec struct {
 	EnforcedSecurityGroupId      string   `json:"enforcedSecurityGroupId,omitempty"`
 	TrustEnforcedSecurityGroupId string   `json:"trustEnforcedSecurityGroupId,omitemtpy"`
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
+// +genclient:nonNamespaced
 
 // AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration
 // +k8s:openapi-gen=true

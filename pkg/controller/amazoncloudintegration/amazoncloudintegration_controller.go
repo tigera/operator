@@ -19,21 +19,23 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/grpc/status"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
+	"github.com/tigera/operator/pkg/render"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_amazoncloudintegration")
@@ -49,7 +51,7 @@ func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
 	r := &ReconcileAmazonCloudIntegration{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
@@ -80,6 +82,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch Tigera network resource: %v", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, render.AmazonCloudIntegrationCredentialName, render.OperatorNamespace()); err != nil {
+		log.V(5).Info("amazoncloudintegration-controller failed to watch Secret", "err", err, "resource", render.AmazonCloudIntegrationCredentialName)
+		return fmt.Errorf("amazoncloudintegration-controller failed to watch the Secret resource(%s): %v", render.AmazonCloudIntegrationCredentialName, err)
+	}
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -97,23 +104,6 @@ type ReconcileAmazonCloudIntegration struct {
 	status   status.StatusManager
 }
 
-// GetAmazonCloudIntegration returns the default installation instance with defaults populated.
-func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
-	// Fetch the AmazonCloudIntegration instance. We only support a single instance named "tigera-secure".
-	instance := &operatorv1.AmazonCloudIntegration{}
-	err := client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	err = validateCustomResource(instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // Reconcile reads that state of the cluster for a AmazonCloudIntegration object and makes changes based on the state read
 // and what is in the AmazonCloudIntegration.Spec
 // Note:
@@ -126,7 +116,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	ctx := context.Background()
 
 	// Fetch the AmazonCloudIntegration instance
-	instance, err := GetAmazonCloudIntegration(ctx, r.client)
+	instance, err := getAmazonCloudIntegration(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -143,11 +133,6 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
-
-	// Set AmazonCloudIntegration instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
-		return reconcile.Result{}, err
-	}
 
 	// Query for the installation object.
 	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
@@ -171,12 +156,19 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	awsCredential, err := getAmazonCredential(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Failed to read Amazon credential secret")
+		r.status.SetDegraded("Failed to read Amazon credential secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.AmazonCloudIntegration(instance, network, pullSecrets)
+	component, err := render.AmazonCloudIntegration(instance, network, awsCredential, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
 		log.Error(err, "Error rendering AmazonCloudIntegration")
 		r.status.SetDegraded("Error rendering AmazonCloudIntegration", err.Error())
@@ -203,4 +195,31 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func getAmazonCredential(client client.Client) (*render.AmazonCredential, error) {
+	secret := &corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{
+		Name:      render.AmazonCloudIntegrationCredentialName,
+		Namespace: render.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read secret %q: %s", render.AmazonCloudIntegrationCredentialName, err)
+	}
+
+	return render.ConvertSecretToCredential(secret)
+}
+
+// GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
+func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
+	instance, err := utils.GetAmazonCloudIntegration(ctx, client)
+
+	err = validateCustomResource(instance)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
 }

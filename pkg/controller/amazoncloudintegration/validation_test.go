@@ -22,7 +22,7 @@ import (
 )
 
 var _ = Describe("Installation validation tests", func() {
-	var instance *operator.Installation
+	var instance *operator.AmazonCloudIntegration
 
 	BeforeEach(func() {
 		instance = &operator.AmazonCloudIntegration{

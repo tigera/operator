@@ -1,0 +1,7 @@
+apiVersion: operator.tigera.io/v1
+kind: AmazonCloudIntegration
+metadata:
+  name: example-amazoncloudintegration
+spec:
+  # Add fields here
+  size: 3

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -44,14 +45,15 @@ const (
 )
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, migrationNeeded bool) Component {
-	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, namespaceMigration: migrationNeeded}
+func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, aci *operator.AmazonCloudIntegration, migrationNeeded bool) Component {
+	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, amazonCloudInt: aci, namespaceMigration: migrationNeeded}
 }
 
 type typhaComponent struct {
 	cr                 *operator.Installation
 	provider           operator.Provider
 	typhaNodeTLS       *TyphaNodeTLS
+	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
 }
 
@@ -461,6 +463,23 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+	}
+
+	if c.amazonCloudInt != nil {
+		nodeSGIds := c.amazonCloudInt.Spec.NodeSecurityGroupIds
+		if len(nodeSGIds) > 0 {
+			typhaEnv = append(typhaEnv, v1.EnvVar{
+				Name:  "FELIX_DEFAULT_SECURITY_GROUPS",
+				Value: strings.Join(nodeSGIds, ","),
+			})
+		}
+		podSGId := c.amazonCloudInt.Spec.PodSecurityGroupId
+		if podSGId != "" {
+			typhaEnv = append(typhaEnv, v1.EnvVar{
+				Name:  "FELIX_POD_SECURITY_GROUP",
+				Value: podSGId,
+			})
 		}
 	}
 

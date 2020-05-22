@@ -231,3 +231,15 @@ func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*c
 
 	return secrets, nil
 }
+
+// GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
+func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
+	// Fetch the Installation instance. We only support a single instance named "tsee-secure".
+	instance := &operatorv1.AmazonCloudIntegration{}
+	err := client.Get(ctx, DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
+}

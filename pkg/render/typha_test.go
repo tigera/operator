@@ -49,7 +49,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Typha(installation, provider, typhaNodeTLS, false)
+		component := render.Typha(installation, provider, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -78,7 +78,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
-		component := render.Typha(installation, provider, typhaNodeTLS, true)
+		component := render.Typha(installation, provider, typhaNodeTLS, nil, true)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 

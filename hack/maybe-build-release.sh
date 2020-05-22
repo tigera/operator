@@ -6,6 +6,11 @@ if [[ -z "${tag}" ]]; then
 	exit 0
 fi
 
+if [[ ! "$(git branch --show-current)" =~ (release-v*.*|master) ]]; then
+	echo "not on 'master' or 'release-vX.Y'"
+	exit 0
+fi
+
 echo "On a git tag - building release: ${tag}"
 make release VERSION=${tag}
 

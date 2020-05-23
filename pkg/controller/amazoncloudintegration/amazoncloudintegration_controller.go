@@ -56,7 +56,7 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: provider,
-		status:   status.New(mgr.GetClient(), "amazoncloudintegration"),
+		status:   status.New(mgr.GetClient(), "amazon-cloud-integration"),
 	}
 	r.status.Run()
 	return r

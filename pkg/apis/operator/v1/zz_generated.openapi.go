@@ -173,12 +173,12 @@ func schema_pkg_apis_operator_v1_AmazonCloudIntegrationSpec(ref common.Reference
 				Properties: map[string]spec.Schema{
 					"defaultPodMetadataAccess": {
 						SchemaProps: spec.SchemaProps{
-							Description: "DefaultPodMetadataAccess defines what the default behavior will be for accessing metadata from a pod. Default: Denied",
+							Description: "DefaultPodMetadataAccess defines what the default behavior will be for accessing the AWS metadata service from a pod. Default: Denied",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"nodeSecurityGroupIds": {
+					"nodeSecurityGroupIDs": {
 						SchemaProps: spec.SchemaProps{
 							Type: []string{"array"},
 							Items: &spec.SchemaOrArray{
@@ -191,7 +191,7 @@ func schema_pkg_apis_operator_v1_AmazonCloudIntegrationSpec(ref common.Reference
 							},
 						},
 					},
-					"podSecurityGroupId": {
+					"podSecurityGroupID": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
@@ -210,7 +210,7 @@ func schema_pkg_apis_operator_v1_AmazonCloudIntegrationSpec(ref common.Reference
 							},
 						},
 					},
-					"sqsUrl": {
+					"sqsURL": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
@@ -222,20 +222,20 @@ func schema_pkg_apis_operator_v1_AmazonCloudIntegrationSpec(ref common.Reference
 							Format: "",
 						},
 					},
-					"enforcedSecurityGroupId": {
+					"enforcedSecurityGroupID": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
-					"trustEnforcedSecurityGroupId": {
+					"trustEnforcedSecurityGroupID": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
 				},
-				Required: []string{"trustEnforcedSecurityGroupId"},
+				Required: []string{"trustEnforcedSecurityGroupID"},
 			},
 		},
 		Dependencies: []string{},

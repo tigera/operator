@@ -34,19 +34,19 @@ const (
 // +k8s:openapi-gen=true
 type AmazonCloudIntegrationSpec struct {
 	// DefaultPodMetadataAccess defines what the default behavior will be for accessing
-	// metadata from a pod.
+	// the AWS metadata service from a pod.
 	// Default: Denied
 	// +optional
 	// +kubebuilder:validation:Enum=Allowed,Denied
 	DefaultPodMetadataAccess string `json:"defaultPodMetadataAccess,omitempty"`
 
-	NodeSecurityGroupIds         []string `json:"nodeSecurityGroupIds,omitempty"`
-	PodSecurityGroupId           string   `json:"podSecurityGroupId,omitempty"`
+	NodeSecurityGroupIDs         []string `json:"nodeSecurityGroupIDs,omitempty"`
+	PodSecurityGroupID           string   `json:"podSecurityGroupID,omitempty"`
 	Vpcs                         []string `json:"vpcs,omitempty"`
-	SqsUrl                       string   `json:"sqsUrl,omitempty"`
+	SqsURL                       string   `json:"sqsURL,omitempty"`
 	AwsRegion                    string   `json:"awsRegion,omitempty"`
-	EnforcedSecurityGroupId      string   `json:"enforcedSecurityGroupId,omitempty"`
-	TrustEnforcedSecurityGroupId string   `json:"trustEnforcedSecurityGroupId,omitemtpy"`
+	EnforcedSecurityGroupID      string   `json:"enforcedSecurityGroupID,omitempty"`
+	TrustEnforcedSecurityGroupID string   `json:"trustEnforcedSecurityGroupID,omitemtpy"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

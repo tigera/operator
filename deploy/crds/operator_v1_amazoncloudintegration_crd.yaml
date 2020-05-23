@@ -33,29 +33,30 @@ spec:
               type: string
             defaultPodMetadataAccess:
               description: 'DefaultPodMetadataAccess defines what the default behavior
-                will be for accessing metadata from a pod. Default: Denied'
+                will be for accessing the AWS metadata service from a pod. Default:
+                Denied'
               enum:
               - Allowed
               - Denied
               type: string
-            enforcedSecurityGroupId:
+            enforcedSecurityGroupID:
               type: string
-            nodeSecurityGroupIds:
+            nodeSecurityGroupIDs:
               items:
                 type: string
               type: array
-            podSecurityGroupId:
+            podSecurityGroupID:
               type: string
-            sqsUrl:
+            sqsURL:
               type: string
-            trustEnforcedSecurityGroupId:
+            trustEnforcedSecurityGroupID:
               type: string
             vpcs:
               items:
                 type: string
               type: array
           required:
-          - trustEnforcedSecurityGroupId
+          - trustEnforcedSecurityGroupID
           type: object
         status:
           properties:

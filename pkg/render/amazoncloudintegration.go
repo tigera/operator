@@ -37,20 +37,20 @@ const (
 
 func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 	return &amazonCloudIntegrationComponent{
-		amazonCloudInt: aci,
-		installation:   installation,
-		credentials:    cred,
-		pullSecrets:    ps,
-		openshift:      openshift,
+		amazonCloudIntegration: aci,
+		installation:           installation,
+		credentials:            cred,
+		pullSecrets:            ps,
+		openshift:              openshift,
 	}, nil
 }
 
 type amazonCloudIntegrationComponent struct {
-	amazonCloudInt *operator.AmazonCloudIntegration
-	installation   *operator.Installation
-	credentials    *AmazonCredential
-	pullSecrets    []*corev1.Secret
-	openshift      bool
+	amazonCloudIntegration *operator.AmazonCloudIntegration
+	installation           *operator.Installation
+	credentials            *AmazonCredential
+	pullSecrets            []*corev1.Secret
+	openshift              bool
 }
 
 type AmazonCredential struct {
@@ -207,7 +207,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AmazonCloudIntegrationComponentName,
-			Namespace: APIServerNamespace,
+			Namespace: AmazonCloudIntegrationComponentNamespace,
 			Labels: map[string]string{
 				"k8s-app": AmazonCloudIntegrationComponentName,
 			},
@@ -250,11 +250,11 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},
-		{Name: "VPCS", Value: strings.Join(c.amazonCloudInt.Spec.Vpcs, ",")},
-		{Name: "SQS_URL", Value: c.amazonCloudInt.Spec.SqsUrl},
-		{Name: "AWS_REGION", Value: c.amazonCloudInt.Spec.AwsRegion},
-		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.amazonCloudInt.Spec.EnforcedSecurityGroupId},
-		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.amazonCloudInt.Spec.TrustEnforcedSecurityGroupId},
+		{Name: "VPCS", Value: strings.Join(c.amazonCloudIntegration.Spec.Vpcs, ",")},
+		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SqsUrl},
+		{Name: "AWS_REGION", Value: c.amazonCloudIntegration.Spec.AwsRegion},
+		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.EnforcedSecurityGroupId},
+		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.TrustEnforcedSecurityGroupId},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{

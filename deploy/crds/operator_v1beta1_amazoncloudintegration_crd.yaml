@@ -9,7 +9,7 @@ spec:
     listKind: AmazonCloudIntegrationList
     plural: amazoncloudintegrations
     singular: amazoncloudintegration
-  scope: Namespaced
+  scope: Cluster
   subresources:
     status: {}
   validation:
@@ -64,8 +64,8 @@ spec:
               description: State provides user-readable status.
               type: string
           type: object
-  version: v1
+  version: v1beta1
   versions:
-  - name: v1
+  - name: v1beta1
     served: true
     storage: true

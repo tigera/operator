@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1
+package v1beta1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,10 +49,6 @@ type AmazonCloudIntegrationSpec struct {
 	TrustEnforcedSecurityGroupID string   `json:"trustEnforcedSecurityGroupID,omitemtpy"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +genclient
-// +genclient:nonNamespaced
-
 // AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration
 // +k8s:openapi-gen=true
 type AmazonCloudIntegrationStatus struct {
@@ -61,6 +57,8 @@ type AmazonCloudIntegrationStatus struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
+// +genclient:nonNamespaced
 
 // AmazonCloudIntegration is the Schema for the amazoncloudintegrations API
 // +k8s:openapi-gen=true

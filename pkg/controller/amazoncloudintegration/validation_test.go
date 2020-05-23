@@ -18,22 +18,22 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 )
 
 var _ = Describe("Installation validation tests", func() {
-	var instance *operator.AmazonCloudIntegration
+	var instance *operatorv1beta1.AmazonCloudIntegration
 
 	BeforeEach(func() {
-		instance = &operator.AmazonCloudIntegration{
-			Spec: operator.AmazonCloudIntegrationSpec{
-				NodeSecurityGroupIds:         []string{"sg-nodesgid"},
-				PodSecurityGroupId:           "sg-podsgid",
+		instance = &operatorv1beta1.AmazonCloudIntegration{
+			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+				NodeSecurityGroupIDs:         []string{"sg-nodesgid"},
+				PodSecurityGroupID:           "sg-podsgid",
 				Vpcs:                         []string{"vpc-id"},
-				SqsUrl:                       "sqs/url",
+				SqsURL:                       "sqs/url",
 				AwsRegion:                    "us-west",
-				EnforcedSecurityGroupId:      "sg-enforcedsgid",
-				TrustEnforcedSecurityGroupId: "sg-trustenforcedsgid",
+				EnforcedSecurityGroupID:      "sg-enforcedsgid",
+				TrustEnforcedSecurityGroupID: "sg-trustenforcedsgid",
 			},
 		}
 	})

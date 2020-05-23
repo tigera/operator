@@ -15,12 +15,12 @@
 package amazoncloudintegration
 
 import (
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
-func validateCustomResource(instance *operatorv1.AmazonCloudIntegration) error {
+func validateCustomResource(instance *operatorv1beta1.AmazonCloudIntegration) error {
 
 	// TODO: Do some validation
 

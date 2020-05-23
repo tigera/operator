@@ -288,7 +288,7 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_logstorage_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator_v1_managementclusterconnection_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_amazoncloudintegration_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator_v1beta1_amazoncloudintegration_crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 

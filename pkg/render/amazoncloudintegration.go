@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +36,7 @@ const (
 	AmazonCloudCredentialKeySecretName   = "key-secret"
 )
 
-func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
+func AmazonCloudIntegration(aci *operatorv1beta1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 	return &amazonCloudIntegrationComponent{
 		amazonCloudIntegration: aci,
 		installation:           installation,
@@ -46,7 +47,7 @@ func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *
 }
 
 type amazonCloudIntegrationComponent struct {
-	amazonCloudIntegration *operator.AmazonCloudIntegration
+	amazonCloudIntegration *operatorv1beta1.AmazonCloudIntegration
 	installation           *operator.Installation
 	credentials            *AmazonCredential
 	pullSecrets            []*corev1.Secret
@@ -207,7 +208,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AmazonCloudIntegrationComponentName,
-			Namespace: AmazonCloudIntegrationComponentNamespace,
+			Namespace: AmazonCloudIntegrationNamespace,
 			Labels: map[string]string{
 				"k8s-app": AmazonCloudIntegrationComponentName,
 			},
@@ -251,10 +252,10 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},
 		{Name: "VPCS", Value: strings.Join(c.amazonCloudIntegration.Spec.Vpcs, ",")},
-		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SqsUrl},
+		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SqsURL},
 		{Name: "AWS_REGION", Value: c.amazonCloudIntegration.Spec.AwsRegion},
-		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.EnforcedSecurityGroupId},
-		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.TrustEnforcedSecurityGroupId},
+		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.EnforcedSecurityGroupID},
+		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.TrustEnforcedSecurityGroupID},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{

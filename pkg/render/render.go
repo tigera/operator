@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/common"
 )
 
@@ -67,7 +68,7 @@ func Calico(
 	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
-	aci *operator.AmazonCloudIntegration,
+	aci *operatorv1beta1.AmazonCloudIntegration,
 	up bool,
 ) (Renderer, error) {
 
@@ -210,7 +211,7 @@ type calicoRenderer struct {
 	birdTemplates   map[string]string
 	provider        operator.Provider
 	networkConfig   NetworkConfig
-	amazonCloudInt  *operator.AmazonCloudIntegration
+	amazonCloudInt  *operatorv1beta1.AmazonCloudIntegration
 	upgrade         bool
 }
 

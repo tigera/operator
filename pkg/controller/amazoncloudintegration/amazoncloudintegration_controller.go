@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -71,7 +72,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource AmazonCloudIntegration
-	err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
@@ -190,7 +191,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.AmazonCloudIntegrationStatusReady
+	instance.Status.State = operatorv1beta1.AmazonCloudIntegrationStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -214,7 +215,7 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 }
 
 // GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
-func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
+func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1beta1.AmazonCloudIntegration, error) {
 	instance, err := utils.GetAmazonCloudIntegration(ctx, client)
 
 	err = validateCustomResource(instance)

@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/common"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -78,7 +79,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(5 + 4 + 2 + 6 + 4 + 1 + 1))
 	})
@@ -91,7 +92,7 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(((5 + 4 + 2 + 6 + 4 + 1) + 1 + 1)))
 	})
@@ -107,7 +108,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, false)
+		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {

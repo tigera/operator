@@ -15,21 +15,64 @@
 package amazoncloudintegration
 
 import (
+	"fmt"
+	"strings"
+
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1beta1.AmazonCloudIntegration) error {
+	if instance == nil {
+		return fmt.Errorf("no amazonCloudIntegration to validate, nil is not valid")
+	}
 
-	// TODO: Do some validation
+	errMsgs := []string{}
+	if len(instance.Spec.Vpcs) == 0 {
+		errMsgs = append(errMsgs, "missing spec.vpcs")
+	}
+	for _, x := range instance.Spec.Vpcs {
+		if x == "" {
+			errMsgs = append(errMsgs, "empty spec.vpcs are not valid")
+			break
+		}
+	}
 
-	//if instance.Spec.Variant == operatorv1.Calico {
-	//	// Validation specific to Calico.
-	//	if instance.Spec.ClusterManagementType != "" {
-	//		return fmt.Errorf("clusterManagementType must not be set for variant 'Calico'")
-	//	}
-	//}
+	if instance.Spec.SqsURL == "" {
+		errMsgs = append(errMsgs, "missing spec.sqsURL")
+	}
+
+	if instance.Spec.AwsRegion == "" {
+		errMsgs = append(errMsgs, "missing spec.awsRegion")
+	}
+
+	if len(instance.Spec.NodeSecurityGroupIDs) == 0 {
+		errMsgs = append(errMsgs, "missing spec.nodeSecurityGroupsIDs")
+	}
+
+	for _, x := range instance.Spec.NodeSecurityGroupIDs {
+		if x == "" {
+			errMsgs = append(errMsgs, "empty spec.nodeSecurityGroupIDs are not valid")
+			break
+		}
+	}
+
+	if instance.Spec.PodSecurityGroupID == "" {
+		errMsgs = append(errMsgs, "missing spec.podSecurityGroupsID")
+	}
+
+	if instance.Spec.EnforcedSecurityGroupID == "" {
+		errMsgs = append(errMsgs, "missing spec.enforcedSecurityGroupID")
+	}
+
+	if instance.Spec.TrustEnforcedSecurityGroupID == "" {
+		errMsgs = append(errMsgs, "missing spec.trustEnforcedSecurityGroupID")
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf("AmazonCloudIntegration invalid; %s", strings.Join(errMsgs, ", "))
+	}
 
 	return nil
 }

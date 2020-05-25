@@ -135,6 +135,8 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	// TODO: Write back defaulted config
+
 	// Query for the installation object.
 	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
@@ -205,9 +207,6 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 		Namespace: render.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("Failed to read secret %q: %s", render.AmazonCloudIntegrationCredentialName, err)
 	}
 
@@ -217,6 +216,8 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 // GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
 func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1beta1.AmazonCloudIntegration, error) {
 	instance, err := utils.GetAmazonCloudIntegration(ctx, client)
+
+	// TODO: Do defaulting
 
 	err = validateCustomResource(instance)
 	if err != nil {

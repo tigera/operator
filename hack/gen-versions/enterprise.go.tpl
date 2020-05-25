@@ -153,4 +153,10 @@ var (
 		Image:   "{{ .Image }}",
     }
 {{- end }}
+{{ with index . "cloud-controllers" }}
+    ComponentCloudControllers = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+    }
+{{- end }}
 )

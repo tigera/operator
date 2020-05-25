@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -44,14 +46,15 @@ const (
 )
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, migrationNeeded bool) Component {
-	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, namespaceMigration: migrationNeeded}
+func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, aci *operatorv1beta1.AmazonCloudIntegration, migrationNeeded bool) Component {
+	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, amazonCloudInt: aci, namespaceMigration: migrationNeeded}
 }
 
 type typhaComponent struct {
 	cr                 *operator.Installation
 	provider           operator.Provider
 	typhaNodeTLS       *TyphaNodeTLS
+	amazonCloudInt     *operatorv1beta1.AmazonCloudIntegration
 	namespaceMigration bool
 }
 
@@ -461,6 +464,23 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+	}
+
+	if c.amazonCloudInt != nil {
+		nodeSGIDs := c.amazonCloudInt.Spec.NodeSecurityGroupIDs
+		if len(nodeSGIDs) > 0 {
+			typhaEnv = append(typhaEnv, v1.EnvVar{
+				Name:  "FELIX_DEFAULT_SECURITY_GROUPS",
+				Value: strings.Join(nodeSGIDs, ","),
+			})
+		}
+		podSGID := c.amazonCloudInt.Spec.PodSecurityGroupID
+		if podSGID != "" {
+			typhaEnv = append(typhaEnv, v1.EnvVar{
+				Name:  "FELIX_POD_SECURITY_GROUP",
+				Value: podSGID,
+			})
 		}
 	}
 

@@ -166,7 +166,7 @@ func (c *amazonCloudIntegrationComponent) clusterRoleBinding() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver-access-crds",
+			Name: AmazonCloudIntegrationComponentName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -261,7 +261,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: AmazonCloudIntegrationCredentialName,
 				},
-				Key: "aws_secret_access_key",
+				Key: AmazonCloudCredentialKeySecretName,
 			},
 		}},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: &corev1.EnvVarSource{
@@ -269,7 +269,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: AmazonCloudIntegrationCredentialName,
 				},
-				Key: "aws_access_key_id",
+				Key: AmazonCloudCredentialKeyIdName,
 			},
 		}},
 	}

@@ -216,6 +216,9 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 // GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
 func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1beta1.AmazonCloudIntegration, error) {
 	instance, err := utils.GetAmazonCloudIntegration(ctx, client)
+	if err != nil {
+		return nil, err
+	}
 
 	// TODO: Do defaulting
 

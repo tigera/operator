@@ -38,15 +38,26 @@ type AmazonCloudIntegrationSpec struct {
 	// Default: Denied
 	// +optional
 	// +kubebuilder:validation:Enum=Allowed,Denied
-	DefaultPodMetadataAccess string `json:"defaultPodMetadataAccess,omitempty"`
+	DefaultPodMetadataAccess MetadataAccessAllowedType `json:"defaultPodMetadataAccess,omitempty"`
 
-	NodeSecurityGroupIDs         []string `json:"nodeSecurityGroupIDs,omitempty"`
-	PodSecurityGroupID           string   `json:"podSecurityGroupID,omitempty"`
-	Vpcs                         []string `json:"vpcs,omitempty"`
-	SqsURL                       string   `json:"sqsURL,omitempty"`
-	AwsRegion                    string   `json:"awsRegion,omitempty"`
-	EnforcedSecurityGroupID      string   `json:"enforcedSecurityGroupID,omitempty"`
-	TrustEnforcedSecurityGroupID string   `json:"trustEnforcedSecurityGroupID,omitemtpy"`
+	// NodeSecurityGroupIDs is a list of Security Group IDs that all nodes and masters
+	// will be in.
+	NodeSecurityGroupIDs []string `json:"nodeSecurityGroupIDs,omitempty"`
+	// PodSecurityGroupID is the ID of the Security Group which all pods should be placed
+	// in by default.
+	PodSecurityGroupID string `json:"podSecurityGroupID,omitempty"`
+	// Vpcs is a list of VPC IDs to monitor for ENIs and Security Groups, only one is supported.
+	Vpcs []string `json:"vpcs,omitempty"`
+	// SqsURL is the SQS URL needed to access the Simple Queue Service.
+	SqsURL string `json:"sqsURL,omitempty"`
+	// AwsRegion is the region in which your cluster is located.
+	AwsRegion string `json:"awsRegion,omitempty"`
+	// EnforcedSecurityGroupID is the ID of the Security Group which will be applied to all
+	// ENIs that are on a host that is also part of the Kubernetes cluster.
+	EnforcedSecurityGroupID string `json:"enforcedSecurityGroupID,omitempty"`
+	// TrustEnforcedSecurityGroupID is the ID of the Security Group which will be applied
+	// to all ENIs in the VPC.
+	TrustEnforcedSecurityGroupID string `json:"trustEnforcedSecurityGroupID,omitemtpy"`
 }
 
 // AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration

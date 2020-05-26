@@ -75,7 +75,8 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref common.Refe
 					},
 					"nodeSecurityGroupIDs": {
 						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
+							Description: "NodeSecurityGroupIDs is a list of Security Group IDs that all nodes and masters will be in.",
+							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
@@ -88,13 +89,15 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref common.Refe
 					},
 					"podSecurityGroupID": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "PodSecurityGroupID is the ID of the Security Group which all pods should be placed in by default.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"vpcs": {
 						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
+							Description: "Vpcs is a list of VPC IDs to monitor for ENIs and Security Groups, only one is supported.",
+							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
@@ -107,26 +110,30 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref common.Refe
 					},
 					"sqsURL": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "SqsURL is the SQS URL needed to access the Simple Queue Service.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"awsRegion": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "AwsRegion is the region in which your cluster is located.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"enforcedSecurityGroupID": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "EnforcedSecurityGroupID is the ID of the Security Group which will be applied to all ENIs that are on a host that is also part of the Kubernetes cluster.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"trustEnforcedSecurityGroupID": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "TrustEnforcedSecurityGroupID is the ID of the Security Group which will be applied to all ENIs in the VPC.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},

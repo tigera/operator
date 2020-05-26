@@ -965,6 +965,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				Value: podSGID,
 			})
 		}
+		nodeEnv = append(nodeEnv, v1.EnvVar{
+			Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
+			Value: "tcp:22,udp:68,tcp:179,tcp:443,tcp:5473,tcp:6443",
+		})
+		nodeEnv = append(nodeEnv, v1.EnvVar{
+			Name:  "FELIX_FAILSAFEOUTBOUNDHOSTPORTS",
+			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
+		})
 	}
 	return nodeEnv
 }

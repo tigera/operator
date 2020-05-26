@@ -34,6 +34,7 @@ const (
 	AmazonCloudIntegrationCredentialName = "amazon-cloud-integration-credentials"
 	AmazonCloudCredentialKeyIdName       = "key-id"
 	AmazonCloudCredentialKeySecretName   = "key-secret"
+	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
 func AmazonCloudIntegration(aci *operatorv1beta1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
@@ -204,6 +205,9 @@ func (c *amazonCloudIntegrationComponent) credentialSecret() *corev1.Secret {
 func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
+	annotations := make(map[string]string)
+	annotations[credentialSecretHashAnnotation] = AnnotationHash(c.credentials)
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -226,6 +230,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 					Labels: map[string]string{
 						"k8s-app": AmazonCloudIntegrationComponentName,
 					},
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
@@ -245,9 +250,6 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 
 // container creates the API server container.
 func (c *amazonCloudIntegrationComponent) container() corev1.Container {
-
-	//TODO: Add annotation for secret
-
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},

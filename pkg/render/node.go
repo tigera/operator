@@ -954,14 +954,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeSGIDs := c.amazonCloudInt.Spec.NodeSecurityGroupIDs
 		if len(nodeSGIDs) > 0 {
 			nodeEnv = append(nodeEnv, v1.EnvVar{
-				Name:  "FELIX_DEFAULT_SECURITY_GROUPS",
+				Name:  "TIGERA_DEFAULT_SECURITY_GROUPS",
 				Value: strings.Join(nodeSGIDs, ","),
 			})
 		}
 		podSGID := c.amazonCloudInt.Spec.PodSecurityGroupID
 		if podSGID != "" {
 			nodeEnv = append(nodeEnv, v1.EnvVar{
-				Name:  "FELIX_POD_SECURITY_GROUP",
+				Name:  "TIGERA_POD_SECURITY_GROUP",
 				Value: podSGID,
 			})
 		}

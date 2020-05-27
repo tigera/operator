@@ -30,6 +30,7 @@ spec:
         spec:
           properties:
             awsRegion:
+              description: AwsRegion is the region in which your cluster is located.
               type: string
             defaultPodMetadataAccess:
               description: 'DefaultPodMetadataAccess defines what the default behavior
@@ -40,18 +41,31 @@ spec:
               - Denied
               type: string
             enforcedSecurityGroupID:
+              description: EnforcedSecurityGroupID is the ID of the Security Group
+                which will be applied to all ENIs that are on a host that is also
+                part of the Kubernetes cluster.
               type: string
             nodeSecurityGroupIDs:
+              description: NodeSecurityGroupIDs is a list of Security Group IDs that
+                all nodes and masters will be in.
               items:
                 type: string
               type: array
             podSecurityGroupID:
+              description: PodSecurityGroupID is the ID of the Security Group which
+                all pods should be placed in by default.
               type: string
             sqsURL:
+              description: SqsURL is the SQS URL needed to access the Simple Queue
+                Service.
               type: string
             trustEnforcedSecurityGroupID:
+              description: TrustEnforcedSecurityGroupID is the ID of the Security
+                Group which will be applied to all ENIs in the VPC.
               type: string
             vpcs:
+              description: Vpcs is a list of VPC IDs to monitor for ENIs and Security
+                Groups, only one is supported.
               items:
                 type: string
               type: array

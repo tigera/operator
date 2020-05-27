@@ -26,6 +26,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -127,42 +128,50 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		reqLogger.V(5).Info("failed to get AmazonCloudIntegration CR", "err", err)
-		r.status.SetDegraded("Error querying AmazonCloudIntegration", err.Error())
+		r.SetDegraded("Error querying AmazonCloudIntegration", err, reqLogger)
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	// TODO: Write back defaulted config
+	// Validate the configuration.
+	if err = validateCustomResource(instance); err != nil {
+		r.SetDegraded("Invalid AmazonCloudIntegration provided", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	if err = r.client.Update(ctx, instance); err != nil {
+		r.SetDegraded("Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	// Query for the installation object.
 	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.SetDegraded("Installation not found", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
+		r.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), fmt.Errorf(""), reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving Pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	awsCredential, err := getAmazonCredential(r.client)
 	if err != nil {
-		reqLogger.Error(err, "Failed to read Amazon credential secret")
-		r.status.SetDegraded("Failed to read Amazon credential secret", err.Error())
+		r.SetDegraded("Failed to read Amazon credential secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -173,13 +182,12 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	reqLogger.V(3).Info("rendering components")
 	component, err := render.AmazonCloudIntegration(instance, network, awsCredential, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
-		log.Error(err, "Error rendering AmazonCloudIntegration")
-		r.status.SetDegraded("Error rendering AmazonCloudIntegration", err.Error())
+		r.SetDegraded("Error rendering AmazonCloudIntegration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		r.SetDegraded("Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -200,6 +208,11 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
+func (r *ReconcileAmazonCloudIntegration) SetDegraded(reason string, err error, log logr.Logger) {
+	log.Error(err, reason)
+	r.status.SetDegraded(reason, err.Error())
+}
+
 func getAmazonCredential(client client.Client) (*render.AmazonCredential, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
@@ -213,6 +226,12 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 	return render.ConvertSecretToCredential(secret)
 }
 
+func fillDefaults(aci *operatorv1beta1.AmazonCloudIntegration) {
+	if aci.Spec.DefaultPodMetadataAccess == "" {
+		aci.Spec.DefaultPodMetadataAccess = operatorv1beta1.MetadataAccessDenied
+	}
+}
+
 // GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
 func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1beta1.AmazonCloudIntegration, error) {
 	instance, err := utils.GetAmazonCloudIntegration(ctx, client)
@@ -220,11 +239,7 @@ func getAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 		return nil, err
 	}
 
-	// TODO: Do defaulting
+	fillDefaults(instance)
 
-	err = validateCustomResource(instance)
-	if err != nil {
-		return nil, err
-	}
 	return instance, nil
 }

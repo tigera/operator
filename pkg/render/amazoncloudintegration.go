@@ -252,6 +252,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "FAILSAFE_CONTROLLER_APP_NAME", Value: AmazonCloudIntegrationComponentName},
 		{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},
 		{Name: "VPCS", Value: strings.Join(c.amazonCloudIntegration.Spec.Vpcs, ",")},
 		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SqsURL},

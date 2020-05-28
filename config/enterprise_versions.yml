@@ -58,7 +58,7 @@ components:
     version: v3.0.0
   cloud-controllers:
     image: tigera/cloud-controllers
-    version: v3.0.0
+    version: master
   kibana:
     image: tigera/kibana
     version: v3.0.0

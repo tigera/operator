@@ -17,11 +17,13 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -75,6 +77,15 @@ var _ = Describe("Typha rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
+
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		tc := d.Spec.Template.Spec.Containers[0]
+		Expect(tc.Name).To(Equal("calico-typha"))
+		// Expect the SECURITY_GROUP env variables to not be set
+		Expect(tc.Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+		Expect(tc.Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 	})
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
@@ -95,5 +106,31 @@ var _ = Describe("Typha rendering tests", func() {
 			Namespaces:  []string{"kube-system"},
 			TopologyKey: "kubernetes.io/hostname",
 		}))
+	})
+	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
+		aci := &operatorv1beta1.AmazonCloudIntegration{
+			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
+				PodSecurityGroupID:   "sg-podsgid",
+			},
+		}
+		component := render.Typha(installation, provider, typhaNodeTLS, aci, true)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(6))
+
+		deploymentResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+		d := deploymentResource.(*apps.Deployment)
+		tc := d.Spec.Template.Spec.Containers[0]
+		Expect(tc.Name).To(Equal("calico-typha"))
+
+		// Assert on expected env vars.
+		expectedEnvVars := []v1.EnvVar{
+			{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
+			{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
+		}
+		for _, v := range expectedEnvVars {
+			Expect(tc.Env).To(ContainElement(v))
+		}
 	})
 })

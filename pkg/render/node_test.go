@@ -20,9 +20,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
@@ -184,6 +186,9 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+		// Expect the SECURITY_GROUP env variables to not be set
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
 		expectedCNIEnv := []v1.EnvVar{
 			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
@@ -990,6 +995,30 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds).ToNot(BeNil())
 
 		Expect(ds.Spec.Template.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(seccompProf))
+	})
+
+	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
+		aci := &operatorv1beta1.AmazonCloudIntegration{
+			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
+				PodSecurityGroupID:   "sg-podsgid",
+			},
+		}
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, aci, false)
+		resources, _ := component.Objects()
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+
+		// Assert on expected env vars.
+		expectedEnvVars := []v1.EnvVar{
+			{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
+			{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
+		}
+		ds := dsResource.(*apps.DaemonSet)
+		for _, v := range expectedEnvVars {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
+		}
 	})
 })
 

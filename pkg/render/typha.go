@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"strings"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -467,22 +466,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		}
 	}
 
-	if c.amazonCloudInt != nil {
-		nodeSGIDs := c.amazonCloudInt.Spec.NodeSecurityGroupIDs
-		if len(nodeSGIDs) > 0 {
-			typhaEnv = append(typhaEnv, v1.EnvVar{
-				Name:  "TIGERA_DEFAULT_SECURITY_GROUPS",
-				Value: strings.Join(nodeSGIDs, ","),
-			})
-		}
-		podSGID := c.amazonCloudInt.Spec.PodSecurityGroupID
-		if podSGID != "" {
-			typhaEnv = append(typhaEnv, v1.EnvVar{
-				Name:  "TIGERA_POD_SECURITY_GROUP",
-				Value: podSGID,
-			})
-		}
-	}
+	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
 
 	return typhaEnv
 }

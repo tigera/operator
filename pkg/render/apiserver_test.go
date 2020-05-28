@@ -21,11 +21,13 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
@@ -45,7 +47,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should render an API server with default configuration", func() {
 		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(instance, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -196,6 +198,10 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].ValueFrom).To(BeNil())
 
+		// Expect the SECURITY_GROUP env variables to not be set
+		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
+
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts).To(BeEmpty())
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))
@@ -215,7 +221,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -230,7 +236,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -254,7 +260,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(instance, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -266,7 +272,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -290,6 +296,35 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
 		Expect(crb.Subjects[0].Name).To(Equal("tigera-apiserver"))
 		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
+	})
+
+	It("should set TIGERA_*_SECURITY_GROUP variables on queryserver when AmazonCloudIntegration is defined", func() {
+		aci := &operatorv1beta1.AmazonCloudIntegration{
+			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
+				PodSecurityGroupID:   "sg-podsgid",
+			},
+		}
+		component, err := render.APIServer(instance, aci, nil, nil, openshift)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploymentResource := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		d := deploymentResource.(*v1.Deployment)
+
+		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+		qc := d.Spec.Template.Spec.Containers[1]
+
+		// Assert on expected env vars.
+		expectedEnvVars := []corev1.EnvVar{
+			{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
+			{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
+		}
+		for _, v := range expectedEnvVars {
+			Expect(qc.Env).To(ContainElement(v))
+		}
 	})
 })
 

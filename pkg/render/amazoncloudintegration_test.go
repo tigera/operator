@@ -28,6 +28,11 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
+const (
+	AwsCIName = "tigera-amazon-cloud-integration"
+	AwsCINs   = "tigera-amazon-cloud-integration"
+)
+
 var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	var instance *operatorv1beta1.AmazonCloudIntegration
 	var credential *render.AmazonCredential
@@ -61,9 +66,6 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 
 		resources, _ := component.Objects()
-
-		AwsCIName := "tigera-amazon-cloud-integration"
-		AwsCINs := "tigera-amazon-cloud-integration"
 
 		// Should render the correct resources.
 		// - 1 namespace
@@ -163,28 +165,63 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(envs).To(HaveLen(len(env)))
 		Expect(envs).To(ConsistOf(env))
 
-		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command).To(ConsistOf([]string{"check-status", "-r"}))
-		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.InitialDelaySeconds).To(BeEquivalentTo(10))
-		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
-		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{"check-status", "-r"}))
+		Expect(container.ReadinessProbe.InitialDelaySeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
-		Expect(*(d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot)).To(BeTrue())
-		Expect(*(d.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation)).To(BeFalse())
+		Expect(*(container.SecurityContext.RunAsNonRoot)).To(BeTrue())
+		Expect(*(container.SecurityContext.AllowPrivilegeEscalation)).To(BeFalse())
 
 	})
 
-	//It("should render an API server with custom configuration", func() {
-	//	component, err := render.APIServer(instance, nil, nil, openshift)
-	//	Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-	//	resources, _ := component.Objects()
+	It("should set MetadataAccess when configured", func() {
+		instance.Spec.DefaultPodMetadataAccess = operatorv1beta1.MetadataAccessAllowed
+		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
+		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 
-	//	// Should render the correct resources.
-	//	// Expect same number as above
-	//	Expect(len(resources)).To(Equal(22))
-	//	ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		resources, _ := component.Objects()
 
-	//	d := resources[13].(*v1.Deployment)
+		resource := GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
+		Expect(resource).ToNot(BeNil())
+		d := resource.(*v1.Deployment)
 
-	//	Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
-	//})
+		Expect(d.Name).To(Equal(AwsCIName))
+
+		container := d.Spec.Template.Spec.Containers[0]
+		Expect(container.Name).To(Equal(AwsCIName))
+
+		envs := container.Env
+
+		env := []corev1.EnvVar{
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "FAILSAFE_CONTROLLER_APP_NAME", Value: AwsCIName},
+			{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},
+			{Name: "VPCS", Value: "vpc-id"},
+			{Name: "SQS_URL", Value: "sqs://aws.some.host"},
+			{Name: "AWS_REGION", Value: "us-west-2"},
+			{Name: "TIGERA_ENFORCED_GROUP_ID", Value: "sg-enforcedsgid"},
+			{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: "sg-trustenforcedsgid"},
+			{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "amazon-cloud-integration-credentials",
+					},
+					Key: "key-secret",
+				},
+			}},
+			{Name: "AWS_ACCESS_KEY_ID", ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "amazon-cloud-integration-credentials",
+					},
+					Key: "key-id",
+				},
+			}},
+			{Name: "ALLOW_POD_METADATA_ACCESS", Value: "true"},
+		}
+		Expect(envs).To(HaveLen(len(env)))
+		Expect(envs).To(ConsistOf(env))
+
+	})
 })

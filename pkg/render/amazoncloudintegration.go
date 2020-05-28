@@ -315,3 +315,27 @@ func (c *amazonCloudIntegrationComponent) tolerations() []corev1.Toleration {
 
 	return tolerations
 }
+
+func GetTigeraSecurityGroupEnvVariables(aci *operatorv1beta1.AmazonCloudIntegration) []corev1.EnvVar {
+	envs := []corev1.EnvVar{}
+	if aci == nil {
+		return envs
+	}
+
+	nodeSGIDs := aci.Spec.NodeSecurityGroupIDs
+	if len(nodeSGIDs) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "TIGERA_DEFAULT_SECURITY_GROUPS",
+			Value: strings.Join(nodeSGIDs, ","),
+		})
+	}
+	podSGID := aci.Spec.PodSecurityGroupID
+	if podSGID != "" {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "TIGERA_POD_SECURITY_GROUP",
+			Value: podSGID,
+		})
+	}
+
+	return envs
+}

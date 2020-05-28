@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
@@ -951,20 +950,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 
 	if c.amazonCloudInt != nil {
-		nodeSGIDs := c.amazonCloudInt.Spec.NodeSecurityGroupIDs
-		if len(nodeSGIDs) > 0 {
-			nodeEnv = append(nodeEnv, v1.EnvVar{
-				Name:  "TIGERA_DEFAULT_SECURITY_GROUPS",
-				Value: strings.Join(nodeSGIDs, ","),
-			})
-		}
-		podSGID := c.amazonCloudInt.Spec.PodSecurityGroupID
-		if podSGID != "" {
-			nodeEnv = append(nodeEnv, v1.EnvVar{
-				Name:  "TIGERA_POD_SECURITY_GROUP",
-				Value: podSGID,
-			})
-		}
+		nodeEnv = append(nodeEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
 		nodeEnv = append(nodeEnv, v1.EnvVar{
 			Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
 			Value: "tcp:22,udp:68,tcp:179,tcp:443,tcp:5473,tcp:6443",

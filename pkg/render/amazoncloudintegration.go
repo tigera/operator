@@ -277,6 +277,10 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		}},
 	}
 
+	if c.amazonCloudIntegration.Spec.DefaultPodMetadataAccess == operatorv1beta1.MetadataAccessAllowed {
+		env = append(env, corev1.EnvVar{Name: "ALLOW_POD_METADATA_ACCESS", Value: "true"})
+	}
+
 	nonRoot := true
 	privEscalation := false
 

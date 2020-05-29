@@ -377,7 +377,12 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
-	privileged := true
+	privileged := false
+	//On OpenShift reported needs privileged access to write compliance reports to host path volume
+	if c.openshift {
+		privileged = true
+	}
+
 
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "warning"},

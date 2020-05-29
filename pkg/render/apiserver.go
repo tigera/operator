@@ -566,7 +566,11 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "tigera-apiserver-certs", MountPath: "/code/apiserver.local.config/certificates"},
 	}
 
-	isPrivileged := true
+	isPrivileged := false
+	//On OpenShift apiserver needs privileged access to write audit logs to host path volume
+	if c.openshift {
+		isPrivileged = true
+	}
 
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},

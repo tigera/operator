@@ -20,11 +20,11 @@ package components
 
 // This section contains images used when installing open-source Calico.
 const (
-	VersionCalicoNode            = "v3.10.3"
-	VersionCalicoCNI             = "v3.10.3"
-	VersionCalicoTypha           = "v3.10.3"
-	VersionCalicoKubeControllers = "v3.10.3"
-	VersionFlexVolume            = "v3.10.3"
+	VersionCalicoNode            = "v3.10.4"
+	VersionCalicoCNI             = "v3.10.4"
+	VersionCalicoTypha           = "v3.10.4"
+	VersionCalicoKubeControllers = "v3.10.4"
+	VersionFlexVolume            = "v3.10.4"
 )
 
 // This section contains images used when installing Tigera Secure.

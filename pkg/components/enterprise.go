@@ -131,7 +131,7 @@ var (
     }
 
     ComponentCloudControllers = component{
-		Version: "master",
+		Version: "v3.1.0.calient-0.dev-14-gbd93096",
 		Image:   "tigera/cloud-controllers",
     }
 )

@@ -20,48 +20,48 @@ package components
 
 // This section contains images used when installing open-source Calico.
 const (
-	VersionCalicoNode            = "v3.10.3"
-	VersionCalicoCNI             = "v3.10.3"
-	VersionCalicoTypha           = "v3.10.3"
-	VersionCalicoKubeControllers = "v3.10.3"
-	VersionFlexVolume            = "v3.10.3"
+	VersionCalicoNode            = "v3.10.4"
+	VersionCalicoCNI             = "v3.10.4"
+	VersionCalicoTypha           = "v3.10.4"
+	VersionCalicoKubeControllers = "v3.10.4"
+	VersionFlexVolume            = "v3.10.4"
 )
 
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.6.2"
-	VersionTigeraTypha           = "v2.6.2"
-	VersionTigeraKubeControllers = "v2.6.2"
+	VersionTigeraNode            = "v2.6.3"
+	VersionTigeraTypha           = "v2.6.3"
+	VersionTigeraKubeControllers = "v2.6.3"
 
 	// API server images.
-	VersionAPIServer   = "v2.6.2"
-	VersionQueryServer = "v2.6.2"
+	VersionAPIServer   = "v2.6.3"
+	VersionQueryServer = "v2.6.3"
 
 	// Logging
-	VersionFluentd = "v2.6.2"
+	VersionFluentd = "v2.6.3"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.6.2"
-	VersionComplianceReporter    = "v2.6.2"
-	VersionComplianceServer      = "v2.6.2"
-	VersionComplianceSnapshotter = "v2.6.2"
-	VersionComplianceBenchmarker = "v2.6.2"
+	VersionComplianceController  = "v2.6.3"
+	VersionComplianceReporter    = "v2.6.3"
+	VersionComplianceServer      = "v2.6.3"
+	VersionComplianceSnapshotter = "v2.6.3"
+	VersionComplianceBenchmarker = "v2.6.3"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.6.2"
-	VersionIntrusionDetectionJobInstaller = "v2.6.2"
+	VersionIntrusionDetectionController   = "v2.6.3"
+	VersionIntrusionDetectionJobInstaller = "v2.6.3"
 
 	// Manager images.
-	VersionManager        = "v2.6.2"
-	VersionManagerProxy   = "v2.6.2"
-	VersionManagerEsProxy = "v2.6.2"
+	VersionManager        = "v2.6.3"
+	VersionManagerProxy   = "v2.6.3"
+	VersionManagerEsProxy = "v2.6.3"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "v2.6.2"
+	VersionEsCurator        = "v2.6.3"
 
-	VersionKibana = "v2.6.2"
+	VersionKibana = "v2.6.3"
 )

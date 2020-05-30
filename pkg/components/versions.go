@@ -20,51 +20,51 @@ package components
 
 // This section contains images used when installing open-source Calico.
 const (
-	VersionCalicoNode            = "v3.12.1"
-	VersionCalicoCNI             = "v3.12.1"
-	VersionCalicoTypha           = "v3.12.1"
-	VersionCalicoKubeControllers = "v3.12.1"
-	VersionFlexVolume            = "v3.12.1"
+	VersionCalicoNode            = "v3.12.2"
+	VersionCalicoCNI             = "v3.12.2"
+	VersionCalicoTypha           = "v3.12.2"
+	VersionCalicoKubeControllers = "v3.12.2"
+	VersionFlexVolume            = "v3.12.2"
 )
 
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "v2.7.4"
-	VersionTigeraTypha           = "v2.7.4"
-	VersionTigeraKubeControllers = "v2.7.4"
+	VersionTigeraNode            = "v2.7.5"
+	VersionTigeraTypha           = "v2.7.5"
+	VersionTigeraKubeControllers = "v2.7.5"
 
 	// API server images.
-	VersionAPIServer   = "v2.7.4"
-	VersionQueryServer = "v2.7.4"
+	VersionAPIServer   = "v2.7.5"
+	VersionQueryServer = "v2.7.5"
 
 	// Logging
-	VersionFluentd = "v2.7.4"
+	VersionFluentd = "v2.7.5"
 
 	// Compliance images.
-	VersionComplianceController  = "v2.7.4"
-	VersionComplianceReporter    = "v2.7.4"
-	VersionComplianceServer      = "v2.7.4"
-	VersionComplianceSnapshotter = "v2.7.4"
-	VersionComplianceBenchmarker = "v2.7.4"
+	VersionComplianceController  = "v2.7.5"
+	VersionComplianceReporter    = "v2.7.5"
+	VersionComplianceServer      = "v2.7.5"
+	VersionComplianceSnapshotter = "v2.7.5"
+	VersionComplianceBenchmarker = "v2.7.5"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "v2.7.4"
-	VersionIntrusionDetectionJobInstaller = "v2.7.4"
+	VersionIntrusionDetectionController   = "v2.7.5"
+	VersionIntrusionDetectionJobInstaller = "v2.7.5"
 
 	// Manager images.
-	VersionManager        = "v2.7.4"
-	VersionManagerProxy   = "v2.7.4"
-	VersionManagerEsProxy = "v2.7.4"
+	VersionManager        = "v2.7.5"
+	VersionManagerProxy   = "v2.7.5"
+	VersionManagerEsProxy = "v2.7.5"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "v2.7.4"
+	VersionEsCurator        = "v2.7.5"
 
-	VersionKibana = "v2.7.4"
+	VersionKibana = "v2.7.5"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "v2.7.4"
+	VersionGuardian = "v2.7.5"
 )

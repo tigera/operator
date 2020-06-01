@@ -319,7 +319,11 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	isPrivileged := true
+	isPrivileged := false
+	//On OpenShift Fluentd needs privileged access to access logs on host path volume
+	if c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift {
+		isPrivileged = true
+	}
 
 	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
@@ -47,6 +48,16 @@ func Main() {
 	}
 
 	ctx := context.Background()
+
+	mp, found := os.LookupEnv("METRICS_PORT")
+	if found {
+		if i, err := strconv.Atoi(mp); err == nil {
+			metricsPort = i
+		} else {
+			log.Error(err, "Invalid value specified in METRICS_PORT")
+			os.Exit(1)
+		}
+	}
 
 	// Become the leader before proceeding
 	err = leader.Become(ctx, "operator-lock")

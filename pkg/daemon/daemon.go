@@ -16,7 +16,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -31,9 +30,8 @@ import (
 )
 
 var (
-	metricsHost       = "0.0.0.0"
-	metricsPort int32 = 8383
-	namespace         = ""
+	metricsBindAddress = "0.0.0.0:8383"
+	namespace          = ""
 )
 
 var log = logf.Log.WithName("daemon")
@@ -48,6 +46,13 @@ func Main() {
 
 	ctx := context.Background()
 
+	// use default value if METRICS_BIND_ADDRESS not specified.
+	// note: to disable, user should set to '0'
+	mp := os.Getenv("METRICS_BIND_ADDRESS")
+	if mp == "" {
+		mp = metricsBindAddress
+	}
+
 	// Become the leader before proceeding
 	err = leader.Become(ctx, "operator-lock")
 	if err != nil {
@@ -59,7 +64,7 @@ func Main() {
 	mgr, err := manager.New(cfg, manager.Options{
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		MetricsBindAddress: mp,
 	})
 	if err != nil {
 		log.Error(err, "")

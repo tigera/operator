@@ -50,6 +50,15 @@ const (
 	ManagerOIDCWellknownURI   = "/usr/share/nginx/html/.well-known"
 	ManagerOIDCJwksURI        = "/usr/share/nginx/html/discovery"
 
+	// VoltronTLSSecretName points to secret containing cert used for
+	// communication between Voltron and internal components (like kube
+	// controller and compliance server).
+	VoltronTLSSecretName = "voltron-tls"
+	// VoltronSecretKeyName refers to name of TLS key for Voltron secret.
+	VoltronSecretKeyName = "key"
+	// VoltronSecretCertName refers to name of TLS cert for Voltron secret.
+	VoltronSecretCertName = "cert"
+
 	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation        = "hash.operator.tigera.io/tls-secret"
 	oidcConfigHashAnnotation       = "hash.operator.tigera.io/oidc-config"

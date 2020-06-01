@@ -92,7 +92,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch the given secrets in each both the manager and operator namespaces
 	for _, namespace := range []string{render.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
+			render.ManagerTLSSecretName, render.VoltronTLSSecretName, render.ElasticsearchPublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
 		} {
@@ -205,7 +205,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
+	// Check that if the manager cert pair secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
 	tlsSecret, err := utils.ValidateCertPair(r.client,
@@ -214,7 +214,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		render.ManagerSecretCertName,
 	)
 
-	// An error is returned in case the read cannot be performed of the secret does not match the expected format
+	// An error is returned in case the read cannot be performed or the secret does not match the expected format
 	// In case the secret is not found, the error and the secret will be nil. This check needs to be done for all
 	// cluster types. For management cluster, we also need to check if the secret was created before hand.
 	if err != nil {
@@ -226,6 +226,15 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("No TLS manager certificate", err.Error())
 		return reconcile.Result{}, err
 	}
+
+	// Check that if the voltron cert pair secret exists that it is valid (has key and cert fields)
+	// If it does not exist then this function returns a nil secret but no error and a self-signed
+	// certificate will be generated when rendering below.
+	voltronTLSSecret, err := utils.ValidateCertPair(r.client,
+		render.VoltronTLSSecretName,
+		render.VoltronSecretKeyName,
+		render.VoltronSecretCertName,
+	)
 
 	// Check that compliance is running.
 	compliance, err := compliance.GetCompliance(ctx, r.client)
@@ -252,7 +261,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		}
 		return reconcile.Result{}, err
 	}
-
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {

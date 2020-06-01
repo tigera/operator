@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/common"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -126,6 +127,7 @@ var _ = Describe("Rendering tests", func() {
 			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.VoltronTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},

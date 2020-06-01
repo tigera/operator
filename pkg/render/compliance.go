@@ -49,12 +49,11 @@ const (
 	ComplianceServerKeyName    = "tls.key"
 
 	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
-	ManagerTLSHashAnnotation          = "hash.operator.tigera.io/manager-certificate"
 )
 
 func Compliance(
 	esSecrets []*corev1.Secret,
-	managerSecret *corev1.Secret,
+	voltronSecret *corev1.Secret,
 	installation *operatorv1.Installation,
 	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
@@ -81,7 +80,7 @@ func Compliance(
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
-		managerSecret:               managerSecret,
+		voltronSecret:               voltronSecret,
 		installation:                installation,
 		esClusterConfig:             esClusterConfig,
 		pullSecrets:                 pullSecrets,
@@ -92,7 +91,7 @@ func Compliance(
 
 type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
-	managerSecret               *corev1.Secret
+	voltronSecret               *corev1.Secret
 	installation                *operatorv1.Installation
 	esClusterConfig             *ElasticsearchClusterConfig
 	pullSecrets                 []*corev1.Secret
@@ -139,8 +138,8 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
-	if c.managerSecret != nil {
-		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
+	if c.voltronSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.voltronSecret)...)...)
 	}
 
 	var objsToDelete []runtime.Object
@@ -583,10 +582,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: complianceVolumeMounts(c.managerSecret),
+					VolumeMounts: complianceVolumeMounts(c.voltronSecret),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: complianceVolumes(defaultMode, c.managerSecret),
+			Volumes: complianceVolumes(defaultMode, c.voltronSecret),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -610,16 +609,16 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	}
 }
 
-func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
+func complianceVolumeMounts(voltronSecret *corev1.Secret) []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{{
 		Name:      "cert",
 		MountPath: "/code/apiserver.local.config/certificates",
 		ReadOnly:  true,
 	}}
 
-	if managerSecret != nil {
+	if voltronSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      "manager-cert",
+			Name:      "voltron-cert",
 			MountPath: "/manager-tls",
 			ReadOnly:  true,
 		})
@@ -628,7 +627,7 @@ func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
 	return mounts
 }
 
-func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1.Volume {
+func complianceVolumes(defaultMode int32, voltronSecret *corev1.Secret) []corev1.Volume {
 	var volumes = []corev1.Volume{{
 		Name: "cert",
 		VolumeSource: corev1.VolumeSource{
@@ -648,14 +647,14 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 			},
 		}}}
 
-	if managerSecret != nil {
+	if voltronSecret != nil {
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: "manager-cert",
+				Name: "voltron-cert",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						DefaultMode: &defaultMode,
-						SecretName:  ManagerTLSSecretName,
+						SecretName:  VoltronTLSSecretName,
 						Items: []corev1.KeyToPath{
 							{
 								Key:  "cert",

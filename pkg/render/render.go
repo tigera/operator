@@ -109,7 +109,11 @@ func Calico(
 	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
-	if managerTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+	// Determine whether this installation is for a Calico Enterprise management cluster
+	isManagement = (cr.Spec.Variant == operator.TigeraSecureEnterprise) &&
+		(cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement)
+
+	if managerTLSSecret == nil && isManagement {
 		// Generate CA and TLS certificate for tigera-manager
 		log.Info("Creating secret for manager")
 		var err error
@@ -120,12 +124,32 @@ func Calico(
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
 			ManagerServiceIP,
-			ManagerServiceDNS,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("generating certificates for manager was not finalized due to %v", err)
 		}
 		tss = append(tss, managerTLSSecret)
+	}
+
+	// In a Calico Enterprise management cluster we need a secondary TLS certificate for internal communication
+	// between voltron and other components (e.g. kube controller and compliance server).
+	var voltronTLSSecret *corev1.Secret
+	if isManagement {
+		// Generate CA and TLS certificate for voltron (within tigera-manager)
+		log.Info("Creating secret for voltron")
+		var err error
+		voltronTLSSecret, err = CreateOperatorTLSSecret(nil,
+			VoltronTLSSecretName,
+			VoltronSecretKeyName,
+			VoltronSecretCertName,
+			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			nil,
+			ManagerServiceDNS, // voltron cert is only for internal cluster communication using service DNS
+		)
+		if err != nil {
+			return nil, fmt.Errorf("generating certificates for voltron was not finalized due to %v", err)
+		}
+		tss = append(tss, voltronTLSSecret)
 	}
 
 	return calicoRenderer{
@@ -134,7 +158,7 @@ func Calico(
 		typhaNodeTLS:    typhaNodeTLS,
 		tlsConfigMaps:   tcms,
 		tlsSecrets:      tss,
-		managerTLSecret: managerTLSSecret,
+		voltronTLSecret: voltronTLSSecret,
 		birdTemplates:   bt,
 		provider:        p,
 		networkConfig:   nc,
@@ -204,7 +228,7 @@ type calicoRenderer struct {
 	typhaNodeTLS    *TyphaNodeTLS
 	tlsConfigMaps   []*corev1.ConfigMap
 	tlsSecrets      []*corev1.Secret
-	managerTLSecret *corev1.Secret
+	voltronTLSecret *corev1.Secret
 	birdTemplates   map[string]string
 	provider        operator.Provider
 	networkConfig   NetworkConfig
@@ -219,7 +243,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.upgrade))
 	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation, r.managerTLSecret))
+	components = appendNotNil(components, KubeControllers(r.installation, r.voltronTLSecret))
 	return components
 }
 

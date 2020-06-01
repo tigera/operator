@@ -455,7 +455,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	var managerTLSSecret *corev1.Secret
 	managerTLSSecret, err = utils.ValidateCertPair(r.client,
-		render.ManagerTLSSecretName,
+		render.VoltronTLSSecretName,
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
 	)

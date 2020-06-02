@@ -111,7 +111,7 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.0.0-0.dev-70-gae8763c",
+		Version: "v3.1.0.calient-0.dev-42-gfddf40d",
 		Image:   "tigera/kube-controllers",
 	}
 

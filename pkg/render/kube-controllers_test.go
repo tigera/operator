@@ -16,8 +16,6 @@ package render_test
 
 import (
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/components"
@@ -105,21 +103,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
 
-		var managerTLSSecret = v1.Secret{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Secret",
-				APIVersion: "v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ManagerTLSSecretName,
-				Namespace: render.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"cert": []byte("cert"),
-				"key":  []byte("key"),
-			},
-		}
-		component := render.KubeControllers(instance, &managerTLSSecret)
+		component := render.KubeControllers(instance, &internalManagerTLSSecret)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -128,7 +112,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ExpectResource(resources[1], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 		ExpectResource(resources[2], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
 		ExpectResource(resources[3], "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
-		ExpectResource(resources[4], render.ManagerTLSSecretName, "calico-system", "", "v1", "Secret")
+		ExpectResource(resources[4], render.ManagerInternalTLSSecretName, "calico-system", "", "v1", "Secret")
 
 		// The Deployment should have the correct configuration.
 		ds := resources[3].(*apps.Deployment)

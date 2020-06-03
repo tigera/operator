@@ -54,7 +54,7 @@ const (
 
 func Compliance(
 	esSecrets []*corev1.Secret,
-	managerSecret *corev1.Secret,
+	managerInternalTLSSecret *corev1.Secret,
 	installation *operatorv1.Installation,
 	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
@@ -81,7 +81,7 @@ func Compliance(
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
-		managerSecret:               managerSecret,
+		managerInternalTLSSecret:    managerInternalTLSSecret,
 		installation:                installation,
 		esClusterConfig:             esClusterConfig,
 		pullSecrets:                 pullSecrets,
@@ -92,7 +92,7 @@ func Compliance(
 
 type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
-	managerSecret               *corev1.Secret
+	managerInternalTLSSecret    *corev1.Secret
 	installation                *operatorv1.Installation
 	esClusterConfig             *ElasticsearchClusterConfig
 	pullSecrets                 []*corev1.Secret
@@ -139,8 +139,8 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
-	if c.managerSecret != nil {
-		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
+	if c.managerInternalTLSSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
 	var objsToDelete []runtime.Object
@@ -583,10 +583,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: complianceVolumeMounts(c.managerSecret),
+					VolumeMounts: complianceVolumeMounts(c.managerInternalTLSSecret),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: complianceVolumes(defaultMode, c.managerSecret),
+			Volumes: complianceVolumes(defaultMode, c.managerInternalTLSSecret),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 

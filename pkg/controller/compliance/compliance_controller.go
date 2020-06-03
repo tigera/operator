@@ -214,16 +214,16 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	var managerCertSecret *corev1.Secret
+	var managerInternalTLSSecret *corev1.Secret
 	if network.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
-		managerCertSecret, err = utils.ValidateCertPair(r.client,
-			render.ManagerTLSSecretName,
-			render.ManagerSecretCertName,
-			render.ManagerSecretKeyName,
+		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+			render.ManagerInternalTLSSecretName,
+			render.ManagerInternalSecretCertName,
+			render.ManagerInternalSecretKeyName,
 		)
 		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerTLSSecretName), err.Error())
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalSecretKeyName), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -245,7 +245,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerCertSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

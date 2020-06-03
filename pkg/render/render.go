@@ -63,7 +63,7 @@ func Calico(
 	cr *operator.Installation,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
-	managerTLSSecret *corev1.Secret,
+	managerInternalTLSSecret *corev1.Secret,
 	bt map[string]string,
 	p operator.Provider,
 	nc NetworkConfig,
@@ -109,14 +109,15 @@ func Calico(
 	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
-	if managerTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
-		// Generate CA and TLS certificate for tigera-manager
-		log.Info("Creating secret for manager")
+	if managerInternalTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
+		// The certificate will be issued for ManagerServiceDNS and localhost
+		log.Info("Creating secret for internal manager credentials")
 		var err error
-		managerTLSSecret, err = CreateOperatorTLSSecret(nil,
-			ManagerTLSSecretName,
-			ManagerSecretKeyName,
-			ManagerSecretCertName,
+		managerInternalTLSSecret, err = CreateOperatorTLSSecret(nil,
+			ManagerInternalTLSSecretName,
+			ManagerInternalSecretKeyName,
+			ManagerInternalSecretCertName,
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
 			ManagerServiceIP,
@@ -125,20 +126,20 @@ func Calico(
 		if err != nil {
 			return nil, fmt.Errorf("generating certificates for manager was not finalized due to %v", err)
 		}
-		tss = append(tss, managerTLSSecret)
+		tss = append(tss, managerInternalTLSSecret)
 	}
 
 	return calicoRenderer{
-		installation:    cr,
-		pullSecrets:     pullSecrets,
-		typhaNodeTLS:    typhaNodeTLS,
-		tlsConfigMaps:   tcms,
-		tlsSecrets:      tss,
-		managerTLSecret: managerTLSSecret,
-		birdTemplates:   bt,
-		provider:        p,
-		networkConfig:   nc,
-		upgrade:         up,
+		installation:            cr,
+		pullSecrets:             pullSecrets,
+		typhaNodeTLS:            typhaNodeTLS,
+		tlsConfigMaps:           tcms,
+		tlsSecrets:              tss,
+		managerInternalTLSecret: managerInternalTLSSecret,
+		birdTemplates:           bt,
+		provider:                p,
+		networkConfig:           nc,
+		upgrade:                 up,
 	}, nil
 }
 
@@ -199,16 +200,16 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	installation    *operator.Installation
-	pullSecrets     []*corev1.Secret
-	typhaNodeTLS    *TyphaNodeTLS
-	tlsConfigMaps   []*corev1.ConfigMap
-	tlsSecrets      []*corev1.Secret
-	managerTLSecret *corev1.Secret
-	birdTemplates   map[string]string
-	provider        operator.Provider
-	networkConfig   NetworkConfig
-	upgrade         bool
+	installation            *operator.Installation
+	pullSecrets             []*corev1.Secret
+	typhaNodeTLS            *TyphaNodeTLS
+	tlsConfigMaps           []*corev1.ConfigMap
+	tlsSecrets              []*corev1.Secret
+	managerInternalTLSecret *corev1.Secret
+	birdTemplates           map[string]string
+	provider                operator.Provider
+	networkConfig           NetworkConfig
+	upgrade                 bool
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -219,7 +220,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.upgrade))
 	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation, r.managerTLSecret))
+	components = appendNotNil(components, KubeControllers(r.installation, r.managerInternalTLSecret))
 	return components
 }
 

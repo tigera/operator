@@ -30,16 +30,16 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation, managerSecret *v1.Secret) *kubeControllersComponent {
+func KubeControllers(cr *operator.Installation, managerInternalSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr: cr,
-		managerSecret: managerSecret,
+		cr:                    cr,
+		managerInternalSecret: managerInternalSecret,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr *operator.Installation
-	managerSecret *v1.Secret
+	cr                    *operator.Installation
+	managerInternalSecret *v1.Secret
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -49,8 +49,8 @@ func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object
 		c.controllersRoleBinding(),
 		c.controllersDeployment(),
 	}
-	if c.managerSecret != nil {
-		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerSecret)...)...)
+	if c.managerInternalSecret != nil {
+		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
 	}
 
 	return kubeControllerObjects, nil
@@ -268,10 +268,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 									},
 								},
 							},
-							VolumeMounts: kubeControllersVolumeMounts(c.managerSecret),
+							VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 						},
 					},
-					Volumes: kubeControllersVolumes(defaultMode, c.managerSecret),
+					Volumes: kubeControllersVolumes(defaultMode, c.managerInternalSecret),
 				},
 			},
 		},
@@ -289,7 +289,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 func kubeControllersVolumeMounts(managerSecret *v1.Secret) []v1.VolumeMount {
 	if managerSecret != nil {
 		return []v1.VolumeMount{{
-			Name:      "manager-cert",
+			Name:      ManagerInternalTLSSecretName,
 			MountPath: "/manager-tls",
 			ReadOnly:  true,
 		}}
@@ -303,11 +303,11 @@ func kubeControllersVolumes(defaultMode int32, managerSecret *v1.Secret) []v1.Vo
 
 		return []v1.Volume{
 			{
-				Name: "manager-cert",
+				Name: ManagerInternalTLSSecretName,
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
 						DefaultMode: &defaultMode,
-						SecretName:  ManagerTLSSecretName,
+						SecretName:  ManagerInternalTLSSecretName,
 						Items: []v1.KeyToPath{
 							{
 								Key:  "cert",

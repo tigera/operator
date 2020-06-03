@@ -453,17 +453,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	var managerTLSSecret *corev1.Secret
-	managerTLSSecret, err = utils.ValidateCertPair(r.client,
-		render.ManagerTLSSecretName,
-		render.ManagerSecretKeyName,
-		render.ManagerSecretCertName,
+	var managerInternalTLSSecret *corev1.Secret
+	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+		render.ManagerInternalTLSSecretName,
+		render.ManagerInternalSecretCertName,
+		render.ManagerInternalSecretKeyName,
 	)
 
 	if instance.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
 		if err != nil {
-			log.Error(err, "Invalid manager TLS Cert")
-			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+			log.Error(err, "Invalid internal manager TLS Cert")
+			r.status.SetDegraded("Error validating internal manager TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -512,7 +512,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance,
 		pullSecrets,
 		typhaNodeTLS,
-		managerTLSSecret,
+		managerInternalTLSSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		netConf,

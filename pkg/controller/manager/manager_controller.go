@@ -253,7 +253,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
@@ -318,6 +317,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	var management = installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement
 	var tunnelSecret *corev1.Secret
+	var internalTrafficSecret *corev1.Secret
 	if management {
 
 		// If clusterType is management and the customer brings its own cert, copy it over to the manager ns.
@@ -328,6 +328,21 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 				tunnelSecret = nil
 			} else {
 				r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
+				return reconcile.Result{}, nil
+			}
+		}
+
+		// We expect that the secret that holds the certificates for internal communication within the management
+		// K8S cluster is already created by the KubeControllers
+		internalTrafficSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, client.ObjectKey{
+			Name: render.ManagerInternalTLSSecretName,
+			Namespace: render.OperatorNamespace(),
+		}, internalTrafficSecret)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				var message = fmt.Sprintf("Failed to check for the existence of %s secret", render.ManagerInternalTLSSecretName)
+				r.status.SetDegraded(message, err.Error())
 				return reconcile.Result{}, nil
 			}
 		}
@@ -350,6 +365,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		oidcConfig,
 		management,
 		tunnelSecret,
+		internalTrafficSecret,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

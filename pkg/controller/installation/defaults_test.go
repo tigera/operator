@@ -231,6 +231,19 @@ var _ = Describe("Defaulting logic tests", func() {
 			nil,
 			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
 		),
+		table.Entry("kubeadm only CIDR, but other fields in calico network",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						IPPools: []operator.IPPool{
+							{Encapsulation: operator.EncapsulationVXLANCrossSubnet},
+						},
+					},
+				},
+			},
+			nil,
+			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
+		),
 	)
 
 	table.DescribeTable("Test different values for FlexVolumePath",

@@ -18,7 +18,7 @@ func extractKubeadmCIDRs(kubeadmConfig *v1.ConfigMap) ([]string, error) {
 	var line []string
 	var foundCIDRs []string
 
-	// Look through the config map for lines starting with 'podSubnet', then assign the right variable
+	// Look through the config map for a line starting with 'podSubnet', then assign the right variable
 	// according to the IP family of the matching string.
 	re := regexp.MustCompile(`podSubnet: (.*)`)
 	for _, l := range kubeadmConfig.Data {

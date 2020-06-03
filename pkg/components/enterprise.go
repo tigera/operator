@@ -125,8 +125,8 @@ var (
 		Image:   "tigera/typha",
 	}
 
-	ComponentTigeraCNI = component{
+    ComponentTigeraCNI = component{
 		Version: "v3.0.0-0.dev-53-gb3668d9",
 		Image:   "tigera/cni",
-	}
+    }
 )

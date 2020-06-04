@@ -34,23 +34,24 @@ import (
 )
 
 const (
-	managerPort                   = 9443
-	managerTargetPort             = 9443
-	ManagerNamespace              = "tigera-manager"
-	ManagerServiceDNS             = "tigera-manager.tigera-manager.svc"
-	ManagerServiceIP              = "localhost"
-	ManagerServiceAccount         = "tigera-manager"
-	ManagerClusterRole            = "tigera-manager-role"
-	ManagerClusterRoleBinding     = "tigera-manager-binding"
-	ManagerTLSSecretName          = "manager-tls"
-	ManagerSecretKeyName          = "key"
-	ManagerSecretCertName         = "cert"
-	ManagerInternalTLSSecretName  = "internal-manager-tls"
-	ManagerInternalSecretKeyName  = "key"
-	ManagerInternalSecretCertName = "cert"
-	ManagerOIDCConfig             = "tigera-manager-oidc-config"
-	ManagerOIDCWellknownURI       = "/usr/share/nginx/html/.well-known"
-	ManagerOIDCJwksURI            = "/usr/share/nginx/html/discovery"
+	managerPort                      = 9443
+	managerTargetPort                = 9443
+	ManagerNamespace                 = "tigera-manager"
+	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc"
+	ManagerServiceIP                 = "localhost"
+	ManagerServiceAccount            = "tigera-manager"
+	ManagerClusterRole               = "tigera-manager-role"
+	ManagerClusterRoleBinding        = "tigera-manager-binding"
+	ManagerTLSSecretName             = "manager-tls"
+	ManagerSecretKeyName             = "key"
+	ManagerSecretCertName            = "cert"
+	ManagerInternalTLSSecretName     = "internal-manager-tls"
+	ManagerInternalTLSSecretCertName = "internal-manager-tls-cert"
+	ManagerInternalSecretKeyName     = "key"
+	ManagerInternalSecretCertName    = "cert"
+	ManagerOIDCConfig                = "tigera-manager-oidc-config"
+	ManagerOIDCWellknownURI          = "/usr/share/nginx/html/.well-known"
+	ManagerOIDCJwksURI               = "/usr/share/nginx/html/discovery"
 
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
@@ -303,6 +304,21 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		v = append(v,
 			v1.Volume{
 				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
+				Name: ManagerInternalTLSSecretCertName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: ManagerInternalTLSSecretName,
+						Items: []v1.KeyToPath{
+							{
+								Key:  "cert",
+								Path: "cert",
+							},
+						},
+					},
+				},
+			},
+			v1.Volume{
+				// We mount the full secret to be shared with Voltron.
 				Name: ManagerInternalTLSSecretName,
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
@@ -496,7 +512,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 	if c.management {
 		apiServer.VolumeMounts = []corev1.VolumeMount{
-			{Name: ManagerInternalTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
+			{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
 		}
 	}
 	return apiServer

@@ -92,7 +92,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron:" + components.ComponentManagerProxy.Version))
 
-		// Expect 3 volumes mounts
+		// Expect 1 volume mounts for es proxy
+		var esProxy = deployment.Spec.Template.Spec.Containers[1]
+		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
+		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
+
+		// Expect 3 volume mounts for voltron
 		var voltron = deployment.Spec.Template.Spec.Containers[2]
 		Expect(len(voltron.VolumeMounts)).To(Equal(3))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
@@ -223,10 +229,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
 		voltron := deployment.Spec.Template.Spec.Containers[2]
+		esProxy := deployment.Spec.Template.Spec.Containers[1]
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
-		// Expect 5 volumes mounts
+		// Expect 2 volume mounts for esproxy
+		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
+		Expect(esProxy.VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretCertName))
+		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
+
+		// Expect 5 volume mounts for voltron
 		Expect(len(voltron.VolumeMounts)).To(Equal(5))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/certs/https"))
@@ -239,20 +253,22 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.VoltronTunnelSecretName))
 		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/certs/tunnel"))
 
-		// Expect 6 volumes mapped to 6 secrets
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(6))
+		// Expect 7 volumes mapped to 6 secrets
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(7))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.KibanaPublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerInternalTLSSecretCertName))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.VoltronTunnelSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[5].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
+		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[5].Name).To(Equal(render.VoltronTunnelSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[6].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 	})
 })
 

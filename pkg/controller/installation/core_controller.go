@@ -37,6 +37,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -206,26 +207,46 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 	}
 
 	var openshiftConfig *configv1.Network
+	var kubeadmConfig *v1.ConfigMap
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openshiftConfig = &configv1.Network{}
 		// If configured to run in openshift, then also fetch the openshift configuration API.
-		err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
+		err = client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
 		}
+	} else {
+		// Check if we're running on kubeadm by getting the config map.
+		kubeadmConfig = &v1.ConfigMap{}
+		key := types.NamespacedName{Name: kubeadmConfigMap, Namespace: metav1.NamespaceSystem}
+		err = client.Get(ctx, key, kubeadmConfig)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return nil, fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
+			}
+			kubeadmConfig = nil
+		}
 	}
 
-	err = mergeAndFillDefaults(instance, openshiftConfig)
+	err = mergeAndFillDefaults(instance, openshiftConfig, kubeadmConfig)
 	if err != nil {
 		return nil, err
 	}
 	return instance, nil
 }
 
-func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network) error {
+// mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
+// populates defaults in the Installation instance.
+func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *v1.ConfigMap) error {
 	if o != nil {
+		// Merge in OpenShift configuration.
 		if err := updateInstallationForOpenshiftNetwork(i, o); err != nil {
 			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
+		}
+	} else if kubeadmConfig != nil {
+		// Merge in kubeadm configuraiton.
+		if err := updateInstallationForKubeadm(i, kubeadmConfig); err != nil {
+			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
 		}
 	}
 
@@ -780,62 +801,78 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}
 
-	// if IPPools is nil, add IPPool with openshift CIDR
+	platformCIDRs := []string{}
+	for _, c := range o.Spec.ClusterNetwork {
+		platformCIDRs = append(platformCIDRs, c.CIDR)
+	}
+	return mergePlatformPodCIDRs(i, platformCIDRs)
+}
+
+func updateInstallationForKubeadm(i *operator.Installation, c *v1.ConfigMap) error {
+	if i.Spec.CalicoNetwork == nil {
+		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	}
+
+	platformCIDRs, err := extractKubeadmCIDRs(c)
+	if err != nil {
+		return err
+	}
+	return mergePlatformPodCIDRs(i, platformCIDRs)
+}
+
+func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) error {
+	// If IPPools is nil, add IPPool with CIDRs detected from platform configuration.
 	if i.Spec.CalicoNetwork.IPPools == nil {
-		// If the openshift spec has no ClusterNetworks then return and let the
-		// normal defaulting happen.
-		if len(o.Spec.ClusterNetwork) == 0 {
+		if len(platformCIDRs) == 0 {
+			// If the platform has no CIDRs defined as well, then return and let the
+			// normal defaulting happen.
 			return nil
 		}
 		v4found := false
 		v6found := false
 
-		// Since we don't really know all the use cases in OpenShift of having multiple
-		// ClusterNetworks, we grab the '1st' IPv4 and IPv6 cidrs. This will allow the
+		// Currently we only support a single IPv4 and a single IPv6 CIDR configured via the operator.
+		// So, grab the 1st IPv4 and IPv6 cidrs we find and use those. This will allow the
 		// operator to work in situations where there are more than one of each.
-		for _, osCIDR := range o.Spec.ClusterNetwork {
-			addr, _, err := net.ParseCIDR(osCIDR.CIDR)
+		for _, c := range platformCIDRs {
+			addr, _, err := net.ParseCIDR(c)
 			if err != nil {
-				log.Error(err, "Failed to parse ClusterNetwork CIDR.")
+				log.Error(err, "Failed to parse platform's pod network CIDR.")
 				continue
 			}
+
 			if addr.To4() == nil {
 				if v6found {
 					continue
 				}
 				v6found = true
 				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-					operator.IPPool{
-						CIDR: osCIDR.CIDR,
-					})
+					operator.IPPool{CIDR: c})
 			} else {
 				if v4found {
 					continue
 				}
 				v4found = true
 				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-					operator.IPPool{
-						CIDR: osCIDR.CIDR,
-					})
+					operator.IPPool{CIDR: c})
 			}
 			if v6found && v4found {
 				break
 			}
 		}
-	} else {
+	} else if len(i.Spec.CalicoNetwork.IPPools) == 0 {
 		// Empty IPPools list so nothing to do.
-		if len(i.Spec.CalicoNetwork.IPPools) == 0 {
-			return nil
-		}
-
+		return nil
+	} else {
+		// Pools are configured on the Installation. Make sure they are compatible with
+		// the configuration set in the underlying Kubernetes platform.
 		for _, pool := range i.Spec.CalicoNetwork.IPPools {
 			within := false
-			for _, osCIDR := range o.Spec.ClusterNetwork {
-				within = within || cidrWithinCidr(osCIDR.CIDR, pool.CIDR)
+			for _, c := range platformCIDRs {
+				within = within || cidrWithinCidr(c, pool.CIDR)
 			}
 			if !within {
-				return fmt.Errorf("IPPool %v is not within the OpenShift ClusterNetwork",
-					pool.CIDR)
+				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s)", pool.CIDR)
 			}
 		}
 	}

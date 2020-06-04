@@ -34,25 +34,29 @@ import (
 )
 
 const (
-	managerPort               = 9443
-	managerTargetPort         = 9443
-	ManagerNamespace          = "tigera-manager"
-	ManagerServiceDNS         = "tigera-manager.tigera-manager.svc"
-	ManagerServiceIP          = "localhost"
-	ManagerServiceAccount     = "tigera-manager"
-	ManagerClusterRole        = "tigera-manager-role"
-	ManagerClusterRoleBinding = "tigera-manager-binding"
-	ManagerTLSSecretName      = "manager-tls"
-	ManagerTLSSecretCertName  = "manager-tls-cert"
-	ManagerSecretKeyName      = "key"
-	ManagerSecretCertName     = "cert"
-	ManagerOIDCConfig         = "tigera-manager-oidc-config"
-	ManagerOIDCWellknownURI   = "/usr/share/nginx/html/.well-known"
-	ManagerOIDCJwksURI        = "/usr/share/nginx/html/discovery"
+	managerPort                      = 9443
+	managerTargetPort                = 9443
+	ManagerNamespace                 = "tigera-manager"
+	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc"
+	ManagerServiceIP                 = "localhost"
+	ManagerServiceAccount            = "tigera-manager"
+	ManagerClusterRole               = "tigera-manager-role"
+	ManagerClusterRoleBinding        = "tigera-manager-binding"
+	ManagerTLSSecretName             = "manager-tls"
+	ManagerSecretKeyName             = "key"
+	ManagerSecretCertName            = "cert"
+	ManagerInternalTLSSecretName     = "internal-manager-tls"
+	ManagerInternalTLSSecretCertName = "internal-manager-tls-cert"
+	ManagerInternalSecretKeyName     = "key"
+	ManagerInternalSecretCertName    = "cert"
+	ManagerOIDCConfig                = "tigera-manager-oidc-config"
+	ManagerOIDCWellknownURI          = "/usr/share/nginx/html/.well-known"
+	ManagerOIDCJwksURI               = "/usr/share/nginx/html/discovery"
 
-	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
-	tlsSecretHashAnnotation        = "hash.operator.tigera.io/tls-secret"
-	oidcConfigHashAnnotation       = "hash.operator.tigera.io/oidc-config"
+	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
+	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
+	ManagerInternalTLSHashAnnotation = "hash.operator.tigera.io/internal-tls-secret"
+	oidcConfigHashAnnotation         = "hash.operator.tigera.io/oidc-config"
 )
 
 // ManagementClusterConnection configuration constants
@@ -77,10 +81,12 @@ func Manager(
 	oidcConfig *corev1.ConfigMap,
 	management bool,
 	tunnelSecret *corev1.Secret,
+	internalTrafficSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
+	tlsAnnotations := make(map[string]string)
 
-	if tlsKeyPair == nil && !management {
+	if tlsKeyPair == nil {
 		var err error
 		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			ManagerTLSSecretName,
@@ -96,15 +102,22 @@ func Manager(
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
-	var tunnelSecrets []*corev1.Secret
+	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+
 	if management {
 		// If there is no secret create one and add it to the operator namespace.
 		if tunnelSecret == nil {
 			tunnelSecret = voltronTunnelSecret()
-			tunnelSecrets = append(tunnelSecrets, tunnelSecret)
+			tlsSecrets = append(tlsSecrets, tunnelSecret)
 		}
 
-		tunnelSecrets = append(tunnelSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
+		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
+		// tunnelSecret contains the ca cert to generate guardian certificates
+		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
+		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
+		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, internalTrafficSecret)...)
+		tlsAnnotations[voltronTunnelHashAnnotation] = AnnotationHash(tunnelSecret.Data)
+		tlsAnnotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
 		cr:                         cr,
@@ -113,12 +126,12 @@ func Manager(
 		complianceServerCertSecret: complianceServerCertSecret,
 		esClusterConfig:            esClusterConfig,
 		tlsSecrets:                 tlsSecrets,
+		tlsAnnotations:             tlsAnnotations,
 		pullSecrets:                pullSecrets,
 		openshift:                  openshift,
 		installation:               installation,
 		oidcConfig:                 oidcConfig,
 		management:                 management,
-		tunnelSecrets:              tunnelSecrets,
 	}, nil
 }
 
@@ -129,14 +142,13 @@ type managerComponent struct {
 	complianceServerCertSecret *corev1.Secret
 	esClusterConfig            *ElasticsearchClusterConfig
 	tlsSecrets                 []*corev1.Secret
+	tlsAnnotations             map[string]string
 	pullSecrets                []*corev1.Secret
 	openshift                  bool
 	installation               *operator.Installation
 	oidcConfig                 *corev1.ConfigMap
 	// If true, this is a management cluster.
 	management bool
-	// The tunnel secret if present in the operator namespace
-	tunnelSecrets []*corev1.Secret
 }
 
 func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -170,7 +182,6 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
-	objs = append(objs, secretsToRuntimeObjects(c.tunnelSecrets...)...)
 	if c.oidcConfig != nil {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
 	}
@@ -193,13 +204,14 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		"scheduler.alpha.kubernetes.io/critical-pod": "",
 		complianceServerTLSHashAnnotation:            AnnotationHash(c.complianceServerCertSecret.Data),
 	}
-	if c.management {
-		annotations[voltronTunnelHashAnnotation] = AnnotationHash(c.tunnelSecrets[0].Data)
-	}
-	if len(c.tlsSecrets) > 0 {
-		// Add a hash of the Secret to ensure if it changes the manager will be
-		// redeployed.
-		annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
+
+	// Add a hash of the Secret to ensure if it changes the manager will be
+	// redeployed.	The following secrets are annotated:
+	// manager-tls : cert used for tigera UI
+	// internal-manager-tls : cert used for internal communication within K8S cluster
+	// tigera-management-cluster-connection : cert used to generate guardian certificates
+	for k, v := range c.tlsAnnotations {
+		annotations[k] = v
 	}
 	if c.oidcConfig != nil {
 		annotations[oidcConfigHashAnnotation] = AnnotationHash(c.oidcConfig.Data)
@@ -257,7 +269,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
-	optional := true
 	v := []v1.Volume{
 		{
 			Name: ManagerTLSSecretName,
@@ -272,15 +283,6 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
 					SecretName: KibanaPublicCertSecret,
-				},
-			},
-		},
-		{
-			Name: VoltronTunnelSecretName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: VoltronTunnelSecretName,
-					Optional:   &optional,
 				},
 			},
 		},
@@ -302,16 +304,34 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		v = append(v,
 			v1.Volume{
 				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
-				Name: ManagerTLSSecretCertName,
+				Name: ManagerInternalTLSSecretCertName,
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: ManagerTLSSecretName,
+						SecretName: ManagerInternalTLSSecretName,
 						Items: []v1.KeyToPath{
 							{
 								Key:  "cert",
 								Path: "cert",
 							},
 						},
+					},
+				},
+			},
+			v1.Volume{
+				// We mount the full secret to be shared with Voltron.
+				Name: ManagerInternalTLSSecretName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: ManagerInternalTLSSecretName,
+					},
+				},
+			},
+			v1.Volume{
+				// Append volume for tunnel certificate
+				Name: VoltronTunnelSecretName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: VoltronTunnelSecretName,
 					},
 				},
 			},
@@ -459,15 +479,25 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
 			{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
-			{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana"},
-			{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance"},
-			{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel/"},
-		},
+		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),
 	}
+}
+
+func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
+	var mounts = []corev1.VolumeMount{
+		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
+		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
+		{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true},
+	}
+
+	if c.management {
+		mounts = append(mounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretName, MountPath: "/certs/internal", ReadOnly: true})
+		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
+	}
+
+	return mounts
 }
 
 // managerEsProxyContainer returns the ES proxy container
@@ -480,7 +510,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 	if c.management {
 		apiServer.VolumeMounts = []corev1.VolumeMount{
-			{Name: ManagerTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
+			{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
 		}
 	}
 	return apiServer

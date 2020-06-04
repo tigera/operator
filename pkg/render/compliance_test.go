@@ -20,8 +20,6 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	v1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("compliance rendering tests", func() {
@@ -94,20 +92,8 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Secret",
-					APIVersion: "v1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ManagerTLSSecretName,
-					Namespace: render.OperatorNamespace(),
-				},
-				Data: map[string][]byte{
-					"cert": []byte("cert"),
-					"key":  []byte("key"),
-				},
-			}, &operatorv1.Installation{
+			component, err := render.Compliance(nil, &internalManagerTLSSecret,
+				&operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
 					KubernetesProvider:    operatorv1.ProviderNone,
 					Registry:              "testregistry.com/",
@@ -152,7 +138,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{render.ManagerTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
+				{render.ManagerInternalTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
@@ -176,7 +162,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("manager-cert"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
@@ -184,8 +170,8 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal("cert"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal("manager-cert"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 		})

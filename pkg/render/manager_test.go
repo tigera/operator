@@ -102,7 +102,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[2].Name).To(Equal(render.ComplianceServerCertSecret))
 		Expect(voltron.VolumeMounts[2].MountPath).To(Equal("/certs/compliance"))
 
-		//Expect 3 volumes mapped to 3 secrets
+		//Expect 4 volumes mapped to 4 secrets
 		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))

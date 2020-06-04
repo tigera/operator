@@ -221,11 +221,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
 		return reconcile.Result{}, err
 	}
-	if installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement && tlsSecret == nil {
-		err = fmt.Errorf("manager TLS Secret not found")
-		r.status.SetDegraded("No TLS manager certificate", err.Error())
-		return reconcile.Result{}, err
-	}
 
 	// Check that compliance is running.
 	compliance, err := compliance.GetCompliance(ctx, r.client)

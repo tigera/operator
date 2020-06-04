@@ -19,11 +19,14 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 
 	"github.com/onsi/ginkgo/reporters"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 func TestStatus(t *testing.T) {
+	logf.SetLogger(zap.LoggerTo(GinkgoWriter))
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../../../report/clusterconnection_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/Management Cluster Connection Suite", []Reporter{junitReporter})

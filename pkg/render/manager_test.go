@@ -201,11 +201,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
-			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
-			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: render.ManagerInternalTLSSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
+			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -219,8 +219,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		By("creating a valid self-signed cert")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		validateSecret(resources[10].(*corev1.Secret))
-		validateSecret(resources[11].(*corev1.Secret))
+		validateSecret(resources[8].(*corev1.Secret))
+		validateSecret(resources[9].(*corev1.Secret))
 
 		By("configuring the manager deployment")
 		deployment := resources[len(resources) - 1].(*v1.Deployment)
@@ -233,7 +233,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
-		// Expect 2 volume mounts for esproxy
+		// Expect 2 volume mounts for es proxy
 		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretCertName))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))

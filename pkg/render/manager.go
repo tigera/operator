@@ -84,6 +84,7 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
+	tlsAnnotations := make(map[string]string)
 
 	if tlsKeyPair == nil {
 		var err error
@@ -101,18 +102,22 @@ func Manager(
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
-	var tunnelSecrets []*corev1.Secret
+	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+
 	if management {
 		// If there is no secret create one and add it to the operator namespace.
 		if tunnelSecret == nil {
 			tunnelSecret = voltronTunnelSecret()
-			tunnelSecrets = append(tunnelSecrets, tunnelSecret)
+			tlsSecrets = append(tlsSecrets, tunnelSecret)
 		}
 
-		tunnelSecrets = append(tunnelSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
-		if internalTrafficSecret != nil {
-			tunnelSecrets = append(tunnelSecrets, CopySecrets(ManagerNamespace, internalTrafficSecret)...)
-		}
+		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
+		// tunnelSecret contains the ca cert to generate guardian certificates
+		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
+		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
+		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, internalTrafficSecret)...)
+		tlsAnnotations[voltronTunnelHashAnnotation] = AnnotationHash(tunnelSecret.Data)
+		tlsAnnotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
 		cr:                         cr,
@@ -121,12 +126,12 @@ func Manager(
 		complianceServerCertSecret: complianceServerCertSecret,
 		esClusterConfig:            esClusterConfig,
 		tlsSecrets:                 tlsSecrets,
+		tlsAnnotations:             tlsAnnotations,
 		pullSecrets:                pullSecrets,
 		openshift:                  openshift,
 		installation:               installation,
 		oidcConfig:                 oidcConfig,
 		management:                 management,
-		tunnelSecrets:              tunnelSecrets,
 	}, nil
 }
 
@@ -137,15 +142,13 @@ type managerComponent struct {
 	complianceServerCertSecret *corev1.Secret
 	esClusterConfig            *ElasticsearchClusterConfig
 	tlsSecrets                 []*corev1.Secret
+	tlsAnnotations             map[string]string
 	pullSecrets                []*corev1.Secret
 	openshift                  bool
 	installation               *operator.Installation
 	oidcConfig                 *corev1.ConfigMap
 	// If true, this is a management cluster.
 	management bool
-	// The tunnel secret if present in the operator namespace
-	// The certificate used for internal communication in the operator namespace
-	tunnelSecrets []*corev1.Secret
 }
 
 func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -179,7 +182,6 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
-	objs = append(objs, secretsToRuntimeObjects(c.tunnelSecrets...)...)
 	if c.oidcConfig != nil {
 		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
 	}
@@ -202,16 +204,14 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		"scheduler.alpha.kubernetes.io/critical-pod": "",
 		complianceServerTLSHashAnnotation:            AnnotationHash(c.complianceServerCertSecret.Data),
 	}
-	if c.management {
-		annotations[voltronTunnelHashAnnotation] = AnnotationHash(c.tunnelSecrets[0].Data)
-		if len(c.tunnelSecrets) == 2 {
-			annotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(c.tunnelSecrets[1].Data)
-		}
-	}
-	if len(c.tlsSecrets) > 0 {
-		// Add a hash of the Secret to ensure if it changes the manager will be
-		// redeployed.
-		annotations[tlsSecretHashAnnotation] = AnnotationHash(c.tlsSecrets[0].Data)
+
+	// Add a hash of the Secret to ensure if it changes the manager will be
+	// redeployed.	The following secrets are annotated:
+	// manager-tls : cert used for tigera UI
+	// internal-manager-tls : cert used for internal communication within K8S cluster
+	// tigera-management-cluster-connection : cert used to generate guardian certificates
+	for k, v := range c.tlsAnnotations {
+		annotations[k] = v
 	}
 	if c.oidcConfig != nil {
 		annotations[oidcConfigHashAnnotation] = AnnotationHash(c.oidcConfig.Data)
@@ -326,17 +326,15 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 					},
 				},
 			},
-		)
-
-		// Append volume for tunnel certificate
-		v = append(v, v1.Volume{
-			Name: VoltronTunnelSecretName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: VoltronTunnelSecretName,
+			v1.Volume{
+				// Append volume for tunnel certificate
+				Name: VoltronTunnelSecretName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: VoltronTunnelSecretName,
+					},
 				},
 			},
-		},
 		)
 	}
 	if c.oidcConfig != nil {

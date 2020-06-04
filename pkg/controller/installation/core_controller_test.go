@@ -74,9 +74,9 @@ var _ = Describe("Testing core-controller installation", func() {
 	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
 		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
 			if expectSuccess {
-				Expect(mergeAndFillDefaults(i, on)).To(BeNil())
+				Expect(mergeAndFillDefaults(i, on, nil)).To(BeNil())
 			} else {
-				Expect(mergeAndFillDefaults(i, on)).ToNot(BeNil())
+				Expect(mergeAndFillDefaults(i, on, nil)).ToNot(BeNil())
 				return
 			}
 

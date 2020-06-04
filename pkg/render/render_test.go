@@ -101,7 +101,7 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
 		// - 1 ns (tigera-prometheus)
-		// - pass in managerTLSSecret
+		// - pass in internalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
@@ -125,7 +125,7 @@ var _ = Describe("Rendering tests", func() {
 			{render.NodeTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
-			{render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
@@ -142,7 +142,7 @@ var _ = Describe("Rendering tests", func() {
 			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-kube-controllers", common.CalicoNamespace, "apps", "v1", "Deployment"},
-			{render.ManagerTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 		}
 
 		var resources []runtime.Object

@@ -101,7 +101,7 @@ var (
 	}
 
 	ComponentManagerProxy = component{
-		Version: "v3.0.0-0.dev-9-ge9b5d1c",
+		Version: "v3.1.0.calient-0.dev-2-gf6b3d1c",
 		Image:   "tigera/voltron",
 	}
 

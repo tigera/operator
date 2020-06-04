@@ -49,12 +49,11 @@ const (
 	ComplianceServerKeyName    = "tls.key"
 
 	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
-	ManagerTLSHashAnnotation          = "hash.operator.tigera.io/manager-certificate"
 )
 
 func Compliance(
 	esSecrets []*corev1.Secret,
-	managerSecret *corev1.Secret,
+	managerInternalTLSSecret *corev1.Secret,
 	installation *operatorv1.Installation,
 	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
@@ -81,7 +80,7 @@ func Compliance(
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
-		managerSecret:               managerSecret,
+		managerInternalTLSSecret:    managerInternalTLSSecret,
 		installation:                installation,
 		esClusterConfig:             esClusterConfig,
 		pullSecrets:                 pullSecrets,
@@ -92,7 +91,7 @@ func Compliance(
 
 type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
-	managerSecret               *corev1.Secret
+	managerInternalTLSSecret    *corev1.Secret
 	installation                *operatorv1.Installation
 	esClusterConfig             *ElasticsearchClusterConfig
 	pullSecrets                 []*corev1.Secret
@@ -139,8 +138,8 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
-	if c.managerSecret != nil {
-		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerSecret)...)...)
+	if c.managerInternalTLSSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
 	var objsToDelete []runtime.Object
@@ -588,10 +587,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: complianceVolumeMounts(c.managerSecret),
+					VolumeMounts: complianceVolumeMounts(c.managerInternalTLSSecret),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: complianceVolumes(defaultMode, c.managerSecret),
+			Volumes: complianceVolumes(defaultMode, c.managerInternalTLSSecret),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -624,7 +623,7 @@ func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
 
 	if managerSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      "manager-cert",
+			Name:      ManagerInternalTLSSecretName,
 			MountPath: "/manager-tls",
 			ReadOnly:  true,
 		})
@@ -656,11 +655,11 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 	if managerSecret != nil {
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: "manager-cert",
+				Name: ManagerInternalTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						DefaultMode: &defaultMode,
-						SecretName:  ManagerTLSSecretName,
+						SecretName:  ManagerInternalTLSSecretName,
 						Items: []corev1.KeyToPath{
 							{
 								Key:  "cert",
@@ -678,6 +677,10 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 func complianceAnnotations(c *complianceComponent) map[string]string {
 	var annotations = map[string]string{
 		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecrets[0].Data),
+	}
+
+	if c.managerInternalTLSSecret != nil {
+		annotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(c.managerInternalTLSSecret.Data)
 	}
 
 	return annotations

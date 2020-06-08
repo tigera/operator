@@ -31,9 +31,8 @@ import (
 )
 
 var (
-	metricsHost       = "0.0.0.0"
-	metricsPort int32 = 8383
-	namespace         = ""
+	defaultMetricsPort int32 = 8383
+	namespace                = ""
 )
 
 var log = logf.Log.WithName("daemon")
@@ -59,7 +58,7 @@ func Main() {
 	mgr, err := manager.New(cfg, manager.Options{
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		MetricsBindAddress: metricsAddr(),
 	})
 	if err != nil {
 		log.Error(err, "")
@@ -103,4 +102,26 @@ func Main() {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}
+}
+
+// metricsAddr processes user-specified metrics host and port and sets
+// default values accordingly.
+func metricsAddr() string {
+	metricsHost := os.Getenv("METRICS_HOST")
+	metricsPort := os.Getenv("METRICS_PORT")
+	// if neither are specified, disable metrics.
+	if metricsHost == "" && metricsPort == "" {
+		// the controller-runtime accepts '0' to denote that metrics should be disabled.
+		return "0"
+	}
+	// if just a host is specified, listen on port 8383 of that host.
+	if metricsHost != "" && metricsPort == "" {
+		// the controller-runtime will choose a random port if none is specified.
+		// so use the defaultMetricsPort in that case.
+		return fmt.Sprintf("%s:%d", metricsHost, defaultMetricsPort)
+	}
+
+	// finally, handle cases where just a port is specified or both are specified in the same case
+	// since controller-runtime correctly uses all interfaces if no host is specified.
+	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
 }

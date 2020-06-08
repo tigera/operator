@@ -16,32 +16,32 @@ package components
 
 var (
 	ComponentAPIServer = component{
-		Version: "v3.0.0-0.dev-32-g771e07c7",
+		Version: "master",
 		Image:   "tigera/cnx-apiserver",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "v3.0.0-0.dev-23-gd7abd7d",
+		Version: "master",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "v3.0.0-0.dev-23-gd7abd7d",
+		Version: "master",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "v3.0.0-0.dev-23-gd7abd7d",
+		Version: "master",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "v3.0.0-0.dev-23-gd7abd7d",
+		Version: "master",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "v3.0.0-0.dev-23-gd7abd7d",
+		Version: "master",
 		Image:   "tigera/compliance-snapshotter",
 	}
 
@@ -51,7 +51,7 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "v3.0.0-0.dev-15-g466c351",
+		Version: "master",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
@@ -66,67 +66,67 @@ var (
 	}
 
 	ComponentEsCurator = component{
-		Version: "v3.0.0-0.dev-10-gf2e83fb",
+		Version: "master",
 		Image:   "tigera/es-curator",
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.0.0-0.dev-29-gfe7b046",
+		Version: "master",
 		Image:   "tigera/es-proxy",
 	}
 
 	ComponentFluentd = component{
-		Version: "v3.0.0-0.dev-12-g63e0f79",
+		Version: "master",
 		Image:   "tigera/fluentd",
 	}
 
 	ComponentGuardian = component{
-		Version: "v3.0.0-0.dev-8-g4197ee4",
+		Version: "master",
 		Image:   "tigera/guardian",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.0.0-0.dev-15-g466c351",
+		Version: "master",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
 	ComponentKibana = component{
-		Version: "v3.1.0.calient-0.dev-3-g3c84c12",
+		Version: "master",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "v3.0.0-0.dev-138-g711599c3",
+		Version: "master",
 		Image:   "tigera/cnx-manager",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "v3.1.0.calient-0.dev-2-gf6b3d1c",
+		Version: "master",
 		Image:   "tigera/voltron",
 	}
 
 	ComponentQueryServer = component{
-		Version: "v3.0.0-0.dev-27-gd8468ea",
+		Version: "master",
 		Image:   "tigera/cnx-queryserver",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.1.0.calient-0.dev-42-gfddf40d",
+		Version: "master",
 		Image:   "tigera/kube-controllers",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "v3.0.0-0.dev-82-gd804d79",
+		Version: "master",
 		Image:   "tigera/cnx-node",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "v3.0.0-0.dev-52-g8aa41da",
+		Version: "master",
 		Image:   "tigera/typha",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "v3.0.0-0.dev-53-gb3668d9",
+		Version: "master",
 		Image:   "tigera/cni",
 	}
 )

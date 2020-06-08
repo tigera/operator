@@ -16,7 +16,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -31,9 +30,7 @@ import (
 )
 
 var (
-	metricsHost       = "0.0.0.0"
-	metricsPort int32 = 8383
-	namespace         = ""
+	namespace = ""
 )
 
 var log = logf.Log.WithName("daemon")
@@ -44,6 +41,13 @@ func Main() {
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
+	}
+
+	mp := os.Getenv("METRICS_BIND_ADDRESS")
+	// empty value should disable metrics. the controller-runtime manager accepts '0' to
+	// denote that metrics should be disabled.
+	if mp == "" {
+		mp = "0"
 	}
 
 	ctx := context.Background()
@@ -59,7 +63,7 @@ func Main() {
 	mgr, err := manager.New(cfg, manager.Options{
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		MetricsBindAddress: mp,
 	})
 	if err != nil {
 		log.Error(err, "")

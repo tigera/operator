@@ -148,9 +148,9 @@ var (
 	}
 {{- end }}
 {{ with index . "tigera-cni" }}
-    ComponentTigeraCNI = component{
+	ComponentTigeraCNI = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
-    }
+	}
 {{- end }}
 )

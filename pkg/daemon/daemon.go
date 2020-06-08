@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	defaultMetricsPort int32 = 8383
+	defaultMetricsPort int32 = 8484
 	namespace                = ""
 )
 
@@ -115,7 +115,7 @@ func metricsAddr() string {
 		// the controller-runtime accepts '0' to denote that metrics should be disabled.
 		return "0"
 	}
-	// if just a host is specified, listen on port 8383 of that host.
+	// if just a host is specified, listen on port 8484 of that host.
 	if metricsHost != "" && metricsPort == "" {
 		// the controller-runtime will choose a random port if none is specified.
 		// so use the defaultMetricsPort in that case.

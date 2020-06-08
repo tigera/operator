@@ -16,6 +16,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -30,7 +31,8 @@ import (
 )
 
 var (
-	namespace = ""
+	defaultMetricsPort int32 = 8383
+	namespace                = ""
 )
 
 var log = logf.Log.WithName("daemon")
@@ -41,13 +43,6 @@ func Main() {
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
-	}
-
-	metricsAddr := os.Getenv("METRICS_BIND_ADDRESS")
-	// empty value should disable metrics. the controller-runtime manager accepts '0' to
-	// denote that metrics should be disabled.
-	if metricsAddr == "" {
-		metricsAddr = "0"
 	}
 
 	ctx := context.Background()
@@ -63,7 +58,7 @@ func Main() {
 	mgr, err := manager.New(cfg, manager.Options{
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: metricsAddr,
+		MetricsBindAddress: metricsAddr(),
 	})
 	if err != nil {
 		log.Error(err, "")
@@ -107,4 +102,25 @@ func Main() {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}
+}
+
+// metricsAddr reads handles defaulting for metrics host and port.
+func metricsAddr() string {
+	metricsHost := os.Getenv("METRICS_HOST")
+	metricsPort := os.Getenv("METRICS_PORT")
+	// if neither are specified, disable metrics.
+	if metricsHost == "" && metricsPort == "" {
+		// the controller-runtime accepts '0' to denote that metrics should be disabled.
+		return "0"
+	}
+	// if just a host is specified, listen on port 8383 of that host.
+	if metricsHost != "" && metricsPort == "" {
+		// the controller-runtime will choose a random port if none is specified.
+		// so use the defaultMetricsPort in that case.
+		return fmt.Sprintf("%s:%d", metricsHost, defaultMetricsPort)
+	}
+
+	// finally, handle cases where just a port is specified or both are specified in the same case
+	// since controller-runtime correctly uses all interfaces if no host is specified.
+	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
 }

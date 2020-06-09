@@ -73,9 +73,33 @@ type Nodes struct {
 	// Count defines the number of nodes in the Elasticsearch cluster.
 	Count int64 `json:"count,omitempty"`
 
+	// NodeSets defines configuration specific to each Elasticsearch Node Set
+	// +optional
+	NodeSets []NodeSet `json:"nodeSets,omitempty"`
+
 	// ResourceRequirements defines the resource limits and requirements for the Elasticsearch cluster.
 	// +optional
 	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements,omitempty"`
+}
+
+// NodeSets defines configuration specific to each Elasticsearch Node Set
+type NodeSet struct {
+	// SelectionAttributes defines K8s node attributes a NodeSet should use when setting the Node Affinity selectors and
+	// Elasticsearch cluster awareness attributes for the Elasticsearch nodes. The list of SelectionAttributes are used
+	// to define Node Affinities and set the node awareness configuration in the running Elasticsearch instance.
+	SelectionAttributes []NodeSetSelectionAttribute `json:"selectionAttributes,omitempty"`
+}
+
+// NodeSetSelectionAttribute defines a K8s node "attribute" the Elasticsearch nodes should be aware of. The "Name" and "Value"
+// are used together to set the "awareness" attributes in Elasticsearch, while the "NodeLabel" and "Value" are used together
+// to define Node Affinity for the Pods created for the Elasticsearch nodes.
+type NodeSetSelectionAttribute struct {
+	// +required
+	Name string `json:"name"`
+	// +required
+	NodeLabel string `json:"nodeLabel"`
+	// +required
+	Value string `json:"value"`
 }
 
 // Indices defines the configuration for the indices in an Elasticsearch cluster.

@@ -503,9 +503,6 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
 func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
-	nodeConfig := es.logStorage.Spec.Nodes
-	pvcTemplate := es.pvcTemplate()
-
 	return &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -525,22 +522,112 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 					},
 				},
 			},
-			NodeSets: []esv1.NodeSet{
-				{
-					Count: int32(nodeConfig.Count),
-					Name: nodeSetName(pvcTemplate),
-					Config: &cmnv1.Config{
-						Data: map[string]interface{}{
-							"node.master": "true",
-							"node.data":   "true",
-							"node.ingest": "true",
+			NodeSets: es.nodeSets(),
+		},
+	}
+}
+
+// nodeSets calculates the number of NodeSets needed for the Elasticsearch cluster. Multiple NodeSets are returned only
+// if the "nodeSets" field has been set in the LogStorage CR. The number of Nodes for the cluster will be distributed as
+// evenly as possible between the NodeSets.
+func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
+	nodeConfig := es.logStorage.Spec.Nodes
+	pvcTemplate := es.pvcTemplate()
+
+	var nodeSets []esv1.NodeSet
+	if nodeConfig.NodeSets == nil {
+		nodeSet := es.nodeSetTemplate()
+		nodeSet.Name = nodeSetName(pvcTemplate)
+		nodeSet.Count = int32(nodeConfig.Count)
+		nodeSet.PodTemplate = es.podTemplate()
+
+		nodeSets = append(nodeSets, nodeSet)
+	} else {
+		baseNumNodes := nodeConfig.Count / int64(len(nodeConfig.NodeSets))
+
+		for i, nodeSetConfig := range nodeConfig.NodeSets {
+			numNodes := baseNumNodes
+			// Increase the first nodeConfig.Count % nodeConfig.NodeSets by 1, so that the sum of nodes in each
+			// NodeSet is equal to nodeConfig.Count.
+			if int64(i) < nodeConfig.Count%int64(len(nodeConfig.NodeSets)) {
+				numNodes++
+			}
+
+			// Don't create a NodeSet with 0 Nodes.
+			if numNodes < 1 {
+				// If count is less than 1 this iteration it will be less than one all subsequent iterations.
+				break
+			}
+
+			nodeSet := es.nodeSetTemplate()
+			// Each NodeSet needs a unique name, so just add the index as a suffix
+			nodeSet.Name = fmt.Sprintf("%s-%d", nodeSetName(pvcTemplate), i)
+			nodeSet.Count = int32(numNodes)
+
+			podTemplate := es.podTemplate()
+
+			// If SelectionAttributes is set that means that the user wants the Elasticsearch Nodes and Replicas
+			// spread out across K8s nodes with specific attributes, like availability zone. Therefore, the Node Affinity
+			// is set for the NodeSet's pod template and each running instance of elasticsearch is made aware of the
+			// attributes of the K8s node it is running on, via "node.attr" and "cluster.routing.allocation.awareness.attributes".
+			// Making each Elasticsearch instance aware of the K8s node it's running on allows the Elasticsearch cluster
+			// to assign shard replicas to nodes with different attributes than the node of the primary shard.
+			if nodeSetConfig.SelectionAttributes != nil {
+				var esAwarenessAttrs []string
+				var nodeSelectorRequirements []corev1.NodeSelectorRequirement
+
+				for _, attr := range nodeSetConfig.SelectionAttributes {
+					nodeSet.Config.Data[fmt.Sprintf("node.attr.%s", attr.Name)] = attr.Value
+					esAwarenessAttrs = append(esAwarenessAttrs, attr.Name)
+
+					nodeSelectorRequirements = append(
+						nodeSelectorRequirements,
+						corev1.NodeSelectorRequirement{
+							Key:      attr.NodeLabel,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{attr.Value},
+						},
+					)
+				}
+
+				nodeSet.Config.Data["cluster.routing.allocation.awareness.attributes"] = strings.Join(esAwarenessAttrs, ",")
+
+				podTemplate.Spec.Affinity = &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: nodeSelectorRequirements,
+							}},
 						},
 					},
-					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{pvcTemplate},
-					PodTemplate:          es.podTemplate(),
-				},
+				}
+			}
+
+			nodeSet.PodTemplate = podTemplate
+
+			nodeSets = append(nodeSets, nodeSet)
+		}
+	}
+
+	return nodeSets
+}
+
+// nodeSetTemplate returns a NodeSet with default values needed for all Elasticsearch cluster setups.
+//
+// Note that this does not return a complete NodeSet, fields like Name and Count will at least need to be set on the returned
+// NodeSet
+func (es elasticsearchComponent) nodeSetTemplate() esv1.NodeSet {
+	pvcTemplate := es.pvcTemplate()
+
+	return esv1.NodeSet{
+		Config: &cmnv1.Config{
+			Data: map[string]interface{}{
+				"node.master": "true",
+				"node.data":   "true",
+				"node.ingest": "true",
 			},
 		},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{pvcTemplate},
 	}
 }
 
@@ -555,7 +642,12 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
 		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
 		return "es"
 	}
-	pvcTemplateHash.Write(templateBytes)
+
+	if _, err := pvcTemplateHash.Write(templateBytes); err != nil {
+		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
+		return "es"
+	}
+
 	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
 }
 
@@ -880,8 +972,8 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 									},
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret),
 							},
-							ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-							RestartPolicy:    corev1.RestartPolicyOnFailure,
+							ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+							RestartPolicy:      corev1.RestartPolicyOnFailure,
 							ServiceAccountName: EsCuratorServiceAccount,
 						}),
 					},

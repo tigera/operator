@@ -58,6 +58,28 @@ spec:
                     cluster.
                   format: int64
                   type: integer
+                nodeSets:
+                  description: NodeSets defines configuration specific to each Elasticsearch
+                    Node Set
+                  items:
+                    properties:
+                      selectionAttributes:
+                        description: SelectionAttributes defines K8s node attributes
+                          a NodeSet should use when setting the Node Affinity selectors
+                          and Elasticsearch cluster awareness attributes for the Elasticsearch
+                          nodes. The list of SelectionAttributes are used to define
+                          Node Affinities and set the node awareness configuration
+                          in the running Elasticsearch instance.
+                        items:
+                          properties:
+                            nodeLabel:
+                              type: string
+                            value:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  type: array
                 resourceRequirements:
                   description: ResourceRequirements defines the resource limits and
                     requirements for the Elasticsearch cluster.

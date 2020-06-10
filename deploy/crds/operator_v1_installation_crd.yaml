@@ -225,21 +225,21 @@ spec:
               - Calico
               - TigeraSecureEnterprise
               type: string
-            resourceRequirements:
+            componentResources:
               type: array
-              description: 'ResourceRequirements is an array of name, value pairs which allows the configuration
-                of resource (cpu, memory) limits and requests.'
+              description: 'ComponentResources is an array of name, value (ResourceRequirements) pairs
+                which allows the configuration of resource limits and requests, such as cpu and memory, per component.'
               items:
                 type: object
                 properties:
                   name:
                     type: string
-                    description: The short name of the component
+                    description: The short name of the component.
                     enum:
                     - node
                     - kube-controllers
                     - typha
-                  value:
+                  resourceRequirements:
                     type: object
                     description: 'A ResourceRequirements object for the component identified by "name"'
           type: object

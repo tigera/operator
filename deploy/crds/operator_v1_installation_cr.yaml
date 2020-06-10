@@ -2,3 +2,29 @@ apiVersion: operator.tigera.io/v1
 kind: Installation
 metadata:
   name: default
+spec:
+  componentResources:
+    - name: node
+      resourceRequirements:
+        requests:
+          memory: 64Mi
+          cpu: 250m
+        limits:
+          memory: 500Mi
+          cpu: 500m
+    - name: typha
+      resourceRequirements:
+        requests:
+          memory: 64Mi
+          cpu: 250m
+        limits:
+          memory: 500Mi
+          cpu: 500m
+    - name: kube-controllers
+      resourceRequirements:
+        requests:
+          memory: 64Mi
+          cpu: 250m
+        limits:
+          memory: 500Mi
+          cpu: 500m

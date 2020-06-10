@@ -78,6 +78,7 @@ func main() {
 		fmt.Println(components.GetReference(components.ComponentTigeraNode, "", ""))
 		fmt.Println(components.GetReference(components.ComponentTigeraTypha, "", ""))
 		fmt.Println(components.GetReference(components.ComponentTigeraKubeControllers, "", ""))
+		fmt.Println(components.GetReference(components.ComponentCloudControllers, "", ""))
 		fmt.Println(components.GetReference(components.ComponentAPIServer, "", ""))
 		fmt.Println(components.GetReference(components.ComponentQueryServer, "", ""))
 		fmt.Println(components.GetReference(components.ComponentComplianceController, "", ""))

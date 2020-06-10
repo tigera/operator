@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -51,8 +52,8 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, migrate bool) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, migrationNeeded: migrate}
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, aci *operatorv1beta1.AmazonCloudIntegration, migrate bool) Component {
+	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, amazonCloudInt: aci, migrationNeeded: migrate}
 }
 
 type nodeComponent struct {
@@ -61,6 +62,7 @@ type nodeComponent struct {
 	netConfig       NetworkConfig
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
+	amazonCloudInt  *operatorv1beta1.AmazonCloudIntegration
 	migrationNeeded bool
 }
 
@@ -946,6 +948,18 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
+
+	if c.amazonCloudInt != nil {
+		nodeEnv = append(nodeEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
+		nodeEnv = append(nodeEnv, v1.EnvVar{
+			Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
+			Value: "tcp:22,udp:68,tcp:179,tcp:443,tcp:5473,tcp:6443",
+		})
+		nodeEnv = append(nodeEnv, v1.EnvVar{
+			Name:  "FELIX_FAILSAFEOUTBOUNDHOSTPORTS",
+			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
+		})
+	}
 	return nodeEnv
 }
 

@@ -22,9 +22,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ComponentName CRD enum
+type ComponentName string
+const (
+	ComponentNameNode            ComponentName = "Node"
+	ComponentNameTypha           ComponentName = "Typha"
+	ComponentNameKubeControllers ComponentName = "KubeControllers"
+)
+
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
-	Name                 string                   `json:"name"`
+	ComponentName        ComponentName            `json:"componentName"`
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
 

@@ -232,13 +232,13 @@ spec:
               items:
                 type: object
                 properties:
-                  name:
+                  componentName:
                     type: string
                     description: The short name of the component.
                     enum:
-                    - node
-                    - kube-controllers
-                    - typha
+                    - Node
+                    - Typha
+                    - KubeControllers
                   resourceRequirements:
                     type: object
                     description: 'A ResourceRequirements object for the component identified by "name"'

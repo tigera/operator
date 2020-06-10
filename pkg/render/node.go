@@ -685,7 +685,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 
 // nodeResources creates the node's resource requirements.
 func (c *nodeComponent) nodeResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.cr, "node")
+	return GetResourceRequirements(c.cr, operator.ComponentNameNode)
 }
 
 // nodeVolumeMounts creates the node's volume mounts.

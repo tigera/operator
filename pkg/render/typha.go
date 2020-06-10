@@ -411,7 +411,7 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.cr, "typha")
+	return GetResourceRequirements(c.cr, operator.ComponentNameTypha)
 }
 
 // typhaEnvVars creates the typha's envvars.

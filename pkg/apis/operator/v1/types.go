@@ -22,9 +22,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type ResourceRequirementItem struct {
-	Name  string                   `json:"name"`
-	Value *v1.ResourceRequirements `json:"value"`
+// The ComponentResource struct associates a ResourceRequirements with a component by name
+type ComponentResource struct {
+	Name                 string                   `json:"name"`
+	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
 
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
@@ -106,9 +107,9 @@ type InstallationSpec struct {
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
-	// ResourceRequirements can be used to customize the resource requirements for each component.
+	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
-	ResourceRequirements []*ResourceRequirementItem `json:"resourceRequirements,omitempty"`
+	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

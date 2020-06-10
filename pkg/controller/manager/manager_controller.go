@@ -331,7 +331,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		// K8S cluster is already created by the KubeControllers
 		internalTrafficSecret = &corev1.Secret{}
 		err = r.client.Get(ctx, client.ObjectKey{
-			Name: render.ManagerInternalTLSSecretName,
+			Name:      render.ManagerInternalTLSSecretName,
 			Namespace: render.OperatorNamespace(),
 		}, internalTrafficSecret)
 		if err != nil {
@@ -368,7 +368,11 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+	allowedMetadata := utils.NoUserAddedMetadata
+	if r.provider == operatorv1.ProviderOpenShift {
+		allowedMetadata = utils.AllowOpenshiftSCCAnnotations
+	}
+	if err := handler.CreateOrUpdate(ctx, component, r.status, allowedMetadata); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

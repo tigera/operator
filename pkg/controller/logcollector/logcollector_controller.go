@@ -84,7 +84,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-	    render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
@@ -286,7 +286,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		installation,
 	)
 
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+	if err := handler.CreateOrUpdate(context.Background(), component, r.status, utils.NoUserAddedMetadata); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

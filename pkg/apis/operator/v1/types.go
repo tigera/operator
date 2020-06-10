@@ -22,6 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type ResourceRequirementItem struct {
+	Name  string                   `json:"name"`
+	Value *v1.ResourceRequirements `json:"value"`
+}
+
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
@@ -100,6 +105,10 @@ type InstallationSpec struct {
 	// field.
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
+
+	// ResourceRequirements can be used to customize the resource requirements for each component.
+	// +optional
+	ResourceRequirements []*ResourceRequirementItem `json:"resourceRequirements,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

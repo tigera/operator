@@ -368,7 +368,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+	if err := handler.CreateOrUpdate(ctx, component, r.status, utils.AllowOpenshiftSCCAnnotations); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

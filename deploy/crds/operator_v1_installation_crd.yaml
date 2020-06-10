@@ -225,6 +225,23 @@ spec:
               - Calico
               - TigeraSecureEnterprise
               type: string
+            resourceRequirements:
+              type: array
+              description: 'ResourceRequirements is an array of name, value pairs which allows the configuration
+                of resource (cpu, memory) limits and requests.'
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: The short name of the component
+                    enum:
+                    - node
+                    - kube-controllers
+                    - typha
+                  value:
+                    type: object
+                    description: 'A ResourceRequirements object for the component identified by "name"'
           type: object
         status:
           description: Most recently observed state for the Calico or Calico Enterprise

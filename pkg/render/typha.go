@@ -413,6 +413,13 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
+	if c.cr.Spec.ResourceRequirements != nil {
+		for _, ri := range c.cr.Spec.ResourceRequirements {
+			if ri.Name == "typha" && ri.Value != nil {
+				return *ri.Value
+			}
+		}
+	}
 	return v1.ResourceRequirements{}
 }
 

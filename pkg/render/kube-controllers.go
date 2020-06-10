@@ -259,6 +259,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 							Name:  "calico-kube-controllers",
 							Image: image,
 							Env:   env,
+							Resources: c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{
 									Exec: &v1.ExecAction{
@@ -285,6 +286,18 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	return &d
+}
+
+// kubeControllerResources creates the kube-controller's resource requirements.
+func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequirements {
+	if c.cr.Spec.ResourceRequirements != nil {
+		for _, ri := range c.cr.Spec.ResourceRequirements {
+			if ri.Name == "kube-controllers" && ri.Value != nil {
+				return *ri.Value
+			}
+		}
+	}
+	return v1.ResourceRequirements{}
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {

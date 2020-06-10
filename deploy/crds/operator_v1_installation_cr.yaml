@@ -4,23 +4,17 @@ metadata:
   name: default
 spec:
   componentResources:
-    - name: node
+    - componentName: Node
       resourceRequirements:
         requests:
           memory: 64Mi
           cpu: 250m
-        limits:
-          memory: 500Mi
-          cpu: 500m
-    - name: typha
+    - componentName: Typha
       resourceRequirements:
-        requests:
-          memory: 64Mi
-          cpu: 250m
         limits:
           memory: 500Mi
           cpu: 500m
-    - name: kube-controllers
+    - componentName: KubeControllers
       resourceRequirements:
         requests:
           memory: 64Mi

@@ -290,7 +290,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 // kubeControllerResources creates the kube-controller's resource requirements.
 func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.cr, "kube-controllers")
+	return GetResourceRequirements(c.cr, operator.ComponentNameKubeControllers)
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {

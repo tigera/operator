@@ -20,6 +20,7 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -81,6 +82,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, render.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
+	err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
+		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 	}
 
 	// TODO: Watch for dependent objects.
@@ -164,12 +171,21 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
+	aci, err := utils.GetAmazonCloudIntegration(ctx, r.client)
+	if errors.IsNotFound(err) {
+		aci = nil
+	} else if err != nil {
+		log.Error(err, "Error reading AmazonCloudIntegration")
+		r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
+	component, err := render.APIServer(network, aci, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

@@ -29,21 +29,21 @@ func validateCustomResource(instance *operatorv1beta1.AmazonCloudIntegration) er
 	}
 
 	errMsgs := []string{}
-	if len(instance.Spec.Vpcs) == 0 {
+	if len(instance.Spec.VPCS) == 0 {
 		errMsgs = append(errMsgs, "missing spec.vpcs")
 	}
-	for _, x := range instance.Spec.Vpcs {
+	for _, x := range instance.Spec.VPCS {
 		if x == "" {
 			errMsgs = append(errMsgs, "empty spec.vpcs are not valid")
 			break
 		}
 	}
 
-	if instance.Spec.SqsURL == "" {
+	if instance.Spec.SQSURL == "" {
 		errMsgs = append(errMsgs, "missing spec.sqsURL")
 	}
 
-	if instance.Spec.AwsRegion == "" {
+	if instance.Spec.AWSRegion == "" {
 		errMsgs = append(errMsgs, "missing spec.awsRegion")
 	}
 

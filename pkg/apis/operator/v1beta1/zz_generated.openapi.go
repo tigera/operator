@@ -110,14 +110,14 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref common.Refe
 					},
 					"sqsURL": {
 						SchemaProps: spec.SchemaProps{
-							Description: "SqsURL is the SQS URL needed to access the Simple Queue Service.",
+							Description: "SQSURL is the SQS URL needed to access the Simple Queue Service.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"awsRegion": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AwsRegion is the region in which your cluster is located.",
+							Description: "AWSRegion is the region in which your cluster is located.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

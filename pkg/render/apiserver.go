@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +41,7 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
+func APIServer(installation *operator.Installation, aci *operatorv1beta1.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	if tlsKeyPair == nil {
 		var err error
@@ -67,18 +68,20 @@ func APIServer(installation *operator.Installation, tlsKeyPair *corev1.Secret, p
 	tlsSecrets = append(tlsSecrets, copy)
 
 	return &apiServerComponent{
-		installation: installation,
-		tlsSecrets:   tlsSecrets,
-		pullSecrets:  pullSecrets,
-		openshift:    openshift,
+		installation:           installation,
+		amazonCloudIntegration: aci,
+		tlsSecrets:             tlsSecrets,
+		pullSecrets:            pullSecrets,
+		openshift:              openshift,
 	}, nil
 }
 
 type apiServerComponent struct {
-	installation *operator.Installation
-	tlsSecrets   []*corev1.Secret
-	pullSecrets  []*corev1.Secret
-	openshift    bool
+	installation           *operator.Installation
+	amazonCloudIntegration *operatorv1beta1.AmazonCloudIntegration
+	tlsSecrets             []*corev1.Secret
+	pullSecrets            []*corev1.Secret
+	openshift              bool
 }
 
 func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -628,6 +631,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
+
+	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
 
 	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})

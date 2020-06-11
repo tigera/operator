@@ -801,15 +801,19 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// to false would cause IPv6 to be enabled by default in felix.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	} else {
-		// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults.
+		// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
+		// MTU of 1460.
 		ipipMtu := "1440"
 		vxlanMtu := "1410"
+		wireguardMtu := "1400"
 		if c.cr.Spec.CalicoNetwork.MTU != nil {
 			ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
+			wireguardMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
 		}
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 
 		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork)

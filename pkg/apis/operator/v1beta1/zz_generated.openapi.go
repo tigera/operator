@@ -11,9 +11,9 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"./pkg/apis/operator/v1beta1.AmazonCloudIntegration":       schema_pkg_apis_operator_v1beta1_AmazonCloudIntegration(ref),
-		"./pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec":   schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref),
-		"./pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus": schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationStatus(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegration":       schema_pkg_apis_operator_v1beta1_AmazonCloudIntegration(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec":   schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref),
+		"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus": schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationStatus(ref),
 	}
 }
 
@@ -44,19 +44,19 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegration(ref common.Referenc
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec"),
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus"),
+							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec", "./pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec", "github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 

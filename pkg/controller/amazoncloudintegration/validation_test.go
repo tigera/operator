@@ -29,7 +29,7 @@ var _ = Describe("Installation validation tests", func() {
 			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs:         []string{"sg-nodesgid"},
 				PodSecurityGroupID:           "sg-podsgid",
-				Vpcs:                         []string{"vpc-id"},
+				VPCS:                         []string{"vpc-id"},
 				SqsURL:                       "sqs/url",
 				AwsRegion:                    "us-west",
 				EnforcedSecurityGroupID:      "sg-enforcedsgid",

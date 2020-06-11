@@ -64,7 +64,7 @@ spec:
                 Group which will be applied to all ENIs in the VPC.
               type: string
             vpcs:
-              description: Vpcs is a list of VPC IDs to monitor for ENIs and Security
+              description: VPCS is a list of VPC IDs to monitor for ENIs and Security
                 Groups, only one is supported.
               items:
                 type: string

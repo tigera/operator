@@ -11,9 +11,9 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegration":       schema_pkg_apis_operator_v1beta1_AmazonCloudIntegration(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec":   schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref),
-		"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus": schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationStatus(ref),
+		"./pkg/apis/operator/v1beta1.AmazonCloudIntegration":       schema_pkg_apis_operator_v1beta1_AmazonCloudIntegration(ref),
+		"./pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec":   schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref),
+		"./pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus": schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationStatus(ref),
 	}
 }
 
@@ -44,19 +44,19 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegration(ref common.Referenc
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec"),
+							Ref: ref("./pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus"),
+							Ref: ref("./pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec", "github.com/tigera/operator/pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"./pkg/apis/operator/v1beta1.AmazonCloudIntegrationSpec", "./pkg/apis/operator/v1beta1.AmazonCloudIntegrationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -96,7 +96,7 @@ func schema_pkg_apis_operator_v1beta1_AmazonCloudIntegrationSpec(ref common.Refe
 					},
 					"vpcs": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Vpcs is a list of VPC IDs to monitor for ENIs and Security Groups, only one is supported.",
+							Description: "VPCS is a list of VPC IDs to monitor for ENIs and Security Groups, only one is supported.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{

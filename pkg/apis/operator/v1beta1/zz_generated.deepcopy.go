@@ -77,8 +77,8 @@ func (in *AmazonCloudIntegrationSpec) DeepCopyInto(out *AmazonCloudIntegrationSp
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.Vpcs != nil {
-		in, out := &in.Vpcs, &out.Vpcs
+	if in.VPCS != nil {
+		in, out := &in.VPCS, &out.VPCS
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}

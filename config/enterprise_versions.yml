@@ -71,3 +71,6 @@ components:
   tigera-cni:
     image: tigera/cni
     version: master
+  cloud-controllers:
+    image: tigera/cloud-controllers
+    version: master

@@ -20,9 +20,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
@@ -69,7 +71,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources for a default configuration", func() {
 		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -184,6 +186,9 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+		// Expect the SECURITY_GROUP env variables to not be set
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
 		expectedCNIEnv := []v1.EnvVar{
 			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
@@ -268,7 +273,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -361,7 +366,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render all resources when running on openshift", func() {
 		defaultInstance.Spec.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -480,7 +485,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -580,7 +585,7 @@ var _ = Describe("Node rendering tests", func() {
 		bt := map[string]string{
 			"template-1.yaml": "dataforTemplate1 that is not used here",
 		}
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, bt, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -625,7 +630,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support canReach", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -640,7 +645,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support interface regex", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -655,7 +660,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support skip-interface regex", func() {
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -669,7 +674,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should include updates needed for the core upgrade", func() {
-		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, true)
+		component := render.Node(defaultInstance, operator.ProviderOpenShift, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, true)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5), fmt.Sprintf("resources are %v", resources))
 
@@ -704,7 +709,7 @@ var _ = Describe("Node rendering tests", func() {
 		func(pool operator.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration
 			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
-			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+			component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(5))
 
@@ -831,7 +836,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.Spec.NodeMetricsPort = nil
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -851,7 +856,7 @@ var _ = Describe("Node rendering tests", func() {
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -875,7 +880,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
 		defaultInstance.Spec.FlexVolumePath = "None"
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -889,7 +894,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render MaxUnavailable if a custom value was set", func() {
 		two := intstr.FromInt(2)
 		defaultInstance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -905,7 +910,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		hpd := operator.HostPortsDisabled
 		defaultInstance.Spec.CalicoNetwork.HostPorts = &hpd
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -981,7 +986,7 @@ var _ = Describe("Node rendering tests", func() {
 		seccompProf := "localhost/calico-node-v1"
 		defaultInstance.ObjectMeta.Annotations = make(map[string]string)
 		defaultInstance.ObjectMeta.Annotations["tech-preview.operator.tigera.io/node-apparmor-profile"] = seccompProf
-		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, false)
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -990,6 +995,30 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds).ToNot(BeNil())
 
 		Expect(ds.Spec.Template.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(seccompProf))
+	})
+
+	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
+		aci := &operatorv1beta1.AmazonCloudIntegration{
+			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
+				PodSecurityGroupID:   "sg-podsgid",
+			},
+		}
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, aci, false)
+		resources, _ := component.Objects()
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+
+		// Assert on expected env vars.
+		expectedEnvVars := []v1.EnvVar{
+			{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
+			{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
+		}
+		ds := dsResource.(*apps.DaemonSet)
+		for _, v := range expectedEnvVars {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
+		}
 	})
 })
 

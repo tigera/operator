@@ -254,9 +254,9 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "FAILSAFE_CONTROLLER_APP_NAME", Value: AmazonCloudIntegrationComponentName},
 		{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},
-		{Name: "VPCS", Value: strings.Join(c.amazonCloudIntegration.Spec.Vpcs, ",")},
-		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SqsURL},
-		{Name: "AWS_REGION", Value: c.amazonCloudIntegration.Spec.AwsRegion},
+		{Name: "VPCS", Value: strings.Join(c.amazonCloudIntegration.Spec.VPCS, ",")},
+		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SQSURL},
+		{Name: "AWS_REGION", Value: c.amazonCloudIntegration.Spec.AWSRegion},
 		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.EnforcedSecurityGroupID},
 		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.TrustEnforcedSecurityGroupID},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{

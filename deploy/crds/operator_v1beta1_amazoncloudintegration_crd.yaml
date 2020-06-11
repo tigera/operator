@@ -30,7 +30,7 @@ spec:
         spec:
           properties:
             awsRegion:
-              description: AwsRegion is the region in which your cluster is located.
+              description: AWSRegion is the region in which your cluster is located.
               type: string
             defaultPodMetadataAccess:
               description: 'DefaultPodMetadataAccess defines what the default behavior
@@ -56,7 +56,7 @@ spec:
                 all pods should be placed in by default.
               type: string
             sqsURL:
-              description: SqsURL is the SQS URL needed to access the Simple Queue
+              description: SQSURL is the SQS URL needed to access the Simple Queue
                 Service.
               type: string
             trustEnforcedSecurityGroupID:

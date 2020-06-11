@@ -48,10 +48,10 @@ type AmazonCloudIntegrationSpec struct {
 	PodSecurityGroupID string `json:"podSecurityGroupID,omitempty"`
 	// VPCS is a list of VPC IDs to monitor for ENIs and Security Groups, only one is supported.
 	VPCS []string `json:"vpcs,omitempty"`
-	// SqsURL is the SQS URL needed to access the Simple Queue Service.
-	SqsURL string `json:"sqsURL,omitempty"`
-	// AwsRegion is the region in which your cluster is located.
-	AwsRegion string `json:"awsRegion,omitempty"`
+	// SQSURL is the SQS URL needed to access the Simple Queue Service.
+	SQSURL string `json:"sqsURL,omitempty"`
+	// AWSRegion is the region in which your cluster is located.
+	AWSRegion string `json:"awsRegion,omitempty"`
 	// EnforcedSecurityGroupID is the ID of the Security Group which will be applied to all
 	// ENIs that are on a host that is also part of the Kubernetes cluster.
 	EnforcedSecurityGroupID string `json:"enforcedSecurityGroupID,omitempty"`

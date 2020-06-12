@@ -132,7 +132,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	}
 
 	// Only watch the AmazonCloudIntegration if the tsee API is available
-	if r.enterpriseCRDsExist {
+	if r.autoDetectedProvider == operator.ProviderEKS {
 		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
@@ -535,7 +535,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var aci *operatorv1beta1.AmazonCloudIntegration
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+	if instance.Spec.KubernetesProvider == operator.ProviderEKS {
 		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
 		if apierrors.IsNotFound(err) {
 			aci = nil

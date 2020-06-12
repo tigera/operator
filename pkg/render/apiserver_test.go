@@ -15,16 +15,18 @@
 package render_test
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
+	"github.com/openshift/library-go/pkg/crypto"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"time"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
@@ -47,7 +49,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should render an API server with default configuration", func() {
 		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(instance, nil, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -221,7 +223,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -236,7 +238,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -260,7 +262,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(instance, nil, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -272,7 +274,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -305,7 +307,7 @@ var _ = Describe("API server rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component, err := render.APIServer(instance, aci, nil, nil, openshift)
+		component, err := render.APIServer(instance, aci, nil, nil, openshift, false, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -324,6 +326,135 @@ var _ = Describe("API server rendering tests", func() {
 		}
 		for _, v := range expectedEnvVars {
 			Expect(qc.Env).To(ContainElement(v))
+		}
+	})
+
+	It("should render an API server with custom configuration with MCM enabled at startup", func() {
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, true, nil)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		// - 1 namespace
+		// - 1 ConfigMap audit Policy
+		// - 1 Service account
+		// - 2 ServiceAccount ClusterRole and binding
+		// - 2 ClusterRole and binding for auth configmap
+		// - 2 tiered policy passthru ClusterRole and binding
+		// - 1 delegate auth binding
+		// - 1 auth reader binding
+		// - 2 webhook reader ClusterRole and binding
+		// - 4 cert secrets
+		// - 1 api server
+		// - 1 service registration
+		// - 1 Server service
+
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		By("Validating the newly created tunnel secret")
+		// Use the x509 package to validate that the cert was signed with the privatekey
+		validateTunnelSecret(resources[13].(*corev1.Secret))
+		validateTunnelSecret(resources[14].(*corev1.Secret))
+
+	})
+
+	It("should render an API server with custom configuration with MCM enabled at restart", func() {
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, true, &voltronTunnelSecret)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		// - 1 namespace
+		// - 1 ConfigMap audit Policy
+		// - 1 Service account
+		// - 2 ServiceAccount ClusterRole and binding
+		// - 2 ClusterRole and binding for auth configmap
+		// - 2 tiered policy passthru ClusterRole and binding
+		// - 1 delegate auth binding
+		// - 1 auth reader binding
+		// - 2 webhook reader ClusterRole and binding
+		// - 3 cert secrets
+		// - 1 api server
+		// - 1 service registration
+		// - 1 Server service
+
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
 		}
 	})
 })
@@ -352,4 +483,41 @@ func verifyCertSANs(certBytes []byte) {
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
 	Expect(cert.DNSNames).To(ConsistOf([]string{"tigera-api.tigera-system.svc"}), "Expect cert SAN's to match extension API server service DNS name")
+}
+
+func validateTunnelSecret(voltronSecret *corev1.Secret) {
+	var newCert *x509.Certificate
+
+	cert := voltronSecret.Data["cert"]
+	key := voltronSecret.Data["key"]
+	_, err := tls.X509KeyPair(cert, key)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	roots := x509.NewCertPool()
+	ok := roots.AppendCertsFromPEM([]byte(cert))
+	Expect(ok).To(BeTrue())
+
+	block, _ := pem.Decode([]byte(cert))
+	Expect(err).ShouldNot(HaveOccurred())
+	Expect(block).To(Not(BeNil()))
+
+	newCert, err = x509.ParseCertificate(block.Bytes)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	opts := x509.VerifyOptions{
+		DNSName: render.VoltronDnsName,
+		Roots:   roots,
+	}
+
+	_, err = newCert.Verify(opts)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	opts = x509.VerifyOptions{
+		DNSName:     render.VoltronDnsName,
+		Roots:       x509.NewCertPool(),
+		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
+	}
+	_, err = newCert.Verify(opts)
+	Expect(err).Should(HaveOccurred())
+
 }

@@ -17,6 +17,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	v1 "k8s.io/api/core/v1"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -164,6 +165,21 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
+	var isManagement = network.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement
+	var tunnelCASecret *v1.Secret
+	if isManagement {
+		tunnelCASecret, err = utils.ValidateCertPair(r.client,
+			render.VoltronTunnelSecretName,
+			render.VoltronTunnelSecretKeyName,
+			render.VoltronTunnelSecretCertName,
+		)
+		if err != nil {
+			log.Error(err, "Invalid TLS Cert")
+			r.status.SetDegraded("Error validating TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Pull secrets")
@@ -185,7 +201,8 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network, aci, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
+	component, err := render.APIServer(network, aci, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+		isManagement, tunnelCASecret)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

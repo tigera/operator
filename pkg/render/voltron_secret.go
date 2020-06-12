@@ -24,6 +24,9 @@ import (
 	"math/big"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/openshift/library-go/pkg/crypto"
 )
 
@@ -34,6 +37,23 @@ const (
 	blockTypePrivateKey = "RSA PRIVATE KEY"
 	blockTypeCert       = "CERTIFICATE"
 )
+
+// Creates a secret that will store the CA needed to generated certificates
+// for managed cluster registration
+func voltronTunnelSecret() *corev1.Secret {
+	key, cert := ceateSelfSignedVoltronSecret()
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronTunnelSecretName,
+			Namespace: OperatorNamespace(),
+		},
+		Data: map[string][]byte{
+			"cert": []byte(cert),
+			"key":  []byte(key),
+		},
+	}
+}
 
 // Secrets to establish a tunnel between Voltron and Guardian
 // Differs from other secrets in the way that it needs a DNS name and KeyUsage.

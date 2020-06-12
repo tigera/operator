@@ -315,13 +315,12 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	var internalTrafficSecret *corev1.Secret
 	if management {
 
-		// If clusterType is management and the customer brings its own cert, copy it over to the manager ns.
+		// We expect that the secret that holds the certificates for tunnel certificate generation
+		// is already created by the Api Server
 		tunnelSecret = &corev1.Secret{}
 		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				tunnelSecret = nil
-			} else {
 				r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
 				return reconcile.Result{}, nil
 			}

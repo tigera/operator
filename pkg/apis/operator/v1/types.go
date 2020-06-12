@@ -22,20 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ComponentName CRD enum
-type ComponentName string
-const (
-	ComponentNameNode            ComponentName = "Node"
-	ComponentNameTypha           ComponentName = "Typha"
-	ComponentNameKubeControllers ComponentName = "KubeControllers"
-)
-
-// The ComponentResource struct associates a ResourceRequirements with a component by name
-type ComponentResource struct {
-	ComponentName        ComponentName            `json:"componentName"`
-	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
-}
-
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
 // +k8s:openapi-gen=true
 type InstallationSpec struct {
@@ -118,6 +104,22 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
+}
+
+// ComponentName CRD enum
+type ComponentName string
+const (
+	ComponentNameNode            ComponentName = "Node"
+	ComponentNameTypha           ComponentName = "Typha"
+	ComponentNameKubeControllers ComponentName = "KubeControllers"
+)
+
+// The ComponentResource struct associates a ResourceRequirements with a component by name
+// +k8s:openapi-gen=true
+type ComponentResource struct {
+	// +kubebuilder:validation:Enum=Node,Typha,KubeControllers
+	ComponentName        ComponentName            `json:"componentName"`
+	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

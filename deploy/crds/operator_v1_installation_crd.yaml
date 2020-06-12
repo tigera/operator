@@ -158,6 +158,24 @@ spec:
               - Management
               - Managed
               type: string
+            componentResources:
+              description: ComponentResources can be used to customize the resource
+                requirements for each component.
+              items:
+                properties:
+                  componentName:
+                    enum:
+                    - Node
+                    - Typha
+                    - KubeControllers
+                    type: string
+                  resourceRequirements:
+                    type: object
+                required:
+                - componentName
+                - resourceRequirements
+                type: object
+              type: array
             controlPlaneNodeSelector:
               additionalProperties:
                 type: string
@@ -225,23 +243,6 @@ spec:
               - Calico
               - TigeraSecureEnterprise
               type: string
-            componentResources:
-              type: array
-              description: 'ComponentResources is an array of name, value (ResourceRequirements) pairs
-                which allows the configuration of resource limits and requests, such as cpu and memory, per component.'
-              items:
-                type: object
-                properties:
-                  componentName:
-                    type: string
-                    description: The short name of the component.
-                    enum:
-                    - Node
-                    - Typha
-                    - KubeControllers
-                  resourceRequirements:
-                    type: object
-                    description: 'A ResourceRequirements object for the component identified by "name"'
           type: object
         status:
           description: Most recently observed state for the Calico or Calico Enterprise

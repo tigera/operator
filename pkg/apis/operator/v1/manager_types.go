@@ -39,7 +39,7 @@ type ManagerStatus struct {
 type Auth struct {
 	// Type configures the type of authentication used by the manager.
 	// Default: Token
-	// +kubebuilder:validation:Enum=Token,Basic,OIDC,OAuth
+	// +kubebuilder:validation:Enum=Token;Basic;OIDC;OAuth
 	Type AuthType `json:"type,omitempty"`
 
 	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
@@ -70,6 +70,7 @@ const (
 // of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 type Manager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

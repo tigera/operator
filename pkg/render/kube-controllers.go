@@ -158,6 +158,12 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"remoteclusterconfigurations"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
+			{
+				// For federated services.
+				APIGroups: []string{""},
+				Resources: []string{"endpoints"},
+				Verbs:     []string{"create", "update", "delete"},
+			},
 		}
 
 		role.Rules = append(role.Rules, extraRules...)

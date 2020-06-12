@@ -413,10 +413,9 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-## Generating code after API changes
+## Generating code after API changes. Requires operator-sdk v0.18.1.
 gen-files:
-	operator-sdk generate k8s
-	operator-sdk generate openapi
+	operator-sdk generate crds
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml

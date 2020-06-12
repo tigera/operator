@@ -35,6 +35,7 @@ type ManagementClusterConnectionSpec struct {
 // ManagementClusterConnection represents a link between a managed cluster and a management cluster. At most one
 // instance of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
+// +kubebuilder:resource:scope=Cluster
 type ManagementClusterConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

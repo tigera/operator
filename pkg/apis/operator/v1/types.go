@@ -28,7 +28,7 @@ type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
 	// Default: Calico
 	// +optional
-	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
 	// Registry is the default Docker registry used for component Docker images. If specified,
@@ -63,7 +63,7 @@ type InstallationSpec struct {
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
 	// will additionally compare the auto-detected value to the specified value to confirm they match.
 	// +optional
-	// +kubebuilder:validation:Enum=,EKS,GKE,AKS,OpenShift,DockerEnterprise
+	// +kubebuilder:validation:Enum=EKS;GKE;AKS;OpenShift;DockerEnterprise
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CalicoNetwork specifies configuration options for Calico provided pod networking.
@@ -76,7 +76,7 @@ type InstallationSpec struct {
 	// This option is applicable only when variant is TigeraSecureEnterprise.
 	// Default: Standalone
 	// +optional
-	// +kubebuilder:validation:Enum=Standalone,Management,Managed
+	// +kubebuilder:validation:Enum=Standalone;Management;Managed
 	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
 
 	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
@@ -190,13 +190,13 @@ type CalicoNetworkSpec struct {
 	// HostPorts configures whether or not Calico will support Kubernetes HostPorts.
 	// Default: Enabled
 	// +optional
-	// +kubebuilder:validation:Enum=Enabled,Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	HostPorts *HostPortsType `json:"hostPorts,omitempty"`
 
 	// MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for Calico Enterprise installations.
 	// Default: None
 	// +optional
-	// +kubebuilder:validation:Enum=None,Multus
+	// +kubebuilder:validation:Enum=None;Multus
 	MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`
 }
 
@@ -287,13 +287,13 @@ type IPPool struct {
 	// the IP Pool.
 	// Default: IPIP
 	// +optional
-	// +kubebuilder:validation:Enum=IPIPCrossSubnet,IPIP,VXLAN,VXLANCrossSubnet,None
+	// +kubebuilder:validation:Enum=IPIPCrossSubnet;IPIP;VXLAN;VXLANCrossSubnet;None
 	Encapsulation EncapsulationType `json:"encapsulation,omitempty"`
 
 	// NATOutgoing specifies if NAT will be enabled or disabled for outgoing traffic.
 	// Default: Enabled
 	// +optional
-	// +kubebuilder:validation:Enum=Enabled,Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	NATOutgoing NATOutgoingType `json:"natOutgoing,omitempty"`
 
 	// NodeSelector specifies the node selector that will be set for the IP Pool.
@@ -312,7 +312,7 @@ type IPPool struct {
 // +k8s:openapi-gen=true
 type InstallationStatus struct {
 	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
-	// +kubebuilder:validation:Enum=Calico,TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 }
 
@@ -325,6 +325,7 @@ type InstallationStatus struct {
 // and network policy components, and provides general install-time configuration.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 type Installation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

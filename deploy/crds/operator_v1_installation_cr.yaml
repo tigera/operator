@@ -9,16 +9,16 @@ spec:
         requests:
           memory: 64Mi
           cpu: 250m
-    - componentName: Typha
-      resourceRequirements:
         limits:
           memory: 500Mi
           cpu: 500m
-    - componentName: KubeControllers
+    - componentName: Typha
       resourceRequirements:
         requests:
           memory: 64Mi
           cpu: 250m
+    - componentName: KubeControllers
+      resourceRequirements:
         limits:
           memory: 500Mi
           cpu: 500m

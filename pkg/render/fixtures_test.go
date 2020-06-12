@@ -34,3 +34,18 @@ var internalManagerTLSSecret = v1.Secret{
 		"key":  []byte("key"),
 	},
 }
+
+var voltronTunnelSecret = v1.Secret{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "Secret",
+		APIVersion: "v1",
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      render.VoltronTunnelSecretName,
+		Namespace: render.OperatorNamespace(),
+	},
+	Data: map[string][]byte{
+		"cert": []byte("cert"),
+		"key":  []byte("key"),
+	},
+}

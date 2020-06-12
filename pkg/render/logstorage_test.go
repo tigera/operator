@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	. "github.com/onsi/ginkgo"
@@ -360,7 +361,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				// Check updates to storage requirements are reflected
 				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
 					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
-				
+
 				newNodeName := updatedResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
 			})
@@ -387,8 +388,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
 			// Verify that the node selectors are passed into the Elasticsearch pod spec.
-			createResouces, _ := component.Objects()
-			nodeSelectors := createResouces[15].(*esv1.Elasticsearch).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
+			createResources, _ := component.Objects()
+			nodeSelectors := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
 			Expect(nodeSelectors["k1"]).To(Equal("v1"))
 			Expect(nodeSelectors["k2"]).To(Equal("v2"))
 		})
@@ -438,6 +439,408 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 		})
 		Context("Deleting LogStorage", deleteLogStorageTests(operatorv1.ClusterManagementTypeManaged))
+	})
+
+	Context("NodeSet configuration", func() {
+		var logStorage *operator.LogStorage
+		var installation *operatorv1.Installation
+		var esConfig *render.ElasticsearchClusterConfig
+
+		replicas, retention := int32(1), int32(1)
+
+		BeforeEach(func() {
+			logStorage = &operator.LogStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operator.LogStorageSpec{
+					Indices: &operator.Indices{
+						Replicas: &replicas,
+					},
+					Retention: &operatorv1.Retention{
+						Flows:             &retention,
+						AuditReports:      &retention,
+						Snapshots:         &retention,
+						ComplianceReports: &retention,
+					},
+				},
+				Status: operator.LogStorageStatus{
+					State: "",
+				},
+			}
+
+			installation = &operatorv1.Installation{
+				Spec: operatorv1.InstallationSpec{
+					KubernetesProvider:    operatorv1.ProviderNone,
+					Registry:              "testregistry.com/",
+					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
+				},
+			}
+			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
+		})
+		Context("Node distribution", func() {
+			When("the number of Nodes and NodeSets is 3", func() {
+				It("creates 3 1 Node NodeSet", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count: 3,
+						NodeSets: []operator.NodeSet{
+							{}, {}, {},
+						},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(3))
+					for _, nodeSet := range nodeSets {
+						Expect(nodeSet.Count).Should(Equal(int32(1)))
+					}
+				})
+			})
+			When("the number of Nodes is 2 and the number of NodeSets is 3", func() {
+				It("creates 2 1 Node NodeSets", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count: 2,
+						NodeSets: []operator.NodeSet{
+							{}, {}, {},
+						},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(2))
+					for _, nodeSet := range nodeSets {
+						Expect(nodeSet.Count).Should(Equal(int32(1)))
+					}
+				})
+			})
+			When("the number of Nodes is 6 and the number of NodeSets is 3", func() {
+				It("creates 3 2 Node NodeSets", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count: 6,
+						NodeSets: []operator.NodeSet{
+							{}, {}, {},
+						},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(3))
+					for _, nodeSet := range nodeSets {
+						Expect(nodeSet.Count).Should(Equal(int32(2)))
+					}
+				})
+			})
+			When("the number of Nodes is 5 and the number of NodeSets is 6", func() {
+				It("creates 2 2 Node NodeSets and 1 1 Node NodeSet", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count: 5,
+						NodeSets: []operator.NodeSet{
+							{}, {}, {},
+						},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(3))
+
+					Expect(nodeSets[0].Count).Should(Equal(int32(2)))
+					Expect(nodeSets[1].Count).Should(Equal(int32(2)))
+					Expect(nodeSets[2].Count).Should(Equal(int32(1)))
+				})
+			})
+		})
+
+		Context("Node selection", func() {
+			When("NodeSets is set but empty", func() {
+				It("returns the defualt NodeSet", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:    2,
+						NodeSets: []operator.NodeSet{},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(1))
+				})
+			})
+			When("there is a single selection attribute for a NodeSet", func() {
+				It("sets the Node Affinity Elasticsearch cluster awareness attributes with the single selection attribute", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count: 2,
+						NodeSets: []operator.NodeSet{
+							{
+								SelectionAttributes: []operator.NodeSetSelectionAttribute{{
+									Name:      "zone",
+									NodeLabel: "failure-domain.beta.kubernetes.io/zone",
+									Value:     "us-west-2a",
+								}},
+							},
+							{
+								SelectionAttributes: []operator.NodeSetSelectionAttribute{{
+									Name:      "zone",
+									NodeLabel: "failure-domain.beta.kubernetes.io/zone",
+									Value:     "us-west-2b",
+								}},
+							},
+						},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(2))
+					Expect(nodeSets[0].PodTemplate.Spec.Affinity.NodeAffinity).Should(Equal(&corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
+									Key:      "failure-domain.beta.kubernetes.io/zone",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"us-west-2a"},
+								}},
+							}},
+						},
+					}))
+					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
+						"node.master":    "true",
+						"node.data":      "true",
+						"node.ingest":    "true",
+						"node.attr.zone": "us-west-2a",
+						"cluster.routing.allocation.awareness.attributes": "zone",
+					}))
+
+					Expect(nodeSets[1].PodTemplate.Spec.Affinity.NodeAffinity).Should(Equal(&corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
+									Key:      "failure-domain.beta.kubernetes.io/zone",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"us-west-2b"},
+								}},
+							}},
+						},
+					}))
+					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
+						"node.master":    "true",
+						"node.data":      "true",
+						"node.ingest":    "true",
+						"node.attr.zone": "us-west-2b",
+						"cluster.routing.allocation.awareness.attributes": "zone",
+					}))
+				})
+			})
+			When("there are multiple selection attributes for a NodeSet", func() {
+				It("combines to attributes for the Node Affinity and Elasticsearch cluster awareness attributes", func() {
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count: 2,
+						NodeSets: []operator.NodeSet{
+							{
+								SelectionAttributes: []operator.NodeSetSelectionAttribute{
+									{
+										Name:      "zone",
+										NodeLabel: "failure-domain.beta.kubernetes.io/zone",
+										Value:     "us-west-2a",
+									},
+									{
+										Name:      "rack",
+										NodeLabel: "some-rack-label.kubernetes.io/rack",
+										Value:     "rack1",
+									},
+								},
+							},
+							{
+								SelectionAttributes: []operator.NodeSetSelectionAttribute{
+									{
+										Name:      "zone",
+										NodeLabel: "failure-domain.beta.kubernetes.io/zone",
+										Value:     "us-west-2b",
+									},
+									{
+										Name:      "rack",
+										NodeLabel: "some-rack-label.kubernetes.io/rack",
+										Value:     "rack1",
+									},
+								},
+							},
+						},
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+
+					createResources, _ := component.Objects()
+					nodeSets := getElasticsearch(createResources).Spec.NodeSets
+
+					Expect(len(nodeSets)).Should(Equal(2))
+					Expect(nodeSets[0].PodTemplate.Spec.Affinity.NodeAffinity).Should(Equal(&corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{
+									{
+										Key:      "failure-domain.beta.kubernetes.io/zone",
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{"us-west-2a"},
+									},
+									{
+										Key:      "some-rack-label.kubernetes.io/rack",
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{"rack1"},
+									},
+								},
+							}},
+						},
+					}))
+					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
+						"node.master":    "true",
+						"node.data":      "true",
+						"node.ingest":    "true",
+						"node.attr.zone": "us-west-2a",
+						"node.attr.rack": "rack1",
+						"cluster.routing.allocation.awareness.attributes": "zone,rack",
+					}))
+
+					Expect(nodeSets[1].PodTemplate.Spec.Affinity.NodeAffinity).Should(Equal(&corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{
+								{
+									MatchExpressions: []corev1.NodeSelectorRequirement{{
+										Key:      "failure-domain.beta.kubernetes.io/zone",
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{"us-west-2b"},
+									},
+										{
+											Key:      "some-rack-label.kubernetes.io/rack",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{"rack1"},
+										},
+									},
+								}},
+						},
+					}))
+					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
+						"node.master":    "true",
+						"node.data":      "true",
+						"node.ingest":    "true",
+						"node.attr.zone": "us-west-2b",
+						"node.attr.rack": "rack1",
+						"cluster.routing.allocation.awareness.attributes": "zone,rack",
+					}))
+				})
+			})
+		})
 	})
 })
 
@@ -621,4 +1024,11 @@ func compareResources(resources []runtime.Object, expectedResources []resourceTe
 			expectedResource.f(resource)
 		}
 	}
+}
+
+func getElasticsearch(resources []runtime.Object) *esv1.Elasticsearch {
+	resource := GetResource(resources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch")
+	Expect(resource).ShouldNot(BeNil())
+
+	return resource.(*esv1.Elasticsearch)
 }

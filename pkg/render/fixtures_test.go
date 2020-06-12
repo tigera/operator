@@ -45,7 +45,7 @@ var voltronTunnelSecret = v1.Secret{
 		Namespace: render.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
-		"cert": []byte("cert"),
-		"key":  []byte("key"),
+		render.VoltronTunnelSecretCertName: []byte("cert"),
+		render.VoltronTunnelSecretKeyName:  []byte("key"),
 	},
 }

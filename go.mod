@@ -13,11 +13,10 @@ require (
 	github.com/onsi/gomega v1.7.0
 	github.com/openshift/api v3.9.1-0.20190927182313-d4a64ec2cbd8+incompatible
 	github.com/openshift/library-go v0.0.0-20190924092619-a8c1174d4ee7
-	github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
+	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
-
 	github.com/tigera/api v0.0.0-20200311151854-a6d8502444cd
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.2.8

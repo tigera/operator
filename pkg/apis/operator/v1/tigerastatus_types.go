@@ -37,10 +37,11 @@ type TigeraStatusStatus struct {
 // TigeraStatus represents the most recently observed status for Calico or a Calico Enterprise functional area.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=="Available")].status",description="Whether the component running and stable."
-// +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type=="Progressing")].status",description="Whether the component is processing changes."
-// +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type=="Degraded")].status",description="Whether the component is degraded."
-// +kubebuilder:printcolumn:name="Since",type="date",JSONPath=".status.conditions[?(@.type=="Available")].lastTransitionTime",description="The time the component's Available status last changed."
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status",description="Whether the component running and stable."
+// +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type=='Progressing')].status",description="Whether the component is processing changes."
+// +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type=='Degraded')].status",description="Whether the component is degraded."
+// +kubebuilder:printcolumn:name="Since",type="date",JSONPath=".status.conditions[?(@.type=='Available')].lastTransitionTime",description="The time the component's Available status last changed."
 type TigeraStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

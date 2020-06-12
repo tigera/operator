@@ -32,7 +32,7 @@ var replicas int32 = 1
 
 func KubeControllers(cr *operator.Installation, managerInternalSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr:                    cr,
+		cr: cr,
 		managerInternalSecret: managerInternalSecret,
 	}
 }
@@ -152,6 +152,17 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"remoteclusterconfigurations"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// For federated services.
+				APIGroups: []string{""},
+				Resources: []string{"endpoints"},
+				Verbs:     []string{"create", "update", "delete"},
 			},
 		}
 
@@ -292,8 +303,8 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		return make(map[string]string)
 	}
 
-	return map[string]string {
-		ManagerInternalTLSHashAnnotation : AnnotationHash(c.managerInternalSecret.Data),
+	return map[string]string{
+		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
 	}
 }
 

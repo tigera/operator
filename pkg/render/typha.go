@@ -264,6 +264,11 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"create"},
 			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}

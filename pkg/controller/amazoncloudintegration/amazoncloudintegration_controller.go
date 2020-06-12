@@ -45,7 +45,7 @@ var log = logf.Log.WithName("controller_amazoncloudintegration")
 // Add creates a new AmazonCloudIntegration Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
-	if !tsee {
+	if !tsee || provider != operatorv1.ProviderEKS {
 		// No need to start this controller.
 		return nil
 	}

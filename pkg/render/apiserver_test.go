@@ -41,7 +41,6 @@ var _ = Describe("API server rendering tests", func() {
 	BeforeEach(func() {
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				ClusterManagementType: operator.ClusterManagementTypeManagement,
 				Registry:              "testregistry.com/",
 			},
 		}
@@ -49,7 +48,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should render an API server with default configuration", func() {
 		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -223,7 +222,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -238,7 +237,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift,  nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -262,7 +261,7 @@ var _ = Describe("API server rendering tests", func() {
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -274,7 +273,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, false, nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift,  nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -307,7 +306,7 @@ var _ = Describe("API server rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component, err := render.APIServer(instance, aci, nil, nil, openshift, false, nil)
+		component, err := render.APIServer(instance, aci, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -330,7 +329,8 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, true, nil)
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -398,7 +398,8 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift, true, &voltronTunnelSecret)
+		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
+		component, err := render.APIServer(instance, nil, nil, nil, openshift,  &voltronTunnelSecret)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()

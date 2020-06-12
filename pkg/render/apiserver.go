@@ -41,9 +41,11 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.Installation, aci *operatorv1beta1.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, isManagement bool, tunnelCASecret *corev1.Secret) (Component, error) {
+func APIServer(installation *operator.Installation, aci *operatorv1beta1.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
+
+	var isManagement = installation.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement
 
 	if tlsKeyPair == nil {
 		var err error

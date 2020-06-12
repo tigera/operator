@@ -105,12 +105,6 @@ func Manager(
 	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 
 	if management {
-		// If there is no secret create one and add it to the operator namespace.
-		if tunnelSecret == nil {
-			tunnelSecret = voltronTunnelSecret()
-			tlsSecrets = append(tlsSecrets, tunnelSecret)
-		}
-
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
 		// tunnelSecret contains the ca cert to generate guardian certificates
 		// internalTrafficCert containts the cert used to communicated within the management K8S cluster

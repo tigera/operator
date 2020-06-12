@@ -132,7 +132,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	}
 
 	// Only watch the AmazonCloudIntegration if the tsee API is available
-	if r.enterpriseCRDsExist {
+	if r.autoDetectedProvider == operator.ProviderEKS {
 		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
@@ -474,6 +474,27 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// The operator supports running without the cloud-controllers integration when not running in eks mode.
+	// If we are switching from this mode to EKS networking, we need to restart the operator to enable the aws sg integration controller.
+	if instance.Spec.KubernetesProvider == operator.ProviderEKS && instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Perform an API discovery to determine if the aws APIs exists. If it does, we can reboot.
+		// if it does not, we need to notify the user that the requested configuration is invalid.
+		b, err := utils.RequiresAWSControllers(r.config)
+		if b {
+			log.Info("Rebooting to enable AWS controllers")
+			os.Exit(0)
+		} else if err != nil {
+			r.SetDegraded("Error discovering AWS controller availability", err, reqLogger)
+		} else {
+			r.SetDegraded("Cannot deploy AWS controller", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
+		}
+
+		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
+		// this controller to fail.
+		reqLogger.Info("Scheduling a retry in 30 seconds")
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
 
@@ -535,7 +556,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var aci *operatorv1beta1.AmazonCloudIntegration
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+	if instance.Spec.KubernetesProvider == operator.ProviderEKS {
 		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
 		if apierrors.IsNotFound(err) {
 			aci = nil

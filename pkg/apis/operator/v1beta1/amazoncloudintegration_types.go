@@ -37,7 +37,7 @@ type AmazonCloudIntegrationSpec struct {
 	// the AWS metadata service from a pod.
 	// Default: Denied
 	// +optional
-	// +kubebuilder:validation:Enum=Allowed,Denied
+	// +kubebuilder:validation:Enum=Allowed;Denied
 	DefaultPodMetadataAccess MetadataAccessAllowedType `json:"defaultPodMetadataAccess,omitempty"`
 
 	// NodeSecurityGroupIDs is a list of Security Group IDs that all nodes and masters
@@ -74,6 +74,7 @@ type AmazonCloudIntegrationStatus struct {
 // AmazonCloudIntegration is the Schema for the amazoncloudintegrations API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 type AmazonCloudIntegration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

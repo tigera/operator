@@ -49,8 +49,8 @@ func voltronTunnelSecret() *corev1.Secret {
 			Namespace: OperatorNamespace(),
 		},
 		Data: map[string][]byte{
-			"cert": []byte(cert),
-			"key":  []byte(key),
+			VoltronTunnelSecretKeyName: []byte(cert),
+			VoltronTunnelSecretCertName:  []byte(key),
 		},
 	}
 }

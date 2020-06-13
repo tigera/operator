@@ -397,6 +397,18 @@ var _ = Describe("API server rendering tests", func() {
 		apiServerTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
+
+		dep := GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		Expect(dep).ToNot(BeNil())
+
+		By("Validating startup args")
+		expectedArgs := []string{
+			"--secure-port=5443",
+			"--audit-policy-file=/etc/tigera/audit/policy.conf",
+			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+			"--enable-managed-clusters-create-api=true",
+		}
+		Expect((dep.(*v1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
@@ -459,6 +471,18 @@ var _ = Describe("API server rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
+
+		dep := GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		Expect(dep).ToNot(BeNil())
+
+		By("Validating startup args")
+		expectedArgs := []string{
+			"--secure-port=5443",
+			"--audit-policy-file=/etc/tigera/audit/policy.conf",
+			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+			"--enable-managed-clusters-create-api=true",
+		}
+		Expect((dep.(*v1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
 })
 

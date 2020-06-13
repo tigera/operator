@@ -611,12 +611,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
 		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-		Args: []string{
-			fmt.Sprintf("--secure-port=%d", apiServerPort),
-			"--audit-policy-file=/etc/tigera/audit/policy.conf",
-			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
-		},
-		Env: env,
+		Args: c.startUpArgs(),
+		Env:  env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -647,6 +643,20 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	return apiServer
+}
+
+func (c *apiServerComponent) startUpArgs() []string {
+	args := []string{
+		fmt.Sprintf("--secure-port=%d", apiServerPort),
+		"--audit-policy-file=/etc/tigera/audit/policy.conf",
+		"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+	}
+
+	if c.isManagement {
+		args = append(args, "--enable-managed-clusters-create-api=true")
+	}
+
+	return args
 }
 
 // queryServerContainer creates the query server container.

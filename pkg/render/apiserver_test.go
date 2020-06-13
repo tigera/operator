@@ -19,6 +19,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
@@ -26,7 +28,6 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"time"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
@@ -41,7 +42,7 @@ var _ = Describe("API server rendering tests", func() {
 	BeforeEach(func() {
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Registry:              "testregistry.com/",
+				Registry: "testregistry.com/",
 			},
 		}
 	})
@@ -237,7 +238,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift,  nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -273,7 +274,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
-		component, err := render.APIServer(instance, nil, nil, nil, openshift,  nil)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -370,8 +371,8 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: render.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: render.APIServerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
@@ -392,14 +393,16 @@ var _ = Describe("API server rendering tests", func() {
 
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		validateTunnelSecret(resources[13].(*corev1.Secret))
-		validateTunnelSecret(resources[14].(*corev1.Secret))
+		operatorTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, render.OperatorNamespace(), "", "v1", "Secret")
+		apiServerTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
+		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
+		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
 
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
 		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
-		component, err := render.APIServer(instance, nil, nil, nil, openshift,  &voltronTunnelSecret)
+		component, err := render.APIServer(instance, nil, nil, nil, openshift, &voltronTunnelSecret)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -439,7 +442,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: render.APIServerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},

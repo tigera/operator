@@ -397,7 +397,6 @@ var _ = Describe("API server rendering tests", func() {
 		apiServerTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
-
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {

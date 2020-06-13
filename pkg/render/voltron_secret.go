@@ -41,7 +41,7 @@ const (
 // Creates a secret that will store the CA needed to generated certificates
 // for managed cluster registration
 func voltronTunnelSecret() *corev1.Secret {
-	key, cert := ceateSelfSignedVoltronSecret()
+	key, cert := createSelfSignedVoltronSecret()
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -49,15 +49,15 @@ func voltronTunnelSecret() *corev1.Secret {
 			Namespace: OperatorNamespace(),
 		},
 		Data: map[string][]byte{
-			VoltronTunnelSecretKeyName: []byte(cert),
-			VoltronTunnelSecretCertName:  []byte(key),
+			VoltronTunnelSecretCertName: []byte(cert),
+			VoltronTunnelSecretKeyName:  []byte(key),
 		},
 	}
 }
 
 // Secrets to establish a tunnel between Voltron and Guardian
 // Differs from other secrets in the way that it needs a DNS name and KeyUsage.
-func ceateSelfSignedVoltronSecret() (string, string) {
+func createSelfSignedVoltronSecret() (string, string) {
 	template := template()
 	privateKey, err := rsa.GenerateKey(rand.Reader, VoltronKeySizeBits)
 	if err != nil {

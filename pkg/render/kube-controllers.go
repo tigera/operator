@@ -292,8 +292,8 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		return make(map[string]string)
 	}
 
-	return map[string]string {
-		ManagerInternalTLSHashAnnotation : AnnotationHash(c.managerInternalSecret.Data),
+	return map[string]string{
+		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
 	}
 }
 

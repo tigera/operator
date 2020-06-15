@@ -50,7 +50,7 @@ func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
@@ -62,7 +62,7 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 	// Create a new controller
 	c, err := controller.New("apiserver-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -85,10 +85,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
-	err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+	if r.provider == operatorv1.ProviderEKS {
+		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
+			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	// TODO: Watch for dependent objects.
@@ -187,13 +189,16 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	aci, err := utils.GetAmazonCloudIntegration(ctx, r.client)
-	if errors.IsNotFound(err) {
-		aci = nil
-	} else if err != nil {
-		log.Error(err, "Error reading AmazonCloudIntegration")
-		r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
-		return reconcile.Result{}, err
+	var aci *operatorv1beta1.AmazonCloudIntegration
+	if r.provider == operatorv1.ProviderEKS {
+		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
+		if errors.IsNotFound(err) {
+			aci = nil
+		} else if err != nil {
+			log.Error(err, "Error reading AmazonCloudIntegration")
+			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Create a component handler to manage the rendered component.

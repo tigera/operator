@@ -81,9 +81,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 
 		deployment := resources[expectedResourcesNumber-1].(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:" + components.ComponentManager.Version))
-		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/es-proxy:" + components.ComponentEsProxy.Version))
-		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal("gcr.io/unique-caldron-775/cnx/tigera/voltron:" + components.ComponentManagerProxy.Version))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
+		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
 		// Expect 1 volume mounts for es proxy
 		var esProxy = deployment.Spec.Template.Spec.Containers[1]

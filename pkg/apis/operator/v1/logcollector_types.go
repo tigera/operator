@@ -120,6 +120,7 @@ type LogCollectorStatus struct {
 // configured to collect Tigera log data and export it to Tigera's Elasticsearch cluster as well as any additionally configured destinations.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 type LogCollector struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

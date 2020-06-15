@@ -279,15 +279,15 @@ deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		./kubectl apply -f deploy/crds/calico/ && \
 		./kubectl apply -f deploy/crds/enterprise/ && \
-		./kubectl apply -f deploy/crds/operator_v1_manager_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_logcollector_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_intrusiondetection_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_compliance_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_apiserver_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_installation_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_tigerastatus_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_logstorage_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator_v1_managementclusterconnection_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_managers_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_logcollectors_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_intrusiondetections_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_compliances_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_apiservers_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_installations_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_tigerastatuses_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_logstorages_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusterconnections_crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 
@@ -413,10 +413,9 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-## Generating code after API changes
+## Generating code after API changes. Requires operator-sdk v0.18.1.
 gen-files:
-	operator-sdk generate k8s
-	operator-sdk generate openapi
+	operator-sdk generate crds
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml

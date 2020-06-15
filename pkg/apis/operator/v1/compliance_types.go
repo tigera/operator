@@ -42,6 +42,7 @@ type ComplianceStatus struct {
 // of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 type Compliance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

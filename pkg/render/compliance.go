@@ -382,7 +382,6 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		privileged = true
 	}
 
-
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "warning"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
@@ -454,7 +453,7 @@ func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAc
 }
 
 func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+	clusterRole := &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"},
 		Rules: []rbacv1.PolicyRule{
@@ -464,17 +463,22 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
-				APIGroups: []string{"authentication.k8s.io"},
-				Resources: []string{"tokenreviews"},
-				Verbs:     []string{"create"},
-			},
-			{
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
 		},
 	}
+
+	if c.installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
+		// For cross-cluster requests, an authentication review will be done for authenticating the compliance-server.
+		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		})
+	}
+	return clusterRole
 }
 
 func (c *complianceComponent) complianceServerManagedClusterRole() *rbacv1.ClusterRole {

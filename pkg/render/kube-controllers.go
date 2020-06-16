@@ -156,6 +156,15 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		}
 
 		role.Rules = append(role.Rules, extraRules...)
+
+		if c.cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			})
+		}
 	}
 	return role
 }
@@ -292,8 +301,8 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		return make(map[string]string)
 	}
 
-	return map[string]string {
-		ManagerInternalTLSHashAnnotation : AnnotationHash(c.managerInternalSecret.Data),
+	return map[string]string{
+		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
 	}
 }
 

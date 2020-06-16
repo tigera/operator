@@ -158,24 +158,6 @@ spec:
               - Management
               - Managed
               type: string
-            componentResources:
-              description: ComponentResources can be used to customize the resource
-                requirements for each component.
-              items:
-                properties:
-                  componentName:
-                    enum:
-                    - Node
-                    - Typha
-                    - KubeControllers
-                    type: string
-                  resourceRequirements:
-                    type: object
-                required:
-                - componentName
-                - resourceRequirements
-                type: object
-              type: array
             controlPlaneNodeSelector:
               additionalProperties:
                 type: string

@@ -7,6 +7,7 @@ import v1 "github.com/tigera/operator/pkg/apis/operator/v1"
 // use to determine if they should run at all, or store them and influence their
 // reconciliation loops.
 type AddOptions struct {
-	DetectedProvider            v1.Provider
-	EnableEnterpriseControllers bool
+	DetectedProvider    v1.Provider
+	EnterpriseCRDExists bool
+	AmazonCRDExists     bool
 }

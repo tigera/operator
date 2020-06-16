@@ -216,7 +216,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		enabledControllers = append(enabledControllers, "service")
+		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
 		if c.cr.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
 			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")

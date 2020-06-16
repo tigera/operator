@@ -20,6 +20,7 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 	v1 "k8s.io/api/apps/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 var _ = Describe("compliance rendering tests", func() {
@@ -87,6 +88,13 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[20], "network-access")
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
+
+			clusterRole := resources[27].(*rbacv1.ClusterRole)
+			Expect(clusterRole.Name).To(Equal("tigera-compliance-server"))
+			Expect(len(clusterRole.Rules)).To(Equal(2))
+			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
+			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
+			Expect(clusterRole.Rules[1].Resources[0]).To(Equal("subjectaccessreviews"))
 		})
 	})
 
@@ -94,12 +102,12 @@ var _ = Describe("compliance rendering tests", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(nil, &internalManagerTLSSecret,
 				&operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider:    operatorv1.ProviderNone,
-					Registry:              "testregistry.com/",
-					ClusterManagementType: operatorv1.ClusterManagementTypeManagement,
-				},
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift)
+					Spec: operatorv1.InstallationSpec{
+						KubernetesProvider:    operatorv1.ProviderNone,
+						Registry:              "testregistry.com/",
+						ClusterManagementType: operatorv1.ClusterManagementTypeManagement,
+					},
+				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -157,7 +165,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
-			var dpComplianceServer = resources[len(expectedResources) - 1].(*v1.Deployment)
+			var dpComplianceServer = resources[len(expectedResources)-1].(*v1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
@@ -174,6 +182,14 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
+
+			clusterRole := resources[28].(*rbacv1.ClusterRole)
+			Expect(clusterRole.Name).To(Equal("tigera-compliance-server"))
+			Expect(len(clusterRole.Rules)).To(Equal(3))
+			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
+			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
+			Expect(clusterRole.Rules[1].Resources[0]).To(Equal("subjectaccessreviews"))
+			Expect(clusterRole.Rules[2].Resources[0]).To(Equal("authenticationreviews"))
 		})
 	})
 
@@ -237,6 +253,13 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[20], "network-access")
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
+
+			clusterRole := resources[25].(*rbacv1.ClusterRole)
+			Expect(clusterRole.Name).To(Equal("tigera-compliance-server"))
+			Expect(len(clusterRole.Rules)).To(Equal(2))
+			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
+			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
+			Expect(clusterRole.Rules[1].Resources[0]).To(Equal("subjectaccessreviews"))
 		})
 	})
 })

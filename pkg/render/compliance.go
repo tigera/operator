@@ -472,6 +472,8 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 
 	if c.installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
 		// For cross-cluster requests, an authentication review will be done for authenticating the compliance-server.
+		// Requests on behalf of the compliance-server will be sent to Voltron, where an authentication review will take
+		// place with its bearer token.
 		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authenticationreviews"},

@@ -84,6 +84,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
+	for _, namespace := range []string{render.OperatorNamespace(), render.APIServerNamespace} {
+		if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+		}
+	}
+
 	err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)

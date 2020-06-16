@@ -419,8 +419,6 @@ endif
 ###############################################################################
 ## Generating code after API changes
 gen-files:
-	@echo "NOTE: If operator-sdk crashes, try setting your GOROOT env var explicitly:"
-	@echo "  export GOROOT=/path/to/go"
 	operator-sdk generate k8s
 	operator-sdk generate openapi
 

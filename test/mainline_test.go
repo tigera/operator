@@ -234,8 +234,8 @@ func setupManager() (client.Client, manager.Manager) {
 	Expect(err).NotTo(HaveOccurred())
 	// Setup all Controllers
 	err = controller.AddToManager(mgr, options.AddOptions{
-		DetectedProvider:            operator.ProviderNone,
-		EnableEnterpriseControllers: true,
+		DetectedProvider:    operator.ProviderNone,
+		EnterpriseCRDExists: true,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr

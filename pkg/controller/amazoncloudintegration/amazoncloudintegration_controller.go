@@ -46,7 +46,7 @@ var log = logf.Log.WithName("controller_amazoncloudintegration")
 // Add creates a new AmazonCloudIntegration Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnableEnterpriseControllers {
+	if !opts.AmazonCRDExists {
 		// No need to start this controller.
 		return nil
 	}

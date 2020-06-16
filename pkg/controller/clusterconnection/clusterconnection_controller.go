@@ -47,7 +47,7 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started. This controller is meant only for enterprise users.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnableEnterpriseControllers {
+	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}

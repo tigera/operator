@@ -32,7 +32,7 @@ var replicas int32 = 1
 
 func KubeControllers(cr *operator.Installation, managerInternalSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr:                    cr,
+		cr: cr,
 		managerInternalSecret: managerInternalSecret,
 	}
 }
@@ -205,7 +205,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		enabledControllers = append(enabledControllers, "service")
+		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
 		if c.cr.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
 			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")

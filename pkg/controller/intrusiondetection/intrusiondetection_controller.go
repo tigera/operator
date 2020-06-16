@@ -23,6 +23,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -44,12 +45,12 @@ var log = logf.Log.WithName("controller_intrusiondetection")
 
 // Add creates a new IntrusionDetection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, p operatorv1.Provider, tsee bool) error {
-	if !tsee {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, p))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
 }
 
 // newReconciler returns a new reconcile.Reconciler

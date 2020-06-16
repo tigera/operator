@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -45,13 +46,13 @@ var log = logf.Log.WithName(controllerName)
 
 // Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started. This controller is meant only for enterprise users.
-func Add(mgr manager.Manager, p operatorv1.Provider, enterpriseEnabled bool) error {
-	if !enterpriseEnabled {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection")
-	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, p))
+	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider))
 }
 
 // newReconciler returns a new reconcile.Reconciler

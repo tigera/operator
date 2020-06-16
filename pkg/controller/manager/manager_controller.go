@@ -23,6 +23,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -44,12 +45,12 @@ var log = logf.Log.WithName("controller_manager")
 
 // Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
-	if !tsee {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, provider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -324,11 +325,13 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			return reconcile.Result{}, nil
 		}
 
-		internalTrafficSecret, err = utils.ValidateCertPair(r.client,
-			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretCertName,
-			render.ManagerInternalSecretKeyName,
-		)
+		// We expect that the secret that holds the certificates for internal communication within the management
+		// K8S cluster is already created by the KubeControllers
+		internalTrafficSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, client.ObjectKey{
+			Name:      render.ManagerInternalTLSSecretName,
+			Namespace: render.OperatorNamespace(),
+		}, internalTrafficSecret)
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error validating TLS secret %s", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err

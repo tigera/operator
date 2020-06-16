@@ -579,12 +579,6 @@ func managerClusterRole(impersonationOnly bool) *rbacv1.ClusterRole {
 	if !impersonationOnly {
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
-
-				APIGroups: []string{"authentication.k8s.io"},
-				Resources: []string{"tokenreviews"},
-				Verbs:     []string{"create"},
-			},
-			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch", "update"},

@@ -101,8 +101,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
-		clusterRole := resources[1].(*rbacv1.ClusterRole)
-		Expect(clusterRole.Name).To(Equal("calico-kube-controllers"))
+		clusterRole := GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(12))
 	})
 
@@ -135,8 +134,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
 		// Management clusters also have a role for authenticationreviews.
-		clusterRole := resources[1].(*rbacv1.ClusterRole)
-		Expect(clusterRole.Name).To(Equal("calico-kube-controllers"))
+		clusterRole := GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(13))
 		Expect(clusterRole.Rules[12].Resources[0]).To(Equal("authenticationreviews"))
 	})

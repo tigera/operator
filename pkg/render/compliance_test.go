@@ -89,8 +89,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
-			clusterRole := resources[27].(*rbacv1.ClusterRole)
-			Expect(clusterRole.Name).To(Equal("tigera-compliance-server"))
+			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(len(clusterRole.Rules)).To(Equal(2))
 			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
 			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
@@ -183,8 +182,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 
-			clusterRole := resources[28].(*rbacv1.ClusterRole)
-			Expect(clusterRole.Name).To(Equal("tigera-compliance-server"))
+			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(len(clusterRole.Rules)).To(Equal(3))
 			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
 			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
@@ -254,8 +252,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[21], "policy-audit")
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
-			clusterRole := resources[25].(*rbacv1.ClusterRole)
-			Expect(clusterRole.Name).To(Equal("tigera-compliance-server"))
+			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(len(clusterRole.Rules)).To(Equal(2))
 			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
 			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))

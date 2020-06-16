@@ -106,7 +106,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 
 		clusterRole := GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(12))
+		Expect(len(clusterRole.Rules)).To(Equal(14))
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
@@ -145,7 +145,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Management clusters also have a role for authenticationreviews.
 		clusterRole := GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(13))
+		Expect(len(clusterRole.Rules)).To(Equal(15))
 		Expect(clusterRole.Rules[12].Resources[0]).To(Equal("authenticationreviews"))
 	})
 

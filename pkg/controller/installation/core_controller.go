@@ -28,6 +28,7 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -61,8 +62,8 @@ var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
-	ri, err := newReconciler(mgr, provider, tsee)
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	ri, err := newReconciler(mgr, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create Core Reconciler: %v", err)
 	}
@@ -70,7 +71,7 @@ func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (*ReconcileInstallation, error) {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
@@ -80,11 +81,12 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: provider,
+		autoDetectedProvider: opts.DetectedProvider,
 		status:               status.New(mgr.GetClient(), "calico"),
 		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
 		namespaceMigration:   nm,
-		enterpriseCRDsExist:  tsee,
+		amazonCRDExists:      opts.AmazonCRDExists,
+		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()
@@ -131,8 +133,8 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %v", cm, err)
 	}
 
-	// Only watch the AmazonCloudIntegration if the tsee API is available
-	if r.enterpriseCRDsExist {
+	// Only watch the AmazonCloudIntegration if the CRD is available
+	if r.amazonCRDExists {
 		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
@@ -198,6 +200,7 @@ type ReconcileInstallation struct {
 	typhaAutoscaler      *typhaAutoscaler
 	namespaceMigration   *migration.CoreNamespaceMigration
 	enterpriseCRDsExist  bool
+	amazonCRDExists      bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
@@ -474,6 +477,21 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// The operator supports running without the AmazonCloudIntegration when it's CRD is not installed.
+	// If, when this controller was started, the CRD didn't exist, but it does now, then reboot.
+	if !r.amazonCRDExists {
+		amazonCRDRequired, err := utils.RequiresAmazonController(r.config)
+		if err != nil {
+			r.SetDegraded("Error discovering AmazonCloudIntegration CRD", err, reqLogger)
+			reqLogger.Info("Scheduling a retry in 30 seconds")
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		if amazonCRDRequired {
+			log.Info("Rebooting to enable AWS controllers")
+			os.Exit(0)
+		}
+	}
+
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
 
@@ -535,7 +553,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var aci *operatorv1beta1.AmazonCloudIntegration
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+	if r.amazonCRDExists {
 		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
 		if apierrors.IsNotFound(err) {
 			aci = nil

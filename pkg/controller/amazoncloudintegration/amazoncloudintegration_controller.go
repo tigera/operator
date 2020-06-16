@@ -30,6 +30,7 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -44,12 +45,12 @@ var log = logf.Log.WithName("controller_amazoncloudintegration")
 
 // Add creates a new AmazonCloudIntegration Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
-	if !tsee {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.AmazonCRDExists {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, provider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
 }
 
 // newReconciler returns a new reconcile.Reconciler

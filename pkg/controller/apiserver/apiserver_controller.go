@@ -17,12 +17,14 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	v1 "k8s.io/api/core/v1"
 	"time"
+
+	v1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -41,28 +43,29 @@ var log = logf.Log.WithName("controller_apiserver")
 
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
-	if !tsee {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, provider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: provider,
-		status:   status.New(mgr.GetClient(), "apiserver"),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		amazonCRDExists: amazonCRDExists,
+		status:          status.New(mgr.GetClient(), "apiserver"),
 	}
 	r.status.Run()
 	return r
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 	// Create a new controller
 	c, err := controller.New("apiserver-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -91,10 +94,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+	if r.amazonCRDExists {
+		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
+			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	// TODO: Watch for dependent objects.
@@ -110,10 +115,11 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider operatorv1.Provider
-	status   status.StatusManager
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	amazonCRDExists bool
+	status          status.StatusManager
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -193,13 +199,16 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	aci, err := utils.GetAmazonCloudIntegration(ctx, r.client)
-	if errors.IsNotFound(err) {
-		aci = nil
-	} else if err != nil {
-		log.Error(err, "Error reading AmazonCloudIntegration")
-		r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
-		return reconcile.Result{}, err
+	var amazon *operatorv1beta1.AmazonCloudIntegration
+	if r.amazonCRDExists {
+		amazon, err = utils.GetAmazonCloudIntegration(ctx, r.client)
+		if errors.IsNotFound(err) {
+			amazon = nil
+		} else if err != nil {
+			log.Error(err, "Error reading AmazonCloudIntegration")
+			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -207,7 +216,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network, aci, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(network, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

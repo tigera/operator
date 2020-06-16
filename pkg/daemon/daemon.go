@@ -23,6 +23,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -82,15 +83,25 @@ func Main() {
 	log.WithValues("provider", provider).Info("Checking type of cluster")
 
 	// Determine if we need to start the TSEE specific controllers.
-	startTSEE, err := utils.RequiresTigeraSecure(mgr.GetConfig())
+	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
 	if err != nil {
 		log.Error(err, "Failed to determine if TSEE is required")
 		os.Exit(1)
 	}
 	log.WithValues("required", startTSEE).Info("Checking if TSEE controllers are required")
 
+	amazonCRDExists, err := utils.RequiresAmazonController(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to determine if AmazonCloudIntegration is required")
+		os.Exit(1)
+	}
+
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr, provider, startTSEE); err != nil {
+	if err := controller.AddToManager(mgr, options.AddOptions{
+		DetectedProvider:    provider,
+		EnterpriseCRDExists: enterpriseCRDExists,
+		AmazonCRDExists:     amazonCRDExists,
+	}); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

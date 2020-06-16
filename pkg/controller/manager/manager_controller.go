@@ -95,6 +95,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
+			render.ManagerInternalTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
@@ -323,16 +324,16 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			return reconcile.Result{}, nil
 		}
 
-		// We expect that the secret that holds the certificates for internal communication within the management
-		// K8S cluster is already created by the KubeControllers
-		internalTrafficSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, client.ObjectKey{
-			Name: render.ManagerInternalTLSSecretName,
-			Namespace: render.OperatorNamespace(),
-		}, internalTrafficSecret)
+		internalTrafficSecret, err = utils.ValidateCertPair(r.client,
+			render.ManagerInternalTLSSecretName,
+			render.ManagerInternalSecretCertName,
+			render.ManagerInternalSecretKeyName,
+		)
 		if err != nil {
-			var message = fmt.Sprintf("Failed to check for the existence of %s secret", render.ManagerInternalTLSSecretName)
-			r.status.SetDegraded(message, err.Error())
+			r.status.SetDegraded(fmt.Sprintf("Error validating TLS secret %s", render.ManagerInternalTLSSecretName), err.Error())
+			return reconcile.Result{}, err
+		} else if internalTrafficSecret == nil {
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s to be available", render.ManagerInternalTLSSecretName), "")
 			return reconcile.Result{}, nil
 		}
 	}

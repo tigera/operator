@@ -156,6 +156,17 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		}
 
 		role.Rules = append(role.Rules, extraRules...)
+
+		if c.cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+			// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
+			// take place with its bearer token.
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			})
+		}
 	}
 	return role
 }

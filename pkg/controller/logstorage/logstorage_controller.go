@@ -34,6 +34,7 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -63,12 +64,12 @@ const (
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, provider operatorv1.Provider, tsee bool) error {
-	if !tsee {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnableEnterpriseControllers {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, provider)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider)
 	if err != nil {
 		return err
 	}

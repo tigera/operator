@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller"
+	"github.com/tigera/operator/pkg/controller/options"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
@@ -232,8 +233,10 @@ func setupManager() (client.Client, manager.Manager) {
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 	// Setup all Controllers
-	runTSEEControllers := true
-	err = controller.AddToManager(mgr, operator.ProviderNone, runTSEEControllers)
+	err = controller.AddToManager(mgr, options.AddOptions{
+		DetectedProvider:            operator.ProviderNone,
+		EnableEnterpriseControllers: true,
+	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr
 }

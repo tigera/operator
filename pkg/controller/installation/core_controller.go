@@ -28,6 +28,7 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -61,8 +62,8 @@ var openshiftNetworkConfig = "cluster"
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
-	ri, err := newReconciler(mgr, provider, tsee)
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	ri, err := newReconciler(mgr, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create Core Reconciler: %v", err)
 	}
@@ -70,7 +71,7 @@ func Add(mgr manager.Manager, provider operator.Provider, tsee bool) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (*ReconcileInstallation, error) {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
@@ -80,11 +81,11 @@ func newReconciler(mgr manager.Manager, provider operator.Provider, tsee bool) (
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: provider,
+		autoDetectedProvider: opts.DetectedProvider,
 		status:               status.New(mgr.GetClient(), "calico"),
 		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
 		namespaceMigration:   nm,
-		enterpriseCRDsExist:  tsee,
+		enterpriseCRDsExist:  opts.EnableEnterpriseControllers,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()

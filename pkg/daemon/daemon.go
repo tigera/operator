@@ -23,6 +23,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -90,7 +91,10 @@ func Main() {
 	log.WithValues("required", startTSEE).Info("Checking if TSEE controllers are required")
 
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr, provider, startTSEE); err != nil {
+	if err := controller.AddToManager(mgr, options.AddOptions{
+		DetectedProvider:            provider,
+		EnableEnterpriseControllers: startTSEE,
+	}); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

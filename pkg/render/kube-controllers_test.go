@@ -100,6 +100,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ds := resources[3].(*apps.Deployment)
 
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContaineElement(v1.EnvVar{
+			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices",
+		}))
 
 		clusterRole := GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(12))
@@ -122,6 +126,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// The Deployment should have the correct configuration.
 		dp := resources[3].(*apps.Deployment)
+
+		envs := dp.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(v1.EnvVar{
+			Name:  "ENABLED_CONTROLLERS",
+			Value: "node,service,federatedservices,elasticsearchconfiguration,managedcluster",
+		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))

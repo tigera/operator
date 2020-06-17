@@ -78,11 +78,25 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create a few nodes
 		_ = createNode(c, "node1")
-		_ = createNode(c, "node2")
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.run()
+
+		verifyTyphaReplicas(c, 1)
+
+		n2 := createNode(c, "node2")
+		verifyTyphaReplicas(c, 2)
+
+		n2.Spec.Unschedulable = true
+		err = c.Update(context.Background(), n2)
+		Expect(err).To(BeNil())
+
+		verifyTyphaReplicas(c, 1)
+
+		n2.Spec.Unschedulable = false
+		err = c.Update(context.Background(), n2)
+		Expect(err).To(BeNil())
 
 		verifyTyphaReplicas(c, 2)
 
@@ -93,7 +107,14 @@ var _ = Describe("Test typha autoscaler ", func() {
 		n3.Spec.Unschedulable = true
 		err = c.Update(context.Background(), n3)
 		Expect(err).To(BeNil())
+
 		verifyTyphaReplicas(c, 2)
+
+		n3.Spec.Unschedulable = false
+		err = c.Update(context.Background(), n3)
+		Expect(err).To(BeNil())
+
+		verifyTyphaReplicas(c, 3)
 	})
 })
 
@@ -117,7 +138,6 @@ func verifyTyphaReplicas(c client.Client, expectedReplicas int) {
 	Eventually(func() int32 {
 		err := test.GetResource(c, typha)
 		Expect(err).To(BeNil())
-		// Just return an invalid number that will never match an expected replica count.
 		if typha.Spec.Replicas == nil {
 			return -1
 		}

@@ -340,7 +340,11 @@ func (c *typhaComponent) tolerations() []v1.Toleration {
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
 		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 	}
-
+	if c.provider == operator.ProviderDockerEE {
+		tolerations = append(tolerations, v1.Toleration{
+			Operator: v1.TolerationOpExists, Key: "com.docker.ucp.manager",
+		})
+	}
 	return tolerations
 }
 

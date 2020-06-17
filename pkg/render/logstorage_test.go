@@ -134,8 +134,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
 
+				resultES := GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
+					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
+
 				// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
-				Expect(createResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector).To(BeEmpty())
+				Expect(resultES.Spec.NodeSets[0].PodTemplate.Spec.NodeSelector).To(BeEmpty())
+
+				// Verify that the default container limist/requests are set.
+				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+				limits := esContainer.Resources.Limits
+				resources := esContainer.Resources.Requests
+
+				Expect(limits.Cpu().String()).To(Equal("1"))
+				Expect(limits.Memory().String()).To(Equal("4Gi"))
+				Expect(resources.Cpu().String()).To(Equal("250m"))
+				Expect(resources.Memory().String()).To(Equal("4Gi"))
+				Expect(esContainer.Env[0].Value).To(Equal("-Xms1398101K -Xmx1398101K"))
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{
@@ -290,18 +304,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 								},
 							},
 						},
-						Indices: &operator.Indices{
-							Replicas: &replicas,
-						},
-						Retention: &operatorv1.Retention{
-							Flows:             &retention,
-							AuditReports:      &retention,
-							Snapshots:         &retention,
-							ComplianceReports: &retention,
-						},
-					},
-					Status: operator.LogStorageStatus{
-						State: "",
 					},
 				}
 

@@ -25,6 +25,7 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/render"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Typha rendering tests", func() {
@@ -132,5 +133,41 @@ var _ = Describe("Typha rendering tests", func() {
 		for _, v := range expectedEnvVars {
 			Expect(tc.Env).To(ContainElement(v))
 		}
+	})
+
+	It("should render resourcerequirements", func() {
+		rr := &v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("250m"),
+				v1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("500m"),
+				v1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		installation.Spec.ComponentResources = []*operator.ComponentResource{
+			{
+				ComponentName:        operator.ComponentNameTypha,
+				ResourceRequirements: rr,
+			},
+		}
+
+		component := render.Typha(installation, provider, typhaNodeTLS, nil, false)
+		resources, _ := component.Objects()
+
+		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*apps.Deployment)
+
+		passed := false
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == "calico-typha" {
+				Expect(container.Resources).To(Equal(*rr))
+				passed = true
+			}
+		}
+		Expect(passed).To(Equal(true))
 	})
 })

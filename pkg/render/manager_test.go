@@ -22,6 +22,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -50,7 +51,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	const expectedResourcesNumber = 11
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(instance, nil, false, nil)
+		resources := renderObjects(instance, nil, operator.ClusterManagementTypeStandalone, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resources.
@@ -114,7 +115,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(instance, nil, false, nil)
+		resources := renderObjects(instance, nil, operator.ClusterManagementTypeStandalone, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -126,6 +127,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
+
+		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch", "update"},
+			},
+		}))
 	})
 
 	It("should render OIDC configmaps given OIDC configuration", func() {
@@ -138,7 +153,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 		}
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, oidcConfig, false, nil)
+		resources := renderObjects(instance, oidcConfig, operator.ClusterManagementTypeStandalone, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1))
 
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
@@ -166,7 +181,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, nil, false, nil)
+		resources := renderObjects(instance, nil, operator.ClusterManagementTypeStandalone, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := resources[expectedResourcesNumber-1].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -176,7 +191,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(instance, nil, true, nil)
+		resources := renderObjects(instance, nil, operator.ClusterManagementTypeManagement, nil)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -256,13 +271,32 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
+
+		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch", "update"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			},
+		}))
 	})
 })
 
-func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, isManagement bool, tlsSecret *corev1.Secret) []runtime.Object {
+func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, clusterType operator.ClusterManagementType, tlsSecret *corev1.Secret) []runtime.Object {
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
-	if isManagement {
+	if clusterType == operator.ClusterManagementTypeManagement {
 		tunnelSecret = &voltronTunnelSecret
 		internalTraffic = &internalManagerTLSSecret
 	}
@@ -284,9 +318,9 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, isM
 		tlsSecret,
 		nil,
 		false,
-		&operator.Installation{Spec: operator.InstallationSpec{}},
+		&operator.Installation{Spec: operator.InstallationSpec{ClusterManagementType: clusterType}},
 		oidcConfig,
-		isManagement,
+		clusterType == operator.ClusterManagementTypeManagement,
 		tunnelSecret,
 		internalTraffic)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

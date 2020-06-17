@@ -38,17 +38,20 @@ const (
 )
 
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
-// The number of Typha replicas depends on the number of nodes:
+// Number of replicas should be at least (1 typha for every 200 nodes) + 2 but the number of typhas
+// cannot exceed the number of nodes+masters.
 // Nodes       Replicas
 //     1              1
 //     2              2
-//     3              3
-//   250              4
-//   500              5
-//  1000              6
-//  1500              7
-//  2000              8
-//  2000+            10
+//  <200              3
+//  <400              4
+//  <600              5
+//  <800              6
+// <1000              7
+//    .....
+// <2000              12
+//    .....
+// <18000             20
 type typhaAutoscaler struct {
 	client     client.Client
 	syncPeriod time.Duration
@@ -78,25 +81,12 @@ func newTyphaAutoscaler(client client.Client, options ...typhaAutoscalerOption) 
 
 // getExpectedReplicas gets the number of replicas expected for a given node number.
 func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
-	switch {
-	case nodes <= 1:
-		return 1
-	case nodes <= 2:
-		return 2
-	case nodes <= 3:
-		return 3
-	case nodes <= 250:
-		return 4
-	case nodes <= 500:
-		return 5
-	case nodes <= 1000:
-		return 6
-	case nodes <= 1500:
-		return 7
-	case nodes <= 2000:
-		return 8
-	}
-	return 10
+	var maxNodesPerTypha int = 200
+	// This gives a count of how many 200s so we need 1+ this number to get at least
+	// 1 typha for every 200 nodes.
+	typhas := nodes / maxNodesPerTypha
+	typhas += 3
+	return typhas
 }
 
 // run starts the Typha autoscaler, updating the Typha deployment's replica count every sync period.

@@ -118,8 +118,10 @@ const (
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 // +k8s:openapi-gen=true
 type ComponentResource struct {
+	// ComponentName is an enum which identifies the component
 	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
 	ComponentName        ComponentName            `json:"componentName"`
+	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
 

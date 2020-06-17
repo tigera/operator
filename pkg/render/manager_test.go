@@ -129,9 +129,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
 
 		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(2))
-		Expect(clusterRole.Rules[0].Resources[0]).To(Equal("subjectaccessreviews"))
-		Expect(clusterRole.Rules[1].Resources[0]).To(Equal("managedclusters"))
+		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch", "update"},
+			},
+		}))
 	})
 
 	It("should render OIDC configmaps given OIDC configuration", func() {
@@ -264,10 +273,23 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 
 		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(3))
-		Expect(clusterRole.Rules[0].Resources[0]).To(Equal("subjectaccessreviews"))
-		Expect(clusterRole.Rules[1].Resources[0]).To(Equal("managedclusters"))
-		Expect(clusterRole.Rules[2].Resources[0]).To(Equal("authenticationreviews"))
+		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch", "update"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			},
+		}))
 	})
 })
 

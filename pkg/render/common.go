@@ -26,6 +26,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openshift/library-go/pkg/crypto"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -256,6 +257,19 @@ func AnnotationHash(i interface{}) string {
 	h := sha1.New()
 	h.Write([]byte(fmt.Sprintf("%q", i)))
 	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// GetResourceRequirements retrieves the component ResourcesRequirements from the installation
+// If it doesn't exist, it returns an empty ResourceRequirements struct
+func GetResourceRequirements(i *operatorv1.Installation, name operatorv1.ComponentName) v1.ResourceRequirements {
+	if i.Spec.ComponentResources != nil {
+		for _, cr := range i.Spec.ComponentResources {
+			if cr.ComponentName == name && cr.ResourceRequirements != nil {
+				return *cr.ResourceRequirements
+			}
+		}
+	}
+	return v1.ResourceRequirements{}
 }
 
 // secretsAnnotationHash generates a hash based off of the data in each secrets Data field that can be used by Deployments

@@ -161,7 +161,7 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(false),
+		managerClusterRole(c.installation.Spec.ClusterManagementType),
 		managerClusterRoleBinding(),
 		c.managerPolicyImpactPreviewClusterRole(),
 		c.managerPolicyImpactPreviewClusterRoleBinding(),
@@ -561,7 +561,7 @@ func managerServiceAccount() *v1.ServiceAccount {
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 // This role can also be used in mcm for impersonation purposes only.
-func managerClusterRole(impersonationOnly bool) *rbacv1.ClusterRole {
+func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -576,7 +576,7 @@ func managerClusterRole(impersonationOnly bool) *rbacv1.ClusterRole {
 		},
 	}
 
-	if !impersonationOnly {
+	if clusterType != operator.ClusterManagementTypeManaged {
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
@@ -586,6 +586,16 @@ func managerClusterRole(impersonationOnly bool) *rbacv1.ClusterRole {
 		)
 	}
 
+	if clusterType == operator.ClusterManagementTypeManagement {
+		// For cross-cluster requests an authentication review will be done for authenticating the tigera-manager.
+		// Requests on behalf of the tigera-manager will be sent to Voltron, where an authentication review will
+		// take place with its bearer token.
+		cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		})
+	}
 	return cr
 }
 

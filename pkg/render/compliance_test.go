@@ -90,10 +90,18 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
 			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(len(clusterRole.Rules)).To(Equal(2))
-			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
-			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
-			Expect(clusterRole.Rules[1].Resources[0]).To(Equal("subjectaccessreviews"))
+			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"globalreporttypes", "globalreports"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"authorization.k8s.io"},
+					Resources: []string{"subjectaccessreviews"},
+					Verbs:     []string{"create"},
+				},
+			}))
 		})
 	})
 
@@ -183,11 +191,23 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 
 			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(len(clusterRole.Rules)).To(Equal(3))
-			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
-			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
-			Expect(clusterRole.Rules[1].Resources[0]).To(Equal("subjectaccessreviews"))
-			Expect(clusterRole.Rules[2].Resources[0]).To(Equal("authenticationreviews"))
+			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"globalreporttypes", "globalreports"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"authorization.k8s.io"},
+					Resources: []string{"subjectaccessreviews"},
+					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"authenticationreviews"},
+					Verbs:     []string{"create"},
+				},
+			}))
 		})
 	})
 
@@ -253,10 +273,18 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(resources[22], "cis-benchmark")
 
 			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(len(clusterRole.Rules)).To(Equal(2))
-			Expect(clusterRole.Rules[0].Resources[0]).To(Equal("globalreporttypes"))
-			Expect(clusterRole.Rules[0].Resources[1]).To(Equal("globalreports"))
-			Expect(clusterRole.Rules[1].Resources[0]).To(Equal("subjectaccessreviews"))
+			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"globalreporttypes", "globalreports"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"authorization.k8s.io"},
+					Resources: []string{"subjectaccessreviews"},
+					Verbs:     []string{"create"},
+				},
+			}))
 		})
 	})
 })

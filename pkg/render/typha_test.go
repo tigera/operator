@@ -98,33 +98,6 @@ var _ = Describe("Typha rendering tests", func() {
 		}))
 	})
 
-	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
-		aci := &operatorv1beta1.AmazonCloudIntegration{
-			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
-				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
-				PodSecurityGroupID:   "sg-podsgid",
-			},
-		}
-		component := render.Typha(installation, provider, typhaNodeTLS, aci, true)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
-
-		deploymentResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
-		Expect(deploymentResource).ToNot(BeNil())
-		d := deploymentResource.(*apps.Deployment)
-		tc := d.Spec.Template.Spec.Containers[0]
-		Expect(tc.Name).To(Equal("calico-typha"))
-
-		// Assert on expected env vars.
-		expectedEnvVars := []v1.EnvVar{
-			{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
-			{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
-		}
-		for _, v := range expectedEnvVars {
-			Expect(tc.Env).To(ContainElement(v))
-		}
-	})
-
 	It("should render resourcerequirements", func() {
 		rr := &v1.ResourceRequirements{
 			Requests: v1.ResourceList{
@@ -144,7 +117,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		component := render.Typha(installation, provider, typhaNodeTLS, nil, false)
+		component := render.Typha(installation, provider, typhaNodeTLS, false)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")

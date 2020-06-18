@@ -483,14 +483,14 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
-		{Name: ManagerTLSSecretName, MountPath: "/certs/https"},
-		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana"},
-		{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance"},
+		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
+		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
+		{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true},
 	}
 
 	if c.management {
-		mounts = append(mounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretName, MountPath: "/certs/internal"})
-		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel"})
+		mounts = append(mounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretName, MountPath: "/certs/internal", ReadOnly: true})
+		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 
 	return mounts

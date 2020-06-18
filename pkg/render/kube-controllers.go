@@ -32,13 +32,13 @@ var replicas int32 = 1
 
 func KubeControllers(cr *operator.Installation, managerSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr: cr,
+		cr:            cr,
 		managerSecret: managerSecret,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr *operator.Installation
+	cr            *operator.Installation
 	managerSecret *v1.Secret
 }
 
@@ -255,9 +255,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
-							Name:  "calico-kube-controllers",
-							Image: image,
-							Env:   env,
+							Name:      "calico-kube-controllers",
+							Image:     image,
+							Env:       env,
+							Resources: c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{
 									Exec: &v1.ExecAction{
@@ -284,6 +285,11 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	return &d
+}
+
+// kubeControllerResources creates the kube-controller's resource requirements.
+func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequirements {
+	return GetResourceRequirements(c.cr, operator.ComponentNameKubeControllers)
 }
 
 func kubeControllersVolumeMounts(managerSecret *v1.Secret) []v1.VolumeMount {

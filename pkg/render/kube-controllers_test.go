@@ -25,6 +25,8 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	apps "k8s.io/api/apps/v1"
 )
 
@@ -149,5 +151,41 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		d := resources[3].(*apps.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+	})
+
+	It("should render resourcerequirements", func() {
+		rr := &v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("250m"),
+				v1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("500m"),
+				v1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		instance.Spec.ComponentResources = []*operator.ComponentResource{
+			{
+				ComponentName:        operator.ComponentNameKubeControllers,
+				ResourceRequirements: rr,
+			},
+		}
+
+		component := render.KubeControllers(instance, nil)
+		resources, _ := component.Objects()
+
+		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*apps.Deployment)
+
+		passed := false
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == "calico-kube-controllers" {
+				Expect(container.Resources).To(Equal(*rr))
+				passed = true
+			}
+		}
+		Expect(passed).To(Equal(true))
 	})
 })

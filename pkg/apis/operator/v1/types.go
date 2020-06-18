@@ -100,6 +100,29 @@ type InstallationSpec struct {
 	// field.
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
+
+	// ComponentResources can be used to customize the resource requirements for each component.
+	// +optional
+	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
+}
+
+// ComponentName CRD enum
+type ComponentName string
+
+const (
+	ComponentNameNode            ComponentName = "Node"
+	ComponentNameTypha           ComponentName = "Typha"
+	ComponentNameKubeControllers ComponentName = "KubeControllers"
+)
+
+// The ComponentResource struct associates a ResourceRequirements with a component by name
+// +k8s:openapi-gen=true
+type ComponentResource struct {
+	// ComponentName is an enum which identifies the component
+	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
+	ComponentName        ComponentName            `json:"componentName"`
+	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
+	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

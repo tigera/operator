@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -1023,6 +1024,42 @@ var _ = Describe("Node rendering tests", func() {
 		for _, v := range expectedEnvVars {
 			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
 		}
+	})
+
+	It("should render resourcerequirements", func() {
+		rr := &v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("250m"),
+				v1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("500m"),
+				v1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		defaultInstance.Spec.ComponentResources = []*operator.ComponentResource{
+			{
+				ComponentName:        operator.ComponentNameNode,
+				ResourceRequirements: rr,
+			},
+		}
+
+		component := render.Node(defaultInstance, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, typhaNodeTLS, nil, false)
+		resources, _ := component.Objects()
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+
+		passed := false
+		for _, container := range ds.Spec.Template.Spec.Containers {
+			if container.Name == "calico-node" {
+				Expect(container.Resources).To(Equal(*rr))
+				passed = true
+			}
+		}
+		Expect(passed).To(Equal(true))
 	})
 })
 

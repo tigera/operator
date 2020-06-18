@@ -156,7 +156,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *v1beta1.APISer
 		Spec: v1beta1.APIServiceSpec{
 			Group:                "projectcalico.org",
 			VersionPriority:      200,
-			GroupPriorityMinimum: 200,
+			GroupPriorityMinimum: 1500,
 			Service: &v1beta1.ServiceReference{
 				Name:      apiServiceName,
 				Namespace: APIServerNamespace,

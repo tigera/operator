@@ -490,7 +490,7 @@ func verifyAPIService(service *v1beta1.APIService) {
 	Expect(service.Name).To(Equal("v3.projectcalico.org"))
 	Expect(service.Spec.Group).To(Equal("projectcalico.org"))
 	Expect(service.Spec.Version).To(Equal("v3"))
-	Expect(service.Spec.GroupPriorityMinimum).To(BeEquivalentTo(200))
+	Expect(service.Spec.GroupPriorityMinimum).To(BeEquivalentTo(1500))
 	Expect(service.Spec.VersionPriority).To(BeEquivalentTo(200))
 	Expect(service.Spec.InsecureSkipTLSVerify).To(BeFalse())
 

@@ -138,7 +138,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 
 				// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
-				Expect(resultES.Spec.NodeSets[0].PodTemplate.Spec.NodeSelector).To(BeEmpty())
+				nodeSet := resultES.Spec.NodeSets[0]
+				Expect(nodeSet.PodTemplate.Spec.NodeSelector).To(BeEmpty())
 
 				// Verify that the default container limist/requests are set.
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
@@ -150,6 +151,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(resources.Cpu().String()).To(Equal("250m"))
 				Expect(resources.Memory().String()).To(Equal("4Gi"))
 				Expect(esContainer.Env[0].Value).To(Equal("-Xms1398101K -Xmx1398101K"))
+
+				//Check that the expected config made it's way to the Elastic CR
+				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
+					"node.master":                 "true",
+					"node.data":                   "true",
+					"node.ingest":                 "true",
+					"cluster.max_shards_per_node": 10000,
+				}))
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{
@@ -704,10 +713,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":    "true",
-						"node.data":      "true",
-						"node.ingest":    "true",
-						"node.attr.zone": "us-west-2a",
+						"node.master":                 "true",
+						"node.data":                   "true",
+						"node.ingest":                 "true",
+						"cluster.max_shards_per_node": 10000,
+						"node.attr.zone":              "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 
@@ -723,10 +733,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":    "true",
-						"node.data":      "true",
-						"node.ingest":    "true",
-						"node.attr.zone": "us-west-2b",
+						"node.master":                 "true",
+						"node.data":                   "true",
+						"node.ingest":                 "true",
+						"cluster.max_shards_per_node": 10000,
+						"node.attr.zone":              "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 				})
@@ -806,11 +817,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":    "true",
-						"node.data":      "true",
-						"node.ingest":    "true",
-						"node.attr.zone": "us-west-2a",
-						"node.attr.rack": "rack1",
+						"node.master":                 "true",
+						"node.data":                   "true",
+						"node.ingest":                 "true",
+						"cluster.max_shards_per_node": 10000,
+						"node.attr.zone":              "us-west-2a",
+						"node.attr.rack":              "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 
@@ -833,11 +845,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":    "true",
-						"node.data":      "true",
-						"node.ingest":    "true",
-						"node.attr.zone": "us-west-2b",
-						"node.attr.rack": "rack1",
+						"node.master":                 "true",
+						"node.data":                   "true",
+						"node.ingest":                 "true",
+						"cluster.max_shards_per_node": 10000,
+						"node.attr.zone":              "us-west-2b",
+						"node.attr.rack":              "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 				})

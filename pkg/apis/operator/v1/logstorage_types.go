@@ -119,7 +119,7 @@ type Retention struct {
 
 	// AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
-	// Default: 367
+	// Default: 91
 	// +optional
 	AuditReports *int32 `json:"auditReports"`
 
@@ -128,7 +128,7 @@ type Retention struct {
 	// Consult the Compliance Reporting documentation for more details on snapshots.
 	// Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
-	// Default: 367
+	// Default: 91
 	// +optional
 	Snapshots *int32 `json:"snapshots"`
 
@@ -137,7 +137,7 @@ type Retention struct {
 	// Consult the Compliance Reporting documentation for more details on reports.
 	// Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
-	// Default: 367
+	// Default: 91
 	// +optional
 	ComplianceReports *int32 `json:"complianceReports"`
 }

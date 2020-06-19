@@ -70,6 +70,7 @@ var _ = Describe("LogStorage controller", func() {
 			cli        client.Client
 			mockStatus *status.MockStatus
 			scheme     *runtime.Scheme
+			ctx        context.Context
 		)
 
 		BeforeEach(func() {
@@ -81,13 +82,47 @@ var _ = Describe("LogStorage controller", func() {
 			Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
+			ctx = context.Background()
 			cli = fake.NewFakeClientWithScheme(scheme)
+		})
+
+		Context("Check default logstorage settings", func() {
+			var ls *operatorv1.LogStorage
+			var err error
+			BeforeEach(func() {
+				Expect(cli.Create(context.Background(), &operatorv1.LogStorage{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operatorv1.LogStorageSpec{
+						Nodes: &operatorv1.Nodes{
+							Count: int64(1),
+						},
+					},
+				})).To(BeNil())
+				ls, err = logstorage.GetLogStorage(ctx, cli)
+				Expect(err).To(BeNil())
+			})
+			It("should set the replica values to the default settings", func() {
+				retain8 := int32(8)
+				retain91 := int32(91)
+				Expect(ls.Spec.Retention.Flows).To(Equal(&retain8))
+				Expect(ls.Spec.Retention.AuditReports).To(Equal(&retain91))
+				Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
+				Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))
+			})
+			It("should set the retention values to the default settings", func() {
+				var replicas int32 = render.DefaultElasticsearchReplicas
+				Expect(ls.Spec.Indices.Replicas).To(Equal(&replicas))
+			})
+			It("should set the storage class to the default settings", func() {
+				Expect(ls.Spec.StorageClassName).To(Equal(logstorage.DefaultElasticsearchStorageClass))
+			})
 		})
 
 		Context("Managed Cluster", func() {
 			Context("LogStorage is nil", func() {
 				BeforeEach(func() {
-					ctx := context.Background()
 					Expect(cli.Create(ctx, &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
@@ -116,7 +151,6 @@ var _ = Describe("LogStorage controller", func() {
 					It("tests that the ExternalService is setup with the default service name", func() {
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
-						ctx := context.Background()
 
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
@@ -138,7 +172,6 @@ var _ = Describe("LogStorage controller", func() {
 
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath)
 						Expect(err).ShouldNot(HaveOccurred())
-						ctx := context.Background()
 
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
@@ -224,7 +257,6 @@ var _ = Describe("LogStorage controller", func() {
 				var mockStatus *status.MockStatus
 
 				BeforeEach(func() {
-					ctx := context.Background()
 					Expect(cli.Create(ctx, &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
@@ -247,7 +279,6 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("OnCRFound").Return()
 				})
 				It("test LogStorage reconciles successfully", func() {
-					ctx := context.Background()
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: storageClassName,
@@ -321,7 +352,6 @@ var _ = Describe("LogStorage controller", func() {
 				var mockStatus *status.MockStatus
 
 				BeforeEach(func() {
-					ctx := context.Background()
 
 					Expect(cli.Create(ctx, &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{

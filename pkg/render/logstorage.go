@@ -612,6 +612,7 @@ func (es elasticsearchComponent) nodeSetTemplate() esv1.NodeSet {
 	pvcTemplate := es.pvcTemplate()
 
 	return esv1.NodeSet{
+		// This is configuration that ends up in /usr/share/elasticsearch/config/elasticsearch.yml on the Elastic container.
 		Config: &cmnv1.Config{
 			Data: map[string]interface{}{
 				"node.master":                 "true",

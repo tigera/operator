@@ -614,9 +614,10 @@ func (es elasticsearchComponent) nodeSetTemplate() esv1.NodeSet {
 	return esv1.NodeSet{
 		Config: &cmnv1.Config{
 			Data: map[string]interface{}{
-				"node.master": "true",
-				"node.data":   "true",
-				"node.ingest": "true",
+				"node.master":                 "true",
+				"node.data":                   "true",
+				"node.ingest":                 "true",
+				"cluster.max_shards_per_node": 10000,
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{pvcTemplate},

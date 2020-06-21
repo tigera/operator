@@ -494,12 +494,8 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 	t := []v1.Toleration{
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
+		{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready"},
 		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
-	if c.provider == operator.ProviderDockerEE {
-		t = append(t, v1.Toleration{
-			Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready",
-		})
 	}
 	return t
 }

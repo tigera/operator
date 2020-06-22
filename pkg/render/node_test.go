@@ -263,9 +263,9 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Verify tolerations.
 		expectedTolerations := []v1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
+			{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready"},
+			{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/unreachable"},
+			{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 		}
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 

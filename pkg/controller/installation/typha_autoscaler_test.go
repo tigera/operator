@@ -79,20 +79,47 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// Create a few nodes
 		_ = createNode(c, "node1")
 		_ = createNode(c, "node2")
+		_ = createNode(c, "node3")
+		_ = createNode(c, "node4")
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.run()
 
+		verifyTyphaReplicas(c, 1)
+
+		n5 := createNode(c, "node5")
 		verifyTyphaReplicas(c, 2)
 
-		n3 := createNode(c, "node3")
+		// Verify that making a node unschedulable updates replicas.
+		n5.Spec.Unschedulable = true
+		err = c.Update(context.Background(), n5)
+		Expect(err).To(BeNil())
+
+		verifyTyphaReplicas(c, 1)
+
+		n5.Spec.Unschedulable = false
+		err = c.Update(context.Background(), n5)
+		Expect(err).To(BeNil())
+
+		verifyTyphaReplicas(c, 2)
+
+		_ = createNode(c, "node6")
+		_ = createNode(c, "node7")
+		_ = createNode(c, "node8")
+		_ = createNode(c, "node9")
+		_ = createNode(c, "node10")
+
+		verifyTyphaReplicas(c, 2)
+
+		n11 := createNode(c, "node11")
+
 		verifyTyphaReplicas(c, 3)
 
-		// Verify that making a node unschedulable updates replicas.
-		n3.Spec.Unschedulable = true
-		err = c.Update(context.Background(), n3)
+		n11.Spec.Unschedulable = true
+		err = c.Update(context.Background(), n11)
 		Expect(err).To(BeNil())
+
 		verifyTyphaReplicas(c, 2)
 	})
 })
@@ -117,10 +144,10 @@ func verifyTyphaReplicas(c client.Client, expectedReplicas int) {
 	Eventually(func() int32 {
 		err := test.GetResource(c, typha)
 		Expect(err).To(BeNil())
-		// Just return an invalid number that will never match an expected replica count.
+		// Replicas defaults to 1:  https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#replicas
 		if typha.Spec.Replicas == nil {
-			return -1
+			return 1
 		}
 		return *typha.Spec.Replicas
-	}, 1*time.Second).Should(BeEquivalentTo(expectedReplicas))
+	}, 1).Should(BeEquivalentTo(expectedReplicas))
 }

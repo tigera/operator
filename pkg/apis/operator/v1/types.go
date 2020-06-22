@@ -63,7 +63,7 @@ type InstallationSpec struct {
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
 	// will additionally compare the auto-detected value to the specified value to confirm they match.
 	// +optional
-	// +kubebuilder:validation:Enum=EKS;GKE;AKS;OpenShift;DockerEnterprise
+	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CalicoNetwork specifies configuration options for Calico provided pod networking.

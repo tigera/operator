@@ -135,7 +135,7 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 		prevReplicas = *typha.Spec.Replicas
 	}
 
-	if prevReplicas == expectedReplicas {
+	if prevReplicas == expectedReplicas && typha.Spec.Replicas != nil {
 		return nil
 	}
 

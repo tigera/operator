@@ -63,7 +63,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(n).To(Equal(1))
 	})
 
-	It("should scale the Typha up and down in response to the number of schedulable nodes TestThis", func() {
+	It("should scale the Typha up and down in response to the number of schedulable nodes", func() {
 		typhaMeta := metav1.ObjectMeta{
 			Name:      "calico-typha",
 			Namespace: "calico-system",

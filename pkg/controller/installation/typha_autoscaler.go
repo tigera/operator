@@ -128,6 +128,7 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 	}
 
 	// The replicas field defaults to 1. We need this in case spec.Replicas is nil.
+	// https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#replicas
 	var prevReplicas int32
 	prevReplicas = 1
 	if typha.Spec.Replicas != nil {

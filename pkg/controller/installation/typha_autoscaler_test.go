@@ -144,6 +144,7 @@ func verifyTyphaReplicas(c client.Client, expectedReplicas int) {
 	Eventually(func() int32 {
 		err := test.GetResource(c, typha)
 		Expect(err).To(BeNil())
+		// Replicas defaults to 1:  https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#replicas
 		if typha.Spec.Replicas == nil {
 			return 1
 		}

@@ -170,15 +170,15 @@ spec:
                     with a component by name
                   properties:
                     componentName:
-                      description: ComponentName CRD enum
+                      description: ComponentName is an enum which identifies the component
                       enum:
                       - Node
                       - Typha
                       - KubeControllers
                       type: string
                     resourceRequirements:
-                      description: ResourceRequirements describes the compute resource
-                        requirements.
+                      description: ResourceRequirements allows customization of limits
+                        and requests for compute resources such as cpu and memory.
                       properties:
                         limits:
                           additionalProperties:

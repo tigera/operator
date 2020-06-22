@@ -253,6 +253,7 @@ spec:
                   compare the auto-detected value to the specified value to confirm
                   they match.
                 enum:
+                - ""
                 - EKS
                 - GKE
                 - AKS

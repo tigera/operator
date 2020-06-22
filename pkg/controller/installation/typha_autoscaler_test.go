@@ -149,5 +149,5 @@ func verifyTyphaReplicas(c client.Client, expectedReplicas int) {
 			return 1
 		}
 		return *typha.Spec.Replicas
-	}, 1).Should(BeEquivalentTo(expectedReplicas))
+	}, 1*time.Second).Should(BeEquivalentTo(expectedReplicas))
 }

@@ -1,6 +1,7 @@
 package render_test
 
 import (
+	esalpha1 "github.com/elastic/cloud-on-k8s/operators/pkg/apis/elasticsearch/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -170,6 +171,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			{"tigera-secure-kibana-cert", "tigera-kibana", "", "v1", "Secret"},
 			{"tigera-secure", "tigera-kibana", "", "", ""},
 		}
+
+		resultES := resources[9].(*esalpha1.Elasticsearch).Spec.Nodes[0]
+		// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
+		Expect(resultES.PodTemplate.Spec.NodeSelector).To(BeEmpty())
+		Expect(resultES.PodTemplate.Spec.NodeSelector).To(BeEmpty())
+
+		// Verify that the default container limist/requests are set.
+		esContainer := resultES.PodTemplate.Spec.Containers[0]
+		reqLimits := esContainer.Resources.Limits
+		reqResources := esContainer.Resources.Requests
+
+		Expect(reqLimits.Cpu().String()).To(Equal("1"))
+		Expect(reqLimits.Memory().String()).To(Equal("4Gi"))
+		Expect(reqResources.Cpu().String()).To(Equal("250m"))
+		Expect(reqResources.Memory().String()).To(Equal("4Gi"))
+		Expect(esContainer.Env[0].Value).To(Equal("-Xms1398101K -Xmx1398101K"))
 
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)

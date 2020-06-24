@@ -40,8 +40,8 @@ const (
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
 // The number of Typha replicas depends on the number of nodes:
 //   Nodes          Replicas
-// <=    4                 1
-// <=   10                 2
+// <=    2                 1
+// <=    5                 2
 // <=  100                 3
 // <=  250                 4
 // <=  500                 5

@@ -293,3 +293,12 @@ func secretsToRuntimeObjects(secrets ...*v1.Secret) []runtime.Object {
 	}
 	return objs
 }
+
+func GetStandardTolerations() []v1.Toleration {
+	t := []v1.Toleration{
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
+		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
+	}
+	return t
+}

@@ -261,11 +261,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready"},
-			{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/unreachable"},
-			{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-		}
+		expectedTolerations := render.GetStandardTolerations()
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
 		verifyProbes(ds, false, false)

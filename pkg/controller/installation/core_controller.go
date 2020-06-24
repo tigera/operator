@@ -426,6 +426,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	ctx := context.Background()
 
+	// Perform an initial check so that we kick off the CR status reporting
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, nil); err != nil && apierrors.IsNotFound(err) {
+		reqLogger.Info("Installation config not found")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
+	}
+	r.status.OnCRFound()
+
 	// Query for the installation object.
 	instance, err := GetInstallation(ctx, r.client, r.autoDetectedProvider)
 	if err != nil {

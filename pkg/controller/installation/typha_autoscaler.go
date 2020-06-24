@@ -39,16 +39,14 @@ const (
 
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
 // The number of Typha replicas depends on the number of nodes:
-// Nodes       Replicas
-//     1              1
-//     2              2
-//     3              3
-//   250              4
-//   500              5
-//  1000              6
-//  1500              7
-//  2000              8
-//  2000+            10
+//   Nodes          Replicas
+// <=    4                 1
+// <=   10                 2
+// <=  100                 3
+// <=  250                 4
+// <=  500                 5
+// <= 1000                 6
+//  > 1000     (nodes/200)+1
 type typhaAutoscaler struct {
 	client     client.Client
 	syncPeriod time.Duration
@@ -78,12 +76,13 @@ func newTyphaAutoscaler(client client.Client, options ...typhaAutoscalerOption) 
 
 // getExpectedReplicas gets the number of replicas expected for a given node number.
 func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
+	const maxNodesPerTypha = 200
 	switch {
-	case nodes <= 1:
-		return 1
 	case nodes <= 2:
+		return 1
+	case nodes <= 5:
 		return 2
-	case nodes <= 3:
+	case nodes <= 100:
 		return 3
 	case nodes <= 250:
 		return 4
@@ -91,12 +90,9 @@ func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
 		return 5
 	case nodes <= 1000:
 		return 6
-	case nodes <= 1500:
-		return 7
-	case nodes <= 2000:
-		return 8
+	default:
+		return (nodes / maxNodesPerTypha) + 1
 	}
-	return 10
 }
 
 // run starts the Typha autoscaler, updating the Typha deployment's replica count every sync period.
@@ -132,13 +128,14 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 	}
 
 	// The replicas field defaults to 1. We need this in case spec.Replicas is nil.
+	// https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#replicas
 	var prevReplicas int32
 	prevReplicas = 1
 	if typha.Spec.Replicas != nil {
 		prevReplicas = *typha.Spec.Replicas
 	}
 
-	if prevReplicas == expectedReplicas {
+	if prevReplicas == expectedReplicas && typha.Spec.Replicas != nil {
 		return nil
 	}
 

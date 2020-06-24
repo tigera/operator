@@ -492,8 +492,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 // nodeTolerations creates the node's tolerations.
 func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 	t := []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready"},
-		{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/unreachable"},
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
+		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
 		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
 	}
 	return t

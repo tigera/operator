@@ -78,9 +78,9 @@ func newTyphaAutoscaler(client client.Client, options ...typhaAutoscalerOption) 
 func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
 	const maxNodesPerTypha = 200
 	switch {
-	case nodes <= 4:
+	case nodes <= 2:
 		return 1
-	case nodes <= 10:
+	case nodes <= 5:
 		return 2
 	case nodes <= 100:
 		return 3

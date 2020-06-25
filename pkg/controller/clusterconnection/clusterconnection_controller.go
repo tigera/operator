@@ -178,7 +178,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		tunnelSecret,
 	)
 
-	if err := ch.CreateOrUpdate(ctx, component, r.status); err != nil {
+	if err := ch.CreateOrUpdate(ctx, component, r.status, utils.NoUserAddedMetadata); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return result, err
 	}

@@ -102,6 +102,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+	}
+
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -200,8 +212,22 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		render.ElasticsearchComplianceReporterUserSecret, render.ElasticsearchComplianceSnapshotterUserSecret,
 	}
 
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementCluster")
+		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Compliance server is only for Standalone or Management clusters
-	if network.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+	if managementClusterConnection == nil {
 		secretsToWatch = append(secretsToWatch, render.ElasticsearchComplianceServerUserSecret)
 	}
 
@@ -217,7 +243,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
-	if network.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
+	if managementCluster != nil {
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 			render.ManagerInternalTLSSecretName,
 			render.ManagerInternalSecretCertName,
@@ -247,7 +273,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

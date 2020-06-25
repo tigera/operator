@@ -335,7 +335,7 @@ func (c *typhaComponent) nodeSelector() map[string]string {
 
 // tolerations creates the typha's tolerations.
 func (c *typhaComponent) tolerations() []v1.Toleration {
-	t := GetStandardTolerations()
+	t := GetCriticalTolerations()
 	return t
 }
 

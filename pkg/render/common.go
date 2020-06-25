@@ -294,7 +294,7 @@ func secretsToRuntimeObjects(secrets ...*v1.Secret) []runtime.Object {
 	return objs
 }
 
-func GetStandardTolerations() []v1.Toleration {
+func GetCriticalTolerations() []v1.Toleration {
 	t := []v1.Toleration{
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
 		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},

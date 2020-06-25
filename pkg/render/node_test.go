@@ -261,7 +261,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := render.GetStandardTolerations()
+		expectedTolerations := render.GetCriticalTolerations()
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
 		verifyProbes(ds, false, false)

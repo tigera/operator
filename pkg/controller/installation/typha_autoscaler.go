@@ -17,6 +17,7 @@ package installation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -27,8 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-
-	"time"
 )
 
 var typhaLog = logf.Log.WithName("typha_autoscaler")
@@ -40,13 +39,13 @@ const (
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
 // The number of Typha replicas depends on the number of nodes:
 //   Nodes          Replicas
-// <=    2                 1
-// <=    5                 2
+// <=    1                 1
+// <=    2                 2
 // <=  100                 3
 // <=  250                 4
 // <=  500                 5
 // <= 1000                 6
-//  > 1000     (nodes/200)+1
+//  > 1000     (nodes/200)+1 (max 20)
 type typhaAutoscaler struct {
 	client     client.Client
 	syncPeriod time.Duration
@@ -76,11 +75,12 @@ func newTyphaAutoscaler(client client.Client, options ...typhaAutoscalerOption) 
 
 // getExpectedReplicas gets the number of replicas expected for a given node number.
 func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
+	const maxTyphas = 20
 	const maxNodesPerTypha = 200
 	switch {
-	case nodes <= 2:
+	case nodes <= 1:
 		return 1
-	case nodes <= 5:
+	case nodes <= 2:
 		return 2
 	case nodes <= 100:
 		return 3
@@ -91,7 +91,11 @@ func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
 	case nodes <= 1000:
 		return 6
 	default:
-		return (nodes / maxNodesPerTypha) + 1
+		typhas := (nodes / maxNodesPerTypha) + 1
+		if typhas > maxTyphas {
+			typhas = maxTyphas
+		}
+		return typhas
 	}
 }
 

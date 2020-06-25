@@ -78,7 +78,6 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create a few nodes
 		_ = createNode(c, "node1")
-		_ = createNode(c, "node2")
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, typhaAutoscalerPeriod(10*time.Millisecond))
@@ -86,36 +85,33 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		verifyTyphaReplicas(c, 1)
 
-		n3 := createNode(c, "node3")
+		n2 := createNode(c, "node2")
 		verifyTyphaReplicas(c, 2)
+
+		n2.Spec.Unschedulable = true
+		err = c.Update(context.Background(), n2)
+		Expect(err).To(BeNil())
+
+		verifyTyphaReplicas(c, 1)
+
+		n2.Spec.Unschedulable = false
+		err = c.Update(context.Background(), n2)
+		Expect(err).To(BeNil())
+
+		verifyTyphaReplicas(c, 2)
+
+		n3 := createNode(c, "node3")
+		verifyTyphaReplicas(c, 3)
 
 		// Verify that making a node unschedulable updates replicas.
 		n3.Spec.Unschedulable = true
 		err = c.Update(context.Background(), n3)
 		Expect(err).To(BeNil())
 
-		verifyTyphaReplicas(c, 1)
+		verifyTyphaReplicas(c, 2)
 
 		n3.Spec.Unschedulable = false
 		err = c.Update(context.Background(), n3)
-		Expect(err).To(BeNil())
-
-		verifyTyphaReplicas(c, 2)
-
-		_ = createNode(c, "node4")
-		_ = createNode(c, "node5")
-		n6 := createNode(c, "node6")
-
-		verifyTyphaReplicas(c, 3)
-
-		n6.Spec.Unschedulable = true
-		err = c.Update(context.Background(), n6)
-		Expect(err).To(BeNil())
-
-		verifyTyphaReplicas(c, 2)
-
-		n6.Spec.Unschedulable = false
-		err = c.Update(context.Background(), n6)
 		Expect(err).To(BeNil())
 
 		verifyTyphaReplicas(c, 3)

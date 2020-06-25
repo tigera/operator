@@ -491,11 +491,13 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 // nodeTolerations creates the node's tolerations.
 func (c *nodeComponent) nodeTolerations() []v1.Toleration {
-	return []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
-		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
+	t := GetCriticalTolerations()
+	if c.provider == operator.ProviderDockerEE {
+		// DockerEE appears to be stripping wildcard tolerations, this should at least get calico-node
+		// installed on all the worker nodes.
+		t = append(t, v1.Toleration{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready"})
 	}
+	return t
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.

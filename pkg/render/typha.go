@@ -335,13 +335,8 @@ func (c *typhaComponent) nodeSelector() map[string]string {
 
 // tolerations creates the typha's tolerations.
 func (c *typhaComponent) tolerations() []v1.Toleration {
-	tolerations := []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
-		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
-
-	return tolerations
+	t := GetCriticalTolerations()
+	return t
 }
 
 // volumes creates the typha's volumes.

@@ -287,6 +287,7 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator.tigera.io_installations_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator.tigera.io_tigerastatuses_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator.tigera.io_logstorages_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusters_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusterconnections_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator.tigera.io_amazoncloudintegrations_crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \

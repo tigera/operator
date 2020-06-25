@@ -360,8 +360,7 @@ func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1b
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ComplianceControllerName,
-			Namespace: ComplianceNamespace,
+			Name: ComplianceControllerName,
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -546,8 +545,7 @@ func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1bet
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-reporter",
-			Namespace: ComplianceNamespace,
+			Name: "compliance-reporter",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -804,8 +802,7 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ComplianceServerName,
-			Namespace: ComplianceNamespace,
+			Name: ComplianceServerName,
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -1061,8 +1058,7 @@ func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ComplianceSnapshotterName,
-			Namespace: ComplianceNamespace,
+			Name: ComplianceSnapshotterName,
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -1298,8 +1294,7 @@ func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-benchmarker",
-			Namespace: ComplianceNamespace,
+			Name: "compliance-benchmarker",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},

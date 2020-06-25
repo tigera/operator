@@ -560,8 +560,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionPodSecurityPolicy() *pol
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection",
-			Namespace: IntrusionDetectionNamespace,
+			Name: "intrusion-detection",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -622,7 +621,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRole() *rbacv1
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "intrusion-detection",
+			Name: "intrusion-detection-psp",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -640,7 +639,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "intrusion-detection-controller",
+			Name: "intrusion-detection-controller-psp",
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",

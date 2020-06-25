@@ -542,8 +542,7 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.TyphaDeploymentName,
-			Namespace: common.CalicoNamespace,
+			Name: common.TyphaDeploymentName,
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},

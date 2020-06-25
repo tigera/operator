@@ -347,8 +347,7 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-kube-controllers",
-			Namespace: common.CalicoNamespace,
+			Name: "calico-kube-controllers",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},

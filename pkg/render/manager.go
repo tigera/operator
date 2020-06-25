@@ -741,8 +741,7 @@ func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurity
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
-			Namespace: ManagerNamespace,
+			Name: "tigera-manager",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},

@@ -1061,8 +1061,7 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecu
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-apiserver",
-			Namespace: APIServerNamespace,
+			Name: "tigera-apiserver",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},

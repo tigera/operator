@@ -896,8 +896,7 @@ func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.P
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKOperatorName,
-			Namespace: ECKOperatorNamespace,
+			Name: ECKOperatorName,
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -1130,8 +1129,7 @@ func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSe
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsCuratorName,
-			Namespace: ElasticsearchNamespace,
+			Name: EsCuratorName,
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -1313,8 +1311,7 @@ func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-elasticsearch",
-			Namespace: ElasticsearchNamespace,
+			Name: "tigera-elasticsearch",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},
@@ -1414,8 +1411,7 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-kibana",
-			Namespace: KibanaNamespace,
+			Name: "tigera-kibana",
 			Annotations: map[string]string{
 				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
 			},

@@ -101,7 +101,17 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		}
 	}
 
-	// TODO: Watch for dependent objects.
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+	}
+
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+	}
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
@@ -176,9 +186,22 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	var isManagement = network.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementCluster")
+		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	var tunnelCASecret *v1.Secret
-	if isManagement {
+	if managementCluster != nil {
 		tunnelCASecret, err = utils.ValidateCertPair(r.client,
 			render.VoltronTunnelSecretName,
 			render.VoltronTunnelSecretKeyName,
@@ -215,7 +238,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

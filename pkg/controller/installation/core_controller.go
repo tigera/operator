@@ -166,6 +166,18 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+	}
+
+	// Watch for changes to primary resource Installation
+	err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -508,12 +520,20 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		render.ManagerInternalSecretKeyName,
 	)
 
-	if instance.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if managementCluster != nil {
 		if err != nil {
 			log.Error(err, "Invalid internal manager TLS Cert")
 			r.status.SetDegraded("Error validating internal manager TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
+	}
+
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
@@ -570,6 +590,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// create or update them.
 	calico, err := render.Calico(
 		instance,
+		managementCluster,
+		managementClusterConnection,
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,

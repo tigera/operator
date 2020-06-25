@@ -40,11 +40,9 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.Installation, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
+func APIServer(installation *operator.Installation, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
-
-	var isManagement = installation.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement
 
 	if tlsKeyPair == nil {
 		var err error
@@ -70,7 +68,7 @@ func APIServer(installation *operator.Installation, aci *operator.AmazonCloudInt
 		Namespace: APIServerNamespace,
 	}
 	tlsSecrets = append(tlsSecrets, copy)
-	if isManagement {
+	if managementCluster != nil {
 		if tunnelCASecret == nil {
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
@@ -80,24 +78,27 @@ func APIServer(installation *operator.Installation, aci *operator.AmazonCloudInt
 	}
 
 	return &apiServerComponent{
-		installation:           installation,
-		amazonCloudIntegration: aci,
-		tlsSecrets:             tlsSecrets,
-		tlsAnnotations:         tlsHashAnnotations,
-		pullSecrets:            pullSecrets,
-		openshift:              openshift,
-		isManagement:           isManagement,
+		installation:                installation,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		amazonCloudIntegration:      aci,
+		tlsSecrets:                  tlsSecrets,
+		tlsAnnotations:              tlsHashAnnotations,
+		pullSecrets:                 pullSecrets,
+		openshift:                   openshift,
 	}, nil
 }
 
 type apiServerComponent struct {
-	installation           *operator.Installation
-	amazonCloudIntegration *operator.AmazonCloudIntegration
-	tlsSecrets             []*corev1.Secret
-	tlsAnnotations         map[string]string
-	pullSecrets            []*corev1.Secret
-	openshift              bool
-	isManagement           bool
+	installation                *operator.Installation
+	managementCluster           *operator.ManagementCluster
+	managementClusterConnection *operator.ManagementClusterConnection
+	amazonCloudIntegration      *operator.AmazonCloudIntegration
+	tlsSecrets                  []*corev1.Secret
+	tlsAnnotations              map[string]string
+	pullSecrets                 []*corev1.Secret
+	openshift                   bool
+	isManagement                bool
 }
 
 func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -583,7 +584,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "tigera-apiserver-certs", MountPath: "/code/apiserver.local.config/certificates"},
 	}
 
-	if c.isManagement {
+	if c.managementCluster != nil {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      VoltronTunnelSecretName,
@@ -610,8 +611,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
 		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-		Args: c.startUpArgs(),
-		Env:  env,
+		Args:  c.startUpArgs(),
+		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -651,7 +652,7 @@ func (c *apiServerComponent) startUpArgs() []string {
 		"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 	}
 
-	if c.isManagement {
+	if c.managementCluster != nil {
 		args = append(args, "--enable-managed-clusters-create-api=true")
 	}
 
@@ -730,7 +731,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 		},
 	}
 
-	if c.isManagement {
+	if c.managementCluster != nil {
 		volumes = append(volumes, corev1.Volume{
 			// Append volume for tunnel CA certificate
 			Name: VoltronTunnelSecretName,
@@ -898,7 +899,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 
 	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
 	// cluster
-	if c.installation.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
+	if c.managementClusterConnection == nil {
 		// Access to flow logs, audit logs, and statistics
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"lma.tigera.io"},
@@ -1017,7 +1018,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 
 	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
 	// cluster
-	if c.installation.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
+	if c.managementClusterConnection == nil {
 		// Access to flow logs, audit logs, and statistics
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"lma.tigera.io"},

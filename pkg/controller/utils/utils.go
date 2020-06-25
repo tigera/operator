@@ -232,6 +232,30 @@ func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*c
 	return secrets, nil
 }
 
+// Return the ManagementCluster CR if present. No error is returned if it was not found.
+func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
+	managementCluster := &operatorv1.ManagementCluster{}
+
+	err := c.Get(ctx, DefaultTSEEInstanceKey, managementCluster)
+	if err != nil && !kerrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	return managementCluster, nil
+}
+
+// Return the ManagementClusterConnection CR if present. No error is returned if it was not found.
+func GetManagementClusterConnection(ctx context.Context, c client.Client) (*operatorv1.ManagementClusterConnection, error) {
+	managementClusterConnection := &operatorv1.ManagementClusterConnection{}
+
+	err := c.Get(ctx, DefaultTSEEInstanceKey, managementClusterConnection)
+	if err != nil && !kerrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	return managementClusterConnection, nil
+}
+
 // GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
 func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
 	// Fetch the Installation instance. We only support a single instance named "tsee-secure".

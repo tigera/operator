@@ -105,7 +105,6 @@ var _ = Describe("Rendering tests", func() {
 		// - pass in internalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)

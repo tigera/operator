@@ -81,7 +81,7 @@ func Manager(
 	openshift bool,
 	installation *operator.Installation,
 	oidcConfig *corev1.ConfigMap,
-	management bool,
+	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
 ) (Component, error) {
@@ -106,7 +106,7 @@ func Manager(
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
 	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 
-	if management {
+	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
 		// tunnelSecret contains the ca cert to generate guardian certificates
 		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
@@ -127,7 +127,7 @@ func Manager(
 		openshift:                  openshift,
 		installation:               installation,
 		oidcConfig:                 oidcConfig,
-		management:                 management,
+		managementCluster:          managementCluster,
 	}, nil
 }
 
@@ -143,8 +143,7 @@ type managerComponent struct {
 	openshift                  bool
 	installation               *operator.Installation
 	oidcConfig                 *corev1.ConfigMap
-	// If true, this is a management cluster.
-	management bool
+	managementCluster          *operator.ManagementCluster
 }
 
 func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -161,7 +160,7 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.installation.Spec.ClusterManagementType),
+		managerClusterRole(c.managementCluster != nil, false),
 		managerClusterRoleBinding(),
 		c.managerPolicyImpactPreviewClusterRole(),
 		c.managerPolicyImpactPreviewClusterRoleBinding(),
@@ -296,7 +295,7 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		},
 	}
 
-	if c.management {
+	if c.managementCluster != nil {
 		v = append(v,
 			v1.Volume{
 				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
@@ -409,7 +408,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
-		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
+		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -472,7 +471,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 			{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
 			{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 			{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
-			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.management)},
+			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
 			{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		},
 		VolumeMounts:    c.volumeMountsForProxyManager(),
@@ -488,7 +487,7 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 		{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true},
 	}
 
-	if c.management {
+	if c.managementCluster != nil {
 		mounts = append(mounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretName, MountPath: "/certs/internal", ReadOnly: true})
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
@@ -504,7 +503,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 	}
-	if c.management {
+	if c.managementCluster != nil {
 		apiServer.VolumeMounts = []corev1.VolumeMount{
 			{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
 		}
@@ -561,7 +560,7 @@ func managerServiceAccount() *v1.ServiceAccount {
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 // This role can also be used in mcm for impersonation purposes only.
-func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.ClusterRole {
+func managerClusterRole(managementCluster, managedCluster bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -576,7 +575,7 @@ func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.Clus
 		},
 	}
 
-	if clusterType != operator.ClusterManagementTypeManaged {
+	if !managedCluster {
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
@@ -586,7 +585,7 @@ func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.Clus
 		)
 	}
 
-	if clusterType == operator.ClusterManagementTypeManagement {
+	if managementCluster {
 		// For cross-cluster requests an authentication review will be done for authenticating the tigera-manager.
 		// Requests on behalf of the tigera-manager will be sent to Voltron, where an authentication review will
 		// take place with its bearer token.

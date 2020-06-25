@@ -24,6 +24,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
+	ocsv1 "github.com/openshift/api/security/v1"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -38,7 +39,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdate(context.Context, render.Component, status.StatusManager, AllowedMetadataKeys) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -57,7 +58,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager, allowedMetadata AllowedMetadataKeys) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -127,7 +128,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		logCtx.V(1).Info("Resource already exists, update it")
 
 		// if mergeState returns nil we don't want to update the object
-		if mobj := mergeState(obj, old); mobj != nil {
+		if mobj := mergeState(obj, old, allowedMetadata); mobj != nil {
 			switch obj.(type) {
 			case *batchv1.Job:
 				// Jobs can't be updated, they can't only be deleted then created
@@ -184,7 +185,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
-func mergeState(desired, current runtime.Object) runtime.Object {
+func mergeState(desired, current runtime.Object, allowedMetadata AllowedMetadataKeys) runtime.Object {
 	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
@@ -192,6 +193,8 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	desiredMeta.SetResourceVersion(currentMeta.GetResourceVersion())
 	desiredMeta.SetUID(currentMeta.GetUID())
 	desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
+
+	copyAllowedMetadata(allowedMetadata, currentMeta, desiredMeta)
 
 	switch desired.(type) {
 	case *v1.Service:
@@ -269,4 +272,59 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// Default to just using the desired state, with an updated RV.
 		return desired
 	}
+}
+
+// AllowedMetadataKeys contains slices of keys of certain annotations or labels
+// that are allowed to be set on objects.
+type AllowedMetadataKeys struct {
+	Annotations []string
+	Labels      []string
+}
+
+var (
+	// Openshift cluster policy controller adds these annotations to Namespaces.
+	// Annotations are declared here: https://github.com/openshift/api/blob/dca637550e8c80dc2fa5ff6653b43a3b5c6c810c/security/v1/consts.go
+	AllowOpenshiftSCCAnnotations = AllowedMetadataKeys{
+		Annotations: []string{
+			ocsv1.UIDRangeAnnotation,
+			ocsv1.SupplementalGroupsAnnotation,
+			ocsv1.MCSAnnotation,
+			ocsv1.ValidatedSCCAnnotation,
+		},
+	}
+
+	NoUserAddedMetadata = AllowedMetadataKeys{}
+)
+
+// copyAllowedMetadata copies AllowedMetadataKeys from current into desired ObjectMeta. The desired ObjectMeta will be updated
+// in-place.
+func copyAllowedMetadata(metadataKeys AllowedMetadataKeys, current, desired metav1.Object) {
+	currentAnnotations := mapExistsOrInitialize(current.GetAnnotations())
+	desiredAnnotations := mapExistsOrInitialize(desired.GetAnnotations())
+	mergedAnnotations := mergeAnnotationsOrLabels(metadataKeys.Annotations, currentAnnotations, desiredAnnotations)
+	desired.SetAnnotations(mergedAnnotations)
+	currentLabels := mapExistsOrInitialize(current.GetLabels())
+	desiredLabels := mapExistsOrInitialize(desired.GetLabels())
+	mergedLabels := mergeAnnotationsOrLabels(metadataKeys.Labels, currentLabels, desiredLabels)
+	desired.SetLabels(mergedLabels)
+	return
+}
+
+// mergeAnnotationsOrLabels copies and returns a map of desired annotations or labels after copying over allowed key:value pairs
+// in the current map that should be present in the desired map.
+func mergeAnnotationsOrLabels(allowed []string, current, desired map[string]string) map[string]string {
+	for _, k := range allowed {
+		// Copy over annotations/labels that should be copied.
+		if v, ok := current[k]; ok {
+			desired[k] = v
+		}
+	}
+	return desired
+}
+
+func mapExistsOrInitialize(m map[string]string) map[string]string {
+	if m != nil {
+		return m
+	}
+	return make(map[string]string)
 }

@@ -30,7 +30,7 @@ var _ = Describe("No registry override", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "", "")).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
 	})
 	It("should render an operator init image correctly", func() {
-		Expect(GetOperatorInitReference("", "")).To(Equal(TigeraRegistry + "tigera/operator-init:" + ComponentOperatorInit.Version))
+		Expect(GetOperatorInitReference("", "")).To(Equal(InitRegistry + "tigera/operator-init:" + ComponentOperatorInit.Version))
 	})
 })
 
@@ -59,7 +59,7 @@ var _ = Describe("imagepath override", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "", "userpath")).To(Equal("docker.elastic.co/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
 	})
 	It("should render an operator init image correctly", func() {
-		Expect(GetOperatorInitReference("", "userpath")).To(Equal(TigeraRegistry + "userpath/operator-init:" + ComponentOperatorInit.Version))
+		Expect(GetOperatorInitReference("", "userpath")).To(Equal(InitRegistry + "userpath/operator-init:" + ComponentOperatorInit.Version))
 	})
 })
 var _ = Describe("registry and imagepath override", func() {

@@ -70,7 +70,7 @@ func GetOperatorInitReference(registry, imagepath string) string {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" {
-		registry = TigeraRegistry
+		registry = InitRegistry
 	}
 
 	image := ComponentOperatorInit.Image

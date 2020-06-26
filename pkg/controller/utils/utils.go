@@ -238,7 +238,10 @@ func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.Man
 	managementCluster := &operatorv1.ManagementCluster{}
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementCluster)
-	if err != nil && !kerrors.IsNotFound(err) {
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -250,7 +253,10 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 	managementClusterConnection := &operatorv1.ManagementClusterConnection{}
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementClusterConnection)
-	if err != nil && !kerrors.IsNotFound(err) {
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 

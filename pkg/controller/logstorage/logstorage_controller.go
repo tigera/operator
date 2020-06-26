@@ -335,7 +335,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
-	} else if ls == nil && managementClusterConnection != nil {
+	} else if ls == nil && managementClusterConnection == nil {
 		log.Error(err, "LogStorage must exist for management and standalone clusters")
 		return reconcile.Result{}, nil
 	} else if ls != nil && ls.DeletionTimestamp == nil && managementClusterConnection != nil {

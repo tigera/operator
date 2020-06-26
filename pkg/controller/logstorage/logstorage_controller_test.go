@@ -27,12 +27,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
+	"github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-
-	"github.com/stretchr/testify/mock"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -90,7 +88,7 @@ var _ = Describe("LogStorage controller", func() {
 			var ls *operatorv1.LogStorage
 			var err error
 			BeforeEach(func() {
-				Expect(cli.Create(context.Background(), &operatorv1.LogStorage{
+				Expect(cli.Create(ctx, &operatorv1.LogStorage{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "tigera-secure",
 					},
@@ -131,10 +129,15 @@ var _ = Describe("LogStorage controller", func() {
 							Variant: operatorv1.TigeraSecureEnterprise,
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant:               operatorv1.TigeraSecureEnterprise,
-							ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
+							Variant: operatorv1.TigeraSecureEnterprise,
 						},
 					})).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(
+						ctx,
+						&operatorv1.ManagementClusterConnection{
+							ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+						})).NotTo(HaveOccurred())
 
 					mockStatus = &status.MockStatus{}
 					mockStatus.On("Run").Return()
@@ -188,15 +191,14 @@ var _ = Describe("LogStorage controller", func() {
 
 				Context("LogStorage exists", func() {
 					BeforeEach(func() {
-						setUpLogStorageComponents(cli, storageClassName)
+						setUpLogStorageComponents(cli, ctx, storageClassName, nil)
 						mockStatus.On("OnCRFound").Return()
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
-
-						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is 'Managed' but LogStorage CR still exists").Return()
+						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
 						result, err := r.Reconcile(reconcile.Request{})
 						Expect(result).Should(Equal(reconcile.Result{}))
 						Expect(err).ShouldNot(HaveOccurred())
@@ -215,27 +217,27 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
-						Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 
 						now := metav1.Now()
 						ls.DeletionTimestamp = &now
 						ls.SetFinalizers([]string{"tigera.io/eck-cleanup"})
-						Expect(cli.Update(context.Background(), ls)).ShouldNot(HaveOccurred())
+						Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
 
 						result, err := r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(result).Should(Equal(reconcile.Result{}))
 
 						By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
-						err = cli.Get(context.Background(), esObjKey, &esv1.Elasticsearch{})
+						err = cli.Get(ctx, esObjKey, &esv1.Elasticsearch{})
 						Expect(errors.IsNotFound(err)).Should(BeTrue())
-						err = cli.Get(context.Background(), kbObjKey, &kbv1.Kibana{})
+						err = cli.Get(ctx, kbObjKey, &kbv1.Kibana{})
 						Expect(errors.IsNotFound(err)).Should(BeTrue())
 
 						// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
 						By("waiting for the Elasticsearch and Kibana resources to be deleted")
 						ls = &operatorv1.LogStorage{}
-						Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 						Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 
 						result, err = r.Reconcile(reconcile.Request{})
@@ -244,7 +246,7 @@ var _ = Describe("LogStorage controller", func() {
 
 						By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
 						ls = &operatorv1.LogStorage{}
-						Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 						Expect(ls.Finalizers).ShouldNot(ContainElement("tigera.io/eck-cleanup"))
 
 						mockStatus.AssertExpectations(GinkgoT())
@@ -265,10 +267,15 @@ var _ = Describe("LogStorage controller", func() {
 							Variant: operatorv1.TigeraSecureEnterprise,
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant:               operatorv1.TigeraSecureEnterprise,
-							ClusterManagementType: operatorv1.ClusterManagementTypeManagement,
+							Variant: operatorv1.TigeraSecureEnterprise,
 						},
 					})).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(
+						ctx,
+						&operatorv1.ManagementCluster{
+							ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+						})).NotTo(HaveOccurred())
 
 					mockStatus = &status.MockStatus{}
 					mockStatus.On("Run").Return()
@@ -308,7 +315,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					By("asserting the finalizers have been set on the LogStorage CR")
 					ls := &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), types.NamespacedName{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 					Expect(ls.Spec.StorageClassName).To(Equal(storageClassName))
 
@@ -361,12 +368,17 @@ var _ = Describe("LogStorage controller", func() {
 							Variant: operatorv1.TigeraSecureEnterprise,
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant:               operatorv1.TigeraSecureEnterprise,
-							ClusterManagementType: operatorv1.ClusterManagementTypeManagement,
+							Variant: operatorv1.TigeraSecureEnterprise,
 						},
 					})).ShouldNot(HaveOccurred())
 
-					setUpLogStorageComponents(cli, "")
+					Expect(cli.Create(
+						ctx,
+						&operatorv1.ManagementCluster{
+							ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+						})).NotTo(HaveOccurred())
+
+					setUpLogStorageComponents(cli, ctx, "", nil)
 
 					mockStatus = &status.MockStatus{}
 					mockStatus.On("Run").Return()
@@ -388,14 +400,14 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					ls := &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 
 					By("setting the DeletionTimestamp on the LogStorage CR")
 					// The fake library does seem to respect finalizers when Delete is called, so we need to manually set the
 					// DeletionTimestamp.
 					now := metav1.Now()
 					ls.DeletionTimestamp = &now
-					Expect(cli.Update(context.Background(), ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Spec.StorageClassName).To(Equal(logstorage.DefaultElasticsearchStorageClass))
 
 					result, err = r.Reconcile(reconcile.Request{})
@@ -403,15 +415,15 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
-					err = cli.Get(context.Background(), esObjKey, &esv1.Elasticsearch{})
+					err = cli.Get(ctx, esObjKey, &esv1.Elasticsearch{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
-					err = cli.Get(context.Background(), kbObjKey, &kbv1.Kibana{})
+					err = cli.Get(ctx, kbObjKey, &kbv1.Kibana{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
 
 					// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
 					By("waiting for the Elasticsearch and Kibana resources to be deleted")
 					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "")
@@ -421,7 +433,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
 					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(context.Background(), utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).ShouldNot(ContainElement("tigera.io/eck-cleanup"))
 
 					mockStatus.AssertExpectations(GinkgoT())
@@ -430,10 +442,8 @@ var _ = Describe("LogStorage controller", func() {
 		})
 	})
 })
-var log = logf.Log.WithName("controller_logstorage")
 
-func setUpLogStorageComponents(cli client.Client, storageClass string) {
-	ctx := context.Background()
+func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageClass string, managementClusterConnection *operatorv1.ManagementClusterConnection) {
 	if storageClass == "" {
 		Expect(cli.Create(ctx, &storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
@@ -472,11 +482,11 @@ func setUpLogStorageComponents(cli client.Client, storageClass string) {
 		ls,
 		&operatorv1.Installation{
 			Spec: operatorv1.InstallationSpec{
-				KubernetesProvider:    operatorv1.ProviderNone,
-				Registry:              "testregistry.com/",
-				ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
 			},
 		},
+		nil, managementClusterConnection,
 		&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 		&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		render.NewElasticsearchClusterConfig("cluster", 1, 1, 1),

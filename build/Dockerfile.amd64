@@ -12,7 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.1
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.2-301.1592810506 AS ubi
+
+# Update base packages to get security updates.
+RUN microdnf update
+
+# Add in top-level license file
+RUN mkdir /licenses
+COPY LICENSE /licenses
+
+COPY build/bin/remove_unneeded /usr/local/bin/remove_unneeded
+SHELL ["/bin/bash", "-c"]
+RUN touch /in-the-container
+RUN  /usr/local/bin/remove_unneeded "/lib64"
+SHELL ["/bin/sh", "-c"]
+
+FROM scratch
+
 ARG GIT_VERSION=unknown
 LABEL name="Calico Operator" \
       vendor="Project Calico" \
@@ -22,9 +38,14 @@ LABEL name="Calico Operator" \
       description="Calico Operator manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift" \
       maintainer="Laurence Man <laurence@tigera.io>"
 
-# Add in top-level license file
-RUN mkdir /licenses
-COPY LICENSE /licenses
+COPY --from=ubi /etc/passwd /etc/passwd
+COPY --from=ubi /licenses /licenses
+COPY --from=ubi /usr/bin/coreutils /usr/bin/coreutils
+
+# those directories have already been pruned removing all that is NOT needed 
+COPY --from=ubi /bin/ /bin/
+COPY --from=ubi /lib64 /lib64
+COPY --from=ubi /usr/bin /usr/bin
 
 ENV OPERATOR=/usr/local/bin/operator \
     USER_UID=1001 \
@@ -34,6 +55,7 @@ ENV OPERATOR=/usr/local/bin/operator \
 COPY build/_output/bin/operator-amd64 ${OPERATOR}
 
 COPY build/bin /usr/local/bin
+SHELL ["/bin/sh", "-c"]
 RUN  /usr/local/bin/user_setup
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

@@ -15,8 +15,9 @@ package components
 
 // Default registries for Calico and Tigera.
 const (
-	CalicoRegistry = "docker.io/"
-	TigeraRegistry = "gcr.io/unique-caldron-775/cnx/"
-	K8sGcrRegistry = "gcr.io/"
-	ECKRegistry    = "docker.elastic.co/"
+	CalicoRegistry     = "docker.io/"
+	TigeraRegistry     = "gcr.io/unique-caldron-775/cnx/"
+	TigeraInitRegistry = "quay.io/"
+	K8sGcrRegistry     = "gcr.io/"
+	ECKRegistry        = "docker.elastic.co/"
 )

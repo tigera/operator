@@ -120,7 +120,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %v", common.TigeraPrometheusNamespace, err)
 	}
 
-	// Watch for changes to primary resource Installation
+	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)

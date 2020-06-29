@@ -584,14 +584,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "tigera-apiserver-certs", MountPath: "/code/apiserver.local.config/certificates"},
 	}
 
-	env := []corev1.EnvVar{
-		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-	}
-
-	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
-	}
-
 	if c.managementCluster != nil {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
@@ -600,16 +592,20 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 				ReadOnly:  true,
 			},
 		)
-
-		if c.managementCluster.Spec.Addr != "" {
-			env = append(env, corev1.EnvVar{Name: "MANAGEMENT_CLUSTER_ADDR", Value: c.managementCluster.Spec.Addr})
-		}
 	}
 
 	isPrivileged := false
 	//On OpenShift apiserver needs privileged access to write audit logs to host path volume
 	if c.openshift {
 		isPrivileged = true
+	}
+
+	env := []corev1.EnvVar{
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
 	apiServer := corev1.Container{
@@ -658,6 +654,9 @@ func (c *apiServerComponent) startUpArgs() []string {
 
 	if c.managementCluster != nil {
 		args = append(args, "--enable-managed-clusters-create-api=true")
+		if c.managementCluster.Spec.Addr != "" {
+			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.managementCluster.Spec.Addr))
+		}
 	}
 
 	return args

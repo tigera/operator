@@ -38,7 +38,7 @@ import (
 
 var _ = Describe("API server rendering tests", func() {
 	var instance *operator.Installation
-
+	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Addr: "example.com:1234"}}
 	BeforeEach(func() {
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{
@@ -330,7 +330,6 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		managementCluster := &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Addr: "example.com:1234"}}
 		component, err := render.APIServer(instance, managementCluster, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
@@ -407,20 +406,13 @@ var _ = Describe("API server rendering tests", func() {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
+			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*v1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
-
-		// Test the expected environment variables for mcm.
-		apiServerDeploy := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
-		Expect(apiServerDeploy.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(
-			[]corev1.EnvVar{
-				{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-				{Name: "MANAGEMENT_CLUSTER_ADDR", Value: managementCluster.Spec.Addr},
-			}))
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(instance, &operator.ManagementCluster{}, nil, nil, nil, nil, openshift, &voltronTunnelSecret)
+		component, err := render.APIServer(instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -488,6 +480,7 @@ var _ = Describe("API server rendering tests", func() {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
+			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*v1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})

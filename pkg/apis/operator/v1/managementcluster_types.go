@@ -36,6 +36,7 @@ type ManagementClusterSpec struct {
 // The presence of ManagementCluster in your cluster, will configure it to be the management plane to which managed
 // clusters can connect. At most one instance of this resource is supported. It must be named "tigera-secure".
 // +k8s:openapi-gen=true
+// +kubebuilder:resource:scope=Cluster
 type ManagementCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -456,6 +456,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// A status is needed at this point for operator scorecard tests.
+	// status.variant is written later but for some tests the reconciliation
+	// does not get to that point.
+	instance.Status = operator.InstallationStatus{}
+	if err = r.client.Status().Update(ctx, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
 	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
 	if !r.enterpriseCRDsExist && instance.Spec.Variant == operator.TigeraSecureEnterprise {

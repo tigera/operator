@@ -62,6 +62,8 @@ type TyphaNodeTLS struct {
 
 func Calico(
 	cr *operator.Installation,
+	managementCluster *operator.ManagementCluster,
+	managementClusterConnection *operator.ManagementClusterConnection,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
@@ -111,7 +113,7 @@ func Calico(
 	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
-	if managerInternalTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+	if managerInternalTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
 		// The certificate will be issued for ManagerServiceDNS and localhost
 		log.Info("Creating secret for internal manager credentials")
@@ -132,17 +134,19 @@ func Calico(
 	}
 
 	return calicoRenderer{
-		installation:            cr,
-		pullSecrets:             pullSecrets,
-		typhaNodeTLS:            typhaNodeTLS,
-		tlsConfigMaps:           tcms,
-		tlsSecrets:              tss,
-		managerInternalTLSecret: managerInternalTLSSecret,
-		birdTemplates:           bt,
-		provider:                p,
-		networkConfig:           nc,
-		amazonCloudInt:          aci,
-		upgrade:                 up,
+		installation:                cr,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		pullSecrets:                 pullSecrets,
+		typhaNodeTLS:                typhaNodeTLS,
+		tlsConfigMaps:               tcms,
+		tlsSecrets:                  tss,
+		managerInternalTLSecret:     managerInternalTLSSecret,
+		birdTemplates:               bt,
+		provider:                    p,
+		networkConfig:               nc,
+		amazonCloudInt:              aci,
+		upgrade:                     up,
 	}, nil
 }
 
@@ -203,17 +207,19 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	installation            *operator.Installation
-	pullSecrets             []*corev1.Secret
-	typhaNodeTLS            *TyphaNodeTLS
-	tlsConfigMaps           []*corev1.ConfigMap
-	tlsSecrets              []*corev1.Secret
-	managerInternalTLSecret *corev1.Secret
-	birdTemplates           map[string]string
-	provider                operator.Provider
-	networkConfig           NetworkConfig
-	amazonCloudInt          *operatorv1beta1.AmazonCloudIntegration
-	upgrade                 bool
+	installation                *operator.Installation
+	managementCluster           *operator.ManagementCluster
+	managementClusterConnection *operator.ManagementClusterConnection
+	pullSecrets                 []*corev1.Secret
+	typhaNodeTLS                *TyphaNodeTLS
+	tlsConfigMaps               []*corev1.ConfigMap
+	tlsSecrets                  []*corev1.Secret
+	managerInternalTLSecret     *corev1.Secret
+	birdTemplates               map[string]string
+	provider                    operator.Provider
+	networkConfig               NetworkConfig
+	amazonCloudInt              *operatorv1beta1.AmazonCloudIntegration
+	upgrade                     bool
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -224,7 +230,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation, r.managerInternalTLSecret))
+	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret))
 	return components
 }
 

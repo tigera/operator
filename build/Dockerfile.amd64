@@ -12,7 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.1
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.2-301.1592810506 AS ubi
+
+# Add in top-level license file
+RUN mkdir /licenses
+COPY LICENSE /licenses
+
+FROM scratch
+
 ARG GIT_VERSION=unknown
 LABEL name="Calico Operator" \
       vendor="Project Calico" \
@@ -22,9 +29,8 @@ LABEL name="Calico Operator" \
       description="Calico Operator manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift" \
       maintainer="Laurence Man <laurence@tigera.io>"
 
-# Add in top-level license file
-RUN mkdir /licenses
-COPY LICENSE /licenses
+COPY --from=ubi /etc/passwd /etc/passwd
+COPY --from=ubi /licenses /licenses
 
 ENV OPERATOR=/usr/local/bin/operator \
     USER_UID=1001 \
@@ -34,8 +40,7 @@ ENV OPERATOR=/usr/local/bin/operator \
 COPY build/_output/bin/operator-amd64 ${OPERATOR}
 
 COPY build/bin /usr/local/bin
-RUN  /usr/local/bin/user_setup
 
-ENTRYPOINT ["/usr/local/bin/entrypoint"]
+ENTRYPOINT ["/usr/local/bin/operator"]
 
 USER ${USER_UID}

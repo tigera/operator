@@ -166,13 +166,13 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	// Watch for changes to primary resource Installation
+	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 	}
 
-	// Watch for changes to primary resource Installation
+	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)

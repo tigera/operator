@@ -97,6 +97,8 @@ const (
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
 	installation *operatorv1.Installation,
+	managementCluster *operatorv1.ManagementCluster,
+	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,
 	kibana *kbv1.Kibana,
 	clusterConfig *ElasticsearchClusterConfig,
@@ -112,40 +114,44 @@ func LogStorage(
 	applyTrial bool) Component {
 
 	return &elasticsearchComponent{
-		logStorage:           logStorage,
-		installation:         installation,
-		elasticsearch:        elasticsearch,
-		kibana:               kibana,
-		clusterConfig:        clusterConfig,
-		elasticsearchSecrets: elasticsearchSecrets,
-		kibanaSecrets:        kibanaSecrets,
-		curatorSecrets:       curatorSecrets,
-		createWebhookSecret:  createWebhookSecret,
-		pullSecrets:          pullSecrets,
-		provider:             provider,
-		esService:            esService,
-		kbService:            kbService,
-		clusterDNS:           clusterDNS,
-		applyTrial:           applyTrial,
+		logStorage:                  logStorage,
+		installation:                installation,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		elasticsearch:               elasticsearch,
+		kibana:                      kibana,
+		clusterConfig:               clusterConfig,
+		elasticsearchSecrets:        elasticsearchSecrets,
+		kibanaSecrets:               kibanaSecrets,
+		curatorSecrets:              curatorSecrets,
+		createWebhookSecret:         createWebhookSecret,
+		pullSecrets:                 pullSecrets,
+		provider:                    provider,
+		esService:                   esService,
+		kbService:                   kbService,
+		clusterDNS:                  clusterDNS,
+		applyTrial:                  applyTrial,
 	}
 }
 
 type elasticsearchComponent struct {
-	logStorage           *operatorv1.LogStorage
-	installation         *operatorv1.Installation
-	elasticsearch        *esv1.Elasticsearch
-	kibana               *kbv1.Kibana
-	clusterConfig        *ElasticsearchClusterConfig
-	elasticsearchSecrets []*corev1.Secret
-	kibanaSecrets        []*corev1.Secret
-	curatorSecrets       []*corev1.Secret
-	createWebhookSecret  bool
-	pullSecrets          []*corev1.Secret
-	provider             operatorv1.Provider
-	esService            *corev1.Service
-	kbService            *corev1.Service
-	clusterDNS           string
-	applyTrial           bool
+	logStorage                  *operatorv1.LogStorage
+	installation                *operatorv1.Installation
+	managementCluster           *operatorv1.ManagementCluster
+	managementClusterConnection *operatorv1.ManagementClusterConnection
+	elasticsearch               *esv1.Elasticsearch
+	kibana                      *kbv1.Kibana
+	clusterConfig               *ElasticsearchClusterConfig
+	elasticsearchSecrets        []*corev1.Secret
+	kibanaSecrets               []*corev1.Secret
+	curatorSecrets              []*corev1.Secret
+	createWebhookSecret         bool
+	pullSecrets                 []*corev1.Secret
+	provider                    operatorv1.Provider
+	esService                   *corev1.Service
+	kbService                   *corev1.Service
+	clusterDNS                  string
+	applyTrial                  bool
 }
 
 func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -183,7 +189,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		return toCreate, toDelete
 	}
 
-	if es.installation.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+	if es.managementClusterConnection == nil {
 		// Write back LogStorage CR to persist any changes
 		toCreate = append(toCreate, es.logStorage)
 

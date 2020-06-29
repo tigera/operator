@@ -109,8 +109,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Spec: operatorv1.InstallationSpec{
 					Registry: "my-reg",
 					// The test is provider agnostic.
-					KubernetesProvider:    operatorv1.ProviderNone,
-					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
+					KubernetesProvider: operatorv1.ProviderNone,
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			})

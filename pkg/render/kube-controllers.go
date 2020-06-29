@@ -30,16 +30,20 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation, managerInternalSecret *v1.Secret) *kubeControllersComponent {
+func KubeControllers(cr *operator.Installation, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, managerInternalSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr: cr,
-		managerInternalSecret: managerInternalSecret,
+		cr:                          cr,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		managerInternalSecret:       managerInternalSecret,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr                    *operator.Installation
-	managerInternalSecret *v1.Secret
+	cr                          *operator.Installation
+	managementCluster           *operator.ManagementCluster
+	managementClusterConnection *operator.ManagementClusterConnection
+	managerInternalSecret       *v1.Secret
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -168,7 +172,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 
 		role.Rules = append(role.Rules, extraRules...)
 
-		if c.cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+		if c.managementCluster != nil {
 			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
 			// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
 			// take place with its bearer token.
@@ -218,11 +222,11 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
-		if c.cr.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
+		if c.managementClusterConnection == nil {
 			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")
 		}
 
-		if c.cr.Spec.ClusterManagementType == operator.ClusterManagementTypeManagement {
+		if c.managementCluster != nil {
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
 
@@ -278,9 +282,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
-							Name:  "calico-kube-controllers",
-							Image: image,
-							Env:   env,
+							Name:      "calico-kube-controllers",
+							Image:     image,
+							Env:       env,
 							Resources: c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{

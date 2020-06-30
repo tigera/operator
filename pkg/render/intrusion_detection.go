@@ -22,6 +22,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -77,6 +78,13 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 		c.intrusionDetectionDeployment(),
 		c.intrusionDetectionElasticsearchJob())
 	objs = append(objs, c.globalAlertTemplates()...)
+
+	if !c.openshift {
+		objs = append(objs,
+			c.intrusionDetectionPodSecurityPolicy(),
+			c.intrusionDetectionPSPClusterRole(),
+			c.intrusionDetectionPSPClusterRoleBinding())
+	}
 
 	return objs, nil
 }
@@ -365,7 +373,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 	return []runtime.Object{
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -387,7 +395,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -409,7 +417,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -431,7 +439,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -453,7 +461,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -476,7 +484,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -499,7 +507,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -522,7 +530,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 		},
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "GlobalAlertTemplate",
+				Kind:       "GlobalAlertTemplate",
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -541,6 +549,56 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 				Metric:      "sum",
 				Condition:   "gt",
 				Threshold:   0,
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("intrusion-detection")
+	return psp
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "intrusion-detection-psp",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"intrusion-detection"},
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "intrusion-detection-controller-psp",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "intrusion-detection-psp",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "intrusion-detection-controller",
+				Namespace: IntrusionDetectionNamespace,
+			},
+			{
+				Kind:      "ServiceAccount",
+				Name:      "default",
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 	}

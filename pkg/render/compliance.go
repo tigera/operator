@@ -512,13 +512,6 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{ComplianceServerName},
-			},
 		},
 	}
 

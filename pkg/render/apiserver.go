@@ -1058,63 +1058,11 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	trueBool := true
 	ptrBoolTrue := &trueBool
-	return &policyv1beta1.PodSecurityPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver",
-			Annotations: map[string]string{
-				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
-			},
-		},
-		Spec: policyv1beta1.PodSecurityPolicySpec{
-			Privileged:               true,
-			AllowPrivilegeEscalation: ptrBoolTrue,
-			RequiredDropCapabilities: []corev1.Capability{
-				corev1.Capability("ALL"),
-			},
-			Volumes: []policyv1beta1.FSType{
-				policyv1beta1.ConfigMap,
-				policyv1beta1.EmptyDir,
-				policyv1beta1.Projected,
-				policyv1beta1.Secret,
-				policyv1beta1.DownwardAPI,
-				policyv1beta1.PersistentVolumeClaim,
-				policyv1beta1.HostPath,
-			},
-			HostNetwork: false,
-			HostPorts: []policyv1beta1.HostPortRange{
-				policyv1beta1.HostPortRange{
-					Min: int32(0),
-					Max: int32(65535),
-				},
-			},
-			HostIPC: false,
-			HostPID: false,
-			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-				Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-			},
-			SELinux: policyv1beta1.SELinuxStrategyOptions{
-				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-			},
-			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			FSGroup: policyv1beta1.FSGroupStrategyOptions{
-				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			ReadOnlyRootFilesystem: false,
-		},
-	}
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("tigera-apiserver")
+	psp.Spec.Privileged = true
+	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
 }

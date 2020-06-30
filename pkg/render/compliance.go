@@ -355,66 +355,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 }
 
 func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	falseBool := false
-	ptrBoolFalse := &falseBool
-	return &policyv1beta1.PodSecurityPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ComplianceControllerName,
-			Annotations: map[string]string{
-				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
-			},
-		},
-		Spec: policyv1beta1.PodSecurityPolicySpec{
-			Privileged:               false,
-			AllowPrivilegeEscalation: ptrBoolFalse,
-			RequiredDropCapabilities: []corev1.Capability{
-				corev1.Capability("ALL"),
-			},
-			Volumes: []policyv1beta1.FSType{
-				policyv1beta1.ConfigMap,
-				policyv1beta1.EmptyDir,
-				policyv1beta1.Projected,
-				policyv1beta1.Secret,
-				policyv1beta1.DownwardAPI,
-				policyv1beta1.PersistentVolumeClaim,
-			},
-			HostNetwork: false,
-			HostPorts: []policyv1beta1.HostPortRange{
-				policyv1beta1.HostPortRange{
-					Min: int32(0),
-					Max: int32(65535),
-				},
-			},
-			HostIPC: false,
-			HostPID: false,
-			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-				Rule: policyv1beta1.RunAsUserStrategyMustRunAsNonRoot,
-			},
-			SELinux: policyv1beta1.SELinuxStrategyOptions{
-				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-			},
-			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			FSGroup: policyv1beta1.FSGroupStrategyOptions{
-				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			ReadOnlyRootFilesystem: false,
-		},
-	}
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(ComplianceControllerName)
+	return psp
 }
 
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
@@ -540,67 +483,11 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 }
 
 func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	falseBool := false
-	ptrBoolFalse := &falseBool
-	return &policyv1beta1.PodSecurityPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "compliance-reporter",
-			Annotations: map[string]string{
-				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
-			},
-		},
-		Spec: policyv1beta1.PodSecurityPolicySpec{
-			Privileged:               false,
-			AllowPrivilegeEscalation: ptrBoolFalse,
-			RequiredDropCapabilities: []corev1.Capability{
-				corev1.Capability("ALL"),
-			},
-			Volumes: []policyv1beta1.FSType{
-				policyv1beta1.ConfigMap,
-				policyv1beta1.EmptyDir,
-				policyv1beta1.Projected,
-				policyv1beta1.Secret,
-				policyv1beta1.DownwardAPI,
-				policyv1beta1.PersistentVolumeClaim,
-				policyv1beta1.HostPath,
-			},
-			HostNetwork: false,
-			HostPorts: []policyv1beta1.HostPortRange{
-				policyv1beta1.HostPortRange{
-					Min: int32(0),
-					Max: int32(65535),
-				},
-			},
-			HostIPC: false,
-			HostPID: false,
-			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-				Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-			},
-			SELinux: policyv1beta1.SELinuxStrategyOptions{
-				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-			},
-			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			FSGroup: policyv1beta1.FSGroupStrategyOptions{
-				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			ReadOnlyRootFilesystem: false,
-		},
-	}
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("compliance-reporter")
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
 }
 
 func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAccount {
@@ -797,66 +684,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 }
 
 func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	falseBool := false
-	ptrBoolFalse := &falseBool
-	return &policyv1beta1.PodSecurityPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ComplianceServerName,
-			Annotations: map[string]string{
-				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
-			},
-		},
-		Spec: policyv1beta1.PodSecurityPolicySpec{
-			Privileged:               false,
-			AllowPrivilegeEscalation: ptrBoolFalse,
-			RequiredDropCapabilities: []corev1.Capability{
-				corev1.Capability("ALL"),
-			},
-			Volumes: []policyv1beta1.FSType{
-				policyv1beta1.ConfigMap,
-				policyv1beta1.EmptyDir,
-				policyv1beta1.Projected,
-				policyv1beta1.Secret,
-				policyv1beta1.DownwardAPI,
-				policyv1beta1.PersistentVolumeClaim,
-			},
-			HostNetwork: false,
-			HostPorts: []policyv1beta1.HostPortRange{
-				policyv1beta1.HostPortRange{
-					Min: int32(0),
-					Max: int32(65535),
-				},
-			},
-			HostIPC: false,
-			HostPID: false,
-			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-				Rule: policyv1beta1.RunAsUserStrategyMustRunAsNonRoot,
-			},
-			SELinux: policyv1beta1.SELinuxStrategyOptions{
-				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-			},
-			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			FSGroup: policyv1beta1.FSGroupStrategyOptions{
-				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			ReadOnlyRootFilesystem: false,
-		},
-	}
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(ComplianceServerName)
+	return psp
 }
 
 func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
@@ -1053,66 +883,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 }
 
 func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	falseBool := false
-	ptrBoolFalse := &falseBool
-	return &policyv1beta1.PodSecurityPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ComplianceSnapshotterName,
-			Annotations: map[string]string{
-				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
-			},
-		},
-		Spec: policyv1beta1.PodSecurityPolicySpec{
-			Privileged:               false,
-			AllowPrivilegeEscalation: ptrBoolFalse,
-			RequiredDropCapabilities: []corev1.Capability{
-				corev1.Capability("ALL"),
-			},
-			Volumes: []policyv1beta1.FSType{
-				policyv1beta1.ConfigMap,
-				policyv1beta1.EmptyDir,
-				policyv1beta1.Projected,
-				policyv1beta1.Secret,
-				policyv1beta1.DownwardAPI,
-				policyv1beta1.PersistentVolumeClaim,
-			},
-			HostNetwork: false,
-			HostPorts: []policyv1beta1.HostPortRange{
-				policyv1beta1.HostPortRange{
-					Min: int32(0),
-					Max: int32(65535),
-				},
-			},
-			HostIPC: false,
-			HostPID: false,
-			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-				Rule: policyv1beta1.RunAsUserStrategyMustRunAsNonRoot,
-			},
-			SELinux: policyv1beta1.SELinuxStrategyOptions{
-				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-			},
-			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			FSGroup: policyv1beta1.FSGroupStrategyOptions{
-				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			ReadOnlyRootFilesystem: false,
-		},
-	}
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(ComplianceSnapshotterName)
+	return psp
 }
 
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
@@ -1289,89 +1062,34 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 }
 
 func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	falseBool := false
-	ptrBoolFalse := &falseBool
-	return &policyv1beta1.PodSecurityPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "compliance-benchmarker",
-			Annotations: map[string]string{
-				"seccomp.security.alpha.kubernetes.io/allowedProfileNames": "*",
-			},
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("compliance-benchmarker")
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
+		{
+			PathPrefix: "/var/lib/etcd",
+			ReadOnly:   true,
 		},
-		Spec: policyv1beta1.PodSecurityPolicySpec{
-			Privileged:               false,
-			AllowPrivilegeEscalation: ptrBoolFalse,
-			RequiredDropCapabilities: []corev1.Capability{
-				corev1.Capability("ALL"),
-			},
-			Volumes: []policyv1beta1.FSType{
-				policyv1beta1.ConfigMap,
-				policyv1beta1.EmptyDir,
-				policyv1beta1.Projected,
-				policyv1beta1.Secret,
-				policyv1beta1.DownwardAPI,
-				policyv1beta1.PersistentVolumeClaim,
-				policyv1beta1.HostPath,
-			},
-			HostNetwork: false,
-			AllowedHostPaths: []policyv1beta1.AllowedHostPath{
-				{
-					PathPrefix: "/var/lib/etcd",
-					ReadOnly:   true,
-				},
-				{
-					PathPrefix: "/etc/systemd",
-					ReadOnly:   true,
-				},
-				{
-					PathPrefix: "/etc/kubernetes",
-					ReadOnly:   true,
-				},
-				{
-					PathPrefix: "/usr/bin",
-					ReadOnly:   true,
-				},
-				{
-					PathPrefix: "/var/lib/kubelet",
-					ReadOnly:   true,
-				},
-			},
-			HostPorts: []policyv1beta1.HostPortRange{
-				policyv1beta1.HostPortRange{
-					Min: int32(0),
-					Max: int32(65535),
-				},
-			},
-			HostIPC: false,
-			HostPID: true,
-			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-				Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-			},
-			SELinux: policyv1beta1.SELinuxStrategyOptions{
-				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-			},
-			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-				Rule: policyv1beta1.SupplementalGroupsStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			FSGroup: policyv1beta1.FSGroupStrategyOptions{
-				Rule: policyv1beta1.FSGroupStrategyMustRunAs,
-				Ranges: []policyv1beta1.IDRange{
-					{
-						Min: int64(1),
-						Max: int64(65535),
-					},
-				},
-			},
-			ReadOnlyRootFilesystem: false,
+		{
+			PathPrefix: "/etc/systemd",
+			ReadOnly:   true,
+		},
+		{
+			PathPrefix: "/etc/kubernetes",
+			ReadOnly:   true,
+		},
+		{
+			PathPrefix: "/usr/bin",
+			ReadOnly:   true,
+		},
+		{
+			PathPrefix: "/var/lib/kubelet",
+			ReadOnly:   true,
 		},
 	}
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	psp.Spec.HostPID = true
+	return psp
 }
 
 func (c *complianceComponent) complianceGlobalReportInventory() *v3.GlobalReportType {

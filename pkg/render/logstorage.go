@@ -34,6 +34,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -207,6 +208,18 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, es.eckOperatorClusterAdminClusterRoleBinding())
 		}
 
+		// Apply the pod security policies for all providers except OpenShift
+		if es.provider != operatorv1.ProviderOpenShift {
+			toCreate = append(toCreate,
+				es.eckOperatorPodSecurityPolicy(),
+				es.elasticsearchClusterRoleBinding(),
+				es.elasticsearchClusterRole(),
+				es.elasticsearchPodSecurityPolicy(),
+				es.kibanaClusterRoleBinding(),
+				es.kibanaClusterRole(),
+				es.kibanaPodSecurityPolicy())
+		}
+
 		if es.createWebhookSecret {
 			toCreate = append(toCreate, es.eckOperatorWebhookSecret())
 		}
@@ -244,6 +257,15 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		if len(es.curatorSecrets) > 0 {
 			toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(ElasticsearchNamespace, es.curatorSecrets...)...)...)
 			toCreate = append(toCreate, es.esCuratorServiceAccount())
+
+			// If the provider is not OpenShift apply the pod security policy for the curator.
+			if es.provider != operatorv1.ProviderOpenShift {
+				toCreate = append(toCreate,
+					es.curatorClusterRole(),
+					es.curatorClusterRoleBinding(),
+					es.curatorPodSecurityPolicy())
+			}
+
 			toCreate = append(toCreate, es.curatorCronJob())
 		}
 
@@ -655,57 +677,69 @@ func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
 }
 
 func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments", "statefulsets"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"batch"},
+			Resources: []string{"cronjobs"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"policy"},
+			Resources: []string{"poddisruptionbudgets"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+			Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"kibana.k8s.elastic.co"},
+			Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"apm.k8s.elastic.co"},
+			Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"associations.k8s.elastic.co"},
+			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{"mutatingwebhookconfigurations", "validatingwebhookconfigurations"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+	}
+
+	if es.provider == operatorv1.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ECKOperatorName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elastic-operator",
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"apps"},
-				Resources: []string{"deployments", "statefulsets"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"batch"},
-				Resources: []string{"cronjobs"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"policy"},
-				Resources: []string{"poddisruptionbudgets"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-				Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"kibana.k8s.elastic.co"},
-				Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"apm.k8s.elastic.co"},
-				Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"associations.k8s.elastic.co"},
-				Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{"admissionregistration.k8s.io"},
-				Resources: []string{"mutatingwebhookconfigurations", "validatingwebhookconfigurations"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -855,6 +889,12 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	}
 }
 
+func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(ECKOperatorName)
+	return psp
+}
+
 func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
@@ -988,6 +1028,49 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 	}
 }
 
+func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: EsCuratorName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{EsCuratorName},
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: EsCuratorName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     EsCuratorName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      EsCuratorServiceAccount,
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(EsCuratorName)
+	return psp
+}
+
 // This is a webhook service that helps with CR validations.
 func (es elasticsearchComponent) webhookService() *corev1.Service {
 	return &corev1.Service{
@@ -1068,4 +1151,99 @@ func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1
 			},
 		},
 	}
+}
+
+func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-elasticsearch",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"tigera-elasticsearch"},
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-elasticsearch",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-elasticsearch",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "default",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	trueBool := true
+	ptrBoolTrue := &trueBool
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("tigera-elasticsearch")
+	psp.Spec.Privileged = true
+	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.RequiredDropCapabilities = nil
+	psp.Spec.AllowedCapabilities = []corev1.Capability{
+		corev1.Capability("CAP_CHOWN"),
+	}
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
+}
+
+func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-kibana",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"tigera-kibana"},
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-kibana",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-kibana",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "default",
+				Namespace: KibanaNamespace,
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("tigera-kibana")
+	return psp
 }

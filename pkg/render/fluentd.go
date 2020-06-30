@@ -23,6 +23,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -45,17 +47,17 @@ const (
 	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
 	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
-	EksLogForwarderAwsId               = "aws-id"
-	EksLogForwarderAwsKey              = "aws-key"
-	eksLogForwarderName                = "eks-log-forwarder"
-	SplunkFluentdTokenSecretName       = "logcollector-splunk-credentials"
-	SplunkFluentdSecretTokenKey        = "token"
-	SplunkFluentdCertificateSecretName = "logcollector-splunk-public-certificate"
-	SplunkFluentdSecretCertificateKey  = "ca.pem"
-	SplunkFluentdSecretsVolName        = "splunk-certificates"
-	SplunkFluentdDefaultCertDir        = "/etc/ssl/splunk/"
-	SplunkFluentdDefaultCertPath       = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
-	ProbeTimeoutSeconds                = 5
+	EksLogForwarderAwsId                     = "aws-id"
+	EksLogForwarderAwsKey                    = "aws-key"
+	eksLogForwarderName                      = "eks-log-forwarder"
+	SplunkFluentdTokenSecretName             = "logcollector-splunk-credentials"
+	SplunkFluentdSecretTokenKey              = "token"
+	SplunkFluentdCertificateSecretName       = "logcollector-splunk-public-certificate"
+	SplunkFluentdSecretCertificateKey        = "ca.pem"
+	SplunkFluentdSecretsVolName              = "splunk-certificates"
+	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
+	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+	ProbeTimeoutSeconds                      = 5
 )
 
 type FluentdFilters struct {
@@ -136,6 +138,12 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.eksConfig != nil {
+		if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
+			objs = append(objs,
+				c.eksLogForwarderClusterRole(),
+				c.eksLogForwarderClusterRoleBinding(),
+				c.eksLogForwarderPodSecurityPolicy())
+		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
 			c.eksLogForwarderDeployment())
@@ -642,6 +650,66 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 			Name: "plugin-statefile-dir",
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: nil,
+			},
+		},
+	}
+}
+
+func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName(eksLogForwarderName)
+	psp.Spec.RequiredDropCapabilities = nil
+	psp.Spec.AllowedCapabilities = []corev1.Capability{
+		corev1.Capability("CAP_CHOWN"),
+	}
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
+		{
+			PathPrefix: "/var/log/calico",
+			ReadOnly:   false,
+		},
+	}
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
+}
+
+func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   eksLogForwarderName,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     eksLogForwarderName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "default",
+				Namespace: LogCollectorNamespace,
+			},
+		},
+	}
+}
+
+func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   eksLogForwarderName,
+			Labels: map[string]string{},
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{eksLogForwarderName},
 			},
 		},
 	}

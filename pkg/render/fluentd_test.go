@@ -51,7 +51,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	It("should render with a default configuration", func() {
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(2))
+		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -62,6 +62,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -71,7 +74,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[1].(*apps.DaemonSet)
+		ds := resources[4].(*apps.DaemonSet)
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []corev1.EnvVar{
@@ -105,7 +108,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(3))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -117,6 +120,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "log-collector-s3-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -126,7 +132,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[2].(*apps.DaemonSet)
+		ds := resources[5].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/s3-credentials"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -171,7 +177,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(2))
+		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -182,6 +188,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -191,7 +200,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[1].(*apps.DaemonSet)
+		ds := resources[4].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -241,12 +250,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
-				Endpoint:    "https://1.2.3.4:8088",
+				Endpoint: "https://1.2.3.4:8088",
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(4))
+		Expect(len(resources)).To(Equal(7))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -259,6 +268,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "logcollector-splunk-public-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -268,7 +280,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[3].(*apps.DaemonSet)
+		ds := resources[6].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 
@@ -314,16 +326,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with splunk configuration without ca", func() {
 		splkCreds := &render.SplunkCredential{
-			Token:       []byte("TokenForHEC"),
+			Token: []byte("TokenForHEC"),
 		}
 		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
-				Endpoint:    "https://1.2.3.4:8088",
+				Endpoint: "https://1.2.3.4:8088",
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(3))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -335,6 +347,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -344,7 +359,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[2].(*apps.DaemonSet)
+		ds := resources[5].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
@@ -387,7 +402,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(3))
+		Expect(len(resources)).To(Equal(6))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -399,6 +414,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "fluentd-filters", ns: "tigera-fluentd", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -408,7 +426,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		ds := resources[2].(*apps.DaemonSet)
+		ds := resources[5].(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/fluentd-filters"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -432,7 +450,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(8))
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -445,6 +463,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "eks-log-forwarder", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "tigera-eks-log-forwarder-secret", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "eks-log-forwarder", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "Deployment"},
 			// Daemonset
 		}
@@ -455,7 +476,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
-		deploy := resources[3].(*apps.Deployment)
+		deploy := resources[6].(*apps.Deployment)
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))

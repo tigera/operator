@@ -677,8 +677,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   eksLogForwarderName,
-			Labels: map[string]string{},
+			Name: eksLogForwarderName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -699,8 +698,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   eksLogForwarderName,
-			Labels: map[string]string{},
+			Name: eksLogForwarderName,
 		},
 
 		Rules: []rbacv1.PolicyRule{

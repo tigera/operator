@@ -587,7 +587,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "intrusion-detection",
+			Name:     "intrusion-detection-psp",
 		},
 		Subjects: []rbacv1.Subject{
 			{

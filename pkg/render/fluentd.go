@@ -138,15 +138,15 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.eksConfig != nil {
-		if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
-			objs = append(objs,
-				c.eksLogForwarderClusterRole(),
-				c.eksLogForwarderClusterRoleBinding(),
-				c.eksLogForwarderPodSecurityPolicy())
-		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
 			c.eksLogForwarderDeployment())
+	}
+	if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
+		objs = append(objs,
+			c.eksLogForwarderClusterRole(),
+			c.eksLogForwarderClusterRoleBinding(),
+			c.eksLogForwarderPodSecurityPolicy())
 	}
 
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(LogCollectorNamespace, c.esSecrets...)...)...)

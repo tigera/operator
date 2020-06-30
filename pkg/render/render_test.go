@@ -72,16 +72,16 @@ var _ = Describe("Rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
-		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
+		// - 6 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
-		// - 6 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget)
-		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
+		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
+		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy)
 		// - 1 namespace
 		// - 1 PriorityClass
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(5 + 4 + 2 + 6 + 4 + 1 + 1))
+		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 5 + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -94,7 +94,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 		c, err := render.Calico(instance, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(((5 + 4 + 2 + 6 + 4 + 1) + 1 + 1)))
+		Expect(componentCount(c.Render())).To(Equal(((6 + 4 + 2 + 7 + 5 + 1) + 1 + 1)))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -133,17 +133,20 @@ var _ = Describe("Rendering tests", func() {
 			{common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment"},
 			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1beta1", "PodDisruptionBudget"},
+			{common.TyphaDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-node", common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
 			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{common.NodeDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 			{"calico-kube-controllers", common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-kube-controllers", common.CalicoNamespace, "apps", "v1", "Deployment"},
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{"calico-kube-controllers", "", "policy", "v1beta1", "PodSecurityPolicy"},
 		}
 
 		var resources []runtime.Object

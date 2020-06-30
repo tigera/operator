@@ -725,7 +725,7 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if es.provider == operatorv1.ProviderOpenShift {
+	if es.provider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},

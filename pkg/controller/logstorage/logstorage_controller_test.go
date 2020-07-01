@@ -498,7 +498,7 @@ func setUpLogStorageComponents(cli client.Client, storageClass string) {
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", true,
+		nil, nil, "cluster.local", true, nil,
 	)
 
 	createObj, _ := component.Objects()

@@ -37,4 +37,6 @@ You should have no local changes and tests should be passing.
 
 1. Go to https://github.com/tigera/operator/releases and edit the release tag to include the generated release notes, and update the title.
 
+1. Close the milestone for this release. https://github.com/tigera/operator/milestones
+
 1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist (e.g., next patch release)

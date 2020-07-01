@@ -127,7 +127,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -215,7 +215,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: render.KibanaServiceName, Namespace: render.KibanaNamespace},
 						Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeExternalName},
-					}, "cluster.local", false)
+					}, "cluster.local", false, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -281,7 +281,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 					},
-					nil, nil, "cluster.local", true)
+					nil, nil, "cluster.local", true, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -332,7 +332,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 				createResources, _ := component.Objects()
 
@@ -365,7 +365,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 				updatedResources, _ := updatedComponent.Objects()
 
@@ -397,7 +397,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 			// Verify that the node selectors are passed into the Elasticsearch pod spec.
 			createResources, _ := component.Objects()
 			nodeSelectors := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
@@ -441,7 +441,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operator.ProviderNone,
-					nil, nil, nil, "cluster.local", true)
+					nil, nil, nil, "cluster.local", true, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -513,7 +513,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -547,7 +547,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -581,7 +581,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -615,7 +615,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -651,7 +651,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -695,7 +695,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -792,7 +792,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true)
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -939,7 +939,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, nil, "cluster.local", true)
+				nil, nil, "cluster.local", true, nil)
 
 			createResources, deleteResources := component.Objects()
 
@@ -978,7 +978,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, nil, "cluster.local", true)
+				nil, nil, "cluster.local", true, nil)
 
 			createResources, deleteResources := component.Objects()
 
@@ -1015,7 +1015,7 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, nil, "cluster.local", true)
+				nil, nil, "cluster.local", true, nil)
 
 			createResources, deleteResources := component.Objects()
 

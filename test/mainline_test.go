@@ -269,6 +269,7 @@ func setupManager() (client.Client, manager.Manager) {
 	err = controller.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: true,
+		AmazonCRDExists:     true,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr

@@ -21,13 +21,8 @@ RUN microdnf update
 RUN mkdir /licenses
 COPY LICENSE /licenses
 
-COPY build/bin/remove_unneeded.sh /usr/local/bin/remove_unneeded.sh
-SHELL ["/bin/bash", "-c"]
-RUN touch /in-the-container
-RUN  /usr/local/bin/remove_unneeded.sh "/lib64"
-SHELL ["/bin/sh", "-c"]
-
 FROM scratch
+COPY --from=ubi /licenses /licenses
 
 ARG GIT_VERSION=unknown
 LABEL name="Calico Operator" \
@@ -38,26 +33,12 @@ LABEL name="Calico Operator" \
       description="Calico Operator manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift" \
       maintainer="Laurence Man <laurence@tigera.io>"
 
-COPY --from=ubi /etc/passwd /etc/passwd
-COPY --from=ubi /licenses /licenses
-COPY --from=ubi /usr/bin/coreutils /usr/bin/coreutils
-
-# those directories have already been pruned removing all that is NOT needed 
-COPY --from=ubi /bin/ /bin/
-COPY --from=ubi /lib64 /lib64
-COPY --from=ubi /usr/bin /usr/bin
-
 ENV OPERATOR=/usr/local/bin/operator \
-    USER_UID=1001 \
-    USER_NAME=operator
+    USER_UID=1001
 
 # install operator binary
 COPY build/_output/bin/operator-amd64 ${OPERATOR}
 
-COPY build/bin /usr/local/bin
-SHELL ["/bin/sh", "-c"]
-RUN  /usr/local/bin/user_setup
-
-ENTRYPOINT ["/usr/local/bin/entrypoint"]
+ENTRYPOINT ["${OPERATOR}"]
 
 USER ${USER_UID}

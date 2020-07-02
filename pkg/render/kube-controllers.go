@@ -20,6 +20,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,7 +33,7 @@ var replicas int32 = 1
 
 func KubeControllers(cr *operator.Installation, managerInternalSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr: cr,
+		cr:                    cr,
 		managerInternalSecret: managerInternalSecret,
 	}
 }
@@ -51,6 +52,10 @@ func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object
 	}
 	if c.managerInternalSecret != nil {
 		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
+	}
+
+	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+		kubeControllerObjects = append(kubeControllerObjects, c.controllersPodSecurityPolicy())
 	}
 
 	return kubeControllerObjects, nil
@@ -179,6 +184,17 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			})
 		}
 	}
+
+	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"calico-kube-controllers"},
+		})
+	}
+
 	return role
 }
 
@@ -278,9 +294,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
-							Name:  "calico-kube-controllers",
-							Image: image,
-							Env:   env,
+							Name:      "calico-kube-controllers",
+							Image:     image,
+							Env:       env,
 							Resources: c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{
@@ -323,6 +339,12 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	return map[string]string{
 		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
 	}
+}
+
+func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("calico-kube-controllers")
+	return psp
 }
 
 func kubeControllersVolumeMounts(managerSecret *v1.Secret) []v1.VolumeMount {

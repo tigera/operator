@@ -739,6 +739,15 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	// If CalicoNetwork is specified, then use Calico networking.
 	if install.Spec.CalicoNetwork != nil {
 		config.CNI = render.CNICalico
+		if install.Spec.CalicoNetwork.BPFDataplaneMode != nil {
+			switch *install.Spec.CalicoNetwork.BPFDataplaneMode {
+			case operator.BPFEnabled:
+				config.BPFEnabled = true
+			case operator.BPFEnabledDSR:
+				config.BPFEnabled = true
+				config.BPFDSR = true
+			}
+		}
 	}
 
 	// Set other provider-specific settings.

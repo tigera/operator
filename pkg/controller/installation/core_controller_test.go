@@ -71,6 +71,8 @@ var _ = Describe("Testing core-controller installation", func() {
 	var twentySix int32 = 26
 	var hpEnabled operator.HostPortsType = operator.HostPortsEnabled
 	var hpDisabled operator.HostPortsType = operator.HostPortsDisabled
+	bpfEnabled := operator.BPFEnabled
+
 	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
 		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
 			if expectSuccess {
@@ -97,6 +99,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			pExpect := calicoNet.IPPools[0]
 			Expect(pool).To(Equal(pExpect))
 			Expect(i.Spec.CalicoNetwork.HostPorts).To(Equal(calicoNet.HostPorts))
+			Expect(i.Spec.CalicoNetwork.BPFDataplaneMode).To(Equal(calicoNet.BPFDataplaneMode))
 		},
 
 		table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{},
@@ -119,6 +122,35 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 				MTU:       &defaultMTU,
 				HostPorts: &hpEnabled,
+			}),
+		table.Entry("Config with BPF enabled (with OpenShift) defaults IPPool",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						BPFDataplaneMode: &bpfEnabled,
+					},
+				},
+			},
+			&osconfigv1.Network{
+				Spec: osconfigv1.NetworkSpec{
+					ClusterNetwork: []osconfigv1.ClusterNetworkEntry{
+						{CIDR: "192.168.0.0/16"},
+					},
+				},
+			}, true,
+			&operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/16",
+						Encapsulation: "IPIP",
+						NATOutgoing:   "Enabled",
+						NodeSelector:  "all()",
+						BlockSize:     &twentySix,
+					},
+				},
+				MTU:              &defaultMTU,
+				HostPorts:        &hpEnabled,
+				BPFDataplaneMode: &bpfEnabled,
 			}),
 		table.Entry("Openshift only CIDR",
 			&operator.Installation{
@@ -257,5 +289,23 @@ var _ = Describe("Testing core-controller installation", func() {
 				MTU:       &defaultMTU,
 				HostPorts: &hpDisabled,
 			}),
+	)
+
+	table.DescribeTable("BPF settings",
+		func(mode operator.BPFDataplaneMode, exp bool) {
+			nc := GenerateRenderConfig(&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						BPFDataplaneMode: &mode,
+					},
+				},
+			})
+
+			Expect(nc.BPFEnabled).To(Equal(exp))
+		},
+		table.Entry("nil", nil, false),
+		table.Entry("Disabled", operator.BPFDisabled, false),
+		table.Entry("Enabled", operator.BPFEnabled, true),
+		table.Entry("EnabledKeepKubeProxy", operator.BPFEnabledKeepKubeProxy, true),
 	)
 })

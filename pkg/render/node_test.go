@@ -93,6 +93,7 @@ func defaultEnvVars(opt bool) []v1.EnvVar {
 			},
 		}},
 		{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
+		{Name: "FELIX_BPFENABLED", Value: "false"},
 	}
 }
 

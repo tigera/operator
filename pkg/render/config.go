@@ -27,4 +27,6 @@ type NetworkConfig struct {
 	CNI                  string
 	NodenameFileOptional bool
 	IPPools              []operatorv1.IPPool
+	BPFEnabled           bool
+	BPFKeepKubeProxy     bool
 }

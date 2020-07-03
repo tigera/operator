@@ -964,6 +964,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
 	}
+
+	if c.netConfig.BPFEnabled {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
+	} else {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "false"})
+	}
+
 	return nodeEnv
 }
 

@@ -205,7 +205,7 @@ type CalicoNetworkSpec struct {
 	// +optional
 	NodeAddressAutodetectionV4 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV4,omitempty"`
 
-	// NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv4 addresses. If not specified,
+	// NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv6 addresses. If not specified,
 	// IPv6 addresses will not be auto-detected.
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`

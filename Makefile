@@ -442,7 +442,7 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
-## Generate ClusterServiceVersion package.
+## Generate a ClusterServiceVersion package.
 # E.g. make gen-csv VERSION=1.6.2 PREV_VERSION=0.0.0
 #
 # VERSION: the operator version to generate a bundle for.
@@ -450,7 +450,13 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 #               no previous version, use 0.0.0
 .PHONY: gen-csv
 gen-csv: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
-	hack/gen-csv/generate.sh
+	hack/gen-csv/csv.sh
+
+## Generate a bundle zip file containing all CSVs and a package manifest.
+# E.g. make gen-bundle
+.PHONY: gen-bundle
+gen-bundle: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	hack/gen-csv/bundle.sh
 
 .PHONY: help
 ## Display this help text

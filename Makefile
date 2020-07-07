@@ -429,6 +429,7 @@ hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
 	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
+	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml

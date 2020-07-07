@@ -859,7 +859,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "var-lib-kubelet", MountPath: "/var/lib/kubelet", ReadOnly: true},
 		{Name: "etc-systemd", MountPath: "/etc/systemd", ReadOnly: true},
 		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
-		{Name: "usr-bin", MountPath: "/usr/bin", ReadOnly: true},
+		{Name: "usr-bin", MountPath: "/usr/local_bin", ReadOnly: true},
 	}
 
 	vols := []corev1.Volume{

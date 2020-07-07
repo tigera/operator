@@ -23,7 +23,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -109,8 +108,8 @@ var _ = Describe("Typha rendering tests", func() {
 		}))
 	})
 	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
-		aci := &operatorv1beta1.AmazonCloudIntegration{
-			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+		aci := &operator.AmazonCloudIntegration{
+			Spec: operator.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
 				PodSecurityGroupID:   "sg-podsgid",
 			},

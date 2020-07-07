@@ -26,7 +26,6 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -135,7 +134,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
 	if r.amazonCRDExists {
-		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
@@ -552,7 +551,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	var aci *operatorv1beta1.AmazonCloudIntegration
+	var aci *operator.AmazonCloudIntegration
 	if r.amazonCRDExists {
 		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
 		if apierrors.IsNotFound(err) {

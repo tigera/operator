@@ -80,8 +80,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		resources := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		resultES := resources[9].(*esalpha1.Elasticsearch).Spec.Nodes[0]
 		// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
-		Expect(resources[9].(*esalpha1.Elasticsearch).Spec.Nodes[0].PodTemplate.Spec.NodeSelector).To(BeEmpty())
+		Expect(resultES.PodTemplate.Spec.NodeSelector).To(BeEmpty())
+		Expect(resultES.PodTemplate.Spec.NodeSelector).To(BeEmpty())
+
+		// Verify that the default container limist/requests are set.
+		esContainer := resultES.PodTemplate.Spec.Containers[0]
+		reqLimits := esContainer.Resources.Limits
+		reqResources := esContainer.Resources.Requests
+
+		Expect(reqLimits.Cpu().String()).To(Equal("1"))
+		Expect(reqLimits.Memory().String()).To(Equal("4Gi"))
+		Expect(reqResources.Cpu().String()).To(Equal("250m"))
+		Expect(reqResources.Memory().String()).To(Equal("4Gi"))
+		Expect(esContainer.Env[0].Value).To(Equal("-Xms1398101K -Xmx1398101K"))
 
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)

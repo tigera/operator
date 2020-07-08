@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -52,6 +53,17 @@ var (
 	nodeBGPReporterPort int32 = 9900
 )
 
+func getK8sEndpoint() (string, string, error) {
+	host := os.Getenv("KUBERNETES_SERVICE_HOST")
+	port := os.Getenv("KUBERNETES_SERVICE_PORT")
+
+	if host == "" || port == "" {
+		return "", "", fmt.Errorf("k8s host and/or port override env vars empty")
+	}
+
+	return host, port, nil
+}
+
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
 	cr *operator.Installation,
@@ -60,13 +72,20 @@ func Node(
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 ) Component {
-	return &nodeComponent{
+	node := &nodeComponent{
 		cr:              cr,
 		birdTemplates:   bt,
 		typhaNodeTLS:    tnTLS,
 		amazonCloudInt:  aci,
 		migrationNeeded: migrate,
 	}
+
+	if k8sHost, k8sPort, err := getK8sEndpoint(); err == nil {
+		node.k8sHost = k8sHost
+		node.k8sPort = k8sPort
+	}
+
+	return node
 }
 
 type nodeComponent struct {
@@ -75,6 +94,8 @@ type nodeComponent struct {
 	typhaNodeTLS    *TyphaNodeTLS
 	amazonCloudInt  *operator.AmazonCloudIntegration
 	migrationNeeded bool
+	k8sHost         string
+	k8sPort         string
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -705,6 +726,13 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
+	if c.k8sHost != "" {
+		envVars = append(envVars, []v1.EnvVar{
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.k8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: c.k8sPort},
+		}...)
+	}
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -1021,6 +1049,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
 	}
+
+	if c.k8sHost != "" {
+		nodeEnv = append(nodeEnv, []v1.EnvVar{
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.k8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: c.k8sPort},
+		}...)
+	}
+
 	return nodeEnv
 }
 

@@ -29,4 +29,6 @@ type NetworkConfig struct {
 	IPPools              []operatorv1.IPPool
 	BPFEnabled           bool
 	BPFDSR               bool
+	K8sHost              string
+	K8sPort              int
 }

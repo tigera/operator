@@ -77,7 +77,7 @@ const (
 	KibanaImageName = "tigera/kibana:" + components.VersionKibana
 
 	ECKOperatorImageName      = "eck/eck-operator:" + components.VersionECKOperator
-	ECKElasticsearchImageName = "elasticsearch/elasticsearch:" + components.VersionECKElasticsearch
+	ElasticsearchImageName    = "tigera/elasticsearch:" + components.VersionElasticsearch
 	EsCuratorImageName        = "tigera/es-curator:" + components.VersionEsCurator
 
 	// Multicluster tunnel image.
@@ -97,7 +97,7 @@ func constructImage(imageName, registry, imagepath string) string {
 		FlexVolumeImageName:
 
 		reg = CalicoRegistry
-	case ECKElasticsearchImageName, ECKOperatorImageName:
+	case ECKOperatorImageName:
 		reg = ECKRegistry
 	}
 

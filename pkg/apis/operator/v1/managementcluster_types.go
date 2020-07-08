@@ -26,7 +26,7 @@ type ManagementClusterSpec struct {
 	// cluster is added, this field is used to populate an easy-to-apply manifest that will connect both clusters.
 	// Valid examples are: "0.0.0.0:31000", "example.com:32000", "[::1]:32500"
 	// +optional
-	Addr string `json:"addr,omitempty"`
+	Address string `json:"addr,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -51,6 +51,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index . "eck-elasticsearch" }}
+	ComponentEckElasticsearch = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index . "eck-kibana" }}
 	ComponentEckKibana = component{
 		Version: "{{ .Version }}",

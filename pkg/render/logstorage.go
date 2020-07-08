@@ -403,9 +403,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		},
 		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 		Command: []string{
-			"sysctl",
-			"-w",
-			"vm.max_map_count=262144",
+			"/bin/sh",
+		},
+		Args: []string{
+			"-c",
+			"echo 262144 > /proc/sys/vm/max_map_count",
 		},
 	}
 

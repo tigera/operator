@@ -632,7 +632,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/code/filecheck",
-						"/tmp/ready",
 					},
 				},
 			},

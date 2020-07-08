@@ -45,6 +45,11 @@ var (
 		Image:   "tigera/compliance-snapshotter",
 	}
 
+	ComponentEckElasticsearch = component{
+		Version: "7.6.2",
+		Image:   "tigera/elasticsearch",
+	}
+
 	ComponentEckKibana = component{
 		Version: "7.6.2",
 		Image:   "tigera/kibana",
@@ -56,8 +61,8 @@ var (
 	}
 
 	ComponentElasticsearch = component{
-		Version: "7.6.2",
-		Image:   "elasticsearch/elasticsearch",
+		Version: "master",
+		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentElasticsearchOperator = component{
@@ -130,8 +135,8 @@ var (
 		Image:   "tigera/cni",
 	}
 
-    ComponentCloudControllers = component{
+	ComponentCloudControllers = component{
 		Version: "master",
 		Image:   "tigera/cloud-controllers",
-    }
+	}
 )

@@ -51,7 +51,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	const expectedResourcesNumber = 11
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(instance, nil, operator.ClusterManagementTypeStandalone, nil)
+		resources := renderObjects(instance, nil, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resources.
@@ -115,7 +115,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(instance, nil, operator.ClusterManagementTypeStandalone, nil)
+		resources := renderObjects(instance, nil, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -153,7 +153,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 		}
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, oidcConfig, operator.ClusterManagementTypeStandalone, nil)
+		resources := renderObjects(instance, oidcConfig, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1))
 
 		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
@@ -181,7 +181,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, nil, operator.ClusterManagementTypeStandalone, nil)
+		resources := renderObjects(instance, nil, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := resources[expectedResourcesNumber-1].(*v1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -191,7 +191,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(instance, nil, operator.ClusterManagementTypeManagement, nil)
+		resources := renderObjects(instance, nil, &operator.ManagementCluster{}, nil)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -293,10 +293,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 })
 
-func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, clusterType operator.ClusterManagementType, tlsSecret *corev1.Secret) []runtime.Object {
+func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, managementCluster *operator.ManagementCluster,
+	tlsSecret *corev1.Secret) []runtime.Object {
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
-	if clusterType == operator.ClusterManagementTypeManagement {
+	if managementCluster != nil {
 		tunnelSecret = &voltronTunnelSecret
 		internalTraffic = &internalManagerTLSSecret
 	}
@@ -318,9 +319,9 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, clu
 		tlsSecret,
 		nil,
 		false,
-		&operator.Installation{Spec: operator.InstallationSpec{ClusterManagementType: clusterType}},
+		&operator.Installation{Spec: operator.InstallationSpec{}},
 		oidcConfig,
-		clusterType == operator.ClusterManagementTypeManagement,
+		managementCluster,
 		tunnelSecret,
 		internalTraffic)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

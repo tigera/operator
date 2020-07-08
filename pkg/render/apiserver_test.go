@@ -37,7 +37,7 @@ import (
 
 var _ = Describe("API server rendering tests", func() {
 	var instance *operator.Installation
-	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Addr: "example.com:1234"}}
+	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Address: "example.com:1234"}}
 	BeforeEach(func() {
 		instance = &operator.Installation{
 			Spec: operator.InstallationSpec{

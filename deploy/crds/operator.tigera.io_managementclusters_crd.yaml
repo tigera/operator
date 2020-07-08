@@ -33,7 +33,7 @@ spec:
           spec:
             description: ManagementClusterSpec defines the desired state of a ManagementCluster
             properties:
-              addr:
+              address:
                 description: 'This field specifies the externally reachable address
                   to which your managed cluster will connect. When a managed cluster
                   is added, this field is used to populate an easy-to-apply manifest

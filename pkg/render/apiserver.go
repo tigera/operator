@@ -654,8 +654,8 @@ func (c *apiServerComponent) startUpArgs() []string {
 
 	if c.managementCluster != nil {
 		args = append(args, "--enable-managed-clusters-create-api=true")
-		if c.managementCluster.Spec.Addr != "" {
-			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.managementCluster.Spec.Addr))
+		if c.managementCluster.Spec.Address != "" {
+			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.managementCluster.Spec.Address))
 		}
 	}
 

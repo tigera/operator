@@ -23,6 +23,7 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/render"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -276,4 +277,99 @@ func GetK8sEndpoint(c client.Client) (string, int, error) {
 
 out:
 	return ip, port, err
+}
+
+// KubeProxyState is the return value of GetKubeProxyState
+type KubeProxyState int
+
+func (s KubeProxyState) String() string {
+	switch s {
+	case KubeProxyRuns:
+		return "kube-proxy runs"
+	case KubeProxyDisabled:
+		return "kube-proxy disabled"
+	case KubeProxyMissing:
+		return "kube-proxy is missing"
+	}
+
+	return "kube-proxy state unknown"
+}
+
+const (
+	// KubeProxyRuns is returned when kube-proxy deployment is unaltered.
+	KubeProxyRuns KubeProxyState = iota
+	// KubeProxyDisabled is returned when kube-proxy deployment exists, but is
+	// disabled by us.
+	KubeProxyDisabled
+	// KubeProxyMissing is returned if there is no kube-proxy deployment.
+	KubeProxyMissing
+)
+
+func getKubeProxy(c client.Client) (*appsv1.DaemonSet, error) {
+	kp := &appsv1.DaemonSet{}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}, kp)
+
+	return kp, err
+}
+
+// GetKubeProxyState returns KubeProxyState that indicates whether kube-proxy
+// exist, is disabled or runs without modifications.
+func GetKubeProxyState(c client.Client) (KubeProxyState, error) {
+	kp, err := getKubeProxy(c)
+
+	if err != nil {
+		return KubeProxyMissing, err
+	}
+
+	if kp.Spec.Template.Spec.NodeSelector == nil {
+		return KubeProxyRuns, nil
+	}
+
+	if _, ok := kp.Spec.Template.Spec.NodeSelector["non-calico"]; ok {
+		return KubeProxyDisabled, nil
+	}
+
+	return KubeProxyRuns, nil
+}
+
+type kubeProxyPatch struct {
+	disable bool
+}
+
+func (p kubeProxyPatch) Data(_ runtime.Object) ([]byte, error) {
+	if p.disable {
+		return []byte(`{"spec":{"template":{"spec":{"nodeSelector":{"non-calico": "true"}}}}}`), nil
+	}
+
+	return []byte(`{"spec":{"template":{"spec":{"nodeSelector":{"non-calico": null}}}}}`), nil
+}
+
+func (p kubeProxyPatch) Type() types.PatchType {
+	if p.disable {
+		return types.StrategicMergePatchType
+	}
+
+	return types.MergePatchType
+}
+
+// KubeProxyEnable remove the node selector from kube-proxy deployment that
+// makes it non-schedulable.
+func KubeProxyEnable(c client.Client) error {
+	return kubeProxySetState(c, false)
+}
+
+// KubeProxyDisable adds the node selector to kube-proxy deployment that
+// makes it non-schedulable.
+func KubeProxyDisable(c client.Client) error {
+	return kubeProxySetState(c, true)
+}
+
+func kubeProxySetState(c client.Client, disable bool) error {
+	kp, err := getKubeProxy(c)
+
+	if err != nil {
+		return err
+	}
+
+	return c.Patch(context.Background(), kp, kubeProxyPatch{disable})
 }

@@ -503,6 +503,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	kubeProxyState, err := utils.GetKubeProxyState(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// If Disabling BPF mode and reenable kube-proxy asap.
+	if kubeProxyState == utils.KubeProxyDisabled && !netConf.BPFEnabled {
+		if err := utils.KubeProxyEnable(r.client); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
@@ -683,6 +695,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	instance.Status.Variant = instance.Spec.Variant
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
+	}
+
+	// If enabling BPF disable kube-proxy as the last thing to keep services
+	// working as long as possible at least for host-networked pods.
+	if kubeProxyState == utils.KubeProxyRuns && netConf.BPFEnabled && !netConf.BPFKeepKubeProxy {
+		if err := utils.KubeProxyDisable(r.client); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Created successfully - don't requeue

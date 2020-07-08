@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -45,7 +44,7 @@ const (
 )
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, aci *operatorv1beta1.AmazonCloudIntegration, migrationNeeded bool) Component {
+func Typha(cr *operator.Installation, p operator.Provider, tnTLS *TyphaNodeTLS, aci *operator.AmazonCloudIntegration, migrationNeeded bool) Component {
 	return &typhaComponent{cr: cr, provider: p, typhaNodeTLS: tnTLS, amazonCloudInt: aci, namespaceMigration: migrationNeeded}
 }
 
@@ -53,7 +52,7 @@ type typhaComponent struct {
 	cr                 *operator.Installation
 	provider           operator.Provider
 	typhaNodeTLS       *TyphaNodeTLS
-	amazonCloudInt     *operatorv1beta1.AmazonCloudIntegration
+	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
 }
 

@@ -20,7 +20,6 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -52,7 +51,7 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, aci *operatorv1beta1.AmazonCloudIntegration, migrate bool) Component {
+func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, aci *operator.AmazonCloudIntegration, migrate bool) Component {
 	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, amazonCloudInt: aci, migrationNeeded: migrate}
 }
 
@@ -62,7 +61,7 @@ type nodeComponent struct {
 	netConfig       NetworkConfig
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
-	amazonCloudInt  *operatorv1beta1.AmazonCloudIntegration
+	amazonCloudInt  *operator.AmazonCloudIntegration
 	migrationNeeded bool
 }
 

@@ -418,16 +418,16 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v0.18.1
+OPERATOR_SDK_VERSION=v0.18.2
 hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p hack/bin
 	curl --fail -L -o hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) \
 		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
 	chmod +x hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 
 ## Generating code after API changes.
 gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
-	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
 	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
 
@@ -442,6 +442,22 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
+
+## Generate a ClusterServiceVersion package.
+# E.g. make gen-csv VERSION=1.6.2 PREV_VERSION=0.0.0
+#
+# VERSION: the operator version to generate a CSV for.
+# PREV_VERSION: the operator version that this CSV will replace. If there is
+#               no previous version, use 0.0.0
+.PHONY: gen-csv
+gen-csv: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	hack/gen-csv/csv.sh
+
+## Generate a CSV bundle zip file containing all CSVs and a package manifest.
+# E.g. make gen-bundle
+.PHONY: gen-bundle
+gen-bundle: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	hack/gen-csv/bundle.sh
 
 .PHONY: help
 ## Display this help text

@@ -495,6 +495,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
 
+	if netConf.BPFEnabled {
+		var err error
+		netConf.K8sHost, netConf.K8sPort, err = utils.GetK8sEndpoint(r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {

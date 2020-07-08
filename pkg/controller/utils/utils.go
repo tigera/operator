@@ -244,3 +244,36 @@ func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 
 	return instance, nil
 }
+
+// GetK8sEndpoint returns an ip:port of a kubernetes endpoint
+func GetK8sEndpoint(c client.Client) (string, int, error) {
+	var (
+		ip   string
+		port int
+		err  error
+	)
+
+	eps := &corev1.Endpoints{}
+	err = c.Get(context.Background(), client.ObjectKey{Name: "kubernetes", Namespace: "default"}, eps)
+	if err != nil {
+		goto out
+	}
+
+	if len(eps.Subsets) == 0 {
+		err = fmt.Errorf("kubernetes Endpoints have no Subsets")
+		goto out
+	}
+
+	for _, ss := range eps.Subsets {
+		if len(ss.Addresses) > 0 && len(ss.Ports) > 0 {
+			ip = ss.Addresses[0].IP
+			port = int(ss.Ports[0].Port)
+			goto out
+		}
+	}
+
+	err = fmt.Errorf("kubernetes Endpoints have no ready endpoint")
+
+out:
+	return ip, port, err
+}

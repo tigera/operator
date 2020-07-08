@@ -917,6 +917,49 @@ var _ = Describe("Node rendering tests", func() {
 		}
 		Expect(passed).To(Equal(true))
 	})
+
+	Context("with BPF enabled", func() {
+		It("should override k8s endpoints", func() {
+			component := render.Node(defaultInstance, operator.ProviderNone,
+				render.NetworkConfig{
+					CNI:        render.CNICalico,
+					BPFEnabled: true,
+					K8sHost:    "k8shost",
+					K8sPort:    1234,
+				},
+				nil, typhaNodeTLS, nil, false)
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			ds := dsResource.(*apps.DaemonSet)
+
+			// FIXME update gomega to include ContainElements
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "k8shost"},
+			))
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "1234"},
+			))
+
+			var cni v1.Container
+
+			for _, c := range ds.Spec.Template.Spec.InitContainers {
+				if c.Name == "install-cni" {
+					cni = c
+					break
+				}
+			}
+			Expect(cni).NotTo(BeNil())
+
+			Expect(cni.Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "k8shost"},
+			))
+			Expect(cni.Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "1234"},
+			))
+		})
+	})
 })
 
 // verifyProbes asserts the expected node liveness and readiness probe.

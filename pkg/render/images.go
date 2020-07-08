@@ -24,7 +24,7 @@ import (
 // Default registries for Calico and Tigera.
 const (
 	CalicoRegistry = "docker.io/"
-	TigeraRegistry = "quay.io/"
+	TigeraRegistry = "gcr.io/unique-caldron-775/cnx/"
 	K8sGcrRegistry = "gcr.io/"
 	ECKRegistry    = "docker.elastic.co/"
 )

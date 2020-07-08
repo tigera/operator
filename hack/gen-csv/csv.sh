@@ -31,21 +31,17 @@
 set -e
 set -x
 
+# VERSION is the version of the operator to publish.
 if [[ -z "${VERSION}" ]]; then
 	echo VERSION is undefined - run with vars VERSION=X.Y.Z PREV_VERSION=D.E.F
 	exit 1
 fi
+
+# PREV_VERSION is the version of the operator that VERSION replaces. If this version does not replace a version, use 0.0.0
 if [[ -z "${PREV_VERSION}" ]]; then
 	echo PREV_VERSION is undefined - run with vars VERSION=X.Y.Z PREV_VERSION=D.E.F
 	exit 1
 fi
-
-# The version of the operator to publish.
-VERSION="${VERSION}"
-
-# The version of the operator that VERSION replaces. If this version does not
-# replace a version, use 0.0.0
-PREV_VERSION="${PREV_VERSION}"
 
 # This is the top-level directory of this script's artifacts.
 OUTPUT_DIR=build/_output/bundle

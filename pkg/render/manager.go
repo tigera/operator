@@ -28,6 +28,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -161,7 +162,7 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.installation.Spec.ClusterManagementType),
+		managerClusterRole(c.installation.Spec.ClusterManagementType, c.openshift),
 		managerClusterRoleBinding(),
 		c.managerPolicyImpactPreviewClusterRole(),
 		c.managerPolicyImpactPreviewClusterRoleBinding(),
@@ -174,6 +175,9 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.openshift {
 		objs = append(objs, c.securityContextConstraints())
+	} else {
+		// If we're not running openshift, we need to add pod security policies.
+		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
@@ -561,7 +565,7 @@ func managerServiceAccount() *v1.ServiceAccount {
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 // This role can also be used in mcm for impersonation purposes only.
-func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.ClusterRole {
+func managerClusterRole(clusterType operator.ClusterManagementType, openshift bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -596,6 +600,19 @@ func managerClusterRole(clusterType operator.ClusterManagementType) *rbacv1.Clus
 			Verbs:     []string{"create"},
 		})
 	}
+
+	if !openshift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		cr.Rules = append(cr.Rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"tigera-manager"},
+			},
+		)
+	}
+
 	return cr
 }
 
@@ -716,4 +733,10 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 	}
 
 	return objs
+}
+
+func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("tigera-manager")
+	return psp
 }

@@ -1,6 +1,10 @@
 # Generating ClusterServiceVersions (CSV) and CSV bundles
 
-This document gives a brief overview of ClusterServiceVersions, CSV bundles, and the files in this directory that are used to generate them.
+This document gives a brief overview of:
+- ClusterServiceVersions
+- CSV bundles
+- operator upgrades via OLM
+- the files in this directory that are used to generate them.
 
 ## Overview
 
@@ -159,6 +163,24 @@ channels:
 defaultChannel: stable
 packageName: tigera-operator
 ```
+
+## Upgrading the operator via OLM
+
+Each CSV can optionally specify a single operator version that it replaces with the `spec.replaces` field.
+
+![OLM’s graph of available channel updates](https://docs.openshift.com/container-platform/4.2/operators/understanding_olm/olm-understanding-olm.html#olm-upgrades_olm-understanding-olm)
+Our operator's CSVs use only a single channel `stable`. Channels are an OLM resource we can use to organize
+operator versions. All channels, the "head" version of each channel, and the default channel is in
+the package manifest.
+
+An operator's upgrade path will traverse every version in its graph but a CSV can be configured to skip
+a range of versions. E.g. if we have v1.3.1, v1.3.2, ... , v1.3.10, we may want the user to upgrade directly
+from v1.3.1 to v1.3.10. This is not supported in our current tooling but the method is described [here](https://docs.openshift.com/container-platform/4.2/operators/understanding_olm/olm-understanding-olm.html#olm-upgrades-skipping_olm-understanding-olm).
+
+## Testing a CSV bundle
+
+- Bring up an OpenShift cluster.
+- Follow these [instructions](https://github.com/operator-framework/community-operators/blob/master/docs/testing-operators.md#testing-operator-deployment-on-openshift).
 
 ## Description of the files
 

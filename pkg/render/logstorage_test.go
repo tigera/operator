@@ -75,9 +75,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			installation = &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider:    operatorv1.ProviderNone,
-					Registry:              "testregistry.com/",
-					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
 				},
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
@@ -115,7 +114,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				component := render.LogStorage(
 					logStorage,
-					installation, nil, nil,
+					installation, nil, nil, nil, nil,
 					esConfig,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -195,7 +194,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				component := render.LogStorage(
 					logStorage,
-					installation, nil, nil,
+					installation, nil, nil, nil, nil,
 					esConfig,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -262,7 +261,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				component := render.LogStorage(
 					logStorage,
-					installation, nil, nil,
+					installation, nil, nil, nil, nil,
 					esConfig,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -290,7 +289,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 		})
 
-		Context("Deleting LogStorage", deleteLogStorageTests(operatorv1.ClusterManagementTypeStandalone))
+		Context("Deleting LogStorage", deleteLogStorageTests(nil, nil))
 
 		Context("Updating LogStorage resource", func() {
 			It("should create new NodeSet", func() {
@@ -320,7 +319,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				component := render.LogStorage(
 					ls,
-					installation, es, nil,
+					installation, nil, nil, es, nil,
 					esConfig,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -353,7 +352,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				updatedComponent := render.LogStorage(
 					ls,
-					installation, es, nil,
+					installation, nil, nil, es, nil,
 					esConfig,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -385,7 +384,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}
 			component := render.LogStorage(
 				logStorage,
-				installation, nil, nil,
+				installation, nil, nil, nil, nil,
 				esConfig,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -408,14 +407,15 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 	Context("Managed cluster", func() {
 		var installation *operatorv1.Installation
+		var managementClusterConnection *operatorv1.ManagementClusterConnection
 		BeforeEach(func() {
 			installation = &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider:    operatorv1.ProviderNone,
-					Registry:              "testregistry.com/",
-					ClusterManagementType: operatorv1.ClusterManagementTypeManaged,
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
 				},
 			}
+			managementClusterConnection = &operatorv1.ManagementClusterConnection{}
 		})
 		Context("Initial creation", func() {
 			It("creates Managed cluster logstorage components", func() {
@@ -437,7 +437,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 
 				component := render.LogStorage(
-					nil, installation, nil, nil, nil, nil, nil, false,
+					nil, installation, nil, managementClusterConnection, nil, nil, nil, nil, nil, false,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operator.ProviderNone,
@@ -449,7 +449,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareResources(deleteResources, []resourceTestObj{})
 			})
 		})
-		Context("Deleting LogStorage", deleteLogStorageTests(operatorv1.ClusterManagementTypeManaged))
+		Context("Deleting LogStorage", deleteLogStorageTests(nil, managementClusterConnection))
 	})
 
 	Context("NodeSet configuration", func() {
@@ -482,9 +482,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			installation = &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider:    operatorv1.ProviderNone,
-					Registry:              "testregistry.com/",
-					ClusterManagementType: operatorv1.ClusterManagementTypeStandalone,
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
 				},
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
@@ -501,7 +500,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -535,7 +534,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -569,7 +568,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -603,7 +602,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -639,7 +638,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -683,7 +682,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -780,7 +779,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					component := render.LogStorage(
 						logStorage,
-						installation, nil, nil,
+						installation, nil, nil, nil, nil,
 						esConfig,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
@@ -859,7 +858,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 })
 
-var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) func() {
+var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection) func() {
 	return func() {
 		var logStorage *operator.LogStorage
 		var installation *operatorv1.Installation
@@ -896,9 +895,8 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 
 			installation = &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider:    operatorv1.ProviderNone,
-					Registry:              "testregistry.com/",
-					ClusterManagementType: clusterType,
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
 				},
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
@@ -919,6 +917,8 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 			component := render.LogStorage(
 				logStorage,
 				installation,
+				managementCluster,
+				managementClusterConnection,
 				&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 				esConfig,
@@ -958,6 +958,8 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 			component := render.LogStorage(
 				logStorage,
 				installation,
+				managementCluster,
+				managementClusterConnection,
 				&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace, DeletionTimestamp: &t}},
 				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace, DeletionTimestamp: &t}},
 				esConfig,
@@ -996,6 +998,8 @@ var deleteLogStorageTests = func(clusterType operatorv1.ClusterManagementType) f
 			component := render.LogStorage(
 				logStorage,
 				installation,
+				managementCluster,
+				managementClusterConnection,
 				nil, nil,
 				esConfig,
 				[]*corev1.Secret{

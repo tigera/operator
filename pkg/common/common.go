@@ -14,6 +14,11 @@
 
 package common
 
+import (
+	"fmt"
+	"os"
+)
+
 const (
 	CalicoNamespace     = "calico-system"
 	TyphaDeploymentName = "calico-typha"
@@ -21,3 +26,15 @@ const (
 
 	TigeraPrometheusNamespace = "tigera-prometheus"
 )
+
+// GetK8sEndpointOverride returns an ip:port override for the KUBERNETES_SERVICE_HOST/PORT
+func GetK8sEndpointOverride() (string, string, error) {
+	host := os.Getenv("TIGERA_OPERATOR_OVERRIDE_K8S_HOST")
+	port := os.Getenv("TIGERA_OPERATOR_OVERRIDE_K8S_PORT")
+
+	if host == "" || port == "" {
+		return "", "", fmt.Errorf("k8s host and/or port override env vars empty")
+	}
+
+	return host, port, nil
+}

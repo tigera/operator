@@ -52,11 +52,6 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Typha(installation, provider, typhaNodeTLS, nil, false)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(7))
-
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -74,6 +69,11 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
+		component := render.Typha(installation, provider, typhaNodeTLS, nil, false)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -91,9 +91,26 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			// Typha resources
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
+			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
 		component := render.Typha(installation, provider, typhaNodeTLS, nil, true)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(7))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
@@ -110,6 +127,23 @@ var _ = Describe("Typha rendering tests", func() {
 		}))
 	})
 	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			// Typha resources
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
+			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
 		aci := &operatorv1beta1.AmazonCloudIntegration{
 			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
@@ -118,7 +152,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 		component := render.Typha(installation, provider, typhaNodeTLS, aci, true)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(7))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		deploymentResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())

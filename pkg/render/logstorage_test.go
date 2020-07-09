@@ -361,7 +361,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				createResources, _ := component.Objects()
 
-				oldNodeSetName := createResources[22].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				oldNodeSetName := GetResource(createResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 
 				// update resource requirements
 				ls.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
@@ -398,7 +398,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
 					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
 
-				newNodeName := updatedResources[22].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				newNodeName := GetResource(updatedResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
 			})
 		})

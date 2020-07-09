@@ -89,10 +89,10 @@ var _ = Describe("compliance rendering tests", func() {
 				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			ExpectGlobalReportType(resources[19], "inventory")
-			ExpectGlobalReportType(resources[20], "network-access")
-			ExpectGlobalReportType(resources[21], "policy-audit")
-			ExpectGlobalReportType(resources[22], "cis-benchmark")
+			ExpectGlobalReportType(GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
+			ExpectGlobalReportType(GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
+			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
+			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
 			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -183,12 +183,12 @@ var _ = Describe("compliance rendering tests", func() {
 				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			ExpectGlobalReportType(resources[19], "inventory")
-			ExpectGlobalReportType(resources[20], "network-access")
-			ExpectGlobalReportType(resources[21], "policy-audit")
-			ExpectGlobalReportType(resources[22], "cis-benchmark")
+			ExpectGlobalReportType(GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
+			ExpectGlobalReportType(GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
+			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
+			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			var dpComplianceServer = resources[len(expectedResources)-6].(*v1.Deployment)
+			var dpComplianceServer = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*v1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
@@ -294,10 +294,10 @@ var _ = Describe("compliance rendering tests", func() {
 				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			ExpectGlobalReportType(resources[19], "inventory")
-			ExpectGlobalReportType(resources[20], "network-access")
-			ExpectGlobalReportType(resources[21], "policy-audit")
-			ExpectGlobalReportType(resources[22], "cis-benchmark")
+			ExpectGlobalReportType(GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
+			ExpectGlobalReportType(GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
+			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
+			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
 			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{

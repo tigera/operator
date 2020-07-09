@@ -17,7 +17,6 @@ package render
 import (
 	"strings"
 
-	"github.com/tigera/operator/pkg/components"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -32,7 +31,7 @@ var replicas int32 = 1
 
 func KubeControllers(cr *operator.Installation, managerInternalSecret *v1.Secret) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr: cr,
+		cr:                    cr,
 		managerInternalSecret: managerInternalSecret,
 	}
 }
@@ -164,6 +163,11 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"endpoints"},
 				Verbs:     []string{"create", "update", "delete"},
 			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
 		}
 
 		role.Rules = append(role.Rules, extraRules...)
@@ -216,7 +220,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		enabledControllers = append(enabledControllers, "service", "federatedservices")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "authorization")
 
 		if c.cr.Spec.ClusterManagementType != operator.ClusterManagementTypeManaged {
 			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")
@@ -234,10 +238,12 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	// Pick which image to use based on variant.
-	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-	}
+	//image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	//if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	//	image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	//}
+
+	image := "gcr.io/tigera-dev/experimental/brianmcmahon/tigera/kube-controllers:latest"
 
 	defaultMode := int32(420)
 
@@ -278,10 +284,11 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{
-							Name:  "calico-kube-controllers",
-							Image: image,
-							Env:   env,
-							Resources: c.kubeControllersResources(),
+							Name:            "calico-kube-controllers",
+							Image:           image,
+							ImagePullPolicy: "Always",
+							Env:             env,
+							Resources:       c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{
 								Handler: v1.Handler{
 									Exec: &v1.ExecAction{

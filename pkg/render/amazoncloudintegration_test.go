@@ -23,7 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 )
@@ -34,14 +33,14 @@ const (
 )
 
 var _ = Describe("AmazonCloudIntegration rendering tests", func() {
-	var instance *operatorv1beta1.AmazonCloudIntegration
+	var instance *operator.AmazonCloudIntegration
 	var credential *render.AmazonCredential
 	var installation *operator.Installation
 
 	BeforeEach(func() {
-		instance = &operatorv1beta1.AmazonCloudIntegration{
-			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
-				DefaultPodMetadataAccess:     operatorv1beta1.MetadataAccessDenied,
+		instance = &operator.AmazonCloudIntegration{
+			Spec: operator.AmazonCloudIntegrationSpec{
+				DefaultPodMetadataAccess:     operator.MetadataAccessDenied,
 				NodeSecurityGroupIDs:         []string{"sg-nodeid"},
 				PodSecurityGroupID:           "sg-podsgid",
 				VPCS:                         []string{"vpc-id"},
@@ -61,7 +60,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
-		//AmazonCloudIntegration(aci *operatorv1beta1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
+		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 
@@ -135,7 +134,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(container.Args).To(BeNil())
 		envs := container.Env
 
-		//DefaultPodMetadataAccess:     operatorv1beta1.MetadataAccessDenied,
+		// DefaultPodMetadataAccess:     operatorv1.MetadataAccessDenied,
 		env := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "FAILSAFE_CONTROLLER_APP_NAME", Value: AwsCIName},
@@ -176,7 +175,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should set MetadataAccess when configured", func() {
-		instance.Spec.DefaultPodMetadataAccess = operatorv1beta1.MetadataAccessAllowed
+		instance.Spec.DefaultPodMetadataAccess = operator.MetadataAccessAllowed
 		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 

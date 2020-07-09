@@ -18,15 +18,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 var _ = Describe("Installation validation tests", func() {
-	var instance *operatorv1beta1.AmazonCloudIntegration
+	var instance *operatorv1.AmazonCloudIntegration
 
 	BeforeEach(func() {
-		instance = &operatorv1beta1.AmazonCloudIntegration{
-			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+		instance = &operatorv1.AmazonCloudIntegration{
+			Spec: operatorv1.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs:         []string{"sg-nodesgid"},
 				PodSecurityGroupID:           "sg-podsgid",
 				VPCS:                         []string{"vpc-id"},

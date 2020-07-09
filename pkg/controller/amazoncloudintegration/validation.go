@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"strings"
 
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
-func validateCustomResource(instance *operatorv1beta1.AmazonCloudIntegration) error {
+func validateCustomResource(instance *operatorv1.AmazonCloudIntegration) error {
 	if instance == nil {
 		return fmt.Errorf("no amazonCloudIntegration to validate, nil is not valid")
 	}

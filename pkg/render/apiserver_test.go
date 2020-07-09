@@ -30,7 +30,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
@@ -301,8 +300,8 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should set TIGERA_*_SECURITY_GROUP variables on queryserver when AmazonCloudIntegration is defined", func() {
-		aci := &operatorv1beta1.AmazonCloudIntegration{
-			Spec: operatorv1beta1.AmazonCloudIntegrationSpec{
+		aci := &operator.AmazonCloudIntegration{
+			Spec: operator.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
 				PodSecurityGroupID:   "sg-podsgid",
 			},

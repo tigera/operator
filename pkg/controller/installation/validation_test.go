@@ -33,8 +33,7 @@ var _ = Describe("Installation validation tests", func() {
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				},
-				Variant:        operator.Calico,
-
+				Variant: operator.Calico,
 			},
 		}
 	})
@@ -92,19 +91,6 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.FlexVolumePath = "foo/bar/baz"
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
-	})
-
-	It("should not allow a cluster management type for Calico", func() {
-		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManaged
-		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("should allow a cluster management type for Calico Enterprise", func() {
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManaged
-		err := validateCustomResource(instance)
-		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should validate HostPorts", func() {

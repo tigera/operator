@@ -16,7 +16,6 @@ package clusterconnection
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/tigera/operator/pkg/controller/options"
@@ -75,6 +74,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("failed to create %s: %v", controllerName, err)
 	}
 
+	// Watch for changes to primary resource ManagementCluster
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch primary resource: %v", controllerName, err)
+	}
+
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -104,12 +109,6 @@ type ReconcileConnection struct {
 	status   status.StatusManager
 }
 
-func GetClusterConnection(ctx context.Context, cli client.Client) (*operatorv1.ManagementClusterConnection, error) {
-	mcc := &operatorv1.ManagementClusterConnection{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, mcc)
-	return mcc, err
-}
-
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
 // state read and what is in the ManagementClusterConnection.Spec. The Controller will requeue the Request to be
 // processed again if the returned error is non-nil or Result.Requeue is true, otherwise upon completion it will
@@ -125,31 +124,32 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		return result, err
 	}
 
-	// Fetch the managementClusterConnection.
-	mcc, err := GetClusterConnection(ctx, r.Client)
+	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// If the resource is not found, we will not return an error. Instead, the watch on the resource will
-			// re-trigger the reconcile function when the situation changes.
-			if instl.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
-				log.Error(err, "ManagementClusterConnection is a necessary resource for Managed clusters")
-			}
-			r.status.OnCRNotFound()
-			return result, nil
-		}
-		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
-		return result, err
-	}
-	log.V(2).Info("Loaded ManagementClusterConnection config", "config", mcc)
-	r.status.OnCRFound()
-
-	if instl.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		err = errors.New(fmt.Sprintf("Cannot establish tunnel unless Installation.clusterManagementType = %v",
-			operatorv1.ClusterManagementTypeManaged))
-		log.Error(err, "")
-		r.status.SetDegraded(err.Error(), err.Error())
+		log.Error(err, "Error reading ManagementCluster")
+		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
 		return reconcile.Result{}, err
 	}
+
+	// Fetch the managementClusterConnection.
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.Client)
+	if err != nil {
+		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
+		return result, err
+	} else if managementClusterConnection == nil {
+		r.status.OnCRNotFound()
+		return result, nil
+	}
+
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
+	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
+	r.status.OnCRFound()
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
 	if err != nil {
@@ -169,9 +169,9 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		return result, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, mcc)
+	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	component := render.Guardian(
-		mcc.Spec.ManagementClusterAddr,
+		managementClusterConnection.Spec.ManagementClusterAddr,
 		pullSecrets,
 		r.Provider == operatorv1.ProviderOpenShift,
 		instl,

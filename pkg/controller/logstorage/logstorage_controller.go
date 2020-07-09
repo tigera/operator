@@ -206,6 +206,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %v", err)
 	}
 
+	// Watch for changes to primary resource ManagementCluster
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+	}
+
+	// Watch for changes to primary resource ManagementClusterConnection
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -305,20 +317,39 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementCluster")
+		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
 	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
 	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
-	} else if ls == nil && installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
-		err := fmt.Errorf("LogStorage must exist for '%s' cluster type", installationCR.Spec.ClusterManagementType)
-		log.Error(err, err.Error())
+	} else if ls == nil && managementClusterConnection == nil {
+		log.Error(err, "LogStorage must exist for management and standalone clusters")
 		return reconcile.Result{}, nil
-	} else if ls != nil && ls.DeletionTimestamp == nil && installationCR.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManaged {
+	} else if ls != nil && ls.DeletionTimestamp == nil && managementClusterConnection != nil {
 		// Note that we check if the DeletionTimestamp is set as the render function is responsible for any cleanup needed
 		// before the LogStorage CR can be deleted, and removing the finalizers from that CR
-		err := fmt.Errorf("cluster type is '%s' but LogStorage CR still exists", operatorv1.ClusterManagementTypeManaged)
-		log.Error(err, err.Error())
-		r.status.SetDegraded("LogStorage validation failed", err.Error())
+		log.Error(err, "cluster type is managed but LogStorage CR still exists")
+		r.status.SetDegraded("LogStorage validation failed", "cluster type is managed but LogStorage CR still exists")
 		return reconcile.Result{}, nil
 	}
 
@@ -348,7 +379,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	createWebhookSecret := false
 	applyTrial := false
 
-	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+	if managementClusterConnection == nil {
 
 		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
 		clusterConfig = render.NewElasticsearchClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), defaultElasticsearchShards, flowShards)
@@ -430,6 +461,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	component := render.LogStorage(
 		ls,
 		installationCR,
+		managementCluster,
+		managementClusterConnection,
 		elasticsearch,
 		kibana,
 		clusterConfig,
@@ -451,7 +484,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if installationCR.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+	if managementClusterConnection == nil {
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil

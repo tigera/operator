@@ -21,6 +21,8 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/tigera/operator/pkg/oidc"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	apps "k8s.io/api/apps/v1"
@@ -427,6 +429,52 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
 	}
 
+	var auth interface{}
+
+	authentication := &operatorv1.Authentication{}
+	if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, authentication); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("An error occurred retrieving the Authentication", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		if authentication.Spec.Method == operatorv1.AuthMethodOIDC {
+			wellKnownConfig, err := oidc.LookupWellKnownConfig(authentication.Spec.OIDC.IssuerURL)
+			if err != nil {
+				log.Error(err, err.Error())
+				r.status.SetDegraded("An error occurred looking up the OIDC well known configuration", err.Error())
+				return reconcile.Result{}, err
+			}
+
+			// TODO validate the secret
+			oidcSecret := &corev1.Secret{}
+			err = r.client.Get(ctx, types.NamespacedName{
+				Name:      "tigera-oidc-credentials",
+				Namespace: render.OperatorNamespace(),
+			}, oidcSecret)
+
+			if err != nil {
+				log.Error(err, err.Error())
+				r.status.SetDegraded("An error occurred retrieving the OIDC secret", err.Error())
+				return reconcile.Result{}, err
+			}
+
+			auth = render.OIDCAuthentication{
+				ClientID:              string(oidcSecret.Data["clientID"]),
+				Secret:                string(oidcSecret.Data["clientSecret"]),
+				IssuerURL:             authentication.Spec.OIDC.IssuerURL,
+				RequestedScopes:       authentication.Spec.OIDC.RequestedScopes,
+				SiteURL:               authentication.Spec.ManagerDomain,
+				UsernameClaim:         authentication.Spec.OIDC.UsernameClaim,
+				GroupsClaim:           authentication.Spec.OIDC.GroupsClaim,
+				AuthorizationEndpoint: wellKnownConfig.AuthorizationEndpoint,
+				TokenEndpoint:         wellKnownConfig.TokenEndpoint,
+				JWKSetURI:             wellKnownConfig.JWKSetURI,
+			}
+		}
+	}
+
 	component := render.LogStorage(
 		ls,
 		installationCR,
@@ -443,6 +491,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		kbService,
 		r.localDNS,
 		applyTrial,
+		auth,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status, utils.NoUserAddedMetadata); err != nil {

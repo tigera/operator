@@ -37,6 +37,12 @@ if [[ -z "${VERSION}" ]]; then
 	exit 1
 fi
 
+# OPERATOR_IMAGE_DIGEST is the operator image's digest
+if [[ -z "${OPERATOR_IMAGE_DIGEST}" ]]; then
+	echo OPERATOR_IMAGE_DIGEST is undefined - run with vars OPERATOR_IMAGE_DIGEST=quay.io/tigera/operator@sha256:5e1d55e1d555e1d55 VERSION=X.Y.Z PREV_VERSION=D.E.F
+	exit 1
+fi
+
 # PREV_VERSION is the version of the operator that VERSION replaces. If this version does not replace a version, use 0.0.0
 if [[ -z "${PREV_VERSION}" ]]; then
 	echo PREV_VERSION is undefined - run with vars VERSION=X.Y.Z PREV_VERSION=D.E.F
@@ -80,31 +86,10 @@ hack/bin/operator-sdk generate csv \
 
 OPERATOR_IMAGE=quay.io/tigera/operator:v${VERSION}
 
-# Pull the image so we can inspect it.
-docker pull ${OPERATOR_IMAGE}
-
 # Set the operator image container image and creation timestamp annotations.
 yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE}
 TIMESTAMP=$(docker image inspect ${OPERATOR_IMAGE} | jq -r .[0].Created)
 yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
-
-# Get the digest for the image. 'docker inspect' returns output like the example
-# below. RepoDigests may have more than one entry so we need to filter.
-# [
-#     {
-#         "Id": "sha256:34a1114040c03830da0a8d57f8d999deba26d8e31bda353aed201a375f68870b",
-#         "RepoTags": [
-#             "quay.io/tigera/operator:v1.3.1",
-#             "..."
-#         ],
-#         "RepoDigests": [
-#             "quay.io/tigera/operator@sha256:5e1d551b5a711592472f4a3cc4645698d5f826da4253f0d47cfa5d5b641a2e1a",
-#             "..."
-#         ],
-#         ...
-#     }
-# ]
-OPERATOR_IMAGE_DIGEST=$(docker image inspect ${OPERATOR_IMAGE} | jq -r '.[0].RepoDigests[] | select(. | contains("quay.io/tigera/operator"))')
 
 # Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
 yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].image ${OPERATOR_IMAGE_DIGEST}

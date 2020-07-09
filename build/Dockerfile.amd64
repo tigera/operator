@@ -39,6 +39,9 @@ ENV OPERATOR=/usr/local/bin/operator \
 # install operator binary
 COPY build/_output/bin/operator-amd64 ${OPERATOR}
 
-ENTRYPOINT ["${OPERATOR}"]
+# The exec form of ENTRYPOINT does not invoke a command shell.
+# This means that normal shell processing does not happen, so will not
+# do variable substitution. Using this form instead of passing $OPERATOR.
+ENTRYPOINT ["/usr/local/bin/operator"]
 
 USER ${USER_UID}

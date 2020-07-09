@@ -22,7 +22,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -95,7 +94,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 	}
 
 	if r.amazonCRDExists {
-		err = c.Watch(&source.Kind{Type: &operatorv1beta1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -199,7 +198,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	var amazon *operatorv1beta1.AmazonCloudIntegration
+	var amazon *operatorv1.AmazonCloudIntegration
 	if r.amazonCRDExists {
 		amazon, err = utils.GetAmazonCloudIntegration(ctx, r.client)
 		if errors.IsNotFound(err) {

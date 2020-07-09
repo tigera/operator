@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -59,12 +58,8 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 	}
 
 	// Use the discovery client to determine if the amazoncloudintegration APIs exist.
-	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1beta1")
+	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
 	if err != nil {
-		// amazoncloudintegration is our only v1beta1 resource (currently) so a 'not found' error is expected if the CRD doesn't exist.
-		if errors.IsNotFound(err) {
-			return false, nil
-		}
 		return false, err
 	}
 	for _, r := range resources.APIResources {

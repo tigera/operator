@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,7 +40,7 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.Installation, aci *operatorv1beta1.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
+func APIServer(installation *operator.Installation, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
@@ -93,7 +92,7 @@ func APIServer(installation *operator.Installation, aci *operatorv1beta1.AmazonC
 
 type apiServerComponent struct {
 	installation           *operator.Installation
-	amazonCloudIntegration *operatorv1beta1.AmazonCloudIntegration
+	amazonCloudIntegration *operator.AmazonCloudIntegration
 	tlsSecrets             []*corev1.Secret
 	tlsAnnotations         map[string]string
 	pullSecrets            []*corev1.Secret

@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1beta1 "github.com/tigera/operator/pkg/apis/operator/v1beta1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,7 +36,7 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(aci *operatorv1beta1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
+func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 	return &amazonCloudIntegrationComponent{
 		amazonCloudIntegration: aci,
 		installation:           installation,
@@ -48,7 +47,7 @@ func AmazonCloudIntegration(aci *operatorv1beta1.AmazonCloudIntegration, install
 }
 
 type amazonCloudIntegrationComponent struct {
-	amazonCloudIntegration *operatorv1beta1.AmazonCloudIntegration
+	amazonCloudIntegration *operator.AmazonCloudIntegration
 	installation           *operator.Installation
 	credentials            *AmazonCredential
 	pullSecrets            []*corev1.Secret
@@ -277,7 +276,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		}},
 	}
 
-	if c.amazonCloudIntegration.Spec.DefaultPodMetadataAccess == operatorv1beta1.MetadataAccessAllowed {
+	if c.amazonCloudIntegration.Spec.DefaultPodMetadataAccess == operator.MetadataAccessAllowed {
 		env = append(env, corev1.EnvVar{Name: "ALLOW_POD_METADATA_ACCESS", Value: "true"})
 	}
 
@@ -320,7 +319,7 @@ func (c *amazonCloudIntegrationComponent) tolerations() []corev1.Toleration {
 	return tolerations
 }
 
-func GetTigeraSecurityGroupEnvVariables(aci *operatorv1beta1.AmazonCloudIntegration) []corev1.EnvVar {
+func GetTigeraSecurityGroupEnvVariables(aci *operator.AmazonCloudIntegration) []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
 	if aci == nil {
 		return envs

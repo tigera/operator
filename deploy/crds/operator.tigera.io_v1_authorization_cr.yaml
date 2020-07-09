@@ -1,0 +1,7 @@
+apiVersion: operator.tigera.io/v1
+kind: Authorization
+metadata:
+  name: example-authorization
+spec:
+  # Add fields here
+  size: 3

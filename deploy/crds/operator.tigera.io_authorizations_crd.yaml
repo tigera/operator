@@ -1,0 +1,81 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: authorizations.operator.tigera.io
+spec:
+  group: operator.tigera.io
+  names:
+    kind: Authorization
+    listKind: AuthorizationList
+    plural: authorizations
+    singular: authorization
+  scope: Cluster
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Authorization is the Schema for the authorizations API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AuthorizationSpec defines the desired state of Authorization
+            properties:
+              managerDomain:
+                description: ManagerDomain is the domain name of the Manager
+                type: string
+              method:
+                description: 'Method configures the method of authentication used
+                  by Kibana. Default: Basic'
+                enum:
+                - Basic
+                - OIDC
+                type: string
+              oidc:
+                description: OIDC contains the configuration needed to setup OIDC
+                  authentication. If the method is OIDC then this is required, if
+                  the method is not OIDC then this must not be specified.
+                properties:
+                  groupsClaim:
+                    description: GroupsClaim specifies which claim to use from the
+                      OIDC provider as the group
+                    type: string
+                  groupsPrefix:
+                    description: UsernamePrefix is used to identify a ClusterRoleBinding
+                      Group subject that has a prefix with the authenticated user
+                    type: string
+                  issuerURL:
+                    description: IssueURL is the URL to the OIDC provider
+                    type: string
+                  usernameClaim:
+                    description: UsernameClaim specifies which claim to use from the
+                      OIDC provider as the username
+                    type: string
+                  usernamePrefix:
+                    description: UsernamePrefix is used to identify a ClusterRoleBinding
+                      User subject that has a prefix with the authenticated user
+                    type: string
+                type: object
+            type: object
+          status:
+            description: AuthorizationStatus defines the observed state of Authorization
+            properties:
+              state:
+                description: State provides user-readable status.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

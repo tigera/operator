@@ -155,13 +155,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			instance.Spec.NodeUpdateStrategy.RollingUpdate)
 	}
 
-	if instance.Spec.Variant == operatorv1.Calico {
-		// Validation specific to Calico.
-		if instance.Spec.ClusterManagementType != "" {
-			return fmt.Errorf("clusterManagementType must not be set for variant 'Calico'")
-		}
-	}
-
 	return nil
 }
 

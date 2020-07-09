@@ -70,15 +70,6 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
-	// How the cluster is managed. Valid values for this field are: Standalone, Management, Managed.
-	// Standalone clusters are fully self-contained installations of Calico Enterprise. Management clusters provide
-	// a single view to manage any number of Managed clusters, which are a lighter weight installation.
-	// This option is applicable only when variant is TigeraSecureEnterprise.
-	// Default: Standalone
-	// +optional
-	// +kubebuilder:validation:Enum=Standalone;Management;Managed
-	ClusterManagementType ClusterManagementType `json:"clusterManagementType,omitempty"`
-
 	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
 	// components. This currently only applies to kube-controllers and the apiserver.
 	// +optional
@@ -120,7 +111,7 @@ const (
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
 	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
-	ComponentName        ComponentName            `json:"componentName"`
+	ComponentName ComponentName `json:"componentName"`
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
@@ -144,16 +135,6 @@ type ProductVariant string
 var (
 	Calico                 ProductVariant = "Calico"
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
-)
-
-// ClusterManagementType represents the type of multicluster management to use. Valid options for this field are: "Standalone",
-// "Management", "Managed".
-type ClusterManagementType string
-
-const (
-	ClusterManagementTypeStandalone ClusterManagementType = "Standalone"
-	ClusterManagementTypeManagement ClusterManagementType = "Management"
-	ClusterManagementTypeManaged    ClusterManagementType = "Managed"
 )
 
 // HostPortsType specifies if the HostPorts plugin enabled status.

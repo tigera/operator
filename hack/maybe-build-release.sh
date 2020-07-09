@@ -1,4 +1,5 @@
 #!/bin/bash
+set -ex
 
 tag=$(git describe --exact-match --tags HEAD)
 if [[ -z "${tag}" ]]; then
@@ -16,3 +17,14 @@ make release VERSION=${tag}
 
 echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
+
+echo "Tagging and pushing Calico images to RedHat Connect for certification"
+
+echo "Logging into RedHat Connect docker registry..."
+docker login -u unused scan.connect.redhat.com --password-stdin <<< ${OPERATOR_RH_REGISTRY_KEY}
+
+calicoImage=quay.io/tigera/operator:$VERSION
+redhatImage=scan.connect.redhat.com/$OPERATOR_RH_PROJECTID/operator:$VERSION
+
+docker tag $calicoImage $redhatImage
+docker push $redhatImage

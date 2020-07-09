@@ -610,8 +610,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
 		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-		Args: c.startUpArgs(),
-		Env:  env,
+		Args:  c.startUpArgs(),
+		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -630,8 +630,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"cat",
-						"/tmp/ready",
+						"/code/filecheck",
 					},
 				},
 			},

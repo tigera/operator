@@ -331,6 +331,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
 	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
 	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")

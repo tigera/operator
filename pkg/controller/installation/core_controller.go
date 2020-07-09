@@ -536,6 +536,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")

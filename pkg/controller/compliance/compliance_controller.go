@@ -226,6 +226,13 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
 	// Compliance server is only for Standalone or Management clusters
 	if managementClusterConnection == nil {
 		secretsToWatch = append(secretsToWatch, render.ElasticsearchComplianceServerUserSecret)

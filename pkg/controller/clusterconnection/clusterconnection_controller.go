@@ -74,6 +74,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("failed to create %s: %v", controllerName, err)
 	}
 
+	// Watch for changes to primary resource ManagementCluster
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch primary resource: %v", controllerName, err)
+	}
+
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -118,17 +124,31 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		return result, err
 	}
 
+	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementCluster")
+		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Fetch the managementClusterConnection.
-	mcc, err := utils.GetManagementClusterConnection(ctx, r.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.Client)
 	if err != nil {
 		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
 		return result, err
-	} else if mcc == nil {
+	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
 		return result, nil
 	}
 
-	log.V(2).Info("Loaded ManagementClusterConnection config", "config", mcc)
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
+	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 	r.status.OnCRFound()
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
@@ -149,9 +169,9 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		return result, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, mcc)
+	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	component := render.Guardian(
-		mcc.Spec.ManagementClusterAddr,
+		managementClusterConnection.Spec.ManagementClusterAddr,
 		pullSecrets,
 		r.Provider == operatorv1.ProviderOpenShift,
 		instl,

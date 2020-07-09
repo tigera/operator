@@ -123,7 +123,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+	}
+
+	// Watch for changes to primary resource ManagementClusterConnection
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
 	}
 
 	return nil
@@ -322,6 +328,20 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	if err != nil {
 		log.Error(err, "Error reading ManagementCluster")
 		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
 		return reconcile.Result{}, err
 	}
 

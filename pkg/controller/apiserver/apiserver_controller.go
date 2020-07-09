@@ -200,6 +200,13 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
+	if managementClusterConnection != nil && managementCluster != nil {
+		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		log.Error(err, "")
+		r.status.SetDegraded(err.Error(), "")
+		return reconcile.Result{}, err
+	}
+
 	var tunnelCASecret *v1.Secret
 	if managementCluster != nil {
 		tunnelCASecret, err = utils.ValidateCertPair(r.client,

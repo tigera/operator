@@ -51,19 +51,33 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all resources for a custom configuration", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-kube-controllers", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
 		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-kube-controllers", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
-		ExpectResource(resources[4], "calico-kube-controllers", "", "policy", "v1beta1", "PodSecurityPolicy")
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
 
 		// The Deployment should have the correct configuration.
-		ds := resources[3].(*apps.Deployment)
+		ds := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 
 		// Image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
@@ -86,21 +100,35 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-kube-controllers", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-kube-controllers", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
-		ExpectResource(resources[4], "calico-kube-controllers", "", "policy", "v1beta1", "PodSecurityPolicy")
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
 
 		// The Deployment should have the correct configuration.
-		ds := resources[3].(*apps.Deployment)
+		ds := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -113,22 +141,36 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-kube-controllers", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: render.ManagerInternalTLSSecretName, ns: "calico-system", group: "", version: "v1", kind: "Secret"},
+			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(instance, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		ExpectResource(resources[0], "calico-kube-controllers", "calico-system", "", "v1", "ServiceAccount")
-		ExpectResource(resources[1], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
-		ExpectResource(resources[2], "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-		ExpectResource(resources[3], "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
-		ExpectResource(resources[4], render.ManagerInternalTLSSecretName, "calico-system", "", "v1", "Secret")
-		ExpectResource(resources[5], "calico-kube-controllers", "", "policy", "v1beta1", "PodSecurityPolicy")
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
 
 		// The Deployment should have the correct configuration.
-		dp := resources[3].(*apps.Deployment)
+		dp := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(v1.EnvVar{
@@ -159,13 +201,34 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-kube-controllers", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		d := resources[3].(*apps.Deployment)
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		d := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 

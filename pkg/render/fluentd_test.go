@@ -49,11 +49,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with a default configuration", func() {
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
-
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -68,13 +63,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		// Should render the correct resources.
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ds := resources[4].(*apps.DaemonSet)
+		ds := GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []corev1.EnvVar{
@@ -106,11 +106,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				BucketPath: "bucketpath",
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
 
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -126,13 +122,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		// Should render the correct resources.
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ds := resources[5].(*apps.DaemonSet)
+		ds := GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/s3-credentials"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -168,18 +169,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	})
 	It("should render with Syslog configuration", func() {
-		var ps int32 = 180
-		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
-			Syslog: &operatorv1.SyslogStoreSpec{
-				Endpoint:   "tcp://1.2.3.4:80",
-				PacketSize: &ps,
-			},
-		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
-
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -194,13 +183,25 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		var ps int32 = 180
+		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				PacketSize: &ps,
+			},
+		}
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ds := resources[4].(*apps.DaemonSet)
+		ds := GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -253,11 +254,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				Endpoint: "https://1.2.3.4:8088",
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(7))
 
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -274,13 +271,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		// Should render the correct resources.
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ds := resources[6].(*apps.DaemonSet)
+		ds := GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 
@@ -333,11 +335,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				Endpoint: "https://1.2.3.4:8088",
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
 
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -353,13 +351,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		// Should render the correct resources.
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ds := resources[5].(*apps.DaemonSet)
+		ds := GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
@@ -400,11 +403,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		filters = &render.FluentdFilters{
 			Flow: "flow-filter",
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(6))
 
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -420,13 +419,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		// Should render the correct resources.
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ds := resources[5].(*apps.DaemonSet)
+		ds := GetResource(resource, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/fluentd-filters"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -435,24 +439,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with EKS Cloudwatch Log", func() {
-		fetchInterval := int32(900)
-		eksConfig = &render.EksCloudwatchLogConfig{
-			AwsId:         []byte("aws-id"),
-			AwsKey:        []byte("aws-key"),
-			AwsRegion:     "us-west-1",
-			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
-			FetchInterval: fetchInterval,
-		}
-		installation = &operatorv1.Installation{
-			Spec: operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderEKS,
-			},
-		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(8))
-
-		// Should render the correct resources.
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -470,13 +456,31 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			// Daemonset
 		}
 
+		fetchInterval := int32(900)
+		eksConfig = &render.EksCloudwatchLogConfig{
+			AwsId:         []byte("aws-id"),
+			AwsKey:        []byte("aws-key"),
+			AwsRegion:     "us-west-1",
+			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
+			FetchInterval: fetchInterval,
+		}
+		installation = &operatorv1.Installation{
+			Spec: operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderEKS,
+			},
+		}
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		deploy := resources[3].(*apps.Deployment)
+		deploy := GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*apps.Deployment)
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))

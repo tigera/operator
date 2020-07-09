@@ -59,6 +59,8 @@ func Compliance(
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
+	managementCluster *operatorv1.ManagementCluster,
+	managementClusterConnection *operatorv1.ManagementClusterConnection,
 ) (Component, error) {
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
@@ -86,6 +88,8 @@ func Compliance(
 		pullSecrets:                 pullSecrets,
 		complianceServerCertSecrets: complianceServerCertSecrets,
 		openshift:                   openshift,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
 	}, nil
 }
 
@@ -97,6 +101,8 @@ type complianceComponent struct {
 	pullSecrets                 []*corev1.Secret
 	complianceServerCertSecrets []*corev1.Secret
 	openshift                   bool
+	managementCluster           *operatorv1.ManagementCluster
+	managementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
 func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -144,7 +150,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	var objsToDelete []runtime.Object
 	// Compliance server is only for Standalone or Management clusters
-	if c.installation.Spec.ClusterManagementType != operatorv1.ClusterManagementTypeManaged {
+	if c.managementClusterConnection == nil {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
 		complianceObjs = append(complianceObjs,
 			c.complianceServerClusterRole(),
@@ -470,7 +476,7 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		},
 	}
 
-	if c.installation.Spec.ClusterManagementType == operatorv1.ClusterManagementTypeManagement {
+	if c.managementCluster != nil {
 		// For cross-cluster requests, an authentication review will be done for authenticating the compliance-server.
 		// Requests on behalf of the compliance-server will be sent to Voltron, where an authentication review will take
 		// place with its bearer token.

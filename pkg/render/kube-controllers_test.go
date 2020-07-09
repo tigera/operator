@@ -51,7 +51,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all resources for a custom configuration", func() {
-		component := render.KubeControllers(instance, nil)
+		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
@@ -87,7 +87,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, nil)
+		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
@@ -112,9 +112,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.ClusterManagementType = operator.ClusterManagementTypeManagement
 
-		component := render.KubeControllers(instance, &internalManagerTLSSecret)
+		component := render.KubeControllers(instance, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -159,7 +158,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.KubeControllers(instance, nil)
+		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(4))
 
@@ -186,7 +185,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		component := render.KubeControllers(instance, nil)
+		component := render.KubeControllers(instance, nil, nil, nil)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")

@@ -37,9 +37,9 @@ if [[ -z "${VERSION}" ]]; then
 	exit 1
 fi
 
-# OPERATOR_IMAGE_DIGEST is the operator image's digest
-if [[ -z "${OPERATOR_IMAGE_DIGEST}" ]]; then
-	echo OPERATOR_IMAGE_DIGEST is undefined - run with vars OPERATOR_IMAGE_DIGEST=quay.io/tigera/operator@sha256:5e1d55e1d555e1d55 VERSION=X.Y.Z PREV_VERSION=D.E.F
+# OPERATOR_IMAGE_INSPECT is the base64-encoded output from "docker image inspect quay.io/tigera/operator:v${VERSION}"
+if [[ -z "${OPERATOR_IMAGE_INSPECT}" ]]; then
+	echo OPERATOR_IMAGE_INSPECT is undefined
 	exit 1
 fi
 
@@ -48,6 +48,8 @@ if [[ -z "${PREV_VERSION}" ]]; then
 	echo PREV_VERSION is undefined - run with vars VERSION=X.Y.Z PREV_VERSION=D.E.F
 	exit 1
 fi
+
+OPERATOR_IMAGE_DIGEST=$(echo $OPERATOR_IMAGE_INSPECT | base64 -d | jq -r '.[0].RepoDigests[] | select(. | contains("quay.io/tigera/operator"))')
 
 # This is the top-level directory of this script's artifacts.
 OUTPUT_DIR=build/_output/bundle

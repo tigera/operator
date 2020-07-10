@@ -169,6 +169,18 @@ func (nt HostPortsType) String() string {
 	return string(nt)
 }
 
+type BPFDataplaneMode string
+
+func (bpf BPFDataplaneMode) String() string {
+	return string(bpf)
+}
+
+const (
+	BPFDisabled             BPFDataplaneMode = "Disabled"
+	BPFEnabled              BPFDataplaneMode = "Enabled"
+	BPFEnabledKeepKubeProxy BPFDataplaneMode = "EnabledKeepKubeProxy"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
@@ -202,6 +214,13 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=None;Multus
 	MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`
+
+	// BPFDataplaneMode configures whether the BPF data plane is enabled anda in
+	// what form.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled;EnabledKeepKubeProxy
+	BPFDataplaneMode *BPFDataplaneMode `json:"bpfDataplaneMode,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

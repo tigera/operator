@@ -38,6 +38,69 @@ var (
 	notOpenshift = false
 )
 
+func defaultEnvVars(opt bool) []v1.EnvVar {
+	optional := opt
+	return []v1.EnvVar{
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+		{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+		{Name: "IP", Value: "autodetect"},
+		{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+		{Name: "IP6", Value: "none"},
+		{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
+		{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
+		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+		{Name: "FELIX_IPINIPMTU", Value: "1440"},
+		{Name: "FELIX_VXLANMTU", Value: "1410"},
+		{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
+		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+		{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+		{Name: "FELIX_HEALTHENABLED", Value: "true"},
+		{
+			Name: "NODENAME",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+		{
+			Name: "NAMESPACE",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+			},
+		},
+		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
+		{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
+		{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+		{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: render.TyphaTLSSecretName,
+				},
+				Key:      render.CommonName,
+				Optional: &optional,
+			},
+		}},
+		{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: render.TyphaTLSSecretName,
+				},
+				Key:      render.URISAN,
+				Optional: &optional,
+			},
+		}},
+		{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
+		{Name: "FELIX_BPFENABLED", Value: "false"},
+	}
+}
+
+func expectedEnvVars(optional bool, additional []v1.EnvVar) []v1.EnvVar {
+	def := defaultEnvVars(optional)
+	return append(def[:len(def):len(def)], additional...)
+}
+
 var _ = Describe("Node rendering tests", func() {
 	var defaultInstance *operator.Installation
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -132,60 +195,9 @@ var _ = Describe("Node rendering tests", func() {
 
 		optional := true
 		// Verify env
-		expectedNodeEnv := []v1.EnvVar{
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+		expectedNodeEnv := expectedEnvVars(optional, []v1.EnvVar{
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
-			{Name: "IP", Value: "autodetect"},
-			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
-			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
-			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
-			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "FELIX_HEALTHENABLED", Value: "true"},
-			{
-				Name: "NODENAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-			{
-				Name: "NAMESPACE",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
-				},
-			},
-			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
-			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
-		}
+		})
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
@@ -295,59 +307,8 @@ var _ = Describe("Node rendering tests", func() {
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		optional := true
-		expectedNodeEnv := []v1.EnvVar{
-			// Default envvars.
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+		expectedNodeEnv := expectedEnvVars(optional, []v1.EnvVar{
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
-			{Name: "IP", Value: "autodetect"},
-			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
-			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
-			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
-			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "FELIX_HEALTHENABLED", Value: "true"},
-			{
-				Name: "NODENAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-			{
-				Name: "NAMESPACE",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
-				},
-			},
-			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
-			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
 			// Tigera-specific envvars
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -358,8 +319,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
-		}
+		})
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
@@ -422,63 +382,11 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
 
 		optional := true
-		expectedNodeEnv := []v1.EnvVar{
-			// Default envvars.
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+		expectedNodeEnv := expectedEnvVars(optional, []v1.EnvVar{
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
-			{Name: "IP", Value: "autodetect"},
-			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
-			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
-			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
-			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "FELIX_HEALTHENABLED", Value: "true"},
-			{
-				Name: "NODENAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-			{
-				Name: "NAMESPACE",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
-				},
-			},
-			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
-			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
-		}
+		})
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
@@ -510,59 +418,8 @@ var _ = Describe("Node rendering tests", func() {
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
 
 		optional := true
-		expectedNodeEnv := []v1.EnvVar{
-			// Default envvars.
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+		expectedNodeEnv := expectedEnvVars(optional, []v1.EnvVar{
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
-			{Name: "IP", Value: "autodetect"},
-			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
-			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
-			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
-			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "FELIX_HEALTHENABLED", Value: "true"},
-			{
-				Name: "NODENAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-			{
-				Name: "NAMESPACE",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
-				},
-			},
-			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
-			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
 			// Tigera-specific envvars
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -575,10 +432,9 @@ var _ = Describe("Node rendering tests", func() {
 
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
-		}
+		})
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
@@ -1059,6 +915,49 @@ var _ = Describe("Node rendering tests", func() {
 			}
 		}
 		Expect(passed).To(Equal(true))
+	})
+
+	Context("with BPF enabled", func() {
+		It("should override k8s endpoints", func() {
+			component := render.Node(defaultInstance, operator.ProviderNone,
+				render.NetworkConfig{
+					CNI:        render.CNICalico,
+					BPFEnabled: true,
+					K8sHost:    "k8shost",
+					K8sPort:    1234,
+				},
+				nil, typhaNodeTLS, nil, false)
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			ds := dsResource.(*apps.DaemonSet)
+
+			// FIXME update gomega to include ContainElements
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "k8shost"},
+			))
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "1234"},
+			))
+
+			var cni v1.Container
+
+			for _, c := range ds.Spec.Template.Spec.InitContainers {
+				if c.Name == "install-cni" {
+					cni = c
+					break
+				}
+			}
+			Expect(cni).NotTo(BeNil())
+
+			Expect(cni.Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "k8shost"},
+			))
+			Expect(cni.Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "1234"},
+			))
+		})
 	})
 })
 

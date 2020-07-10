@@ -506,6 +506,26 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
 
+	if netConf.BPFEnabled {
+		var err error
+		netConf.K8sHost, netConf.K8sPort, err = utils.GetK8sEndpoint(r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	kubeProxyState, err := utils.GetKubeProxyState(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// If Disabling BPF mode and reenable kube-proxy asap.
+	if kubeProxyState == utils.KubeProxyDisabled && !netConf.BPFEnabled {
+		if err := utils.KubeProxyEnable(r.client); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
@@ -705,6 +725,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// If enabling BPF disable kube-proxy as the last thing to keep services
+	// working as long as possible at least for host-networked pods.
+	if kubeProxyState == utils.KubeProxyRuns && netConf.BPFEnabled && !netConf.BPFKeepKubeProxy {
+		if err := utils.KubeProxyDisable(r.client); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
@@ -717,6 +745,15 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	// If CalicoNetwork is specified, then use Calico networking.
 	if install.Spec.CalicoNetwork != nil {
 		config.CNI = render.CNICalico
+		if install.Spec.CalicoNetwork.BPFDataplaneMode != nil {
+			switch *install.Spec.CalicoNetwork.BPFDataplaneMode {
+			case operator.BPFEnabled:
+				config.BPFEnabled = true
+			case operator.BPFEnabledKeepKubeProxy:
+				config.BPFEnabled = true
+				config.BPFKeepKubeProxy = true
+			}
+		}
 	}
 
 	// Set other provider-specific settings.

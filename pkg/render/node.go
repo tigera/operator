@@ -653,6 +653,13 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
+	if c.netConfig.BPFEnabled {
+		envVars = append(envVars, []v1.EnvVar{
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.netConfig.K8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: strconv.Itoa(c.netConfig.K8sPort)},
+		}...)
+	}
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -963,6 +970,17 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
 	}
+
+	if c.netConfig.BPFEnabled {
+		nodeEnv = append(nodeEnv, []v1.EnvVar{
+			{Name: "FELIX_BPFENABLED", Value: "true"},
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.netConfig.K8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: strconv.Itoa(c.netConfig.K8sPort)},
+		}...)
+	} else {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "false"})
+	}
+
 	return nodeEnv
 }
 

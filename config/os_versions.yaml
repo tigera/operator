@@ -4,7 +4,7 @@ components:
   calico/node:
     version: v3.12.2
   calico/cni:
-    version: v3.12.2
+    version: release-v3.12
   calico/kube-controllers:
     version: v3.12.2
   flexvol:

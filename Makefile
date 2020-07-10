@@ -80,7 +80,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.43
+GO_BUILD_VER?=v0.44
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
@@ -450,8 +450,7 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 #               no previous version, use 0.0.0
 .PHONY: gen-csv
 gen-csv: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) get-digest
-	@echo Operator image digest is $(OPERATOR_IMAGE_DIGEST)
-	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_DIGEST="$(OPERATOR_IMAGE_DIGEST)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
+	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
 	$(CONTAINERIZED) hack/gen-csv/csv.sh
 
 .PHONY: prepull-image
@@ -478,7 +477,7 @@ prepull-image:
 .PHONY: get-digest
 get-digest: prepull-image
 	@echo Getting operator image digest...
-	$(eval OPERATOR_IMAGE_DIGEST=$(shell sh -c "docker image inspect quay.io/tigera/operator:v$(VERSION) | jq -r '.[0].RepoDigests[] | select(. | contains(\"quay.io/tigera/operator\"))' "))
+	$(eval OPERATOR_IMAGE_INSPECT=$(shell sh -c "docker image inspect quay.io/tigera/operator:v$(VERSION) | base64 -w 0"))
 
 ## Generate a CSV bundle zip file containing all CSVs and a package manifest.
 # E.g. make gen-bundle

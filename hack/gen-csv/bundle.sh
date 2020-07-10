@@ -82,5 +82,5 @@ EOF
 # Finally, zip up the bundle.
 cwd=$(pwd)
 pushd .
-cd ${CSV_DIR} && zip -FS -r ${cwd}/build/_output/bundle/bundle.zip .
+cd ${CSV_DIR} && zip -r ${cwd}/build/_output/bundle/bundle.zip .
 popd

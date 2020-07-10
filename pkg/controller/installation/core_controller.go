@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -392,6 +393,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	ctx := context.Background()
 
+	// Get the installation object if it exists so that we can save the original
+	// status before we merge/fill that object with other values.
+	instance := &operator.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil && apierrors.IsNotFound(err) {
+		reqLogger.Info("Installation config not found")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
+	}
+	status := instance.Status
+
 	// Query for the installation object.
 	instance, err := GetInstallation(ctx, r.client, r.autoDetectedProvider)
 	if err != nil {
@@ -420,6 +431,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	if err = r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// A status is needed at this point for operator scorecard tests.
+	// status.variant is written later but for some tests the reconciliation
+	// does not get to that point.
+	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
+		instance.Status = operator.InstallationStatus{}
+		if err = r.client.Status().Update(ctx, instance); err != nil {
+			r.SetDegraded("Failed to write default status", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.

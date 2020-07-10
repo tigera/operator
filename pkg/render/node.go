@@ -51,8 +51,24 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, aci *operator.AmazonCloudIntegration, migrate bool) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, amazonCloudInt: aci, migrationNeeded: migrate}
+func Node(cr *operator.Installation,
+	p operator.Provider,
+	nc NetworkConfig,
+	bt map[string]string,
+	tnTLS *TyphaNodeTLS,
+	aci *operator.AmazonCloudIntegration,
+	migrate bool,
+	bpf BPFConfig,
+) Component {
+	return &nodeComponent{cr: cr,
+		provider:        p,
+		netConfig:       nc,
+		birdTemplates:   bt,
+		typhaNodeTLS:    tnTLS,
+		amazonCloudInt:  aci,
+		migrationNeeded: migrate,
+		bpfConfig:       bpf,
+	}
 }
 
 type nodeComponent struct {
@@ -63,6 +79,7 @@ type nodeComponent struct {
 	typhaNodeTLS    *TyphaNodeTLS
 	amazonCloudInt  *operator.AmazonCloudIntegration
 	migrationNeeded bool
+	bpfConfig       BPFConfig
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -653,10 +670,10 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
-	if c.netConfig.BPFEnabled {
+	if c.bpfConfig.BPFEnabled {
 		envVars = append(envVars, []v1.EnvVar{
-			{Name: "KUBERNETES_SERVICE_HOST", Value: c.netConfig.K8sHost},
-			{Name: "KUBERNETES_SERVICE_PORT", Value: strconv.Itoa(c.netConfig.K8sPort)},
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.bpfConfig.K8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: strconv.Itoa(c.bpfConfig.K8sPort)},
 		}...)
 	}
 
@@ -971,13 +988,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		})
 	}
 
-	if c.netConfig.BPFEnabled {
+	if c.bpfConfig.BPFEnabled {
 		nodeEnv = append(nodeEnv, []v1.EnvVar{
 			{Name: "FELIX_BPFENABLED", Value: "true"},
-			{Name: "KUBERNETES_SERVICE_HOST", Value: c.netConfig.K8sHost},
-			{Name: "KUBERNETES_SERVICE_PORT", Value: strconv.Itoa(c.netConfig.K8sPort)},
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.bpfConfig.K8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: strconv.Itoa(c.bpfConfig.K8sPort)},
 		}...)
-		if c.netConfig.BPFDSR {
+		if c.bpfConfig.BPFDSR {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFEXTERNALSERVICEMODE", Value: "DSR"})
 		}
 	} else {

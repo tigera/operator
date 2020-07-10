@@ -529,12 +529,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
 
-	if netConf.BPFEnabled {
-		var err error
-		netConf.K8sHost, netConf.K8sPort, err = r.getInClusterK8s()
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	// N.B. We collect bpf related values here since (a) it may need k8s client
+	// and (b) it may return an error and we would not be able to propagate the
+	// error from deepr inside the render package.
+	bpfConfig, err := render.GenerateBPFConfig(instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	// XXX If we did this in pkg/render, it would create a circular dependency.
+	bpfConfig.K8sHost, bpfConfig.K8sPort, err = r.getInClusterK8s()
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// Query for pull secrets in operator namespace
@@ -638,6 +643,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		netConf,
 		aci,
 		needNsMigration,
+		bpfConfig,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -748,15 +754,6 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	// If CalicoNetwork is specified, then use Calico networking.
 	if install.Spec.CalicoNetwork != nil {
 		config.CNI = render.CNICalico
-		if install.Spec.CalicoNetwork.BPFDataplaneMode != nil {
-			switch *install.Spec.CalicoNetwork.BPFDataplaneMode {
-			case operator.BPFEnabled:
-				config.BPFEnabled = true
-			case operator.BPFEnabledDSR:
-				config.BPFEnabled = true
-				config.BPFDSR = true
-			}
-		}
 	}
 
 	// Set other provider-specific settings.
@@ -869,7 +866,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	return cm, nil
 }
 
-func (r *ReconcileInstallation) getInClusterK8s() (string, int, error) {
+func (_ *ReconcileInstallation) getInClusterK8s() (string, int, error) {
 	// If set, the override trumps everything
 	if host, port, err := utils.GetK8sEndpointOverride(); err == nil {
 		portnum, err := strconv.Atoi(port)

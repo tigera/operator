@@ -308,11 +308,6 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(MultiInterfaceMode)
 		**out = **in
 	}
-	if in.BPFDataplaneMode != nil {
-		in, out := &in.BPFDataplaneMode, &out.BPFDataplaneMode
-		*out = new(BPFDataplaneMode)
-		**out = **in
-	}
 	return
 }
 
@@ -595,6 +590,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 				(*in).DeepCopyInto(*out)
 			}
 		}
+	}
+	if in.BPFDataplaneMode != nil {
+		in, out := &in.BPFDataplaneMode, &out.BPFDataplaneMode
+		*out = new(BPFDataplaneMode)
+		**out = **in
 	}
 	return
 }

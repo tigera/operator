@@ -95,6 +95,13 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
+
+	// BPFDataplaneMode configures whether the BPF data plane is enabled anda in
+	// what form.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled;EnabledDSR
+	BPFDataplaneMode *BPFDataplaneMode `json:"bpfDataplaneMode,omitempty"`
 }
 
 // ComponentName CRD enum
@@ -214,13 +221,6 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=None;Multus
 	MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`
-
-	// BPFDataplaneMode configures whether the BPF data plane is enabled anda in
-	// what form.
-	// Default: Disabled
-	// +optional
-	// +kubebuilder:validation:Enum=Disabled;Enabled;EnabledDSR
-	BPFDataplaneMode *BPFDataplaneMode `json:"bpfDataplaneMode,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

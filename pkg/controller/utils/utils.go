@@ -275,7 +275,6 @@ func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 	return instance, nil
 }
 
-// GetK8sEndpointOverride returns an ip:port override for the KUBERNETES_SERVICE_HOST/PORT
 func GetK8sEndpointOverride() (string, string, error) {
 	host := os.Getenv("TIGERA_OPERATOR_OVERRIDE_K8S_HOST")
 	port := os.Getenv("TIGERA_OPERATOR_OVERRIDE_K8S_PORT")

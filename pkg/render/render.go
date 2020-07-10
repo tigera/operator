@@ -71,6 +71,7 @@ func Calico(
 	nc NetworkConfig,
 	aci *operator.AmazonCloudIntegration,
 	up bool,
+	bpfConfig BPFConfig,
 ) (Renderer, error) {
 
 	tcms := []*corev1.ConfigMap{}
@@ -146,6 +147,7 @@ func Calico(
 		networkConfig:               nc,
 		amazonCloudInt:              aci,
 		upgrade:                     up,
+		bpfConfig:                   bpfConfig,
 	}, nil
 }
 
@@ -219,6 +221,7 @@ type calicoRenderer struct {
 	networkConfig               NetworkConfig
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
+	bpfConfig                   BPFConfig
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -228,7 +231,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.provider, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Node(r.installation, r.provider, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.bpfConfig))
 	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret))
 	return components
 }

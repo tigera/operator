@@ -591,6 +591,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 			}
 		}
 	}
+	if in.BPFDataplaneMode != nil {
+		in, out := &in.BPFDataplaneMode, &out.BPFDataplaneMode
+		*out = new(BPFDataplaneMode)
+		**out = **in
+	}
 	return
 }
 

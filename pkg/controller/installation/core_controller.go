@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -528,6 +529,19 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Convert specified and detected settings into render configuration.
 	netConf := GenerateRenderConfig(instance)
 
+	// N.B. We collect bpf related values here since (a) it may need k8s client
+	// and (b) it may return an error and we would not be able to propagate the
+	// error from deepr inside the render package.
+	bpfConfig, err := render.GenerateBPFConfig(instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	// XXX If we did this in pkg/render, it would create a circular dependency.
+	bpfConfig.K8sHost, bpfConfig.K8sPort, err = r.getInClusterK8s()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
@@ -629,6 +643,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		netConf,
 		aci,
 		needNsMigration,
+		bpfConfig,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -849,6 +864,21 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	}
 
 	return cm, nil
+}
+
+func (_ *ReconcileInstallation) getInClusterK8s() (string, int, error) {
+	// If set, the override trumps everything
+	if host, port, err := utils.GetK8sEndpointOverride(); err == nil {
+		portnum, err := strconv.Atoi(port)
+		// If the override is set, but is bad, return error as we do not know
+		// whether it is correct to fall back to other methods.
+		return host, portnum, err
+	}
+
+	// TODO k8s distro/provider specific methods of obtaining configuration if
+	// override is not specified should be placed here
+
+	return "", 0, fmt.Errorf("no in cluster KUBERNETES_SERVICE_HOST/PORT configuration")
 }
 
 func getBirdTemplates(client client.Client) (map[string]string, error) {

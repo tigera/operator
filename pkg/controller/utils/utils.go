@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -272,4 +273,15 @@ func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 	}
 
 	return instance, nil
+}
+
+func GetK8sEndpointOverride() (string, string, error) {
+	host := os.Getenv("TIGERA_OPERATOR_OVERRIDE_K8S_HOST")
+	port := os.Getenv("TIGERA_OPERATOR_OVERRIDE_K8S_PORT")
+
+	if host == "" || port == "" {
+		return "", "", fmt.Errorf("k8s host and/or port override env vars empty")
+	}
+
+	return host, port, nil
 }

@@ -95,6 +95,13 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
+
+	// BPFDataplaneMode configures whether the BPF data plane is enabled anda in
+	// what form.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled;EnabledDSR
+	BPFDataplaneMode *BPFDataplaneMode `json:"bpfDataplaneMode,omitempty"`
 }
 
 // ComponentName CRD enum
@@ -168,6 +175,18 @@ const (
 func (nt HostPortsType) String() string {
 	return string(nt)
 }
+
+type BPFDataplaneMode string
+
+func (bpf BPFDataplaneMode) String() string {
+	return string(bpf)
+}
+
+const (
+	BPFDisabled   BPFDataplaneMode = "Disabled"
+	BPFEnabled    BPFDataplaneMode = "Enabled"
+	BPFEnabledDSR BPFDataplaneMode = "EnabledDSR"
+)
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {

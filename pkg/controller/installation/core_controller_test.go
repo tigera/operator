@@ -71,6 +71,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	var twentySix int32 = 26
 	var hpEnabled operator.HostPortsType = operator.HostPortsEnabled
 	var hpDisabled operator.HostPortsType = operator.HostPortsDisabled
+
 	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
 		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
 			if expectSuccess {

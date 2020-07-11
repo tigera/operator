@@ -28,3 +28,26 @@ type NetworkConfig struct {
 	NodenameFileOptional bool
 	IPPools              []operatorv1.IPPool
 }
+
+type BPFConfig struct {
+	BPFEnabled bool
+	BPFDSR     bool
+	K8sHost    string
+	K8sPort    int
+}
+
+func GenerateBPFConfig(install *operatorv1.Installation) (BPFConfig, error) {
+	var cfg BPFConfig
+
+	if install.Spec.BPFDataplaneMode != nil {
+		switch *install.Spec.BPFDataplaneMode {
+		case operatorv1.BPFEnabledDSR:
+			cfg.BPFDSR = true
+			fallthrough
+		case operatorv1.BPFEnabled:
+			cfg.BPFEnabled = true
+		}
+	}
+
+	return cfg, nil
+}

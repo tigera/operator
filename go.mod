@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/cloudflare/cfssl v1.4.1
+	github.com/containernetworking/cni v0.8.0
 	github.com/elastic/cloud-on-k8s v0.0.0-20200204083752-bcb7468838a8
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
@@ -15,6 +16,7 @@ require (
 	github.com/openshift/library-go v0.0.0-20190924092619-a8c1174d4ee7
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/pkg/errors v0.8.1
+	github.com/projectcalico/cni-plugin v3.8.9+incompatible
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	github.com/tigera/api v0.0.0-20200311151854-a6d8502444cd

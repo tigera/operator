@@ -166,7 +166,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(ctx, r.client, r.provider)
+	network, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())

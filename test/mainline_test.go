@@ -17,6 +17,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -125,6 +126,38 @@ var _ = Describe("Mainline component function tests", func() {
 
 		It("Should install resources for a CRD", func() {
 			stopChan := installResourceCRD(c, mgr)
+
+			instance := &operator.Installation{
+				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			}
+			By("Checking that the installation status is set correctly")
+			Eventually(func() error {
+				err := GetResource(c, instance)
+				if err != nil {
+					return err
+				}
+				if instance.Status.Variant != operator.Calico {
+					return fmt.Errorf("installation status not Calico yet")
+				}
+				return nil
+			}, 60*time.Second).Should(BeNil())
+
+			By("Checking that the installation status does not change")
+			Consistently(func() error {
+				err := GetResource(c, instance)
+				if err != nil {
+					return err
+				}
+				if reflect.DeepEqual(instance.Status, operator.InstallationStatus{}) {
+					return fmt.Errorf("installation status is empty")
+				}
+				if instance.Status.Variant != operator.Calico {
+					return fmt.Errorf("installation status was %v, expected: %v", instance.Status, operator.Calico)
+				}
+				return nil
+			}, 30*time.Second, 50*time.Millisecond).Should(BeNil())
+
 			defer close(stopChan)
 		})
 	})
@@ -236,6 +269,7 @@ func setupManager() (client.Client, manager.Manager) {
 	err = controller.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: true,
+		AmazonCRDExists:     true,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), mgr

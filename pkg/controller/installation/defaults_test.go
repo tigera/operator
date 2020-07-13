@@ -162,7 +162,7 @@ var _ = Describe("Defaulting logic tests", func() {
 
 	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",
 		func(i *operator.Installation, on *osconfigv1.Network, kadmc *v1.ConfigMap) {
-			Expect(mergeAndFillDefaults(i, on, kadmc)).To(BeNil())
+			Expect(mergeAndFillDefaults(i, on, kadmc, nil)).To(BeNil())
 
 			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
 				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork)

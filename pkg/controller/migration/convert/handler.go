@@ -7,6 +7,4 @@ package convert
 // - mark incompatible clusters by returning a IncompatibleClusterError
 // - carry user config forward by setting the Installation resource according to their installed config
 // - mark variables as 'checked' so that the final env var catch-all doesn't throw an 'unexpected env var' error
-type handler interface {
-	Handle(*components, *Installation) error
-}
+type handler func(*components, *Installation) error

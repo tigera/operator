@@ -150,7 +150,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.SetDegraded("Installation not found", err, reqLogger)

@@ -28,8 +28,9 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/controller/migration/parser"
+	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -217,8 +218,15 @@ type ReconcileInstallation struct {
 	amazonCRDExists      bool
 }
 
+func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operator.Installation{}
+	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
+	return instance, err
+}
+
 // GetInstallation returns the default installation instance with defaults populated.
-func GetInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
+func getInstallation(ctx context.Context, client client.Client, provider operator.Provider, c migration.Converter) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
@@ -255,7 +263,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 		}
 	}
 
-	ei, err := parser.GetExistingInstallation(ctx, client)
+	ei, err := c.Convert()
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +277,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 
 // mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *v1.ConfigMap, ei *parser.Installation) error {
+func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *v1.ConfigMap, ei *operator.Installation) error {
 	if ei != nil {
 		// Merge in Existing configuration
 		if err := updateInstallationForExistingInstall(i, ei); err != nil {
@@ -460,8 +468,10 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	status := instance.Status
 
+	p := convert.Converter{r.client}
+
 	// Query for the installation object.
-	instance, err := GetInstallation(ctx, r.client, r.autoDetectedProvider)
+	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider, p)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -471,7 +481,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		if errors.As(err, &parser.ErrIncompatibleCluster{}) {
+		if errors.As(err, &convert.ErrIncompatibleCluster{}) {
 			r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -903,7 +913,7 @@ func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, clien
 	return (infra.Status.Platform == "AWS"), nil
 }
 
-func updateInstallationForExistingInstall(i *operator.Installation, ei *parser.Installation) error {
+func updateInstallationForExistingInstall(i *operator.Installation, ei *operatorv1.Installation) error {
 	if i.Spec.CalicoNetwork == nil {
 		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}

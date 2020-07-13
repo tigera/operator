@@ -247,6 +247,7 @@ sub-image-%:
 clean:
 	rm -rf build/_output
 	rm -rf build/init/bin
+	rm -rf hack/bin
 	rm -rf .go-pkg-cache
 	rm -f *-release-notes.md
 	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
@@ -417,9 +418,18 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-## Generating code after API changes. Requires operator-sdk v0.18.1.
-gen-files:
-	operator-sdk generate crds
+OPERATOR_SDK_VERSION=v0.18.1
+hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
+	mkdir -p hack/bin
+	curl --fail -L -o hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) \
+		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
+	chmod +x hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+
+## Generating code after API changes.
+gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
+	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
+	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml

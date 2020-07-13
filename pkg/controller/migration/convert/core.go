@@ -1,4 +1,4 @@
-package parser
+package convert
 
 func handleCore(c *components, install *Installation) error {
 	dsType, err := c.node.getEnv(ctx, c.client, "calico-node", "DATASTORE_TYPE")

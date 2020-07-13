@@ -1,4 +1,4 @@
-package parser
+package convert
 
 // handlers are grouped by feature or product and check various
 // fields on Calico components to construct a Installation resource that

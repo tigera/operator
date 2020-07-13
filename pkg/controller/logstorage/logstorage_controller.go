@@ -307,7 +307,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.OnCRFound()
 	}
 
-	installationCR, err := installation.GetInstallation(context.Background(), r.client, r.provider)
+	installationCR, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())

@@ -1,7 +1,7 @@
-// Package parser reads config from existing Calico installations that are not
+// package convert reads config from existing Calico installations that are not
 // managed by Operator, and generates Operator Config that can be used
 // to configure a similar cluster.
-package parser
+package convert
 
 import (
 	"context"
@@ -104,13 +104,17 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 	return comps, err
 }
 
+type Converter struct {
+	Client client.Client
+}
+
 // GetExistingInstallation creates an Installation resource from an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
-func GetExistingInstallation(ctx context.Context, client client.Client) (*Installation, error) {
+func (p Converter) Convert() (*operatorv1.Installation, error) {
 	config := &Installation{}
 
-	comps, err := getComponents(ctx, client)
+	comps, err := getComponents(ctx, p.Client)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			log.Print("no existing install found: ", err)
@@ -132,5 +136,5 @@ func GetExistingInstallation(ctx context.Context, client client.Client) (*Instal
 		return nil, ErrIncompatibleCluster{fmt.Sprintf("unexpected env var: %s", uncheckedVars)}
 	}
 
-	return config, nil
+	return &config.Installation, nil
 }

@@ -1,4 +1,4 @@
-package parser_test
+package convert_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestParser(t *testing.T) {
+func TestConverter(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Parser Suite")
+	RunSpecs(t, "Converter Suite")
 }

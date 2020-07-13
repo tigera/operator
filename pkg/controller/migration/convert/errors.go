@@ -1,4 +1,4 @@
-package parser
+package convert
 
 // ErrIncompatibleCluster indicates that a config option was detected in the existing install
 // which Operator does not support.

@@ -396,6 +396,10 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
     }%s
   ]
 }`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)

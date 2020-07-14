@@ -6,10 +6,10 @@ func handleCore(c *components, install *Installation) error {
 		return err
 	}
 	if dsType != nil && *dsType != "kubernetes" {
-		return ErrIncompatibleCluster{"only CALICO_NETWORKING_BACKEND=bird is supported at this time"}
+		return ErrIncompatibleCluster{"only DATASTORE_TYPE=kubernetes is supported at this time"}
 	}
 
-	// mark other variables as ignored
+	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")
 	c.node.ignoreEnv("calico-node", "NODENAME")

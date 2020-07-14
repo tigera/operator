@@ -65,7 +65,7 @@ func handleNetwork(c *components, install *Installation) error {
 	if am != nil {
 		tam, err := getAutoDetection(*am)
 		if err != nil {
-			return err
+			return ErrIncompatibleCluster{"error parsing IP_AUTODETECTION_METHOD: " + err.Error()}
 		}
 		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &tam
 	}
@@ -77,11 +77,6 @@ func handleNetwork(c *components, install *Installation) error {
 	} else {
 		hp := v1.HostPortsDisabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
-	}
-
-	// CNI bandwidth plugin
-	if _, ok := c.pluginCNIConfig["bandwidth"]; ok {
-		return ErrIncompatibleCluster{"operator does not yet support bandwidth"}
 	}
 
 	if c.calicoCNIConfig == nil {
@@ -96,14 +91,11 @@ func handleNetwork(c *components, install *Installation) error {
 		if err != nil {
 			return err
 		}
-		if mtu == nil {
-			return fmt.Errorf("couldn't detect MTU")
+		if mtu != nil {
+			i := intstr.FromString(*mtu)
+			iv := int32(i.IntValue())
+			install.Spec.CalicoNetwork.MTU = &iv
 		}
-
-		// TODO: clean this up
-		i := intstr.FromString(*mtu)
-		iv := int32(i.IntValue())
-		install.Spec.CalicoNetwork.MTU = &iv
 	} else {
 		// user must have hardcoded their CNI instead of using our cni templating engine.
 		// use the hardcoded value.
@@ -113,7 +105,7 @@ func handleNetwork(c *components, install *Installation) error {
 
 	// CNI IPAM pools
 	if len(c.calicoCNIConfig.IPAM.IPv4Pools) != 0 {
-		return ErrIncompatibleCluster{"cni ipam ranges not suported"}
+		return ErrIncompatibleCluster{"specification of IPPools via cni config is not supported."}
 	}
 
 	// Other CNI features
@@ -161,5 +153,5 @@ func getAutoDetection(method string) (operatorv1.NodeAddressAutodetection, error
 		return operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}, nil
 	}
 
-	return operatorv1.NodeAddressAutodetection{}, errors.New("unrecognized option for AUTODETECTION_METHOD_SKIP_INTERFACE: " + method)
+	return operatorv1.NodeAddressAutodetection{}, errors.New("unrecognized method: " + method)
 }

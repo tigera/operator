@@ -71,6 +71,7 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
 	objs = append(objs, c.intrusionDetectionServiceAccount(),
+		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
@@ -115,6 +116,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 					},
 				},
 			}},
+			ServiceAccountName: IntrusionDetectionInstallerJobName,
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*v1.PodTemplateSpec)
 
@@ -189,6 +191,16 @@ func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *v1.Ser
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
+			Namespace: IntrusionDetectionNamespace,
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *v1.ServiceAccount {
+	return &v1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IntrusionDetectionInstallerJobName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 	}
@@ -597,7 +609,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 			},
 			{
 				Kind:      "ServiceAccount",
-				Name:      "default",
+				Name:      IntrusionDetectionInstallerJobName,
 				Namespace: IntrusionDetectionNamespace,
 			},
 		},

@@ -242,11 +242,13 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secretsToRuntimeObjects(es.elasticsearchSecrets...)...)
 		}
 
+		toCreate = append(toCreate, es.elasticsearchServiceAccount())
 		toCreate = append(toCreate, es.clusterConfig.ConfigMap())
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
 		// Kibana CRs
 		toCreate = append(toCreate, createNamespace(KibanaNamespace, false))
+		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.pullSecrets) > 0 {
 			toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(KibanaNamespace, es.pullSecrets...)...)...)
@@ -328,6 +330,15 @@ func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,
 			ExternalName: fmt.Sprintf("%s.%s.%s", GuardianServiceName, GuardianNamespace, es.clusterDNS),
+		},
+	}
+}
+
+func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-elasticsearch",
+			Namespace: ElasticsearchNamespace,
 		},
 	}
 }
@@ -542,7 +553,8 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 					},
 				},
 			},
-			NodeSets: es.nodeSets(),
+			NodeSets:           es.nodeSets(),
+			ServiceAccountName: "tigera-elasticsearch",
 		},
 	}
 }
@@ -901,6 +913,15 @@ func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.P
 	return psp
 }
 
+func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-kibana",
+			Namespace: KibanaNamespace,
+		},
+	}
+}
+
 func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
@@ -914,8 +935,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			},
 		},
 		Spec: kbv1.KibanaSpec{
-			Version: components.ComponentEckKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Version:            components.ComponentEckKibana.Version,
+			Image:              components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			ServiceAccountName: "tigera-kibana",
 			Config: &cmnv1.Config{
 				Data: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -1189,7 +1211,7 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "default",
+				Name:      "tigera-elasticsearch",
 				Namespace: ElasticsearchNamespace,
 			},
 		},
@@ -1241,7 +1263,7 @@ func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleB
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "default",
+				Name:      "tigera-kibana",
 				Namespace: KibanaNamespace,
 			},
 		},

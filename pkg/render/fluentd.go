@@ -138,18 +138,25 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.eksConfig != nil {
+		if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
+			objs = append(objs,
+				c.eksLogForwarderClusterRole(),
+				c.eksLogForwarderClusterRoleBinding(),
+				c.eksLogForwarderPodSecurityPolicy())
+		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
 			c.eksLogForwarderDeployment())
 	}
 	if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
 		objs = append(objs,
-			c.eksLogForwarderClusterRole(),
-			c.eksLogForwarderClusterRoleBinding(),
-			c.eksLogForwarderPodSecurityPolicy())
+			c.fluentdClusterRole(),
+			c.fluentdClusterRoleBinding(),
+			c.fluentdPodSecurityPolicy())
 	}
 
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(LogCollectorNamespace, c.esSecrets...)...)...)
+	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.daemonset())
 
 	return objs, nil
@@ -228,6 +235,13 @@ func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 	return splunkSecrets
 }
 
+func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: LogCollectorNamespace},
+	}
+}
+
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
@@ -258,6 +272,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			Containers:                    []corev1.Container{c.container()},
 			Volumes:                       c.volumes(),
+			ServiceAccountName:            "fluentd-node",
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -530,6 +545,64 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	return volumes
 }
 
+func (c *fluentdComponent) fluentdPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := basePodSecurityPolicy()
+	psp.GetObjectMeta().SetName("tigera-fluentd")
+	psp.Spec.RequiredDropCapabilities = nil
+	psp.Spec.AllowedCapabilities = []corev1.Capability{
+		corev1.Capability("CAP_CHOWN"),
+	}
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
+		{
+			PathPrefix: "/var/log/calico",
+			ReadOnly:   false,
+		},
+	}
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
+}
+
+func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-fluetnd",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-fluentd",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "fluentd-node",
+				Namespace: LogCollectorNamespace,
+			},
+		},
+	}
+}
+
+func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-fluentd",
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Allow access to the pod security policy in case this is enforced on the cluster
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"tigera-fluentd"},
+			},
+		},
+	}
+}
+
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -655,21 +728,24 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 	}
 }
 
+// TODO: Need to figure out what the write policy is here. This was not done as a part of the PSP work.
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := basePodSecurityPolicy()
-	psp.GetObjectMeta().SetName(eksLogForwarderName)
-	psp.Spec.RequiredDropCapabilities = nil
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("CAP_CHOWN"),
-	}
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
-		{
-			PathPrefix: "/var/log/calico",
-			ReadOnly:   false,
-		},
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	/*
+		psp.GetObjectMeta().SetName(eksLogForwarderName)
+		psp.Spec.RequiredDropCapabilities = nil
+		psp.Spec.AllowedCapabilities = []corev1.Capability{
+			corev1.Capability("CAP_CHOWN"),
+		}
+		psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+		psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
+			{
+				PathPrefix: "/var/log/calico",
+				ReadOnly:   false,
+			},
+		}
+		psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	*/
 	return psp
 }
 
@@ -687,7 +763,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "default",
+				Name:      eksLogForwarderName,
 				Namespace: LogCollectorNamespace,
 			},
 		},

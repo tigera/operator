@@ -222,10 +222,15 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 		return nil, err
 	}
 
-	// TODO: take user-specified config into account!!!
-	instance, err = c.Convert()
+	// grab existing install
+	i, err := c.Convert()
 	if err != nil {
 		return nil, err
+	}
+
+	if i != nil {
+		// TODO: verify that user-specified values are compatible with detected values.
+		i.DeepCopyInto(instance)
 	}
 
 	// Determine the provider in use by combining any auto-detected value with any value

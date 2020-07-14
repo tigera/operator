@@ -49,7 +49,9 @@ if [[ -z "${PREV_VERSION}" ]]; then
 	exit 1
 fi
 
-OPERATOR_IMAGE_DIGEST=$(echo $OPERATOR_IMAGE_INSPECT | base64 -d | jq -r '.[0].RepoDigests[] | select(. | contains("quay.io/tigera/operator"))')
+OPERATOR_IMAGE_INSPECT=$(echo $OPERATOR_IMAGE_INSPECT | base64 -d)
+
+OPERATOR_IMAGE_DIGEST=$(echo $OPERATOR_IMAGE_INSPECT | jq -r '.[0].RepoDigests[] | select(. | contains("quay.io/tigera/operator"))')
 
 # This is the top-level directory of this script's artifacts.
 OUTPUT_DIR=build/_output/bundle
@@ -90,7 +92,7 @@ OPERATOR_IMAGE=quay.io/tigera/operator:v${VERSION}
 
 # Set the operator image container image and creation timestamp annotations.
 yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE}
-TIMESTAMP=$(docker image inspect ${OPERATOR_IMAGE} | jq -r .[0].Created)
+TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
 yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
 
 # Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.

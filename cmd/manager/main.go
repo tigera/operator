@@ -93,6 +93,8 @@ func main() {
 		fmt.Println(components.GetReference(components.ComponentGuardian, "", ""))
 		fmt.Println(components.GetReference(components.ComponentFluentd, "", ""))
 		fmt.Println(components.GetReference(components.ComponentEsCurator, "", ""))
+		fmt.Println(components.GetReference(components.ComponentKibana, "", ""))
+		fmt.Println(components.GetReference(components.ComponentElasticsearch, "", ""))
 		os.Exit(0)
 	}
 

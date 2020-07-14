@@ -43,11 +43,6 @@ func GenerateRenderConfig(install *operatorv1.Installation) NetworkConfig {
 		networkConfig.NodenameFileOptional = true
 	}
 
-	// If CalicoNetwork is specified, then use Calico networking.
-	if install.Spec.CalicoNetwork == nil {
-		return networkConfig
-	}
-
 	networkConfig.MTU = 0
 	if install.Spec.CalicoNetwork.MTU != nil {
 		networkConfig.MTU = *install.Spec.CalicoNetwork.MTU

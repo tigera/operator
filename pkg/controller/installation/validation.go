@@ -28,6 +28,21 @@ import (
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
+	if instance.Spec.CNI == nil {
+		return fmt.Errorf("CNI must be defined.")
+	}
+
+	valid := false
+	for _, t := range operatorv1.CNIPluginTypes {
+		if instance.Spec.CNI.Type == t {
+			valid = true
+		}
+	}
+	if !valid {
+		return fmt.Errorf("%s is invalid for cni.type, should be one of %s",
+			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
+	}
+
 	if instance.Spec.CalicoNetwork != nil && instance.Spec.CNI != nil && instance.Spec.CNI.Type != operatorv1.PluginCalico {
 		return fmt.Errorf("CNI.Type must be Calico if CalicoNetwork is defined.")
 	}
@@ -152,25 +167,19 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	case operatorv1.PluginCalico:
 	case operatorv1.PluginGKE:
 		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderEKS:
-			fallthrough
-		case operatorv1.ProviderAKS:
+		case operatorv1.ProviderEKS, operatorv1.ProviderAKS:
 			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 		}
 	case operatorv1.PluginAmazonVPC:
 		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderGKE:
-			fallthrough
-		case operatorv1.ProviderAKS:
+		case operatorv1.ProviderGKE, operatorv1.ProviderAKS:
 			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 		}
 	case operatorv1.PluginAzureVNET:
 		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderGKE:
-			fallthrough
-		case operatorv1.ProviderEKS:
+		case operatorv1.ProviderGKE, operatorv1.ProviderEKS:
 			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 		}

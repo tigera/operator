@@ -127,48 +127,52 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("AzureVNET", operator.PluginAzureVNET),
 		)
 	})
-	//Describe("validate ExternallyManagedNetwork", func() {
-	//	BeforeEach(func() {
-	//		instance.Spec.CalicoNetwork = nil
-	//		instance.Spec.ExternallyManagedNetwork = &operator.ExternallyManagerNetworkSpec{}
-	//	})
-	//	It("should not allow empty ExternallyManagedNetwork", func() {
-	//		instance.Spec.ExternallyManagedNetwork = &operator.ExternallyManagerNetworkSpec{}
-	//		err := validateCustomResource(instance)
-	//		Expect(err).To(HaveOccurred())
-	//	})
-	//	DescribeTable("test all plugins",
-	//		func(plugin operator.ExternalPluginType) {
-	//			instance.Spec.ExternallyManagedNetwork.Plugin = plugin
-	//			err := validateCustomResource(instance)
-	//			Expect(err).NotTo(HaveOccurred())
-	//		},
+	Describe("validate non-calico CNI plugin Type", func() {
+		BeforeEach(func() {
+			instance.Spec.CalicoNetwork = nil
+			instance.Spec.CNI = &operator.CNISpec{}
+		})
+		It("should not allow empty CNI", func() {
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+		It("should not allow invalid CNI Type", func() {
+			instance.Spec.CNI.Type = "bad"
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+		DescribeTable("test all plugins",
+			func(plugin operator.CNIPluginType) {
+				instance.Spec.CNI.Type = plugin
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			},
 
-	//		Entry("GKE", operator.PluginGKE),
-	//		Entry("AmazonVPC", operator.PluginAmazonVPC),
-	//		Entry("AzureVNET", operator.PluginAzureVNET),
-	//	)
-	//})
-	//Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
-	//	BeforeEach(func() {
-	//		instance.Spec.CalicoNetwork = nil
-	//		instance.Spec.ExternallyManagedNetwork = &operator.ExternallyManagerNetworkSpec{}
-	//	})
-	//	DescribeTable("test all plugins",
-	//		func(kubeProvider operator.Provider, plugin operator.ExternalPluginType, success bool) {
-	//			instance.Spec.KubernetesProvider = kubeProvider
-	//			instance.Spec.ExternallyManagedNetwork.Plugin = plugin
-	//			err := validateCustomResource(instance)
-	//			if success {
-	//				Expect(err).NotTo(HaveOccurred())
-	//			} else {
-	//				Expect(err).To(HaveOccurred())
-	//			}
-	//		},
+			Entry("GKE", operator.PluginGKE),
+			Entry("AmazonVPC", operator.PluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET),
+		)
+	})
+	Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
+		BeforeEach(func() {
+			instance.Spec.CalicoNetwork = nil
+			instance.Spec.CNI = &operator.CNISpec{}
+		})
+		DescribeTable("test all plugins",
+			func(kubeProvider operator.Provider, plugin operator.CNIPluginType, success bool) {
+				instance.Spec.KubernetesProvider = kubeProvider
+				instance.Spec.CNI.Type = plugin
+				err := validateCustomResource(instance)
+				if success {
+					Expect(err).NotTo(HaveOccurred())
+				} else {
+					Expect(err).To(HaveOccurred())
+				}
+			},
 
-	//		Entry("GKE plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginGKE, false),
-	//		Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, true),
-	//		Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, false),
-	//	)
-	//})
+			Entry("GKE plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginGKE, false),
+			Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, true),
+			Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, false),
+		)
+	})
 })

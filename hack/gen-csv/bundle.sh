@@ -47,6 +47,9 @@ done
 #
 # If we only have 1 CSV, we skip this updating.
 NUM_VERSIONS=${#versions[@]}
+
+LATEST_VERSION=${versions[0]}
+
 if [[ $NUM_VERSIONS -gt 1 ]]; then
     # bash arrays are 0-indexed. Get the 2nd last index.
     # If we have the following versions in the array: v1.6.2, v1.3.2, v1.3.1,
@@ -66,14 +69,13 @@ if [[ $NUM_VERSIONS -gt 1 ]]; then
         echo "Setting 'spec.replaces' in ${versions[$i]} to $prev_version"
         yq write -i ${this_csv} spec.replaces tigera-operator.v${prev_version}
     done
-    exit 0
 fi
 
 # Create a new package manifest file in the bundle directory, specifying the latest CSV.
 # We assume that we have a single channel named 'stable'.
 cat > ${BUNDLE_DIR}/tigera-operator.package.yaml <<EOF
 channels:
-- currentCSV: tigera-operator.v$LATEST
+- currentCSV: tigera-operator.v${LATEST_VERSION}
   name: stable
 defaultChannel: stable
 packageName: tigera-operator

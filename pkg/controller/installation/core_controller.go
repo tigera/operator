@@ -306,6 +306,18 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if instance.Spec.CNI == nil {
+		instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginCalico}
+		switch instance.Spec.KubernetesProvider {
+		case operator.ProviderAKS:
+			instance.Spec.CNI.Type = operator.PluginAzureVNET
+		case operator.ProviderEKS:
+			instance.Spec.CNI.Type = operator.PluginAmazonVPC
+		case operator.ProviderGKE:
+			instance.Spec.CNI.Type = operator.PluginGKE
+		}
+	}
+
 	var v4pool, v6pool *operator.IPPool
 
 	// If Calico networking is in use, then default some fields.
@@ -319,8 +331,8 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork)
-		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
+		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
@@ -504,7 +516,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Convert specified and detected settings into render configuration.
-	netConf := GenerateRenderConfig(instance)
+	netConf := render.GenerateRenderConfig(instance)
 
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
@@ -708,24 +720,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
-}
-
-// GenerateRenderConfig converts installation into render config.
-func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
-	config := render.NetworkConfig{CNI: render.CNINone}
-
-	// If CalicoNetwork is specified, then use Calico networking.
-	if install.Spec.CalicoNetwork != nil {
-		config.CNI = render.CNICalico
-	}
-
-	// Set other provider-specific settings.
-	switch install.Spec.KubernetesProvider {
-	case operator.ProviderDockerEE:
-		config.NodenameFileOptional = true
-	}
-
-	return config
 }
 
 func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {

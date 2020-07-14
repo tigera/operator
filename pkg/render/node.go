@@ -51,13 +51,26 @@ var (
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cr *operator.Installation, p operator.Provider, nc NetworkConfig, bt map[string]string, tnTLS *TyphaNodeTLS, aci *operator.AmazonCloudIntegration, migrate bool) Component {
-	return &nodeComponent{cr: cr, provider: p, netConfig: nc, birdTemplates: bt, typhaNodeTLS: tnTLS, amazonCloudInt: aci, migrationNeeded: migrate}
+func Node(
+	cr *operator.Installation,
+	nc NetworkConfig,
+	bt map[string]string,
+	tnTLS *TyphaNodeTLS,
+	aci *operator.AmazonCloudIntegration,
+	migrate bool,
+) Component {
+	return &nodeComponent{
+		cr:              cr,
+		netConfig:       nc,
+		birdTemplates:   bt,
+		typhaNodeTLS:    tnTLS,
+		amazonCloudInt:  aci,
+		migrationNeeded: migrate,
+	}
 }
 
 type nodeComponent struct {
 	cr              *operator.Installation
-	provider        operator.Provider
 	netConfig       NetworkConfig
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
@@ -88,7 +101,7 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objsToCreate = append(objsToCreate, btcm)
 	}
 
-	if c.provider == operator.ProviderDockerEE {
+	if c.cr.Spec.KubernetesProvider == operator.ProviderDockerEE {
 		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
@@ -302,34 +315,34 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
-	if c.netConfig.CNI == CNINone {
+	if c.netConfig.CNIPlugin != operator.PluginCalico {
 		// If calico cni is not being used, then no cni configmap is needed.
 		return nil
 	}
 
 	// Determine MTU to use for veth interfaces.
 	var mtu int32 = 1410
-	if c.cr.Spec.CalicoNetwork.MTU != nil {
-		mtu = *c.cr.Spec.CalicoNetwork.MTU
+	if c.netConfig.MTU != 0 {
+		mtu = c.netConfig.MTU
 	}
 
 	var assign_ipv4 string
 	var assign_ipv6 string
 
-	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork); v4pool != nil {
+	if v4pool := GetIPv4Pool(c.netConfig.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
 
-	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork); v6pool != nil {
+	if v6pool := GetIPv6Pool(c.netConfig.IPPools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"
 	}
 
 	var portmap string = ""
-	if c.cr.Spec.CalicoNetwork.HostPorts != nil && *c.cr.Spec.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
+	if c.netConfig.HostPorts {
 		portmap = `,
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
@@ -439,6 +452,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	a := c.cr.GetObjectMeta().GetAnnotations()
 	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
 		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = val
+
 	}
 
 	initContainers := []v1.Container{}
@@ -477,7 +491,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		},
 	}
 
-	if c.netConfig.CNI != CNINone {
+	if c.netConfig.CNIPlugin == operator.PluginCalico {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
@@ -500,7 +514,7 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 // cniDirectories returns the binary and network config directories for the configured platform.
 func (c *nodeComponent) cniDirectories() (string, string) {
 	var cniBinDir, cniNetDir string
-	switch c.provider {
+	switch c.cr.Spec.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		cniNetDir = "/var/run/multus/cni/net.d"
 		cniBinDir = "/var/lib/cni/bin"
@@ -548,7 +562,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
-	if c.netConfig.CNI != CNINone {
+	if c.netConfig.CNIPlugin == operator.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
 		cniNetDir, cniBinDir := c.cniDirectories()
 		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
@@ -629,7 +643,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
-	if c.netConfig.CNI == CNINone {
+	if c.netConfig.CNIPlugin != operator.PluginCalico {
 		return []v1.EnvVar{}
 	}
 
@@ -726,7 +740,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	// Set the clusterType.
 	clusterType := "k8s,operator"
 
-	switch c.provider {
+	switch c.cr.Spec.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"
 	case operator.ProviderEKS:
@@ -737,7 +751,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",aks"
 	}
 
-	if c.netConfig.CNI == CNICalico {
+	if c.netConfig.CNIPlugin == operator.PluginCalico {
 		clusterType = clusterType + ",bgp"
 	}
 
@@ -789,7 +803,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// Set networking-specific configuration.
-	if c.netConfig.CNI == CNINone {
+	if c.netConfig.CNIPlugin != operator.PluginCalico {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
@@ -815,8 +829,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 
-		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork)
-		v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork)
+		v4pool := GetIPv4Pool(c.netConfig.IPPools)
+		v6pool := GetIPv6Pool(c.netConfig.IPPools)
 
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
@@ -930,7 +944,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// Configure provider specific environment variables here.
-	switch c.provider {
+	switch c.cr.Spec.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
@@ -938,16 +952,19 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
-	case operator.ProviderEKS:
+	}
+
+	switch c.netConfig.CNIPlugin {
+	case operator.PluginAmazonVPC:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
-	case operator.ProviderGKE:
+	case operator.PluginGKE:
 		// The GKE CNI plugin uses its own interface prefix.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
 		// The GKE CNI plugin has its own iptables rules. Defer to them after ours.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
-	case operator.ProviderAKS:
+	case operator.PluginAzureVNET:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
@@ -978,11 +995,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	}
 
 	// if not using calico networking, don't check bird status (or bgp metrics server).
-	if c.netConfig.CNI != CNICalico {
+	if c.netConfig.CNIPlugin != operator.PluginCalico {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 
-	if c.provider == operator.ProviderOpenShift {
+	if c.cr.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		// For Openshift, we need special configuration since our default port is already in use.
 		// Additionally, since the node readiness probe doesn't yet support
 		// custom ports, we need to disable felix readiness for now.
@@ -1063,12 +1080,12 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 }
 
 // GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
-func GetIPv4Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
-	for ii, pool := range cn.IPPools {
+func GetIPv4Pool(pools []operator.IPPool) *operator.IPPool {
+	for ii, pool := range pools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil {
 			if addr.To4() != nil {
-				return &cn.IPPools[ii]
+				return &pools[ii]
 			}
 		}
 	}
@@ -1077,12 +1094,12 @@ func GetIPv4Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
 }
 
 // GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
-func GetIPv6Pool(cn *operator.CalicoNetworkSpec) *operator.IPPool {
-	for ii, pool := range cn.IPPools {
+func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
+	for ii, pool := range pools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil {
 			if addr.To4() == nil {
-				return &cn.IPPools[ii]
+				return &pools[ii]
 			}
 		}
 	}

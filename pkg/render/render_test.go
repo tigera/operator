@@ -34,6 +34,7 @@ import (
 
 var _ = Describe("Rendering tests", func() {
 	var instance *operator.Installation
+	var networkConfig render.NetworkConfig
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -57,6 +58,9 @@ var _ = Describe("Rendering tests", func() {
 				},
 			},
 		}
+		networkConfig = render.NetworkConfig{
+			CNIPlugin: operator.PluginCalico,
+		}
 
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(logf.ZapLoggerTo(logWriter, true))
@@ -79,7 +83,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(instance, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
+		c, err := render.Calico(instance, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, networkConfig, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(5 + 4 + 2 + 6 + 4 + 1 + 1))
 	})
@@ -92,7 +96,7 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(instance, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
+		c, err := render.Calico(instance, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, networkConfig, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(((5 + 4 + 2 + 6 + 4 + 1) + 1 + 1)))
 	})
@@ -107,7 +111,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := render.Calico(instance, &operator.ManagementCluster{}, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, render.NetworkConfig{CNI: render.CNICalico}, nil, false)
+		c, err := render.Calico(instance, &operator.ManagementCluster{}, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, networkConfig, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {

@@ -33,12 +33,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v4pool).ToNot(BeNil())
 		Expect(v4pool.CIDR).To(Equal("192.168.0.0/16"))
 		Expect(v4pool.BlockSize).NotTo(BeNil())
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).To(BeNil())
 	})
 
@@ -48,12 +48,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		fillDefaults(instance)
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v4pool).ToNot(BeNil())
 		Expect(v4pool.CIDR).To(Equal("192.168.0.0/16"))
 		Expect(v4pool.BlockSize).NotTo(BeNil())
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).To(BeNil())
 	})
 
@@ -87,6 +87,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						Name: "pullSecret2",
 					},
 				},
+				CNI: &operator.CNISpec{Type: operator.PluginCalico},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools: []operator.IPPool{
 						{
@@ -150,10 +151,10 @@ var _ = Describe("Defaulting logic tests", func() {
 
 		fillDefaults(instance)
 
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v4pool).To(BeNil())
 
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).NotTo(BeNil())
 		Expect(v6pool.CIDR).To(Equal("fd00::0/64"))
 		Expect(v6pool.BlockSize).NotTo(BeNil())
@@ -165,13 +166,13 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(mergeAndFillDefaults(i, on, kadmc)).To(BeNil())
 
 			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
-				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork)
+				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork.IPPools)
 				Expect(v4pool).ToNot(BeNil())
 				Expect(v4pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", v4pool)
 				Expect(v4pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", v4pool)
 				Expect(v4pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", v4pool)
 				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", v4pool)
-				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork)
+				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork.IPPools)
 				Expect(v6pool).To(BeNil())
 			}
 		},

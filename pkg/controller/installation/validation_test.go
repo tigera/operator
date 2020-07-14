@@ -16,6 +16,7 @@ package installation
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 
@@ -34,6 +35,7 @@ var _ = Describe("Installation validation tests", func() {
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				},
 				Variant: operator.Calico,
+				CNI:     &operator.CNISpec{Type: operator.PluginCalico},
 			},
 		}
 	})
@@ -113,4 +115,60 @@ var _ = Describe("Installation validation tests", func() {
 		err = validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
+
+	Describe("should not allow plugin not-Calico and CalicoNetwork", func() {
+		DescribeTable("non-calico plugins", func(t operator.CNIPluginType) {
+			instance.Spec.CNI.Type = t
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		},
+			Entry("GKE", operator.PluginGKE),
+			Entry("AmazonVPC", operator.PluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET),
+		)
+	})
+	//Describe("validate ExternallyManagedNetwork", func() {
+	//	BeforeEach(func() {
+	//		instance.Spec.CalicoNetwork = nil
+	//		instance.Spec.ExternallyManagedNetwork = &operator.ExternallyManagerNetworkSpec{}
+	//	})
+	//	It("should not allow empty ExternallyManagedNetwork", func() {
+	//		instance.Spec.ExternallyManagedNetwork = &operator.ExternallyManagerNetworkSpec{}
+	//		err := validateCustomResource(instance)
+	//		Expect(err).To(HaveOccurred())
+	//	})
+	//	DescribeTable("test all plugins",
+	//		func(plugin operator.ExternalPluginType) {
+	//			instance.Spec.ExternallyManagedNetwork.Plugin = plugin
+	//			err := validateCustomResource(instance)
+	//			Expect(err).NotTo(HaveOccurred())
+	//		},
+
+	//		Entry("GKE", operator.PluginGKE),
+	//		Entry("AmazonVPC", operator.PluginAmazonVPC),
+	//		Entry("AzureVNET", operator.PluginAzureVNET),
+	//	)
+	//})
+	//Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
+	//	BeforeEach(func() {
+	//		instance.Spec.CalicoNetwork = nil
+	//		instance.Spec.ExternallyManagedNetwork = &operator.ExternallyManagerNetworkSpec{}
+	//	})
+	//	DescribeTable("test all plugins",
+	//		func(kubeProvider operator.Provider, plugin operator.ExternalPluginType, success bool) {
+	//			instance.Spec.KubernetesProvider = kubeProvider
+	//			instance.Spec.ExternallyManagedNetwork.Plugin = plugin
+	//			err := validateCustomResource(instance)
+	//			if success {
+	//				Expect(err).NotTo(HaveOccurred())
+	//			} else {
+	//				Expect(err).To(HaveOccurred())
+	//			}
+	//		},
+
+	//		Entry("GKE plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginGKE, false),
+	//		Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, true),
+	//		Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, false),
+	//	)
+	//})
 })

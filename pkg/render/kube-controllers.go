@@ -319,7 +319,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					NodeSelector: map[string]string{
-						"beta.kubernetes.io/os": "linux",
+						"kubernetes.io/os": "linux",
 					},
 					Tolerations:        tolerations,
 					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,

@@ -30,7 +30,12 @@ import (
 
 var replicas int32 = 1
 
-func KubeControllers(cr *operator.Installation, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, managerInternalSecret *v1.Secret) *kubeControllersComponent {
+func KubeControllers(
+	cr *operator.Installation,
+	managementCluster *operator.ManagementCluster,
+	managementClusterConnection *operator.ManagementClusterConnection,
+	managerInternalSecret *v1.Secret,
+) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
 		managementCluster:           managementCluster,

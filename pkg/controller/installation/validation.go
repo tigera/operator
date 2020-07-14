@@ -28,14 +28,32 @@ import (
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
+	if instance.Spec.CNI == nil {
+		return fmt.Errorf("CNI must be defined.")
+	}
+
+	valid := false
+	for _, t := range operatorv1.CNIPluginTypes {
+		if instance.Spec.CNI.Type == t {
+			valid = true
+		}
+	}
+	if !valid {
+		return fmt.Errorf("%s is invalid for cni.type, should be one of %s",
+			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
+	}
+
+	if instance.Spec.CalicoNetwork != nil && instance.Spec.CNI != nil && instance.Spec.CNI.Type != operatorv1.PluginCalico {
+		return fmt.Errorf("CNI.Type must be Calico if CalicoNetwork is defined.")
+	}
 	if instance.Spec.CalicoNetwork != nil {
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
 			return fmt.Errorf("Only one IPPool per version is allowed.")
 		}
 
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork)
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork)
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
 		if nPools == 2 && (v4pool == nil || v6pool == nil) {
 			return fmt.Errorf("Only one IPPool per version is allowed.")
@@ -143,6 +161,31 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return err
 			}
 		}
+	}
+
+	switch instance.Spec.CNI.Type {
+	case operatorv1.PluginCalico:
+	case operatorv1.PluginGKE:
+		switch instance.Spec.KubernetesProvider {
+		case operatorv1.ProviderEKS, operatorv1.ProviderAKS:
+			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
+				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+	case operatorv1.PluginAmazonVPC:
+		switch instance.Spec.KubernetesProvider {
+		case operatorv1.ProviderGKE, operatorv1.ProviderAKS:
+			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
+				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+	case operatorv1.PluginAzureVNET:
+		switch instance.Spec.KubernetesProvider {
+		case operatorv1.ProviderGKE, operatorv1.ProviderEKS:
+			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
+				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+	default:
+		return fmt.Errorf("Invalid CNI.type %s, it should be one of %s",
+			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
 	}
 
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {

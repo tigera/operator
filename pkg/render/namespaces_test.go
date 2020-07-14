@@ -19,23 +19,12 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Namespace rendering tests", func() {
-	var instance *operator.Installation
-	BeforeEach(func() {
-		// Initialize a default instance to use. Each test can override this to its
-		// desired configuration.
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{},
-		}
-
-	})
-
 	It("should render a namespace", func() {
-		component := render.Namespaces(instance, notOpenshift, nil)
+		component := render.Namespaces(notOpenshift, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
@@ -46,7 +35,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for openshift", func() {
-		component := render.Namespaces(instance, openshift, nil)
+		component := render.Namespaces(openshift, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
 		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")

@@ -739,6 +739,10 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	// If CalicoNetwork is specified, then use Calico networking.
 	if install.Spec.CalicoNetwork != nil {
 		config.CNI = render.CNICalico
+
+		if *install.Spec.CalicoNetwork.ContainerIpForwarding == operator.ContainerIpForwardingEnabled {
+			config.ContainerIpForwarding = true
+		}
 	}
 
 	// Set other provider-specific settings.

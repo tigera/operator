@@ -407,7 +407,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		It("Configures OIDC for Kibana when the OIDC configuration is provided", func() {
 			component := render.LogStorage(
 				logStorage,
-				installation, nil, nil,
+				installation, nil, nil, nil, nil,
 				esConfig,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},

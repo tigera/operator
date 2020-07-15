@@ -21,6 +21,8 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/tigera/operator/pkg/oidc"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	apps "k8s.io/api/apps/v1"
@@ -60,6 +62,7 @@ const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
+	oidcSecretName                     = "tigera-oidc-credentials"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -169,6 +172,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
 	}
 
+	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{
+		ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+	}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %v", err)
+	}
+
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
 	// the utils folder where the other watch logic is.
 	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
@@ -192,7 +201,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.ECKWebhookSecretName} {
+		render.ECKWebhookSecretName, oidcSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
 		}
@@ -458,6 +467,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
 	}
 
+	authConfig, err := r.getAuthentication(ctx)
+	if err != nil {
+		log.Error(err, err.Error())
+		r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	component := render.LogStorage(
 		ls,
 		installationCR,
@@ -476,6 +492,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		kbService,
 		r.localDNS,
 		applyTrial,
+		authConfig,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status, utils.NoUserAddedMetadata); err != nil {
@@ -514,6 +531,65 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// getAuthentication
+func (r *ReconcileLogStorage) getAuthentication(ctx context.Context) (interface{}, error) {
+	var authenticationConfig interface{}
+
+	authenticationCR := &operatorv1.Authentication{}
+	if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, authenticationCR); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("An error occurred retrieving the Authentication", err.Error())
+			return nil, err
+		}
+	} else {
+		if authenticationCR.Spec.Method == operatorv1.AuthMethodOIDC {
+			if authenticationCR.Spec.OIDC == nil {
+				return nil, fmt.Errorf("authentication method is OIDC but no OIDC configuration was provided")
+			}
+
+			wellKnownConfig, err := oidc.LookupWellKnownConfig(authenticationCR.Spec.OIDC.IssuerURL)
+			if err != nil {
+				return nil, err
+			}
+
+			oidcSecret := &corev1.Secret{}
+			err = r.client.Get(ctx, types.NamespacedName{Name: oidcSecretName, Namespace: render.OperatorNamespace()}, oidcSecret)
+			if err != nil {
+				return nil, err
+			}
+
+			_, clientIDExists := oidcSecret.Data["clientID"]
+			_, clientSecretExists := oidcSecret.Data["clientSecret"]
+
+			if !clientIDExists || !clientSecretExists {
+				return nil, fmt.Errorf("%s must contain both the clientID and the clientSecret", oidcSecretName)
+			}
+
+			// If no scopes were requests specifically request all of them
+			requestedScopes := authenticationCR.Spec.OIDC.RequestedScopes
+			if requestedScopes == nil || len(requestedScopes) == 0 {
+				requestedScopes = wellKnownConfig.ScopesSupported
+			}
+
+			authenticationConfig = render.OIDCAuthentication{
+				ClientID:              string(oidcSecret.Data["clientID"]),
+				Secret:                string(oidcSecret.Data["clientSecret"]),
+				IssuerURL:             authenticationCR.Spec.OIDC.IssuerURL,
+				RequestedScopes:       authenticationCR.Spec.OIDC.RequestedScopes,
+				SiteURL:               authenticationCR.Spec.ManagerDomain,
+				UsernameClaim:         authenticationCR.Spec.OIDC.UsernameClaim,
+				GroupsClaim:           authenticationCR.Spec.OIDC.GroupsClaim,
+				AuthorizationEndpoint: wellKnownConfig.AuthorizationEndpoint,
+				TokenEndpoint:         wellKnownConfig.TokenEndpoint,
+				JWKSetURI:             wellKnownConfig.JWKSetURI,
+			}
+		}
+	}
+
+	return authenticationConfig, nil
 }
 
 func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*corev1.Secret, error) {

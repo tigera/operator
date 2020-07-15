@@ -361,6 +361,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
           "assign_ipv4" : "%s",
           "assign_ipv6" : "%s"
       },
+      "container_settings": {
+          "allow_ip_forwarding": %v
+      },
       "policy": {
           "type": "k8s"
       },
@@ -369,7 +372,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       }
     }%s
   ]
-}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, portmap)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, c.netConfig.ContainerIpForwarding, portmap)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

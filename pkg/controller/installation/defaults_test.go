@@ -40,6 +40,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).To(BeNil())
+		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -261,5 +262,27 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 			}, "/foo/bar/",
 		),
+	)
+	It("should default an empty CNI to Calico with no KubernetesProvider", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{},
+			},
+		}
+		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
+	})
+	table.DescribeTable("should default CNI type based on KubernetesProvider for hosted providers",
+		func(provider operator.Provider, plugin operator.CNIPluginType) {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{KubernetesProvider: provider},
+			}
+			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
+		},
+
+		table.Entry("EKS provider defaults to AmazonVPC plugin", operator.ProviderEKS, operator.PluginAmazonVPC),
+		table.Entry("GKE provider defaults to GKE plugin", operator.ProviderGKE, operator.PluginGKE),
+		table.Entry("AKS provider defaults to AzureVNET plugin", operator.ProviderAKS, operator.PluginAzureVNET),
 	)
 })

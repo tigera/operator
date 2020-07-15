@@ -306,7 +306,7 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	if instance.Spec.CNI == nil {
+	if instance.Spec.CNI == nil || instance.Spec.CNI.Type == "" {
 		instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginCalico}
 		switch instance.Spec.KubernetesProvider {
 		case operator.ProviderAKS:

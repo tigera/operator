@@ -15,7 +15,6 @@
 package render
 
 import (
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	schedv1beta "k8s.io/api/scheduling/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +24,7 @@ const (
 	PriorityClassName = "calico-priority"
 )
 
-func PriorityClassDefinitions(cr *operator.Installation) Component {
+func PriorityClassDefinitions() Component {
 	return &priorityClassComponent{}
 }
 

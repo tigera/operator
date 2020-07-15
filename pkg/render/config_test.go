@@ -23,89 +23,95 @@ import (
 )
 
 var _ = Describe("Render Config tests", func() {
-	Describe("test GenerateRenderConfig", func() {
-		var install *operator.Installation
-		var expectedCfg render.NetworkConfig
-		BeforeEach(func() {
-			hpe := operator.HostPortsEnabled
-			install = &operator.Installation{
-				Spec: operator.InstallationSpec{
-					CNI: &operator.CNISpec{
-						Type: operator.PluginCalico,
-					},
-					CalicoNetwork: &operator.CalicoNetworkSpec{
-						IPPools: []operator.IPPool{
-							operator.IPPool{
-								CIDR:          "10.0.0.0/24",
-								Encapsulation: "IPIP",
-								NATOutgoing:   "Enabled",
-							},
+	var install *operator.Installation
+	var expectedCfg render.NetworkConfig
+	BeforeEach(func() {
+		hpe := operator.HostPortsEnabled
+		install = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						operator.IPPool{
+							CIDR:          "10.0.0.0/24",
+							Encapsulation: "IPIP",
+							NATOutgoing:   "Enabled",
 						},
-						HostPorts: &hpe,
 					},
+					HostPorts: &hpe,
 				},
-			}
-			expectedCfg = render.NetworkConfig{
-				CNIPlugin:            operator.PluginCalico,
-				NodenameFileOptional: false,
-				IPPools: []operator.IPPool{
-					operator.IPPool{
-						CIDR:          "10.0.0.0/24",
-						Encapsulation: "IPIP",
-						NATOutgoing:   "Enabled",
-					},
-				},
-				MTU:       0,
-				HostPorts: true,
-			}
-		})
-		It("standard conversion", func() {
-			nc := render.GenerateRenderConfig(install)
-			Expect(nc).To(Equal(expectedCfg))
-		})
-		It("mtu specified", func() {
-			mtu := int32(1234)
-			install.Spec.CalicoNetwork.MTU = &mtu
-			nc := render.GenerateRenderConfig(install)
-			expectedCfg.MTU = 1234
-			Expect(nc).To(Equal(expectedCfg))
-		})
-		It("plugin specified", func() {
-			install.Spec.CNI.Type = operator.PluginGKE
-			install.Spec.CalicoNetwork = nil
-			nc := render.GenerateRenderConfig(install)
-			Expect(nc.CNIPlugin).To(Equal(operator.PluginGKE))
-			Expect(nc).To(Equal(render.NetworkConfig{
-				CNIPlugin:            operator.PluginGKE,
-				NodenameFileOptional: false,
-				MTU:                  0,
-				HostPorts:            false,
-			}))
-		})
-		It("convert DockerEE to NodeNameFileOptional", func() {
-			install.Spec.KubernetesProvider = operator.ProviderDockerEE
-			nc := render.GenerateRenderConfig(install)
-			// Only difference from standard conversion is NodenameFileOptional
-			expectedCfg.NodenameFileOptional = true
-			Expect(nc).To(Equal(expectedCfg))
-		})
-		It("IP pool specified", func() {
-			install.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			},
+		}
+		expectedCfg = render.NetworkConfig{
+			CNIPlugin:            operator.PluginCalico,
+			NodenameFileOptional: false,
+			IPPools: []operator.IPPool{
 				operator.IPPool{
-					CIDR:          "192.168.0.0/16",
-					Encapsulation: "VXLAN",
-					NATOutgoing:   "Disabled",
+					CIDR:          "10.0.0.0/24",
+					Encapsulation: "IPIP",
+					NATOutgoing:   "Enabled",
 				},
-			}
-			nc := render.GenerateRenderConfig(install)
-			expectedCfg.IPPools = []operator.IPPool{
-				operator.IPPool{
-					CIDR:          "192.168.0.0/16",
-					Encapsulation: "VXLAN",
-					NATOutgoing:   "Disabled",
-				},
-			}
-			Expect(nc).To(Equal(expectedCfg))
-		})
+			},
+			MTU:       0,
+			HostPorts: true,
+		}
+	})
+	It("standard conversion", func() {
+		nc := render.GenerateRenderConfig(install)
+		Expect(nc).To(Equal(expectedCfg))
+	})
+	It("no CalicoNetwork conversion", func() {
+		install.Spec.CalicoNetwork = nil
+		nc := render.GenerateRenderConfig(install)
+		Expect(nc).To(Equal(render.NetworkConfig{
+			CNIPlugin:            operator.PluginCalico,
+			NodenameFileOptional: false,
+		}))
+	})
+	It("mtu specified", func() {
+		mtu := int32(1234)
+		install.Spec.CalicoNetwork.MTU = &mtu
+		nc := render.GenerateRenderConfig(install)
+		expectedCfg.MTU = 1234
+		Expect(nc).To(Equal(expectedCfg))
+	})
+	It("plugin specified", func() {
+		install.Spec.CNI.Type = operator.PluginGKE
+		install.Spec.CalicoNetwork = nil
+		nc := render.GenerateRenderConfig(install)
+		Expect(nc.CNIPlugin).To(Equal(operator.PluginGKE))
+		Expect(nc).To(Equal(render.NetworkConfig{
+			CNIPlugin:            operator.PluginGKE,
+			NodenameFileOptional: false,
+			MTU:                  0,
+			HostPorts:            false,
+		}))
+	})
+	It("convert DockerEE to NodeNameFileOptional", func() {
+		install.Spec.KubernetesProvider = operator.ProviderDockerEE
+		nc := render.GenerateRenderConfig(install)
+		// Only difference from standard conversion is NodenameFileOptional
+		expectedCfg.NodenameFileOptional = true
+		Expect(nc).To(Equal(expectedCfg))
+	})
+	It("IP pool specified", func() {
+		install.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			operator.IPPool{
+				CIDR:          "192.168.0.0/16",
+				Encapsulation: "VXLAN",
+				NATOutgoing:   "Disabled",
+			},
+		}
+		nc := render.GenerateRenderConfig(install)
+		expectedCfg.IPPools = []operator.IPPool{
+			operator.IPPool{
+				CIDR:          "192.168.0.0/16",
+				Encapsulation: "VXLAN",
+				NATOutgoing:   "Disabled",
+			},
+		}
+		Expect(nc).To(Equal(expectedCfg))
 	})
 })

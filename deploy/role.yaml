@@ -153,7 +153,23 @@ rules:
       - hostnetwork
     verbs:
       - use
-      # Permissions below this point are required for TSEE only.
+  # Need these permissions for the calicoctl init container.
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - bgpconfigurations
+      - bgppeers
+      - felixconfigurations
+      - kubecontrollersconfigurations
+      - globalnetworkpolicies
+      - globalnetworksets
+      - hostendpoints
+      - ippools
+      - networkpolicies
+      - networksets
+    verbs:
+      - create
+  # Permissions below this point are required for TSEE only.
   - apiGroups:
       - apiregistration.k8s.io
     resources:

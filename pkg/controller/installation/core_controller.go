@@ -740,8 +740,10 @@ func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	if install.Spec.CalicoNetwork != nil {
 		config.CNI = render.CNICalico
 
-		if *install.Spec.CalicoNetwork.ContainerIpForwarding == operator.ContainerIpForwardingEnabled {
-			config.ContainerIpForwarding = true
+		if install.Spec.CalicoNetwork.ContainerIpForwarding != nil {
+			if *install.Spec.CalicoNetwork.ContainerIpForwarding == operator.ContainerIpForwardingEnabled {
+				config.ContainerIpForwarding = true
+			}
 		}
 	}
 

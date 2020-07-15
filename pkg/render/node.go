@@ -349,7 +349,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
           "assign_ipv6" : "%s"
       },
       "container_settings": {
-        "allow_ip_forwarding": %v
+          "allow_ip_forwarding": %v
       },
       "policy": {
           "type": "k8s"

@@ -570,7 +570,7 @@ func (r *ReconcileLogStorage) getAuthentication(ctx context.Context) (interface{
 
 			// If no scopes were requests specifically request all of them
 			requestedScopes := authenticationCR.Spec.OIDC.RequestedScopes
-			if len(requestedScopes) == 0 {
+			if requestedScopes == nil || len(requestedScopes) == 0 {
 				requestedScopes = wellKnownConfig.ScopesSupported
 			}
 

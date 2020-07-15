@@ -46,14 +46,12 @@ const (
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(
 	installation *operator.Installation,
-	netConf NetworkConfig,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
 ) Component {
 	return &typhaComponent{
 		installation:       installation,
-		netConfig:          netConf,
 		typhaNodeTLS:       tnTLS,
 		amazonCloudInt:     aci,
 		namespaceMigration: migrationNeeded,
@@ -62,7 +60,6 @@ func Typha(
 
 type typhaComponent struct {
 	installation       *operator.Installation
-	netConfig          NetworkConfig
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
@@ -393,7 +390,7 @@ func (c *typhaComponent) typhaVolumeMounts() []v1.VolumeMount {
 
 func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
 	return []v1.ContainerPort{
-		v1.ContainerPort{
+		{
 			ContainerPort: TyphaPort,
 			Name:          TyphaPortName,
 			Protocol:      corev1.ProtocolTCP,
@@ -463,7 +460,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		}},
 	}
 
-	switch c.netConfig.CNIPlugin {
+	switch c.installation.Spec.CNI.Type {
 	case operator.PluginAmazonVPC:
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 	case operator.PluginGKE:

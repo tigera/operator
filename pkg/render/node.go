@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -53,7 +54,6 @@ var (
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
 	cr *operator.Installation,
-	nc NetworkConfig,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
@@ -61,7 +61,6 @@ func Node(
 ) Component {
 	return &nodeComponent{
 		cr:              cr,
-		netConfig:       nc,
 		birdTemplates:   bt,
 		typhaNodeTLS:    tnTLS,
 		amazonCloudInt:  aci,
@@ -71,7 +70,6 @@ func Node(
 
 type nodeComponent struct {
 	cr              *operator.Installation
-	netConfig       NetworkConfig
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
 	amazonCloudInt  *operator.AmazonCloudIntegration
@@ -315,38 +313,52 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
-	if c.netConfig.CNIPlugin != operator.PluginCalico {
+	if c.cr.Spec.CNI.Type != operator.PluginCalico {
 		// If calico cni is not being used, then no cni configmap is needed.
 		return nil
 	}
 
 	// Determine MTU to use for veth interfaces.
 	var mtu int32 = 1410
-	if c.netConfig.MTU != 0 {
-		mtu = c.netConfig.MTU
+	if c.cr.Spec.CalicoNetwork.MTU != nil {
+		mtu = *c.cr.Spec.CalicoNetwork.MTU
 	}
 
+	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
-
-	if v4pool := GetIPv4Pool(c.netConfig.IPPools); v4pool != nil {
+	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
-
-	if v6pool := GetIPv6Pool(c.netConfig.IPPools); v6pool != nil {
+	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"
 	}
 
+	// Determine per-provider settings.
+	nodenameFileOptional := false
+	switch c.cr.Spec.KubernetesProvider {
+	case operatorv1.ProviderDockerEE:
+		nodenameFileOptional = true
+	}
+
+	// Pull out other settings.
+	ipForward := false
+	if c.cr.Spec.CalicoNetwork.ContainerIPForwarding != nil {
+		ipForward = (*c.cr.Spec.CalicoNetwork.ContainerIPForwarding == operator.ContainerIPForwardingEnabled)
+	}
+
+	// Determine portmap configuration to use.
 	var portmap string = ""
-	if c.netConfig.HostPorts {
+	if c.cr.Spec.CalicoNetwork.HostPorts != nil && *c.cr.Spec.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
 		portmap = `,
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
+	// Build the CNI configuration json.
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -372,7 +384,8 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       }
     }%s
   ]
-}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, c.netConfig.ContainerIPForwarding, portmap)
+}`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)
+
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -494,7 +507,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		},
 	}
 
-	if c.netConfig.CNIPlugin == operator.PluginCalico {
+	if c.cr.Spec.CNI.Type == operator.PluginCalico {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
@@ -565,7 +578,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
-	if c.netConfig.CNIPlugin == operator.PluginCalico {
+	if c.cr.Spec.CNI.Type == operator.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
 		cniNetDir, cniBinDir := c.cniDirectories()
 		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
@@ -646,7 +659,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
-	if c.netConfig.CNIPlugin != operator.PluginCalico {
+	if c.cr.Spec.CNI.Type != operator.PluginCalico {
 		return []v1.EnvVar{}
 	}
 
@@ -754,7 +767,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",aks"
 	}
 
-	if c.netConfig.CNIPlugin == operator.PluginCalico {
+	if c.cr.Spec.CNI.Type == operator.PluginCalico {
+		// TODO: This isn't right.
 		clusterType = clusterType + ",bgp"
 	}
 
@@ -783,6 +797,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
 		{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretCertName)},
 		{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretKeyName)},
+
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
 		{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
@@ -806,7 +821,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// Set networking-specific configuration.
-	if c.netConfig.CNIPlugin != operator.PluginCalico {
+	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+		// TODO: Casey: This isn't strictly correct (e.g., Calico CNI w/ host-local and cloud provider routes)
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
@@ -832,8 +848,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 
-		v4pool := GetIPv4Pool(c.netConfig.IPPools)
-		v6pool := GetIPv6Pool(c.netConfig.IPPools)
+		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools)
+		v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools)
 
 		// Env based on IPv4 auto-detection configuration.
 		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
@@ -957,7 +973,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 	}
 
-	switch c.netConfig.CNIPlugin {
+	switch c.cr.Spec.CNI.Type {
 	case operator.PluginAmazonVPC:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
@@ -997,8 +1013,9 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
-	// if not using calico networking, don't check bird status (or bgp metrics server).
-	if c.netConfig.CNIPlugin != operator.PluginCalico {
+	// If not using calico networking, don't check bird status (or bgp metrics server).
+	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+		// TODO: Casey: This isn't quite right either.
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 

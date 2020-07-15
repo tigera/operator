@@ -19,20 +19,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
 )
 
-func Namespaces(cr *operator.Installation, openshift bool, pullSecrets []*corev1.Secret) Component {
+func Namespaces(openshift bool, pullSecrets []*corev1.Secret) Component {
 	return &namespaceComponent{
-		cr:          cr,
 		openshift:   openshift,
 		pullSecrets: pullSecrets,
 	}
 }
 
 type namespaceComponent struct {
-	cr          *operator.Installation
 	openshift   bool
 	pullSecrets []*corev1.Secret
 }

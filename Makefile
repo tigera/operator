@@ -291,6 +291,7 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusters_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusterconnections_crd.yaml && \
 		./kubectl apply -f deploy/crds/operator.tigera.io_amazoncloudintegrations_crd.yaml && \
+		./kubectl apply -f deploy/crds/operator.tigera.io_authentications_crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 

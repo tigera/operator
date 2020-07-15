@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
-	"github.com/tigera/operator/pkg/controller/installation"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -1016,7 +1015,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render a proper 'allow_ip_forwarding' container setting in the cni config[TestThis]", func() {
 		cif := operator.ContainerIpForwardingEnabled
 		defaultInstance.Spec.CalicoNetwork.ContainerIpForwarding = &cif
-		component := render.Node(defaultInstance, operator.ProviderNone, installation.GenerateRenderConfig(defaultInstance), nil, typhaNodeTLS, nil, false)
+		component := render.Node(defaultInstance, render.GenerateRenderConfig(defaultInstance), nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 

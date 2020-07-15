@@ -80,7 +80,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.40
+GO_BUILD_VER?=v0.45
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
@@ -419,16 +419,16 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v0.18.1
+OPERATOR_SDK_VERSION=v0.18.2
 hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p hack/bin
 	curl --fail -L -o hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) \
 		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
 	chmod +x hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 
 ## Generating code after API changes.
 gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
-	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
 	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
 
@@ -443,6 +443,49 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
+
+## Generate a ClusterServiceVersion package.
+# E.g. make gen-csv VERSION=1.6.2 PREV_VERSION=0.0.0
+#
+# VERSION: the operator version to generate a CSV for.
+# PREV_VERSION: the operator version that this CSV will replace. If there is
+#               no previous version, use 0.0.0
+.PHONY: gen-csv
+gen-csv: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) get-digest
+	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
+	$(CONTAINERIZED) hack/gen-csv/csv.sh
+
+.PHONY: prepull-image
+prepull-image:
+	@echo Pulling operator image...
+	docker pull quay.io/tigera/operator:v$(VERSION)
+
+# Get the digest for the image. 'docker inspect' returns output like the example
+# below. RepoDigests may have more than one entry so we need to filter.
+# [
+#     {
+#         "Id": "sha256:34a1114040c03830da0a8d57f8d999deba26d8e31bda353aed201a375f68870b",
+#         "RepoTags": [
+#             "quay.io/tigera/operator:v1.3.1",
+#             "..."
+#         ],
+#         "RepoDigests": [
+#             "quay.io/tigera/operator@sha256:5e1d551b5a711592472f4a3cc4645698d5f826da4253f0d47cfa5d5b641a2e1a",
+#             "..."
+#         ],
+#         ...
+#     }
+# ]
+.PHONY: get-digest
+get-digest: prepull-image
+	@echo Getting operator image digest...
+	$(eval OPERATOR_IMAGE_INSPECT=$(shell sh -c "docker image inspect quay.io/tigera/operator:v$(VERSION) | base64 -w 0"))
+
+## Generate a CSV bundle zip file containing all CSVs and a package manifest.
+# E.g. make gen-bundle
+.PHONY: gen-bundle
+gen-bundle: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	$(CONTAINERIZED) hack/gen-csv/bundle.sh
 
 .PHONY: help
 ## Display this help text

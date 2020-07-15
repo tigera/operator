@@ -141,6 +141,14 @@ var (
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
 )
 
+// ContainerIPForwardingType specifies whether the CNI config for container ip forwarding is enabled.
+type ContainerIPForwardingType string
+
+const (
+	ContainerIPForwardingEnabled  ContainerIPForwardingType = "Enabled"
+	ContainerIPForwardingDisabled ContainerIPForwardingType = "Disabled"
+)
+
 // HostPortsType specifies if the HostPorts plugin enabled status.
 type HostPortsType string
 
@@ -206,6 +214,12 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=None;Multus
 	MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`
+
+	// ContainerIPForwarding configures whether ip forwarding will be enabled for containers in the CNI configuration.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

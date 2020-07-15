@@ -14,8 +14,7 @@ CSV_DIR=build/_output/bundle/olm-catalog/tigera-operator
 BUNDLE_DIR=deploy/olm-catalog/tigera-operator
 
 if [ ! -d "${CSV_DIR}" ]; then
-    echo "No CSVs found in ${CSV_DIR}"
-    exit 1
+    mkdir -p ${CSV_DIR}
 fi
 
 # Create the bundle directory if it doesn't already exist.
@@ -84,5 +83,5 @@ EOF
 # Finally, zip up the bundle.
 cwd=$(pwd)
 pushd .
-cd ${CSV_DIR} && zip -r ${cwd}/build/_output/bundle/bundle.zip .
+cd ${BUNDLE_DIR} && zip -r ${cwd}/build/_output/bundle/bundle.zip .
 popd

@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
+	"github.com/tigera/operator/pkg/controller/installation"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -98,6 +99,9 @@ var _ = Describe("Node rendering tests", func() {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
           "assign_ipv6" : "false"
+      },
+      "container_settings": {
+          "allow_ip_forwarding": false
       },
       "policy": {
           "type": "k8s"
@@ -956,6 +960,9 @@ var _ = Describe("Node rendering tests", func() {
           "assign_ipv4" : "true",
           "assign_ipv6" : "false"
       },
+      "container_settings": {
+          "allow_ip_forwarding": false
+      },
       "policy": {
           "type": "k8s"
       },
@@ -1004,6 +1011,46 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+	})
+
+	It("should render a proper 'allow_ip_forwarding' container setting in the cni config[TestThis]", func() {
+		cif := operator.ContainerIpForwardingEnabled
+		defaultInstance.Spec.CalicoNetwork.ContainerIpForwarding = &cif
+		component := render.Node(defaultInstance, operator.ProviderNone, installation.GenerateRenderConfig(defaultInstance), nil, typhaNodeTLS, nil, false)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(5))
+
+		// Should render the correct resources.
+		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*v1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(Equal(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 1410,
+      "nodename_file_optional": false,
+      "ipam": {
+          "type": "calico-ipam",
+          "assign_ipv4" : "true",
+          "assign_ipv6" : "false"
+      },
+      "container_settings": {
+          "allow_ip_forwarding": true
+      },
+      "policy": {
+          "type": "k8s"
+      },
+      "kubernetes": {
+          "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
 	})
 
 	It("should render seccomp profiles", func() {

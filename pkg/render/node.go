@@ -492,9 +492,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 	t := GetCriticalTolerations()
 	if c.provider == operator.ProviderDockerEE {
-		// DockerEE appears to be stripping wildcard tolerations, this should at least get calico-node
-		// installed on all the worker nodes.
+		// DockerEE appears to be stripping wildcard tolerations
 		t = append(t, v1.Toleration{Operator: v1.TolerationOpExists, Key: "node.kubernetes.io/not-ready"})
+		t = append(t, v1.Toleration{Operator: v1.TolerationOpExists, Key: "com.docker.ucp.manager"})
 	}
 	return t
 }

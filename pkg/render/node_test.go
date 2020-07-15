@@ -1012,7 +1012,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	})
 
-	It("should render a proper 'allow_ip_forwarding' container setting in the cni config[TestThis]", func() {
+	It("should render a proper 'allow_ip_forwarding' container setting in the cni config", func() {
 		cif := operator.ContainerIPForwardingEnabled
 		defaultInstance.Spec.CalicoNetwork.ContainerIPForwarding = &cif
 		component := render.Node(defaultInstance, render.GenerateRenderConfig(defaultInstance), nil, typhaNodeTLS, nil, false)

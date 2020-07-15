@@ -16,6 +16,7 @@ package installation
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 
@@ -34,6 +35,7 @@ var _ = Describe("Installation validation tests", func() {
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				},
 				Variant: operator.Calico,
+				CNI:     &operator.CNISpec{Type: operator.PluginCalico},
 			},
 		}
 	})
@@ -112,5 +114,65 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.CalicoNetwork.HostPorts = &hp
 		err = validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
+	})
+
+	Describe("should not allow plugin not-Calico and CalicoNetwork", func() {
+		DescribeTable("non-calico plugins", func(t operator.CNIPluginType) {
+			instance.Spec.CNI.Type = t
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		},
+			Entry("GKE", operator.PluginGKE),
+			Entry("AmazonVPC", operator.PluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET),
+		)
+	})
+	Describe("validate non-calico CNI plugin Type", func() {
+		BeforeEach(func() {
+			instance.Spec.CalicoNetwork = nil
+			instance.Spec.CNI = &operator.CNISpec{}
+		})
+		It("should not allow empty CNI", func() {
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+		It("should not allow invalid CNI Type", func() {
+			instance.Spec.CNI.Type = "bad"
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+		DescribeTable("test all plugins",
+			func(plugin operator.CNIPluginType) {
+				instance.Spec.CNI.Type = plugin
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			},
+
+			Entry("GKE", operator.PluginGKE),
+			Entry("AmazonVPC", operator.PluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET),
+		)
+	})
+	Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
+		BeforeEach(func() {
+			instance.Spec.CalicoNetwork = nil
+			instance.Spec.CNI = &operator.CNISpec{}
+		})
+		DescribeTable("test all plugins",
+			func(kubeProvider operator.Provider, plugin operator.CNIPluginType, success bool) {
+				instance.Spec.KubernetesProvider = kubeProvider
+				instance.Spec.CNI.Type = plugin
+				err := validateCustomResource(instance)
+				if success {
+					Expect(err).NotTo(HaveOccurred())
+				} else {
+					Expect(err).To(HaveOccurred())
+				}
+			},
+
+			Entry("GKE plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginGKE, false),
+			Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, true),
+			Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, false),
+		)
 	})
 })

@@ -66,6 +66,10 @@ type InstallationSpec struct {
 	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
+	// CNI specifies the CNI that will be used by this installation.
+	// +optional
+	CNI *CNISpec `json:"cni,omitempty"`
+
 	// CalicoNetwork specifies configuration options for Calico provided pod networking.
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
@@ -324,6 +328,47 @@ type IPPool struct {
 	// Default: 26 (IPv4), 122 (IPv6)
 	// +optional
 	BlockSize *int32 `json:"blockSize,omitempty"`
+}
+
+// CNIPluginType describe the type of CNI plugin used.
+type CNIPluginType string
+
+const (
+	PluginCalico    CNIPluginType = "Calico"
+	PluginGKE       CNIPluginType = "GKE"
+	PluginAmazonVPC CNIPluginType = "AmazonVPC"
+	PluginAzureVNET CNIPluginType = "AzureVNET"
+)
+
+var CNIPluginTypes []CNIPluginType = []CNIPluginType{
+	PluginCalico,
+	PluginGKE,
+	PluginAmazonVPC,
+	PluginAzureVNET,
+}
+var CNIPluginTypesString []string = []string{
+	PluginCalico.String(),
+	PluginGKE.String(),
+	PluginAmazonVPC.String(),
+	PluginAzureVNET.String(),
+}
+
+func (cp CNIPluginType) String() string {
+	return string(cp)
+}
+
+type CNISpec struct {
+	// Specifies the CNI plugin that will be used in the Calico or Calico Enterprise installation.
+	// For KubernetesProvider GKE, this field defaults to GKE. For KubernetesProvider AKE, this field
+	// defaults to AzureVNET. For KubernetesProvider EKS, this field defaults to AmazonVPC. For all other
+	// KubernetesProviders this field defaults to Calico.
+	// For the value Calico, the CNI plugin binaries and CNI config will be installed as part of deployment,
+	// for all other values the CNI plugin binaries and CNI config is a dependency that is expected
+	// to be installed separately.
+	//
+	// Default: Calico
+	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
+	Type CNIPluginType `json:"type"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

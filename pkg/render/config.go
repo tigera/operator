@@ -24,8 +24,47 @@ const (
 )
 
 type NetworkConfig struct {
-	CNI                   string
-	NodenameFileOptional  bool
+	CNIPlugin            operatorv1.CNIPluginType
+	NodenameFileOptional bool
 	ContainerIpForwarding bool
-	IPPools               []operatorv1.IPPool
+	IPPools              []operatorv1.IPPool
+	MTU                  int32
+	HostPorts            bool
+}
+
+// GenerateRenderConfig converts installation into render config.
+func GenerateRenderConfig(install *operatorv1.Installation) NetworkConfig {
+	networkConfig := NetworkConfig{
+		CNIPlugin: install.Spec.CNI.Type,
+	}
+
+	// Set other provider-specific settings.
+	switch install.Spec.KubernetesProvider {
+	case operatorv1.ProviderDockerEE:
+		networkConfig.NodenameFileOptional = true
+	}
+
+	// Can only convert the following config if CalicoNetwork exists.
+	if install.Spec.CalicoNetwork != nil {
+
+		networkConfig.MTU = 0
+		if install.Spec.CalicoNetwork.MTU != nil {
+			networkConfig.MTU = *install.Spec.CalicoNetwork.MTU
+		}
+
+		networkConfig.HostPorts = false
+		if install.Spec.CalicoNetwork.HostPorts != nil && *install.Spec.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
+			networkConfig.HostPorts = true
+		}
+
+		networkConfig.IPPools = install.Spec.CalicoNetwork.IPPools
+    
+		if install.Spec.CalicoNetwork.ContainerIpForwarding != nil {
+			if *install.Spec.CalicoNetwork.ContainerIpForwarding == operator.ContainerIpForwardingEnabled {
+				networkConfig.ContainerIpForwarding = true
+			}
+		}
+	}
+
+	return networkConfig
 }

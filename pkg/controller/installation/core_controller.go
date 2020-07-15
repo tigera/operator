@@ -291,19 +291,11 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.Variant = operator.Calico
 	}
 
-	// Based on the Kubernetes provider, we may or may not need to default to using Calico networking.
-	// For managed clouds, we use the cloud provided networking. For other platforms, use Calico networking.
-	switch instance.Spec.KubernetesProvider {
-	case operator.ProviderAKS, operator.ProviderEKS, operator.ProviderGKE:
-		if instance.Spec.CalicoNetwork != nil {
-			// For these platforms, it's an error to have CalicoNetwork set.
-			msg := "Installation spec.calicoNetwork must not be set for provider %s"
-			return fmt.Errorf(msg, instance.Spec.KubernetesProvider)
-		}
+	// Default the CNI plugin based on the Kubernetes provider.
+	if instance.Spec.CNI == nil {
+		instance.Spec.CNI = &operator.CNISpec{}
 	}
-
-	if instance.Spec.CNI == nil || instance.Spec.CNI.Type == "" {
-		instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginCalico}
+	if instance.Spec.CNI.Type == "" {
 		switch instance.Spec.KubernetesProvider {
 		case operator.ProviderAKS:
 			instance.Spec.CNI.Type = operator.PluginAzureVNET
@@ -311,24 +303,27 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.CNI.Type = operator.PluginAmazonVPC
 		case operator.ProviderGKE:
 			instance.Spec.CNI.Type = operator.PluginGKE
+		default:
+			instance.Spec.CNI.Type = operator.PluginCalico
 		}
 	}
 
-	if instance.Spec.CalicoNetwork == nil && instance.Spec.CNI.Type == operator.PluginCalico {
-		// For all other platforms, default to using Calico networking.
-		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	// Default the CalicoNetworkSpec based on the CNI plugin.
+	if instance.Spec.CalicoNetwork == nil {
+		switch instance.Spec.CNI.Type {
+		case operator.PluginCalico:
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		}
 	}
 
+	// Default any unspecified fields within the CalicoNetworkSpec.
 	var v4pool, v6pool *operator.IPPool
-
-	// If Calico networking is in use, then default some fields.
 	if instance.Spec.CalicoNetwork != nil {
-		// Default IP pools, only if it is nil.
-		// If it is an empty slice then that means no default IPPools
-		// should be created.
+		// Default IP pools, only if it is nil. If it is an empty slice then that
+		// means no default IPPools should be created.
 		if instance.Spec.CalicoNetwork.IPPools == nil {
 			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-				operator.IPPool{CIDR: "192.168.0.0/16"},
+				{CIDR: "192.168.0.0/16"},
 			}
 		}
 
@@ -381,14 +376,19 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
-		if instance.Spec.CalicoNetwork.HostPorts == nil {
-			hp := operator.HostPortsEnabled
-			instance.Spec.CalicoNetwork.HostPorts = &hp
-		}
+		// While a number of the fields in this section are relevant to all CNI plugins,
+		// there are some settings which are currently only applicable if using Calico CNI.
+		// Handle those here.
+		if instance.Spec.CNI.Type == operator.PluginCalico {
+			if instance.Spec.CalicoNetwork.HostPorts == nil {
+				hp := operator.HostPortsEnabled
+				instance.Spec.CalicoNetwork.HostPorts = &hp
+			}
 
-		if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
-			mm := operator.MultiInterfaceModeNone
-			instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
+			if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
+				mm := operator.MultiInterfaceModeNone
+				instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
+			}
 		}
 	}
 
@@ -407,16 +407,16 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	instance.Spec.NodeUpdateStrategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
-
+	// Default rolling update parameters.
 	var one = intstr.FromInt(1)
-
 	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
-		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{
-			MaxUnavailable: &one,
-		}
-	} else if instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable == nil {
+		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{}
+	}
+	if instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable == nil {
 		instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &one
+	}
+	if instance.Spec.NodeUpdateStrategy.Type == "" {
+		instance.Spec.NodeUpdateStrategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
 	}
 
 	return nil

@@ -58,12 +58,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(v6pool).To(BeNil())
 	})
 
-	It("should error if CalicoNetwork is provided on EKS", func() {
+	It("should not error if CalicoNetwork is provided on EKS", func() {
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 		instance.Spec.KubernetesProvider = operator.ProviderEKS
-		Expect(fillDefaults(instance)).To(HaveOccurred())
+		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 	})
 
 	It("should not override custom configuration", func() {

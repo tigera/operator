@@ -70,7 +70,7 @@ type InstallationSpec struct {
 	// +optional
 	CNI *CNISpec `json:"cni,omitempty"`
 
-	// CalicoNetwork specifies configuration options for Calico provided pod networking.
+	// CalicoNetwork specifies networking configuration options for Calico.
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
@@ -183,12 +183,12 @@ func (nt HostPortsType) String() string {
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
-	// IPPools contains a list of IP pools to use for allocating pod IP addresses. At most one IP pool
-	// may be specified. If omitted, a single pool will be configured when needed.
+	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
+	// address family may be specified. If omitted, a single pool will be configured if needed.
 	// +optional
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
-	// MTU specifies the maximum transmission unit to use for pods on the Calico network.
+	// MTU specifies the maximum transmission unit to use on the pod network.
 	// Default: 1410
 	// +optional
 	MTU *int32 `json:"mtu,omitempty"`
@@ -203,13 +203,14 @@ type CalicoNetworkSpec struct {
 	// +optional
 	NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
 
-	// HostPorts configures whether or not Calico will support Kubernetes HostPorts.
+	// HostPorts configures whether or not Calico will support Kubernetes HostPorts. Valid only when using the Calico CNI plugin.
 	// Default: Enabled
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	HostPorts *HostPortsType `json:"hostPorts,omitempty"`
 
-	// MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for Calico Enterprise installations.
+	// MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for Calico Enterprise installations
+	// using the Calico CNI plugin.
 	// Default: None
 	// +optional
 	// +kubebuilder:validation:Enum=None;Multus

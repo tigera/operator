@@ -24,12 +24,12 @@ const (
 )
 
 type NetworkConfig struct {
-	CNIPlugin            operatorv1.CNIPluginType
-	NodenameFileOptional bool
+	CNIPlugin             operatorv1.CNIPluginType
+	NodenameFileOptional  bool
 	ContainerIpForwarding bool
-	IPPools              []operatorv1.IPPool
-	MTU                  int32
-	HostPorts            bool
+	IPPools               []operatorv1.IPPool
+	MTU                   int32
+	HostPorts             bool
 }
 
 // GenerateRenderConfig converts installation into render config.
@@ -58,9 +58,9 @@ func GenerateRenderConfig(install *operatorv1.Installation) NetworkConfig {
 		}
 
 		networkConfig.IPPools = install.Spec.CalicoNetwork.IPPools
-    
+
 		if install.Spec.CalicoNetwork.ContainerIpForwarding != nil {
-			if *install.Spec.CalicoNetwork.ContainerIpForwarding == operator.ContainerIpForwardingEnabled {
+			if *install.Spec.CalicoNetwork.ContainerIpForwarding == operatorv1.ContainerIpForwardingEnabled {
 				networkConfig.ContainerIpForwarding = true
 			}
 		}

@@ -372,7 +372,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       }
     }%s
   ]
-}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, c.netConfig.ContainerIpForwarding, portmap)
+}`, mtu, c.netConfig.NodenameFileOptional, assign_ipv4, assign_ipv6, c.netConfig.ContainerIPForwarding, portmap)
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

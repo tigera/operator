@@ -105,7 +105,7 @@ func handleNetwork(c *components, install *Installation) error {
 
 	// CNI IPAM pools
 	if len(c.calicoCNIConfig.IPAM.IPv4Pools) != 0 {
-		return ErrIncompatibleCluster{"specification of IPPools via cni config is not supported."}
+		return ErrIncompatibleCluster{"specifying ipv4_pools in cni config is not supported."}
 	}
 
 	// Other CNI features

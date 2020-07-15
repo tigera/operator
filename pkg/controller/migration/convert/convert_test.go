@@ -1,10 +1,8 @@
-package convert_test
+package convert
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"github.com/tigera/operator/pkg/controller/migration/convert"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -15,7 +13,7 @@ import (
 var _ = Describe("Parser", func() {
 	It("should not detect an installation if none exists", func() {
 		c := fake.NewFakeClient()
-		p := convert.Converter{c}
+		p := Converter{c}
 		Expect(p.Convert()).To(BeNil())
 	})
 
@@ -26,15 +24,15 @@ var _ = Describe("Parser", func() {
 				Namespace: "kube-system",
 			},
 		}, emptyKubeControllerSpec())
-		p := convert.Converter{c}
+		p := Converter{c}
 		_, err := p.Convert()
 		// though it will detect an install, it will be in the form of an incompatible-cluster error
-		Expect(err).To(BeAssignableToTypeOf(convert.ErrIncompatibleCluster{}))
+		Expect(err).To(BeAssignableToTypeOf(ErrIncompatibleCluster{}))
 	})
 
 	It("should detect a valid installation", func() {
 		c := fake.NewFakeClient(emptyNodeSpec(), emptyKubeControllerSpec())
-		p := convert.Converter{c}
+		p := Converter{c}
 		Expect(p.Convert()).ToNot(BeNil())
 	})
 
@@ -45,7 +43,7 @@ var _ = Describe("Parser", func() {
 			Value: "bar",
 		}}
 		c := fake.NewFakeClient(node, emptyKubeControllerSpec())
-		p := convert.Converter{c}
+		p := Converter{c}
 		_, err := p.Convert()
 		Expect(err).To(HaveOccurred())
 	})
@@ -64,7 +62,7 @@ var _ = Describe("Parser", func() {
 		}
 
 		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		p := convert.Converter{c}
+		p := Converter{c}
 		cfg, err := p.Convert()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
@@ -80,7 +78,7 @@ var _ = Describe("Parser", func() {
 		}}
 
 		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		p := convert.Converter{c}
+		p := Converter{c}
 		_, err := p.Convert()
 		Expect(err).To(HaveOccurred())
 	})
@@ -88,7 +86,7 @@ var _ = Describe("Parser", func() {
 	// It("should parse cni", func() {
 	// 	ds := emptyNodeSpec()
 	// 	c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-	// p := convert.Parser{c}
+	// p := Parser{c}
 	// 	cfg, err := p.Convert()
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(cfg).ToNot(BeNil())

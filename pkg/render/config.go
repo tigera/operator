@@ -24,7 +24,8 @@ const (
 )
 
 type NetworkConfig struct {
-	CNI                  string
-	NodenameFileOptional bool
-	IPPools              []operatorv1.IPPool
+	CNI                   string
+	NodenameFileOptional  bool
+	ContainerIpForwarding bool
+	IPPools               []operatorv1.IPPool
 }

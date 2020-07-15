@@ -16,7 +16,6 @@ package render_test
 
 import (
 	"fmt"
-	"log"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -995,7 +994,6 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render a proper 'allow_ip_forwarding' container setting in the cni config[TestThis]", func() {
-		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		cif := operator.ContainerIpForwardingEnabled
 		defaultInstance.Spec.CalicoNetwork.ContainerIpForwarding = &cif
 		component := render.Node(defaultInstance, operator.ProviderNone, installation.GenerateRenderConfig(defaultInstance), nil, typhaNodeTLS, nil, false)
@@ -1006,7 +1004,6 @@ var _ = Describe("Node rendering tests", func() {
 		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
-		log.Print(cniCm.Data["config"])
 		Expect(cniCm.Data["config"]).To(Equal(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
@@ -1034,45 +1031,6 @@ var _ = Describe("Node rendering tests", func() {
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]
 }`))
-
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-		Expect(dsResource).ToNot(BeNil())
-
-		// The DaemonSet should have the correct configuration.
-		ds := dsResource.(*apps.DaemonSet)
-
-		cniContainer := GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-		ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-
-		// Validate correct number of init containers.
-		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
-
-		expectedCNIEnv := []v1.EnvVar{
-			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-			{Name: "SLEEP", Value: "false"},
-			{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-			{
-				Name: "CNI_NETWORK_CONFIG",
-				ValueFrom: &v1.EnvVarSource{
-					ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-						Key: "config",
-						LocalObjectReference: v1.LocalObjectReference{
-							Name: "cni-config",
-						},
-					},
-				},
-			},
-		}
-		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
-
-		Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(
-			v1.Volume{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}}))
-
-		expectedCNIVolumeMounts := []v1.VolumeMount{
-			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-		}
-		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	})
 
 	It("should render seccomp profiles", func() {

@@ -171,6 +171,20 @@ rules:
       - create
   # Permissions below this point are required for TSEE only.
   - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - globalalerts
+      - globalalerttemplates
+      - globalreports
+      - globalreporttypes
+      - globalthreatfeeds
+      - licensekeys
+      - managedclusters
+      - remoteclusterconfigurations
+      - tiers
+    verbs:
+      - create
+  - apiGroups:
       - apiregistration.k8s.io
     resources:
       - apiservices

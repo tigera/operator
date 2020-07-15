@@ -578,7 +578,7 @@ func (r *ReconcileLogStorage) getAuthentication(ctx context.Context) (interface{
 				ClientID:              string(oidcSecret.Data["clientID"]),
 				Secret:                string(oidcSecret.Data["clientSecret"]),
 				IssuerURL:             authenticationCR.Spec.OIDC.IssuerURL,
-				RequestedScopes:       authenticationCR.Spec.OIDC.RequestedScopes,
+				RequestedScopes:       requestedScopes,
 				SiteURL:               authenticationCR.Spec.ManagerDomain,
 				UsernameClaim:         authenticationCR.Spec.OIDC.UsernameClaim,
 				GroupsClaim:           authenticationCR.Spec.OIDC.GroupsClaim,

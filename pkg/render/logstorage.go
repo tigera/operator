@@ -942,7 +942,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 
 	switch es.authentication.(type) {
 	case OIDCAuthentication:
-		config["xpack.security.authc.providers"] = []string{"oidc"}
+		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
 		config["xpack.security.authc.oidc.realm"] = "oidc1"
 		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
 	}

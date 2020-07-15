@@ -537,9 +537,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	// Convert specified and detected settings into render configuration.
-	netConf := render.GenerateRenderConfig(instance)
-
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
 	if err != nil {
@@ -638,7 +635,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		managerInternalTLSSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
-		netConf,
 		aci,
 		needNsMigration,
 	)

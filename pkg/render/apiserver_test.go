@@ -403,7 +403,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		cr := GetResource("tigera-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		cr := GetResource(resources, "tigera-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(cr.Rules)).To(Equal(1))
 		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
 		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
@@ -413,7 +413,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
 		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
 
-		crb := GetResource("tigera-apiserver-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		crb := GetResource(resources, "tigera-apiserver-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
 		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
 		Expect(len(crb.Subjects)).To(Equal(1))

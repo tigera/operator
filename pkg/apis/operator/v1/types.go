@@ -98,7 +98,7 @@ type InstallationSpec struct {
 
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
-	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
+	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 }
 
 // ComponentName CRD enum

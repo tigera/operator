@@ -324,6 +324,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(MultiInterfaceMode)
 		**out = **in
 	}
+	if in.ContainerIPForwarding != nil {
+		in, out := &in.ContainerIPForwarding, &out.ContainerIPForwarding
+		*out = new(ContainerIPForwardingType)
+		**out = **in
+	}
 	return
 }
 
@@ -603,13 +608,9 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 	in.NodeUpdateStrategy.DeepCopyInto(&out.NodeUpdateStrategy)
 	if in.ComponentResources != nil {
 		in, out := &in.ComponentResources, &out.ComponentResources
-		*out = make([]*ComponentResource, len(*in))
+		*out = make([]ComponentResource, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(ComponentResource)
-				(*in).DeepCopyInto(*out)
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	return

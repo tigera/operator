@@ -43,6 +43,9 @@ func handleCore(c *components, install *Installation) error {
 	// kube-controllers nodeSelector
 	install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
 
+	// node update-strategy
+	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
+
 	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")

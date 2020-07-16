@@ -38,8 +38,7 @@ var _ = Describe("Typha rendering tests", func() {
 		installation = &operator.Installation{
 			Spec: operator.InstallationSpec{
 				KubernetesProvider: operator.ProviderNone,
-				//Variant ProductVariant `json:"variant,omitempty"`
-				Registry: registry,
+				Registry:           registry,
 				CNI: &operator.CNISpec{
 					Type: operator.PluginCalico,
 				},

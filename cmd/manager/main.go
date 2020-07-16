@@ -92,8 +92,6 @@ func main() {
 		fmt.Println("ManagerEsProxy:", components.VersionManagerEsProxy)
 		fmt.Println("Fluentd:", components.VersionFluentd)
 		fmt.Println("EsCurator:", components.VersionEsCurator)
-		fmt.Println("Kibana:", components.VersionKibana)
-		fmt.Println("Elasticsearch:", components.VersionElasticsearch)
 
 		os.Exit(0)
 	}

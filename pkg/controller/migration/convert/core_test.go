@@ -3,8 +3,11 @@ package convert
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
@@ -75,6 +78,25 @@ var _ = Describe("core handler", func() {
 			comps.kubeControllers.Spec.Template.Spec.NodeSelector = nodeSelector
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(nodeSelector))
+		})
+	})
+
+	Context("node update strategy", func() {
+		It("should not set updateStrategy if none is set", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.NodeUpdateStrategy).To(Equal(appsv1.DaemonSetUpdateStrategy{}))
+		})
+		It("should carry forward updateStrategy", func() {
+			twelve := intstr.FromInt(12)
+			updateStrategy := appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.OnDeleteDaemonSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxUnavailable: &twelve,
+				},
+			}
+			comps.node.Spec.UpdateStrategy = updateStrategy
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.NodeUpdateStrategy).To(Equal(updateStrategy))
 		})
 	})
 })

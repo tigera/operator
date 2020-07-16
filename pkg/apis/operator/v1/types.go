@@ -181,8 +181,20 @@ func (nt HostPortsType) String() string {
 	return string(nt)
 }
 
+type BGPOption string
+
+const (
+	BGPEnabled  BGPOption = "Enabled"
+	BGPDisabled BGPOption = "Disabled"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
+	// BGP configures whether or not to enable Calico's BGP capabilities.
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	BGP *BGPOption `json:"bgp,omitempty"`
+
 	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
 	// address family may be specified. If omitted, a single pool will be configured if needed.
 	// +optional

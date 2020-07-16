@@ -59,7 +59,7 @@ func Node(
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 ) Component {
-	return &nodeComponent{
+	node := &nodeComponent{
 		cr:              cr,
 		netConfig:       nc,
 		birdTemplates:   bt,
@@ -67,6 +67,13 @@ func Node(
 		amazonCloudInt:  aci,
 		migrationNeeded: migrate,
 	}
+
+	if k8sHost, k8sPort, err := common.GetK8sEndpointOverride(); err == nil {
+		node.k8sHost = k8sHost
+		node.k8sPort = k8sPort
+	}
+
+	return node
 }
 
 type nodeComponent struct {
@@ -76,6 +83,8 @@ type nodeComponent struct {
 	typhaNodeTLS    *TyphaNodeTLS
 	amazonCloudInt  *operator.AmazonCloudIntegration
 	migrationNeeded bool
+	k8sHost         string
+	k8sPort         string
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -670,6 +679,13 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
+	if c.k8sHost != "" {
+		envVars = append(envVars, []v1.EnvVar{
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.k8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: c.k8sPort},
+		}...)
+	}
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -983,6 +999,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
 	}
+
+	if c.k8sHost != "" {
+		nodeEnv = append(nodeEnv, []v1.EnvVar{
+			{Name: "KUBERNETES_SERVICE_HOST", Value: c.k8sHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: c.k8sPort},
+		}...)
+	}
+
 	return nodeEnv
 }
 

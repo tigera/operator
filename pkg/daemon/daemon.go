@@ -22,6 +22,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -39,6 +40,23 @@ var (
 var log = logf.Log.WithName("daemon")
 
 func Main() {
+	// Try to get k8s api override from env and set the KUBERNETES_SERVICE_HOST/PORT if
+	// kubeconfig is not specified. Kubeconfig has a precedence, but it unlikely to be set
+	// in-cluster where we need the override to happen if there if the current setting
+	// were to use a k8s service to acces k8s API, while the kube-proxy was disabled, e.g.
+	// when about to switch to BPF dataplane.
+	k8sHostOverride, k8sPortOverride, err := common.GetK8sEndpointOverride()
+	if err != nil {
+		if err := os.Setenv("KUBERNETES_SERVICE_HOST", k8sHostOverride); err != nil {
+			log.Error(err, "Failed to set KUBERNETES_SERVICE_HOST from an override.")
+			os.Exit(1)
+		}
+		if err := os.Setenv("KUBERNETES_SERVICE_PORT", k8sPortOverride); err != nil {
+			log.Error(err, "Failed to set KUBERNETES_SERVICE_PORT from an override.")
+			os.Exit(1)
+		}
+	}
+
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {

@@ -47,27 +47,6 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with default configuration", func() {
-		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
-		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-
-		resources, _ := component.Objects()
-
-		// Should render the correct resources.
-		// - 1 namespace
-		// - 1 ConfigMap audit Policy
-		// - 1 Service account
-		// - 2 ServiceAccount ClusterRole and binding
-		// - 2 ClusterRole and binding for auth configmap
-		// - 2 tiered policy passthru ClusterRole and binding
-		// - 1 delegate auth binding
-		// - 1 auth reader binding
-		// - 2 webhook reader ClusterRole and binding
-		// - 2 cert secrets
-		// - 1 api server
-		// - 1 service registration
-		// - 1 Server service
-		Expect(len(resources)).To(Equal(22))
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -99,34 +78,54 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
+		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
+		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		// - 1 namespace
+		// - 1 ConfigMap audit Policy
+		// - 1 Service account
+		// - 2 ServiceAccount ClusterRole and binding
+		// - 2 ClusterRole and binding for auth configmap
+		// - 2 tiered policy passthru ClusterRole and binding
+		// - 1 delegate auth binding
+		// - 1 auth reader binding
+		// - 2 webhook reader ClusterRole and binding
+		// - 2 cert secrets
+		// - 1 api server
+		// - 1 service registration
+		// - 1 Server service
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
 		i := 0
 		for _, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ns := resources[0].(*corev1.Namespace)
+		ns := GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
 		ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
-
-		operatorCert, ok := resources[11].(*corev1.Secret)
+		operatorCert, ok := render.GetResouce(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(operatorCert)
 
-		tigeraCert, ok := resources[12].(*corev1.Secret)
+		tigeraCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(tigeraCert)
 
-		apiService, ok := resources[14].(*v1beta1.APIService)
+		apiService, ok := GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
 		verifyAPIService(apiService)
 
-		d := resources[13].(*v1.Deployment)
+		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 		Expect(len(d.Labels)).To(Equal(2))
@@ -222,36 +221,99 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
 		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
 		// Expect same number as above
-		Expect(len(resources)).To(Equal(22))
-		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		d := resources[13].(*v1.Deployment)
+		dep := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		ExpectResource(dep, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		d := dep.(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
 		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		cr := resources[16].(*rbacv1.ClusterRole)
+		cr := GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(cr.Rules)).To(Equal(1))
 		Expect(len(cr.Rules[0].Resources)).To(Equal(1))
 		Expect(cr.Rules[0].Resources[0]).To(Equal("tiers"))
 		Expect(len(cr.Rules[0].Verbs)).To(Equal(1))
 		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
 
-		crb := resources[17].(*rbacv1.ClusterRoleBinding)
+		crb := GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
 		Expect(crb.RoleRef.Name).To(Equal("tigera-tier-getter"))
 		Expect(len(crb.Subjects)).To(Equal(1))
@@ -260,27 +322,88 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(22))
-		ExpectResource(resources[13], "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		d := resources[13].(*v1.Deployment)
+		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
 		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		Expect(len(resources)).To(Equal(22))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		cr := resources[20].(*rbacv1.ClusterRole)
+		cr := GetResource(resources, "tigera-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(cr.Rules)).To(Equal(1))
 		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
 		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
@@ -290,7 +413,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
 		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
 
-		crb := resources[21].(*rbacv1.ClusterRoleBinding)
+		crb := GetResource(resources, "tigera-apiserver-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
 		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
 		Expect(len(crb.Subjects)).To(Equal(1))

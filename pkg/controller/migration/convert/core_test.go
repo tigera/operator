@@ -103,4 +103,28 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.NodeUpdateStrategy).To(Equal(updateStrategy))
 		})
 	})
+
+	Context("flexvol", func() {
+		It("should not be set by default", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.FlexVolumePath).To(Equal(""))
+		})
+		It("should carry forward flexvolumepath", func() {
+			hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
+			path := "/foo/bar/"
+			hp := v1.Volume{
+				Name: "flexvol-driver-host",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{
+						Path: path,
+						Type: &hostPathDirectoryOrCreate,
+					},
+				},
+			}
+			comps.node.Spec.Template.Spec.Volumes = []v1.Volume{hp}
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.FlexVolumePath).To(Equal(path))
+		})
+	})
 })

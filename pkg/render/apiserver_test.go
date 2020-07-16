@@ -113,7 +113,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		operatorCert, ok := render.GetResouce(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
+		operatorCert, ok := GetResouce(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		verifyCert(operatorCert)
 

@@ -37,7 +37,7 @@ func GetReference(c component, registry, imagepath string) string {
 			ComponentFlexVolume:
 
 			registry = CalicoRegistry
-		case ComponentElasticsearch, ComponentElasticsearchOperator:
+		case ComponentElasticsearchOperator:
 			registry = ECKRegistry
 		default:
 			registry = TigeraRegistry

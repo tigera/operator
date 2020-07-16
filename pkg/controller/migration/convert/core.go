@@ -46,6 +46,17 @@ func handleCore(c *components, install *Installation) error {
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
 
+	// node volumes
+	for _, vol := range c.node.Spec.Template.Spec.Volumes {
+		switch vol.Name {
+		case "flexvol-driver-host":
+			if vol.HostPath == nil {
+				return ErrIncompatibleCluster{"volume 'flexvol-driver-host' must be a HostPath"}
+			}
+			install.Spec.FlexVolumePath = vol.HostPath.Path
+		}
+	}
+
 	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")

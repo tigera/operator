@@ -1,36 +1,36 @@
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: release-v2.7
+    version: v2.7.5
   voltron:
     image: tigera/voltron
-    version: release-v2.7
+    version: v2.7.5
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: release-v2.7
+    version: v2.7.5
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: release-v2.7
+    version: v2.7.5
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: release-v2.7
+    version: v2.7.5
   typha:
     image: tigera/typha
-    version: release-v2.7
+    version: v2.7.5
   cnx-node:
     image: tigera/cnx-node
-    version: release-v2.7
+    version: v2.7.5
   fluentd:
     image: tigera/fluentd
-    version: release-v2.7
+    version: v2.7.5
   es-proxy:
     image: tigera/es-proxy
-    version: release-v2.7
+    version: v2.7.5
   eck-kibana:
     version: 7.3.2
   kibana:
     image: tigera/kibana
-    version: release-v2.7
+    version: v2.7.5
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
@@ -41,30 +41,30 @@ components:
     version: 7.3.2
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: release-v2.7
+    version: v2.7.5
   es-curator:
     image: tigera/es-curator
-    version: release-v2.7
+    version: v2.7.5
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: release-v2.7
+    version: v2.7.5
   compliance-controller:
     image: tigera/compliance-controller
-    version: release-v2.7
+    version: v2.7.5
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: release-v2.7
+    version: v2.7.5
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: release-v2.7
+    version: v2.7.5
   compliance-server:
     image: tigera/compliance-server
-    version: release-v2.7
+    version: v2.7.5
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: release-v2.7
+    version: v2.7.5
   guardian:
     image: tigera/guardian
-    version: release-v2.7
+    version: v2.7.5
   # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
   # to the docs & manifest tooling not to default to the tigera registry.

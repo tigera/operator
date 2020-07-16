@@ -39,6 +39,14 @@ spec:
                 description: CalicoNetwork specifies configuration options for Calico
                   provided pod networking.
                 properties:
+                  containerIPForwarding:
+                    description: 'ContainerIPForwarding configures whether ip forwarding
+                      will be enabled for containers in the CNI configuration. Default:
+                      Disabled'
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
                   hostPorts:
                     description: 'HostPorts configures whether or not Calico will
                       support Kubernetes HostPorts. Default: Enabled'

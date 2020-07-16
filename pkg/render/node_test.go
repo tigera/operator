@@ -1105,7 +1105,7 @@ var _ = Describe("Node rendering tests", func() {
 			},
 		}
 
-		defaultInstance.Spec.ComponentResources = []*operator.ComponentResource{
+		defaultInstance.Spec.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameNode,
 				ResourceRequirements: rr,

@@ -133,7 +133,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(v1.EnvVar{
-			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices,elasticsearchconfiguration",
+			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices,authorization,elasticsearchconfiguration",
 		}))
 
 		clusterRole := GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -175,7 +175,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(v1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "node,service,federatedservices,elasticsearchconfiguration,managedcluster",
+			Value: "node,service,federatedservices,authorization,elasticsearchconfiguration,managedcluster",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))

@@ -17,7 +17,6 @@ package render
 import (
 	"strings"
 
-	"github.com/tigera/operator/pkg/components"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -27,6 +26,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 )
 
 var replicas int32 = 1
@@ -178,6 +178,11 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"endpoints"},
 				Verbs:     []string{"create", "update", "delete"},
 			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
 		}
 
 		role.Rules = append(role.Rules, extraRules...)
@@ -241,7 +246,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		enabledControllers = append(enabledControllers, "service", "federatedservices")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "authorization")
 
 		if c.managementClusterConnection == nil {
 			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")

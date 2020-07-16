@@ -50,12 +50,13 @@ const (
 	ECKEnterpriseTrial      = "eck-trial-license"
 	ECKWebhookConfiguration = "elastic-webhook.k8s.elastic.co"
 
-	ElasticsearchNamespace     = "tigera-elasticsearch"
-	ElasticsearchHTTPURL       = "tigera-secure-es-http.tigera-elasticsearch.svc"
-	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
-	ElasticsearchName          = "tigera-secure"
-	ElasticsearchConfigMapName = "tigera-secure-elasticsearch"
-	ElasticsearchServiceName   = "tigera-secure-es-http"
+	ElasticsearchNamespace                = "tigera-elasticsearch"
+	ElasticsearchHTTPURL                  = "tigera-secure-es-http.tigera-elasticsearch.svc"
+	ElasticsearchHTTPSEndpoint            = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	ElasticsearchName                     = "tigera-secure"
+	ElasticsearchConfigMapName            = "tigera-secure-elasticsearch"
+	ElasticsearchServiceName              = "tigera-secure-es-http"
+	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 
 	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc"
 	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
@@ -94,6 +95,20 @@ const (
 	maxLogsStoragePercent int32 = 70
 )
 
+type OIDCAuthentication struct {
+	ClientID              string
+	Secret                string
+	IssuerURL             string
+	SiteURL               string
+	UsernameClaim         string
+	GroupsClaim           string
+	AuthorizationEndpoint string
+	TokenEndpoint         string
+	JWKSetURI             string
+	RequestedScopes       []string
+	UserInfoEndpoint      string
+}
+
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
@@ -112,7 +127,8 @@ func LogStorage(
 	esService *corev1.Service,
 	kbService *corev1.Service,
 	clusterDNS string,
-	applyTrial bool) Component {
+	applyTrial bool,
+	authentication interface{}) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -132,6 +148,7 @@ func LogStorage(
 		kbService:                   kbService,
 		clusterDNS:                  clusterDNS,
 		applyTrial:                  applyTrial,
+		authentication:              authentication,
 	}
 }
 
@@ -153,6 +170,7 @@ type elasticsearchComponent struct {
 	kbService                   *corev1.Service
 	clusterDNS                  string
 	applyTrial                  bool
+	authentication              interface{}
 }
 
 func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -244,7 +262,13 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
 		toCreate = append(toCreate, es.clusterConfig.ConfigMap())
-		toCreate = append(toCreate, es.elasticsearchCluster())
+
+		secureSettings := es.secureSettingsSecret()
+		if len(secureSettings.Data) > 0 {
+			toCreate = append(toCreate, secureSettings)
+		}
+
+		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
 
 		// Kibana CRs
 		toCreate = append(toCreate, createNamespace(KibanaNamespace, false))
@@ -535,8 +559,8 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
-	return &esv1.Elasticsearch{
+func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1.Elasticsearch {
+	elasticsearch := &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
@@ -558,6 +582,32 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 			NodeSets:           es.nodeSets(),
 			ServiceAccountName: "tigera-elasticsearch",
 		},
+	}
+
+	if secureSettings {
+		elasticsearch.Spec.SecureSettings = []cmnv1.SecretSource{{
+			SecretName: ElasticsearchSecureSettingsSecretName,
+		}}
+	}
+
+	return elasticsearch
+}
+
+func (es elasticsearchComponent) secureSettingsSecret() *corev1.Secret {
+	secureSettings := make(map[string][]byte)
+
+	switch es.authentication.(type) {
+	case OIDCAuthentication:
+		clientSecret := es.authentication.(OIDCAuthentication).Secret
+		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = []byte(clientSecret)
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchSecureSettingsSecretName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Data: secureSettings,
 	}
 }
 
@@ -653,15 +703,37 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 func (es elasticsearchComponent) nodeSetTemplate() esv1.NodeSet {
 	pvcTemplate := es.pvcTemplate()
 
+	config := map[string]interface{}{
+		"node.master":                 "true",
+		"node.data":                   "true",
+		"node.ingest":                 "true",
+		"cluster.max_shards_per_node": 10000,
+	}
+
+	switch es.authentication.(type) {
+	case OIDCAuthentication:
+		oidcAuth := es.authentication.(OIDCAuthentication)
+		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
+			"order":                       1,
+			"rp.client_id":                oidcAuth.ClientID,
+			"rp.response_type":            "code",
+			"rp.redirect_uri":             fmt.Sprintf("https://%s:9443/tigera-kibana/api/security/oidc/callback", oidcAuth.SiteURL),
+			"rp.requested_scopes":         oidcAuth.RequestedScopes,
+			"op.issuer":                   oidcAuth.IssuerURL,
+			"op.authorization_endpoint":   oidcAuth.AuthorizationEndpoint,
+			"op.token_endpoint":           oidcAuth.TokenEndpoint,
+			"op.jwkset_path":              oidcAuth.JWKSetURI,
+			"op.userinfo_endpoint":        oidcAuth.UserInfoEndpoint,
+			"rp.post_logout_redirect_uri": fmt.Sprintf("https://%s:9443/tigera-kibana/logged_out", oidcAuth.SiteURL),
+			"claims.principal":            oidcAuth.UsernameClaim,
+			"claims.group":                oidcAuth.GroupsClaim,
+		}
+	}
+
 	return esv1.NodeSet{
 		// This is configuration that ends up in /usr/share/elasticsearch/config/elasticsearch.yml on the Elastic container.
 		Config: &cmnv1.Config{
-			Data: map[string]interface{}{
-				"node.master":                 "true",
-				"node.data":                   "true",
-				"node.ingest":                 "true",
-				"cluster.max_shards_per_node": 10000,
-			},
+			Data: config,
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{pvcTemplate},
 	}
@@ -925,6 +997,21 @@ func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
 }
 
 func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
+	config := map[string]interface{}{
+		"server": map[string]interface{}{
+			"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
+			"rewriteBasePath": true,
+		},
+		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
+	}
+
+	switch es.authentication.(type) {
+	case OIDCAuthentication:
+		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
+		config["xpack.security.authc.oidc.realm"] = "oidc1"
+		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
+	}
+
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
@@ -941,13 +1028,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			Image:              components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 			ServiceAccountName: "tigera-kibana",
 			Config: &cmnv1.Config{
-				Data: map[string]interface{}{
-					"server": map[string]interface{}{
-						"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
-						"rewriteBasePath": true,
-					},
-					"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
-				},
+				Data: config,
 			},
 			Count: 1,
 			HTTP: cmnv1.HTTPConfig{

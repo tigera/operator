@@ -585,6 +585,7 @@ func (r *ReconcileLogStorage) getAuthentication(ctx context.Context) (interface{
 				AuthorizationEndpoint: wellKnownConfig.AuthorizationEndpoint,
 				TokenEndpoint:         wellKnownConfig.TokenEndpoint,
 				JWKSetURI:             wellKnownConfig.JWKSetURI,
+				UserInfoEndpoint:      wellKnownConfig.UserInfoEndpoint,
 			}
 		}
 	}

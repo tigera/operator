@@ -105,6 +105,7 @@ type OIDCAuthentication struct {
 	TokenEndpoint         string
 	JWKSetURI             string
 	RequestedScopes       []string
+	UserInfoEndpoint      string
 }
 
 // Elasticsearch renders the
@@ -680,12 +681,13 @@ func (es elasticsearchComponent) nodeSetTemplate() esv1.NodeSet {
 			"order":                       1,
 			"rp.client_id":                oidcAuth.ClientID,
 			"rp.response_type":            "code",
-			"rp.redirect_uri":             fmt.Sprintf("https://%s:9443/tigera-kibana/api/security/v1/oidc", oidcAuth.SiteURL),
+			"rp.redirect_uri":             fmt.Sprintf("https://%s:9443/tigera-kibana/api/security/oidc/callback", oidcAuth.SiteURL),
 			"rp.requested_scopes":         oidcAuth.RequestedScopes,
 			"op.issuer":                   oidcAuth.IssuerURL,
 			"op.authorization_endpoint":   oidcAuth.AuthorizationEndpoint,
 			"op.token_endpoint":           oidcAuth.TokenEndpoint,
 			"op.jwkset_path":              oidcAuth.JWKSetURI,
+			"op.userinfo_endpoint":        oidcAuth.UserInfoEndpoint,
 			"rp.post_logout_redirect_uri": fmt.Sprintf("https://%s:9443/tigera-kibana/logged_out", oidcAuth.SiteURL),
 			"claims.principal":            oidcAuth.UsernameClaim,
 			"claims.group":                oidcAuth.GroupsClaim,

@@ -13,6 +13,7 @@ type WellKnownConfig struct {
 	AuthorizationEndpoint string   `json:"authorization_endpoint"`
 	TokenEndpoint         string   `json:"token_endpoint"`
 	JWKSetURI             string   `json:"jwks_uri"`
+	UserInfoEndpoint      string   `json:"userinfo_endpoint"`
 }
 
 func LookupWellKnownConfig(issuerURL string) (*WellKnownConfig, error) {

@@ -29,24 +29,51 @@ import (
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.CNI == nil {
-		return fmt.Errorf("CNI must be defined.")
+		return fmt.Errorf("spec.cni must be defined")
 	}
 
-	valid := false
-	for _, t := range operatorv1.CNIPluginTypes {
-		if instance.Spec.CNI.Type == t {
-			valid = true
+	// Perform validation based on the chosen CNI plugin.
+	// For example, make sure the plugin is supported on the specified k8s provider.
+	switch instance.Spec.CNI.Type {
+	case operatorv1.PluginCalico:
+		// No specific requirements for CNI type Calico.
+	case operatorv1.PluginGKE:
+		// The GKE CNI plugin is only supported on GKE or BYO.
+		switch instance.Spec.KubernetesProvider {
+		case operatorv1.ProviderGKE, "":
+		default:
+			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
+				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 		}
-	}
-	if !valid {
-		return fmt.Errorf("%s is invalid for cni.type, should be one of %s",
+	case operatorv1.PluginAmazonVPC:
+		// The AmazonVPC CNI plugin is only supported on EKS or BYO.
+		switch instance.Spec.KubernetesProvider {
+		case operatorv1.ProviderEKS, "":
+		default:
+			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
+				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+	case operatorv1.PluginAzureVNET:
+		// The AzureVNET CNI plugin is only supported on AKS or BYO.
+		switch instance.Spec.KubernetesProvider {
+		case operatorv1.ProviderAKS, "":
+		default:
+			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
+				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+	default:
+		// The specified CNI plugin is not supported by this version of the operator.
+		return fmt.Errorf("Invalid value '%s' for spec.cni.type, it should be one of %s",
 			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
 	}
 
-	if instance.Spec.CalicoNetwork != nil && instance.Spec.CNI != nil && instance.Spec.CNI.Type != operatorv1.PluginCalico {
-		return fmt.Errorf("CNI.Type must be Calico if CalicoNetwork is defined.")
-	}
+	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
+		// Currently, calicoNetwork is valid only when using the Calico CNI plugin.
+		if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+			return fmt.Errorf("spec.CalicoNetwork requires spec.cni.type 'Calico'")
+		}
+
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
 			return fmt.Errorf("Only one IPPool per version is allowed.")
@@ -155,44 +182,31 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return err
 			}
 		}
+
 		if instance.Spec.CalicoNetwork.HostPorts != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.hostPorts is supported only for Calico CNI")
+			}
 			err := validateHostPorts(instance.Spec.CalicoNetwork.HostPorts)
 			if err != nil {
 				return err
 			}
 		}
+
+		if instance.Spec.CalicoNetwork.MultiInterfaceMode != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.multiInterfaceMode is supported only for Calico CNI")
+			}
+		}
 	}
 
-	switch instance.Spec.CNI.Type {
-	case operatorv1.PluginCalico:
-	case operatorv1.PluginGKE:
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderEKS, operatorv1.ProviderAKS:
-			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
-				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
-		}
-	case operatorv1.PluginAmazonVPC:
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderGKE, operatorv1.ProviderAKS:
-			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
-				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
-		}
-	case operatorv1.PluginAzureVNET:
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderGKE, operatorv1.ProviderEKS:
-			return fmt.Errorf("kubernetesProvider of %s is invalid with CNI.type %s",
-				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
-		}
-	default:
-		return fmt.Errorf("Invalid CNI.type %s, it should be one of %s",
-			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
-	}
-
+	// Verify that the flexvolume path is valid - either "None" (to disable) or a valid absolute path.
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
 		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
 			instance.Spec.FlexVolumePath)
 	}
 
+	// We only support RollingUpdate for the node daemonset strategy.
 	if instance.Spec.NodeUpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
 		return fmt.Errorf("Installation spec.NodeUpdateStrategy.type '%s' is not supported",
 			instance.Spec.NodeUpdateStrategy.RollingUpdate)

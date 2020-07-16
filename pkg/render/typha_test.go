@@ -29,7 +29,6 @@ import (
 
 var _ = Describe("Typha rendering tests", func() {
 	var installation *operator.Installation
-	var networkConfig render.NetworkConfig
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
 	BeforeEach(func() {
@@ -41,10 +40,10 @@ var _ = Describe("Typha rendering tests", func() {
 				KubernetesProvider: operator.ProviderNone,
 				//Variant ProductVariant `json:"variant,omitempty"`
 				Registry: registry,
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+				},
 			},
-		}
-		networkConfig = render.NetworkConfig{
-			CNIPlugin: operator.PluginCalico,
 		}
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			CAConfigMap: &v1.ConfigMap{},
@@ -54,7 +53,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		component := render.Typha(installation, networkConfig, typhaNodeTLS, nil, false)
+		component := render.Typha(installation, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -92,7 +91,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
-		component := render.Typha(installation, networkConfig, typhaNodeTLS, nil, true)
+		component := render.Typha(installation, typhaNodeTLS, nil, true)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -117,7 +116,7 @@ var _ = Describe("Typha rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component := render.Typha(installation, networkConfig, typhaNodeTLS, aci, true)
+		component := render.Typha(installation, typhaNodeTLS, aci, true)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(6))
 
@@ -156,7 +155,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		component := render.Typha(installation, networkConfig, typhaNodeTLS, nil, false)
+		component := render.Typha(installation, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")

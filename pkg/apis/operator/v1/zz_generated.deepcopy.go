@@ -324,6 +324,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(MultiInterfaceMode)
 		**out = **in
 	}
+	if in.ContainerIPForwarding != nil {
+		in, out := &in.ContainerIPForwarding, &out.ContainerIPForwarding
+		*out = new(ContainerIPForwardingType)
+		**out = **in
+	}
 	return
 }
 

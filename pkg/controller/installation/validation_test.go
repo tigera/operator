@@ -61,6 +61,17 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should error if CalicoNetwork is provided on EKS", func() {
+		instance := &operator.Installation{}
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		instance.Spec.KubernetesProvider = operator.ProviderEKS
+
+		// Fill in defaults and validate the result.
+		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+		Expect(validateCustomResource(instance)).To(HaveOccurred())
+	})
+
 	It("should not allow out-of-bounds block sizes", func() {
 		// Try with an invalid block size.
 		var blockSizeTooBig int32 = 33
@@ -116,15 +127,15 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	Describe("should not allow plugin not-Calico and CalicoNetwork", func() {
+	Describe("CalicoNetwork requires spec.cni.type=Calico", func() {
 		DescribeTable("non-calico plugins", func(t operator.CNIPluginType) {
 			instance.Spec.CNI.Type = t
 			err := validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
 		},
-			Entry("GKE", operator.PluginGKE),
-			Entry("AmazonVPC", operator.PluginAmazonVPC),
-			Entry("AzureVNET", operator.PluginAzureVNET),
+			Entry("should disallow GKE", operator.PluginGKE),
+			Entry("should disallow AmazonVPC", operator.PluginAmazonVPC),
+			Entry("should disallow AzureVNET", operator.PluginAzureVNET),
 		)
 	})
 	Describe("validate non-calico CNI plugin Type", func() {

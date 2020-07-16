@@ -68,7 +68,6 @@ func Calico(
 	managerInternalTLSSecret *corev1.Secret,
 	bt map[string]string,
 	p operator.Provider,
-	nc NetworkConfig,
 	aci *operator.AmazonCloudIntegration,
 	up bool,
 ) (Renderer, error) {
@@ -143,7 +142,6 @@ func Calico(
 		managerInternalTLSecret:     managerInternalTLSSecret,
 		birdTemplates:               bt,
 		provider:                    p,
-		networkConfig:               nc,
 		amazonCloudInt:              aci,
 		upgrade:                     up,
 	}, nil
@@ -216,7 +214,6 @@ type calicoRenderer struct {
 	managerInternalTLSecret     *corev1.Secret
 	birdTemplates               map[string]string
 	provider                    operator.Provider
-	networkConfig               NetworkConfig
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
 }
@@ -227,8 +224,8 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Namespaces(r.installation.Spec.KubernetesProvider == operator.ProviderOpenShift, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
-	components = appendNotNil(components, Typha(r.installation, r.networkConfig, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.installation, r.networkConfig, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Typha(r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Node(r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret))
 	return components
 }

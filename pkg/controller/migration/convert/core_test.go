@@ -26,31 +26,41 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.ComponentResources).To(BeEmpty())
 		})
 
-		It("should migrate resources from calico-node if they are set", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Resources = v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("500m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
-				},
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("250m"),
-					v1.ResourceMemory: resource.MustParse("64Mi"),
-				},
-			}
+		var rqs = v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("500m"),
+				v1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+			Requests: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("250m"),
+				v1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+		}
 
+		It("should migrate resources from calico-node if they are set", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			Expect(i.Spec.ComponentResources).To(ConsistOf(&operatorv1.ComponentResource{
-				ComponentName: operatorv1.ComponentNameNode,
-				ResourceRequirements: &v1.ResourceRequirements{
-					Requests: v1.ResourceList{
-						v1.ResourceCPU:    resource.MustParse("250m"),
-						v1.ResourceMemory: resource.MustParse("64Mi"),
-					},
-					Limits: v1.ResourceList{
-						v1.ResourceCPU:    resource.MustParse("500m"),
-						v1.ResourceMemory: resource.MustParse("500Mi"),
-					},
-				},
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: &rqs,
+			}))
+		})
+
+		It("should migrate resources from kube-controllers if they are set", func() {
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(ConsistOf(&operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: &rqs,
+			}))
+		})
+
+		It("should migrate resources from typha if they are set", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(ConsistOf(&operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: &rqs,
 			}))
 		})
 	})
@@ -64,6 +74,8 @@ func emptyComponents() components {
 			*emptyNodeSpec(),
 			make(map[string]checkedFields),
 		},
+		kubeControllers: *emptyKubeControllerSpec(),
+		typha:           *emptyTyphaDeployment(),
 	}
 }
 

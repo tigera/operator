@@ -64,4 +64,17 @@ var _ = Describe("core handler", func() {
 			}))
 		})
 	})
+
+	Context("nodeSelector", func() {
+		It("should not set nodeSelector if none is set", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ControlPlaneNodeSelector).To(BeEmpty())
+		})
+		It("should carry forward nodeSelector", func() {
+			nodeSelector := map[string]string{"foo": "bar"}
+			comps.kubeControllers.Spec.Template.Spec.NodeSelector = nodeSelector
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(nodeSelector))
+		})
+	})
 })

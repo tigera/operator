@@ -430,6 +430,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					AuthorizationEndpoint: "authend",
 					TokenEndpoint:         "tokenend",
 					JWKSetURI:             "jwkset",
+					UserInfoEndpoint:      "https://https://openidconnect.googleapis.com/v1/userinfo",
 				})
 
 			createResources, _ := component.Objects()
@@ -438,24 +439,25 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(securitySecret.(*corev1.Secret).Data["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"]).Should(Equal([]byte("secret")))
 			elasticsearch := getElasticsearch(createResources)
 			Expect(elasticsearch.Spec.NodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-				"node.master":                 "true",
-				"node.data":                   "true",
-				"node.ingest":                 "true",
 				"cluster.max_shards_per_node": 10000,
 				"xpack.security.authc.realms.oidc.oidc1": map[string]interface{}{
-					"op.issuer":                   "issuer",
-					"op.token_endpoint":           "tokenend",
-					"op.jwkset_path":              "jwkset",
-					"claims.principal":            "username",
-					"rp.requested_scopes":         []string{"scope"},
 					"rp.client_id":                "id",
+					"rp.requested_scopes":         []string{"scope"},
+					"op.jwkset_path":              "jwkset",
+					"op.userinfo_endpoint":        "https://https://openidconnect.googleapis.com/v1/userinfo",
+					"claims.principal":            "username",
+					"order":                       1,
 					"rp.response_type":            "code",
-					"rp.redirect_uri":             "https://siteurl:9443/tigera-kibana/api/security/v1/oidc",
+					"rp.redirect_uri":             "https://siteurl:9443/tigera-kibana/api/security/oidc/callback",
+					"op.issuer":                   "issuer",
 					"op.authorization_endpoint":   "authend",
+					"op.token_endpoint":           "tokenend",
 					"rp.post_logout_redirect_uri": "https://siteurl:9443/tigera-kibana/logged_out",
 					"claims.group":                "group",
-					"order":                       1,
 				},
+				"node.master": "true",
+				"node.data":   "true",
+				"node.ingest": "true",
 			}))
 		})
 	})

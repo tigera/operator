@@ -279,10 +279,27 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
+			Expect(instance.Spec.CalicoNetwork).To(BeNil())
 		},
 
 		table.Entry("EKS provider defaults to AmazonVPC plugin", operator.ProviderEKS, operator.PluginAmazonVPC),
 		table.Entry("GKE provider defaults to GKE plugin", operator.ProviderGKE, operator.PluginGKE),
 		table.Entry("AKS provider defaults to AzureVNET plugin", operator.ProviderAKS, operator.PluginAzureVNET),
+	)
+	table.DescribeTable("setting CNI Provider should default CalicoNetwork to nil",
+		func(plugin operator.CNIPluginType) {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CNI: &operator.CNISpec{Type: plugin},
+				},
+			}
+			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
+			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+		},
+
+		table.Entry("AmazonVPC plugin", operator.PluginAmazonVPC),
+		table.Entry("GKE plugin", operator.PluginGKE),
+		table.Entry("AzureVNET plugin", operator.PluginAzureVNET),
 	)
 })

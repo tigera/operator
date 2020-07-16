@@ -300,11 +300,6 @@ func fillDefaults(instance *operator.Installation) error {
 			msg := "Installation spec.calicoNetwork must not be set for provider %s"
 			return fmt.Errorf(msg, instance.Spec.KubernetesProvider)
 		}
-	default:
-		if instance.Spec.CalicoNetwork == nil {
-			// For all other platforms, default to using Calico networking.
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
-		}
 	}
 
 	if instance.Spec.CNI == nil || instance.Spec.CNI.Type == "" {
@@ -317,6 +312,11 @@ func fillDefaults(instance *operator.Installation) error {
 		case operator.ProviderGKE:
 			instance.Spec.CNI.Type = operator.PluginGKE
 		}
+	}
+
+	if instance.Spec.CalicoNetwork == nil && instance.Spec.CNI.Type == operator.PluginCalico {
+		// For all other platforms, default to using Calico networking.
+		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}
 
 	var v4pool, v6pool *operator.IPPool
@@ -882,6 +882,10 @@ func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, clien
 }
 
 func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {
+	// If CNI plugin is specified and not Calico then skip any CalicoNetwork initialization
+	if i.Spec.CNI != nil && i.Spec.CNI.Type != operator.PluginCalico {
+		return nil
+	}
 	if i.Spec.CalicoNetwork == nil {
 		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}
@@ -894,6 +898,10 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 }
 
 func updateInstallationForKubeadm(i *operator.Installation, c *v1.ConfigMap) error {
+	// If CNI plugin is specified and not Calico then skip any CalicoNetwork initialization
+	if i.Spec.CNI != nil && i.Spec.CNI.Type != operator.PluginCalico {
+		return nil
+	}
 	if i.Spec.CalicoNetwork == nil {
 		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}

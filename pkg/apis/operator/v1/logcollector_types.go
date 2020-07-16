@@ -81,7 +81,7 @@ type SyslogStoreSpec struct {
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.
 type SplunkStoreSpec struct {
-	// Location for splunk's http event collector end point. example https://1.2.3.4:8088
+	// Location for splunk's http event collector end point. example `https://1.2.3.4:8088`
 	Endpoint string `json:"endpoint"`
 }
 

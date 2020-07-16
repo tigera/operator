@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"os"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -1110,6 +1111,60 @@ var _ = Describe("Node rendering tests", func() {
 			}
 		}
 		Expect(passed).To(Equal(true))
+	})
+
+	Context("with k8s overrides set", func() {
+		var k8sHost, k8sPort string
+		BeforeEach(func() {
+			k8sHost = os.Getenv("KUBERNETES_SERVICE_HOST")
+			k8sPort = os.Getenv("KUBERNETES_SERVICE_PORT")
+			err := os.Setenv("KUBERNETES_SERVICE_HOST", "k8shost")
+			Expect(err).To(BeNil())
+			err = os.Setenv("KUBERNETES_SERVICE_PORT", "1234")
+			Expect(err).To(BeNil())
+		})
+
+		JustAfterEach(func() {
+			err := os.Setenv("KUBERNETES_SERVICE_HOST", k8sHost)
+			Expect(err).To(BeNil())
+			err = os.Setenv("KUBERNETES_SERVICE_PORT", k8sPort)
+			Expect(err).To(BeNil())
+		})
+
+		It("should override k8s endpoints", func() {
+			nc := render.GenerateRenderConfig(defaultInstance)
+			component := render.Node(defaultInstance, nc, nil, typhaNodeTLS, nil, false)
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(5))
+
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			ds := dsResource.(*apps.DaemonSet)
+
+			// FIXME update gomega to include ContainElements
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "k8shost"},
+			))
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "1234"},
+			))
+
+			var cni v1.Container
+
+			for _, c := range ds.Spec.Template.Spec.InitContainers {
+				if c.Name == "install-cni" {
+					cni = c
+					break
+				}
+			}
+			Expect(cni).NotTo(BeNil())
+
+			Expect(cni.Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "k8shost"},
+			))
+			Expect(cni.Env).To(ContainElement(
+				v1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "1234"},
+			))
+		})
 	})
 })
 

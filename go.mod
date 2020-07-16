@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/cloudflare/cfssl v1.4.1
-	github.com/elastic/cloud-on-k8s v0.0.0-20200204083752-bcb7468838a8
+	github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/hashicorp/go-version v1.2.0
@@ -21,7 +21,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.2
-	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783
+	k8s.io/apiextensions-apiserver v0.17.0
 	k8s.io/apimachinery v0.18.2
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/cluster-bootstrap v0.18.2 // indirect
@@ -29,13 +29,13 @@ require (
 	k8s.io/kube-aggregator v0.0.0-20190404125450-f5e124c822d6
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.14.2
-	sigs.k8s.io/controller-runtime v0.4.0
+	sigs.k8s.io/controller-runtime v0.5.0
 )
 
 // Pinned to kubernetes-1.14.1
 replace (
 	// This is cloud-on-k8s 1.0.1 tag
-	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200204083752-bcb7468838a8
+	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	k8s.io/api => k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190409022649-727a075fdec8

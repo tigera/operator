@@ -128,7 +128,25 @@ func emptyKubeControllerSpec() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Name: "calico-node",
+						Name: "calico-kube-controllers",
+					}},
+				},
+			},
+		},
+	}
+}
+
+func emptyTyphaDeployment() *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "calico-typha",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "calico-typha",
 					}},
 				},
 			},

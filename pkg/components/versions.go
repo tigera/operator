@@ -63,8 +63,7 @@ const (
 	VersionECKKibana        = "7.3.2"
 	VersionEsCurator        = "release-v2.7"
 
-	VersionKibana        = "release-v2.7"
-	VersionElasticsearch = "release-v2.7"
+	VersionKibana = "release-v2.7"
 
 	// Multicluster tunnel image.
 	VersionGuardian = "release-v2.7"

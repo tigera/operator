@@ -28,6 +28,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,15 +97,24 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ECKWebhookName, render.ECKOperatorNamespace, &corev1.Service{}, nil},
 					{render.ECKWebhookConfiguration, "", &admissionv1beta1.ValidatingWebhookConfiguration{}, nil},
+					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKWebhookSecretName, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchConfigMapName, render.OperatorNamespace(), &corev1.ConfigMap{}, nil},
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
+					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
@@ -172,15 +182,24 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ECKWebhookName, render.ECKOperatorNamespace, &corev1.Service{}, nil},
 					{render.ECKWebhookConfiguration, "", &admissionv1beta1.ValidatingWebhookConfiguration{}, nil},
+					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKWebhookSecretName, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchConfigMapName, render.OperatorNamespace(), &corev1.ConfigMap{}, nil},
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
+					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
@@ -237,6 +256,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ECKWebhookName, render.ECKOperatorNamespace, &corev1.Service{}, nil},
 					{render.ECKWebhookConfiguration, "", &admissionv1beta1.ValidatingWebhookConfiguration{}, nil},
+					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKWebhookSecretName, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
@@ -244,9 +270,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraElasticsearchCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.ElasticsearchPublicCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
+					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchConfigMapName, render.OperatorNamespace(), &corev1.ConfigMap{}, nil},
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
+					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
@@ -255,6 +283,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+					{render.EsCuratorName, "", &rbacv1.ClusterRole{}, nil},
+					{render.EsCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
+					{render.EsCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 					{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 				}
@@ -335,7 +366,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				createResources, _ := component.Objects()
 
-				oldNodeSetName := createResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				oldNodeSetName := GetResource(createResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 
 				// update resource requirements
 				ls.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
@@ -372,7 +403,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
 					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
 
-				newNodeName := updatedResources[15].(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				newNodeName := GetResource(updatedResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
 			})
 		})

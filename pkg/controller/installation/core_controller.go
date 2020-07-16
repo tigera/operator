@@ -456,6 +456,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, nil
 	}
 
+	// mark CR found so we can report converter problems via tigerastatus
+	r.status.OnCRFound()
+
 	c := convert.Converter{r.client}
 
 	// Query for the installation object.
@@ -476,7 +479,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.

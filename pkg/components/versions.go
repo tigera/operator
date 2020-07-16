@@ -30,42 +30,42 @@ const (
 // This section contains images used when installing Tigera Secure.
 const (
 	// Overrides for Calico.
-	VersionTigeraNode            = "release-v2.7"
-	VersionTigeraTypha           = "release-v2.7"
-	VersionTigeraKubeControllers = "release-v2.7"
+	VersionTigeraNode            = "v2.7.5"
+	VersionTigeraTypha           = "v2.7.5"
+	VersionTigeraKubeControllers = "v2.7.5"
 
 	// API server images.
-	VersionAPIServer   = "release-v2.7"
-	VersionQueryServer = "release-v2.7"
+	VersionAPIServer   = "v2.7.5"
+	VersionQueryServer = "v2.7.5"
 
 	// Logging
-	VersionFluentd = "release-v2.7"
+	VersionFluentd = "v2.7.5"
 
 	// Compliance images.
-	VersionComplianceController  = "release-v2.7"
-	VersionComplianceReporter    = "release-v2.7"
-	VersionComplianceServer      = "release-v2.7"
-	VersionComplianceSnapshotter = "release-v2.7"
-	VersionComplianceBenchmarker = "release-v2.7"
+	VersionComplianceController  = "v2.7.5"
+	VersionComplianceReporter    = "v2.7.5"
+	VersionComplianceServer      = "v2.7.5"
+	VersionComplianceSnapshotter = "v2.7.5"
+	VersionComplianceBenchmarker = "v2.7.5"
 
 	// Intrusion detection images.
-	VersionIntrusionDetectionController   = "release-v2.7"
-	VersionIntrusionDetectionJobInstaller = "release-v2.7"
+	VersionIntrusionDetectionController   = "v2.7.5"
+	VersionIntrusionDetectionJobInstaller = "v2.7.5"
 
 	// Manager images.
-	VersionManager        = "release-v2.7"
-	VersionManagerProxy   = "release-v2.7"
-	VersionManagerEsProxy = "release-v2.7"
+	VersionManager        = "v2.7.5"
+	VersionManagerProxy   = "v2.7.5"
+	VersionManagerEsProxy = "v2.7.5"
 
 	// ECK Elasticsearch images
 	VersionECKOperator      = "0.9.0"
 	VersionECKElasticsearch = "7.3.2"
 	VersionECKKibana        = "7.3.2"
-	VersionEsCurator        = "release-v2.7"
+	VersionEsCurator        = "v2.7.5"
 
-	VersionKibana        = "release-v2.7"
-	VersionElasticsearch = "release-v2.7"
+	VersionKibana        = "v2.7.5"
+	VersionElasticsearch = "v2.7.5"
 
 	// Multicluster tunnel image.
-	VersionGuardian = "release-v2.7"
+	VersionGuardian = "v2.7.5"
 )

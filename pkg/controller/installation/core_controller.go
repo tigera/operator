@@ -327,12 +327,23 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
+		// Default BGP enablement based on CNI plugin. We default to BGP
+		// enabled for Calico CNI, but disabled for all others.
+		enabled := operator.BGPEnabled
+		disabled := operator.BGPDisabled
+		switch instance.Spec.CNI.Type {
+		case operator.PluginCalico:
+			instance.Spec.CalicoNetwork.BGP = &enabled
+		default:
+			instance.Spec.CalicoNetwork.BGP = &disabled
+		}
+
 		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
-				v4pool.Encapsulation = operator.EncapsulationDefault
+				v4pool.Encapsulation = operator.EncapsulationIPIP
 			}
 			if v4pool.NATOutgoing == "" {
 				v4pool.NATOutgoing = operator.NATOutgoingEnabled

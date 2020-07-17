@@ -230,7 +230,7 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 
 	if i != nil {
 		// TODO: verify that user-specified values are compatible with detected values.
-		i.DeepCopyInto(instance)
+		i.Spec.DeepCopyInto(&instance.Spec)
 	}
 
 	// Determine the provider in use by combining any auto-detected value with any value

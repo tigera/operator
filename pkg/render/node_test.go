@@ -37,6 +37,7 @@ import (
 var (
 	openshift    = true
 	notOpenshift = false
+	bgpEnabled   = operator.BGPEnabled
 )
 
 var _ = Describe("Node rendering tests", func() {
@@ -51,9 +52,9 @@ var _ = Describe("Node rendering tests", func() {
 		miMode := operator.MultiInterfaceModeNone
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				//KubernetesProvider: operator.ProviderNone,
 				CNI: &operator.CNISpec{Type: "Calico"},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
+					BGP:                        &bgpEnabled,
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
 					HostPorts:                  &hp,

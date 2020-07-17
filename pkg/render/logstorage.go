@@ -95,6 +95,31 @@ const (
 	maxLogsStoragePercent int32 = 70
 )
 
+const (
+	keystoreInitVolumeName = "elastic-internal-secure-settings"
+	keystoreInitMountPath  = "/mnt/elastic-internal/secure-settings"
+
+	keystoreInitScript = `#!/usr/bin/env bash
+set -eux
+
+echo "Initializing keystore."
+
+# create a keystore in the default data path
+# We use they elasticsearch-keystore list to test if the keystore has been initialized.
+! /usr/share/elasticsearch/bin/elasticsearch-keystore list && /usr/share/elasticsearch/bin/elasticsearch-keystore create
+
+# add all existing secret entries into it
+for filename in  /mnt/elastic-internal/secure-settings/*; do
+	[[ -e "$filename" ]] || continue # glob does not match
+	key=$(basename "$filename")
+	echo "Adding $key to the keystore."
+	/usr/share/elasticsearch/bin/elasticsearch-keystore add-file "$key" "$filename" -f
+done
+
+echo "Keystore initialization successful."
+`
+)
+
 type OIDCAuthentication struct {
 	ClientID              string
 	Secret                string
@@ -457,8 +482,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	trueBool := true
+	falseBool := false
 	var user int64 = 0
-	initContainer := corev1.Container{
+	initOSSettingsContainer := corev1.Container{
 		Name: "elastic-internal-init-os-settings",
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &trueBool,
@@ -474,9 +500,29 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		},
 	}
 
+	initContainers := []corev1.Container{initOSSettingsContainer}
+	switch es.authentication.(type) {
+	case OIDCAuthentication:
+
+		initKeystore := corev1.Container{
+			Name:  "elastic-internal-init-keystore",
+			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: &falseBool,
+			},
+			Command: []string{"/usr/bin/env", "bash", "-c", keystoreInitScript},
+			VolumeMounts: []corev1.VolumeMount{{
+				Name:      keystoreInitVolumeName,
+				MountPath: keystoreInitMountPath,
+				ReadOnly:  true,
+			}},
+		}
+		initContainers = append(initContainers, initKeystore)
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
-			InitContainers:   []corev1.Container{initContainer},
+			InitContainers:   initContainers,
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:     es.logStorage.Spec.DataNodeSelector,

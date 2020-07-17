@@ -150,6 +150,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				nodeSet := resultES.Spec.NodeSets[0]
 				Expect(nodeSet.PodTemplate.Spec.NodeSelector).To(BeEmpty())
 
+				// Verify that an initContainer is added
+				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
+				Expect(len(initContainers)).To(Equal(1))
+				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+
 				// Verify that the default container limist/requests are set.
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 				limits := esContainer.Resources.Limits
@@ -490,6 +495,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				"node.data":   "true",
 				"node.ingest": "true",
 			}))
+
+			// Verify that there are 2 init containers for OIDC
+			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
+			Expect(len(initContainers)).To(Equal(2))
+			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
 		})
 	})
 

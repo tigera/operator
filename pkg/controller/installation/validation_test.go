@@ -61,6 +61,36 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should prevent IPIP if BGP is disabled", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIP,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should prevent IPIP cross-subnet if BGP is disabled", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("should error if CalicoNetwork is provided on EKS", func() {
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise

@@ -17,7 +17,6 @@ package render
 import (
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -53,49 +52,32 @@ var (
 	nodeBGPReporterPort int32 = 9900
 )
 
-func getK8sEndpoint() (string, string, error) {
-	host := os.Getenv("KUBERNETES_SERVICE_HOST")
-	port := os.Getenv("KUBERNETES_SERVICE_PORT")
-
-	if host == "" || port == "" {
-		return "", "", fmt.Errorf("k8s host and/or port override env vars empty")
-	}
-
-	return host, port, nil
-}
-
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
+	k8sServiceEp K8sServiceEndpoint,
 	cr *operator.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 ) Component {
-	node := &nodeComponent{
+	return &nodeComponent{
+		k8sServiceEp:    k8sServiceEp,
 		cr:              cr,
 		birdTemplates:   bt,
 		typhaNodeTLS:    tnTLS,
 		amazonCloudInt:  aci,
 		migrationNeeded: migrate,
 	}
-
-	if k8sHost, k8sPort, err := getK8sEndpoint(); err == nil {
-		node.k8sHost = k8sHost
-		node.k8sPort = k8sPort
-	}
-
-	return node
 }
 
 type nodeComponent struct {
+	k8sServiceEp    K8sServiceEndpoint
 	cr              *operator.Installation
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
 	amazonCloudInt  *operator.AmazonCloudIntegration
 	migrationNeeded bool
-	k8sHost         string
-	k8sPort         string
 }
 
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -729,12 +711,7 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
-	if c.k8sHost != "" {
-		envVars = append(envVars, []v1.EnvVar{
-			{Name: "KUBERNETES_SERVICE_HOST", Value: c.k8sHost},
-			{Name: "KUBERNETES_SERVICE_PORT", Value: c.k8sPort},
-		}...)
-	}
+	envVars = append(envVars, c.k8sServiceEp.EnvVars()...)
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
@@ -1053,12 +1030,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		})
 	}
 
-	if c.k8sHost != "" {
-		nodeEnv = append(nodeEnv, []v1.EnvVar{
-			{Name: "KUBERNETES_SERVICE_HOST", Value: c.k8sHost},
-			{Name: "KUBERNETES_SERVICE_PORT", Value: c.k8sPort},
-		}...)
-	}
+	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars()...)
 
 	return nodeEnv
 }

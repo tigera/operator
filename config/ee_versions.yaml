@@ -35,10 +35,11 @@ components:
     registry: docker.elastic.co
     image: eck/eck-operator
     version: 0.9.0
-  elasticsearch:
-    registry: docker.elastic.co
-    image: elasticsearch/elasticsearch
+  eck-elasticsearch:
     version: 7.3.2
+  elasticsearch:
+    image: tigera/elasticsearch
+    version: release-v2.7
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
     version: v2.7.5

@@ -229,8 +229,31 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 	}
 
+	// Override the init container that the ECK operator creates. The ECK operator uses the
+	// sysctl command to set vm.max_map_count. We write to the procfs directly to remove the
+	// dependency on the sysctl command.
+	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
+	trueBool := true
+	var user int64 = 0
+	initContainer := corev1.Container{
+		Name: "elastic-internal-init-os-settings",
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &trueBool,
+			RunAsUser:  &user,
+		},
+		Image:   constructImage(ElasticsearchImageName, es.installcr.Spec.Registry, es.installcr.Spec.ImagePath),
+		Command: []string{
+			"/bin/sh",
+		},
+		Args: []string{
+			"-c",
+			"echo 262144 > /proc/sys/vm/max_map_count",
+		},
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
+			InitContainers:   []corev1.Container{initContainer},
 			Containers:       []corev1.Container{esContainer},
 			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:     es.logStorage.Spec.DataNodeSelector,
@@ -327,7 +350,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esalpha1.Elasticsearch 
 		},
 		Spec: esalpha1.ElasticsearchSpec{
 			Version: components.VersionECKElasticsearch,
-			Image:   constructImage(ECKElasticsearchImageName, es.installcr.Spec.Registry, es.installcr.Spec.ImagePath),
+			Image:   constructImage(ElasticsearchImageName, es.installcr.Spec.Registry, es.installcr.Spec.ImagePath),
 			HTTP: cmneckalpha1.HTTPConfig{
 				TLS: cmneckalpha1.TLSOptions{
 					Certificate: cmneckalpha1.SecretRef{

@@ -767,7 +767,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",aks"
 	}
 
-	if c.cr.Spec.CalicoNetwork != nil && *c.cr.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+	if bgpEnabled(c.cr) {
 		clusterType = clusterType + ",bgp"
 	}
 
@@ -886,7 +886,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 
 	// Configure whether or not BGP should be enabled.
-	if c.cr.Spec.CalicoNetwork == nil || *c.cr.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+	if !bgpEnabled(c.cr) {
 		// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
 		// disabled, and VXLAN will optionally be configurable via IP pools. This works even if you're
 		// not actually using Calico VXLAN for networking (e.g., via an alternative CNI plugin).
@@ -1008,7 +1008,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	}
 
 	// If not using BGP, don't check bird status (or bgp metrics server for enterprise).
-	if c.cr.Spec.CalicoNetwork == nil || *c.cr.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+	if !bgpEnabled(c.cr) {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 
@@ -1118,4 +1118,11 @@ func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
 	}
 
 	return nil
+}
+
+// bgpEnabled returns true if the given Installation enables BGP, false otherwise.
+func bgpEnabled(instance *operator.Installation) bool {
+	return instance.Spec.CalicoNetwork != nil &&
+		instance.Spec.CalicoNetwork.BGP != nil &&
+		*instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled
 }

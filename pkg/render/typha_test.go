@@ -31,6 +31,7 @@ var _ = Describe("Typha rendering tests", func() {
 	var installation *operator.Installation
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
+	k8s := render.K8sServiceEndpoint{}
 	BeforeEach(func() {
 		registry = "test.registry.com/org"
 		// Initialize a default installation to use. Each test can override this to its
@@ -70,7 +71,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.Typha(installation, typhaNodeTLS, nil, false)
+		component := render.Typha(k8s, installation, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -109,7 +110,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.Typha(installation, typhaNodeTLS, nil, true)
+		component := render.Typha(k8s, installation, typhaNodeTLS, nil, true)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -151,7 +152,7 @@ var _ = Describe("Typha rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component := render.Typha(installation, typhaNodeTLS, aci, true)
+		component := render.Typha(k8s, installation, typhaNodeTLS, aci, true)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -190,7 +191,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		component := render.Typha(installation, typhaNodeTLS, nil, false)
+		component := render.Typha(k8s, installation, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")

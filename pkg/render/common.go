@@ -371,3 +371,19 @@ func basePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 		},
 	}
 }
+
+type K8sServiceEndpoint struct {
+	Host string
+	Port string
+}
+
+func (k8s K8sServiceEndpoint) EnvVars() []v1.EnvVar {
+	if k8s.Host == "" || k8s.Port == "" {
+		return nil
+	}
+
+	return []v1.EnvVar{
+		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
+		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
+	}
+}

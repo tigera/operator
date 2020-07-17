@@ -666,6 +666,10 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
+		render.K8sServiceEndpoint{
+			Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
+			Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
+		},
 		instance,
 		logStorageExists,
 		managementCluster,

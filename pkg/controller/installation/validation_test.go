@@ -35,7 +35,10 @@ var _ = Describe("Installation validation tests", func() {
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				},
 				Variant: operator.Calico,
-				CNI:     &operator.CNISpec{Type: operator.PluginCalico},
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
 			},
 		}
 	})
@@ -173,6 +176,30 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("should disallow AzureVNET", operator.PluginAzureVNET),
 		)
 	})
+	Describe("validate Calico CNI plugin Type", func() {
+		DescribeTable("test invalid IPAM",
+			func(ipam operator.IPAMPluginType) {
+				instance.Spec.CNI.Type = operator.PluginCalico
+				instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+			},
+
+			Entry("AmazonVPC", operator.IPAMPluginAmazonVPC),
+			Entry("AzureVNET", operator.IPAMPluginAzureVNET),
+		)
+		DescribeTable("test valid IPAM",
+			func(ipam operator.IPAMPluginType) {
+				instance.Spec.CNI.Type = operator.PluginCalico
+				instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			},
+
+			Entry("Calico", operator.IPAMPluginCalico),
+			Entry("HostLocal", operator.IPAMPluginHostLocal),
+		)
+	})
 	Describe("validate non-calico CNI plugin Type", func() {
 		BeforeEach(func() {
 			instance.Spec.CalicoNetwork = nil
@@ -187,27 +214,46 @@ var _ = Describe("Installation validation tests", func() {
 			err := validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
 		})
-		DescribeTable("test all plugins",
-			func(plugin operator.CNIPluginType) {
+		DescribeTable("test allowed plugins",
+			func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 				instance.Spec.CNI.Type = plugin
+				instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			},
 
-			Entry("GKE", operator.PluginGKE),
-			Entry("AmazonVPC", operator.PluginAmazonVPC),
-			Entry("AzureVNET", operator.PluginAzureVNET),
+			Entry("GKE", operator.PluginGKE, operator.IPAMPluginHostLocal),
+			Entry("AmazonVPC", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
+		)
+		DescribeTable("test invalid CNI and IPAM combinations",
+			func(plugin operator.CNIPluginType, allowedipam operator.IPAMPluginType) {
+				instance.Spec.CNI.Type = plugin
+				for _, x := range operator.IPAMPluginTypes {
+					if allowedipam == x {
+						continue
+					}
+					instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: x}
+					err := validateCustomResource(instance)
+					Expect(err).To(HaveOccurred())
+				}
+			},
+
+			Entry("GKE", operator.PluginGKE, operator.IPAMPluginHostLocal),
+			Entry("AmazonVPC", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
 		)
 	})
-	Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
+	Describe("cross validate CNI Plugin Types and kubernetesProvider", func() {
 		BeforeEach(func() {
 			instance.Spec.CalicoNetwork = nil
 			instance.Spec.CNI = &operator.CNISpec{}
 		})
-		DescribeTable("test all plugins",
-			func(kubeProvider operator.Provider, plugin operator.CNIPluginType, success bool) {
+		DescribeTable("test allowed plugins",
+			func(kubeProvider operator.Provider, plugin operator.CNIPluginType, ipam operator.IPAMPluginType, success bool) {
 				instance.Spec.KubernetesProvider = kubeProvider
 				instance.Spec.CNI.Type = plugin
+				instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
 				err := validateCustomResource(instance)
 				if success {
 					Expect(err).NotTo(HaveOccurred())
@@ -216,9 +262,9 @@ var _ = Describe("Installation validation tests", func() {
 				}
 			},
 
-			Entry("GKE plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginGKE, false),
-			Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, true),
-			Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, false),
+			Entry("GKE plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginGKE, operator.IPAMPluginHostLocal, false),
+			Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC, true),
+			Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, operator.IPAMPluginAzureVNET, false),
 		)
 	})
 })

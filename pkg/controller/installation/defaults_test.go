@@ -87,7 +87,10 @@ var _ = Describe("Defaulting logic tests", func() {
 						Name: "pullSecret2",
 					},
 				},
-				CNI: &operator.CNISpec{Type: operator.PluginCalico},
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools: []operator.IPPool{
 						{
@@ -322,7 +325,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		table.Entry("GKE provider defaults to GKE plugin", operator.ProviderGKE, operator.PluginGKE),
 		table.Entry("AKS provider defaults to AzureVNET plugin", operator.ProviderAKS, operator.PluginAzureVNET),
 	)
-	table.DescribeTable("setting CNI Provider should default CalicoNetwork to nil",
+	table.DescribeTable("setting non-Calico CNI Plugin should default CalicoNetwork to nil",
 		func(plugin operator.CNIPluginType) {
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -359,4 +362,20 @@ var _ = Describe("Defaulting logic tests", func() {
 		})
 	})
 
+	table.DescribeTable("should default IPAM type based on CNI type",
+		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType) {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CNI: &operator.CNISpec{Type: cni},
+				},
+			}
+			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+			Expect(instance.Spec.CNI.IPAM.Type).To(Equal(ipam))
+		},
+
+		table.Entry("AmazonVPC CNI defaults to AmazonVPC IPAM", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC),
+		table.Entry("GKE CNI defaults to HostLocal IPAM", operator.PluginGKE, operator.IPAMPluginHostLocal),
+		table.Entry("AzureVNET CNI defaults to AzureVNET IPAM", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
+		table.Entry("Calico CNI defaults to Calico IPAM", operator.PluginCalico, operator.IPAMPluginCalico),
+	)
 })

@@ -52,7 +52,10 @@ var _ = Describe("Node rendering tests", func() {
 		miMode := operator.MultiInterfaceModeNone
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{Type: "Calico"},
+				CNI: &operator.CNISpec{
+					Type: "Calico",
+					IPAM: &operator.IPAMSpec{Type: "Calico"},
+				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					BGP:                        &bgpEnabled,
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
@@ -807,6 +810,74 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
 	})
 
+	DescribeTable("should properly render configuration using non-Calico CNI plugin",
+		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType, expectedEnvs []v1.EnvVar) {
+			amazonVPCInstalllation := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CNI: &operator.CNISpec{
+						Type: cni,
+						IPAM: &operator.IPAMSpec{Type: ipam},
+					},
+					FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				},
+			}
+
+			component := render.Node(amazonVPCInstalllation, nil, typhaNodeTLS, nil, false)
+			resources, _ := component.Objects()
+
+			// Should render the correct resources.
+			Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// Should not render CNI configuration.
+			cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+			Expect(cniCmResource).To(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+
+			// CNI install container should not be present.
+			cniContainer := GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+			Expect(cniContainer).To(BeNil())
+			// Validate correct number of init containers.
+			Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(1))
+
+			// Verify env
+			expectedEnvs = append(expectedEnvs,
+				v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
+				v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"},
+				v1.EnvVar{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			)
+			for _, expected := range expectedEnvs {
+				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(expected))
+			}
+
+			// Verify readiness and liveness probes.
+			expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}}}
+			expectedLiveness := &v1.Probe{Handler: v1.Handler{
+				HTTPGet: &v1.HTTPGetAction{
+					Host: "localhost",
+					Path: "/liveness",
+					Port: intstr.FromInt(9099),
+				}}}
+			Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
+			Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+		},
+		Entry("GKE", operator.PluginGKE, operator.IPAMPluginHostLocal, []v1.EnvVar{
+			{Name: "FELIX_INTERFACEPREFIX", Value: "gke"},
+			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+			{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"},
+		}),
+		Entry("AmazonVPC", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC, []v1.EnvVar{
+			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
+			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+		}),
+		Entry("AzureVNET", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET, []v1.EnvVar{
+			{Name: "FELIX_INTERFACEPREFIX", Value: "azv"},
+		}),
+	)
+
 	It("should render all resources when running on openshift", func() {
 		expectedResources := []struct {
 			name    string
@@ -1500,7 +1571,7 @@ var _ = Describe("Node rendering tests", func() {
 		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
-		Expect(cniCm.Data["config"]).To(Equal(`{
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
   "plugins": [
@@ -1528,6 +1599,39 @@ var _ = Describe("Node rendering tests", func() {
       "type": "bandwidth",
       "capabilities": {"bandwidth": true}
     },
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+	})
+
+	It("should render cni config with host-local", func() {
+		defaultInstance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		component := render.Node(defaultInstance, nil, typhaNodeTLS, nil, false)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+		// Should render the correct resources.
+		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*v1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 1410,
+      "nodename_file_optional": false,
+      "ipam": {
+          "type": "host-local",
+          "subnet" : "usePodCidr"
+      },
+      "container_settings": { "allow_ip_forwarding": false },
+      "policy": { "type": "k8s" },
+      "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
+    },
+    {"type": "bandwidth", "capabilities": {"bandwidth": true}},
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]
 }`))

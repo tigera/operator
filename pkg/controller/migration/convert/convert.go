@@ -26,7 +26,7 @@ var ctx = context.Background()
 
 // Installation represents the configuration pulled from the existing install.
 type Installation struct {
-	operatorv1.Installation
+	*operatorv1.Installation
 
 	// The following fields are not yet exposed in the
 	// operator API, and serve as a temporary store during prototyping.
@@ -103,35 +103,30 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 	return comps, err
 }
 
-type Converter struct {
-	Client client.Client
-}
-
 // GetExistingInstallation creates an Installation resource from an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
-func (p Converter) Convert() (*operatorv1.Installation, error) {
-	config := &Installation{}
-
-	comps, err := getComponents(ctx, p.Client)
+func Convert(ctx context.Context, client client.Client, install *operatorv1.Installation) error {
+	config := &Installation{install, []corev1.EnvVar{}, ""}
+	comps, err := getComponents(ctx, client)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			log.Print("no existing install found: ", err)
-			return nil, nil
+			return nil
 		}
-		return nil, err
+		return err
 	}
 
 	for _, hdlr := range handlers {
 		if err := hdlr(comps, config); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	// check for unchecked env vars
 	if uncheckedVars := comps.node.uncheckedVars(); len(uncheckedVars) != 0 {
-		return nil, ErrIncompatibleCluster{fmt.Sprintf("unexpected env var: %s", uncheckedVars)}
+		return ErrIncompatibleCluster{fmt.Sprintf("unexpected env var: %s", uncheckedVars)}
 	}
 
-	return &config.Installation, nil
+	return nil
 }

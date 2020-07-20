@@ -47,7 +47,7 @@ type AuthenticationOIDC struct {
 	// RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, all the available scopes
 	// are requested.
 	// + optional
-	RequestedScopes []string `json:"requestedScopes"`
+	RequestedScopes []string `json:"requestedScopes,omitempty"`
 
 	// If specified, UsernamePrefix is prepended to each user obtained from the claims specified by UsernameClaim. Note that
 	// Kibana does not support a user prefix, so this prefix is removed from Kubernetes User when translating log access

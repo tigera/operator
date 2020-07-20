@@ -60,16 +60,56 @@ OUTPUT_DIR=build/_output/bundle
 # - it's the source directory of CRDs that we want in the resulting CSV package.
 # - it's the output directory of the CSV output from the 'operator-sdk generate csv' command.
 CSV_DIR=${OUTPUT_DIR}/olm-catalog/tigera-operator/${VERSION}
-
-CSV=${CSV_DIR}/tigera-operator.v${VERSION}.clusterserviceversion.yaml
-
-# Create the CSV output directory tree.
 mkdir -p ${CSV_DIR}
 
-# Copy over the required CRDs.
-cp deploy/crds/operator.tigera.io_installations_crd.yaml ${CSV_DIR}
-cp deploy/crds/operator.tigera.io_tigerastatuses_crd.yaml ${CSV_DIR}
-cp deploy/crds/calico/* ${CSV_DIR}
+DEPLOY_DIR=${OUTPUT_DIR}/deploy
+mkdir -p ${DEPLOY_DIR}
+
+# Get the base path for the Calico docs site. This will be used to download manifests.
+CALICO_BASE_URL=https://docs.projectcalico.org
+CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
+
+# If Calico version is something other than master, then strip the patch version
+# numbers for both Calico and Enterprise and update the base urls.
+if [ "${CALICO_VERSION}" == "master" ]; then
+	CALICO_BASE_URL=${CALICO_BASE_URL}/master
+else
+	CALICO_VERSION=$(sed -e 's/\.[0-9]\+$//' <<< $CALICO_VERSION)
+	CALICO_BASE_URL=${CALICO_BASE_URL}/archive/${CALICO_VERSION}
+fi
+
+# Download operator manifests.
+curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator.yaml --output ${DEPLOY_DIR}/operator.yaml
+curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-role-tigera-operator.yaml --output ${DEPLOY_DIR}/role.yaml
+
+# Download the installation and tigerastatus CRDs.
+curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-installation.yaml --output ${CSV_DIR}/operator.tigera.io_installations_crd.yaml
+curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-tigerastatus.yaml --output ${CSV_DIR}/operator.tigera.io_tigerastatuses_crd.yaml
+
+CALICO_RESOURCES="
+bgpconfigurations
+bgppeers
+blockaffinities
+clusterinformations
+felixconfigurations
+globalnetworkpolicies
+globalnetworksets
+hostendpoints
+ipamblocks
+ipamconfigs
+ipamhandles
+ippools
+kubecontrollersconfigurations
+networkpolicies
+networksets
+"
+
+# Download the Calico CRDs into CSV dir.
+for resource in $CALICO_RESOURCES; do
+	curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${CSV_DIR}/crd.projectcalico.org_${resource}.yaml
+done
+
+CSV=${CSV_DIR}/tigera-operator.v${VERSION}.clusterserviceversion.yaml
 
 # Copy over the CSV template that will be used as a base CSV. This base CSV has
 # existing values we want for all versions of the tigera-operator.
@@ -82,6 +122,7 @@ hack/bin/operator-sdk generate csv \
   --csv-channel stable \
   --csv-version ${VERSION} \
   --crd-dir ${CSV_DIR} \
+  --deploy-dir ${DEPLOY_DIR} \
   --apis-dir pkg/apis/operator/v1/ \
   --make-manifests=false \
   --verbose \

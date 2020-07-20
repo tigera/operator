@@ -36,7 +36,19 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	// For example, make sure the plugin is supported on the specified k8s provider.
 	switch instance.Spec.CNI.Type {
 	case operatorv1.PluginCalico:
-		// No specific requirements for CNI type Calico.
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginCalico:
+		case operatorv1.IPAMPluginHostLocal:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type,
+				strings.Join([]string{
+					operatorv1.IPAMPluginCalico.String(),
+					operatorv1.IPAMPluginHostLocal.String()}, ",",
+				),
+			)
+		}
 	case operatorv1.PluginGKE:
 		// The GKE CNI plugin is only supported on GKE or BYO.
 		switch instance.Spec.KubernetesProvider {
@@ -44,6 +56,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		default:
 			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginHostLocal:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginHostLocal)
 		}
 	case operatorv1.PluginAmazonVPC:
 		// The AmazonVPC CNI plugin is only supported on EKS or BYO.
@@ -53,6 +73,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 		}
+
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginAmazonVPC:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type  %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAmazonVPC)
+		}
 	case operatorv1.PluginAzureVNET:
 		// The AzureVNET CNI plugin is only supported on AKS or BYO.
 		switch instance.Spec.KubernetesProvider {
@@ -60,6 +88,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		default:
 			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginAzureVNET:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAzureVNET)
 		}
 	default:
 		// The specified CNI plugin is not supported by this version of the operator.

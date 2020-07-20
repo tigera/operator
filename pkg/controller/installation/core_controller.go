@@ -226,7 +226,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
-func getInstallation(ctx context.Context, client client.Client, provider operator.Provider, c migration.Converter) (*operator.Installation, error) {
+func getInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
@@ -235,14 +235,8 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 	}
 
 	// grab existing install
-	i, err := c.Convert()
-	if err != nil {
+	if err := convert.Convert(ctx, client, instance); err != nil {
 		return nil, err
-	}
-
-	if i != nil {
-		// TODO: verify that user-specified values are compatible with detected values.
-		i.Spec.DeepCopyInto(&instance.Spec)
 	}
 
 	// Determine the provider in use by combining any auto-detected value with any value
@@ -484,10 +478,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
-	c := convert.Converter{r.client}
-
 	// Query for the installation object.
-	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider, c)
+	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

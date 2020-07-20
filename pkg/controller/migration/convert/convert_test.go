@@ -1,9 +1,12 @@
 package convert_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -13,10 +16,11 @@ import (
 )
 
 var _ = Describe("Parser", func() {
+	var ctx = context.Background()
+
 	It("should not detect an installation if none exists", func() {
 		c := fake.NewFakeClient()
-		p := convert.Converter{c}
-		Expect(p.Convert()).To(BeNil())
+		Expect(convert.Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
 	It("should detect an installation if one exists", func() {
@@ -26,16 +30,14 @@ var _ = Describe("Parser", func() {
 				Namespace: "kube-system",
 			},
 		}, emptyKubeControllerSpec())
-		p := convert.Converter{c}
-		_, err := p.Convert()
+		err := convert.Convert(ctx, c, &operatorv1.Installation{})
 		// though it will detect an install, it will be in the form of an incompatible-cluster error
 		Expect(err).To(BeAssignableToTypeOf(convert.ErrIncompatibleCluster{}))
 	})
 
 	It("should detect a valid installation", func() {
 		c := fake.NewFakeClient(emptyNodeSpec(), emptyKubeControllerSpec())
-		p := convert.Converter{c}
-		Expect(p.Convert()).ToNot(BeNil())
+		Expect(convert.Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
 	It("should error for unchecked env vars", func() {
@@ -45,8 +47,7 @@ var _ = Describe("Parser", func() {
 			Value: "bar",
 		}}
 		c := fake.NewFakeClient(node, emptyKubeControllerSpec())
-		p := convert.Converter{c}
-		_, err := p.Convert()
+		err := convert.Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -64,8 +65,8 @@ var _ = Describe("Parser", func() {
 		}
 
 		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		p := convert.Converter{c}
-		cfg, err := p.Convert()
+		cfg := &operatorv1.Installation{}
+		err := convert.Convert(ctx, c, cfg)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
 		exp := int32(24)
@@ -80,16 +81,15 @@ var _ = Describe("Parser", func() {
 		}}
 
 		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		p := convert.Converter{c}
-		_, err := p.Convert()
+		err := convert.Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
 	// It("should parse cni", func() {
 	// 	ds := emptyNodeSpec()
 	// 	c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-	// p := convert.Parser{c}
-	// 	cfg, err := p.Convert()
+
+	// 	cfg, err := convert.Convert(ctx, c, &operatorv1.Installation{})
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(cfg).ToNot(BeNil())
 	// })

@@ -80,7 +80,6 @@ spec:
                     type: string
                 required:
                 - issuerURL
-                - requestedScopes
                 - usernameClaim
                 type: object
             type: object

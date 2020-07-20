@@ -105,7 +105,7 @@ var _ = Describe("Node rendering tests", func() {
 		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
-		Expect(cniCm.Data["config"]).To(Equal(`{
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
   "plugins": [
@@ -1421,7 +1421,7 @@ var _ = Describe("Node rendering tests", func() {
 		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
-		Expect(cniCm.Data["config"]).To(Equal(`{
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
   "plugins": [

@@ -6,7 +6,6 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
-
 # Shortcut targets
 default: build
 

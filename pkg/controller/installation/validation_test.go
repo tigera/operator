@@ -43,6 +43,8 @@ var _ = Describe("Installation validation tests", func() {
 	It("should not allow blocksize to exceed the pool size", func() {
 		// Try with an invalid block size.
 		var twentySix int32 = 26
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/27",
@@ -59,6 +61,36 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.CalicoNetwork.IPPools[0].CIDR = "192.168.0.0/26"
 		err = validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should prevent IPIP if BGP is disabled", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIP,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should prevent IPIP cross-subnet if BGP is disabled", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("should error if CalicoNetwork is provided on EKS", func() {
@@ -79,6 +111,8 @@ var _ = Describe("Installation validation tests", func() {
 		var blockSizeJustRight int32 = 32
 
 		// Start with a valid block size - /32 - just on the border.
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.0.0.0/8",

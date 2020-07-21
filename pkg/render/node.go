@@ -320,8 +320,8 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 
 	// Determine MTU to use for veth interfaces.
 	var mtu int32 = 1410
-	if c.cr.Spec.CalicoNetwork.MTU != nil {
-		mtu = *c.cr.Spec.CalicoNetwork.MTU
+	if m := getMTU(c.cr); m != nil {
+		mtu = *m
 	}
 
 	// Determine what address families to enable.
@@ -877,10 +877,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	ipipMtu := "1440"
 	vxlanMtu := "1410"
 	wireguardMtu := "1400"
-	if c.cr.Spec.CalicoNetwork.MTU != nil {
-		ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
-		vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
-		wireguardMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
+	if m := getMTU(c.cr); m != nil {
+		ipipMtu = strconv.Itoa(int(*m))
+		vxlanMtu = strconv.Itoa(int(*m))
+		wireguardMtu = strconv.Itoa(int(*m))
 	}
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
@@ -898,7 +898,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// IPv4 auto-detection configuration.
-	v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
+	var v4Method string
+	if c.cr.Spec.CalicoNetwork != nil {
+		v4Method = getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
+	}
 	if v4Method != "" {
 		// IPv4 Auto-detection is enabled.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
@@ -909,7 +912,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// IPv6 auto-detection and ippool configuration.
-	v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
+	var v6Method string
+	if c.cr.Spec.CalicoNetwork != nil {
+		v6Method = getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
+	}
 	if v6Method != "" {
 		// IPv6 Auto-detection is enabled.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
@@ -1125,4 +1131,13 @@ func bgpEnabled(instance *operator.Installation) bool {
 	return instance.Spec.CalicoNetwork != nil &&
 		instance.Spec.CalicoNetwork.BGP != nil &&
 		*instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled
+}
+
+// getMTU returns the MTU configured in the Installation if there is one, nil otherwise.
+func getMTU(instance *operator.Installation) *int32 {
+	var mtu *int32
+	if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
+		mtu = instance.Spec.CalicoNetwork.MTU
+	}
+	return mtu
 }

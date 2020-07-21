@@ -667,6 +667,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// create or update them.
 	calico, err := render.Calico(
 		render.K8sServiceEndpoint{
+			// We read whatever is in the variable. We would read "" if they were not set.
+			// We decide at the point of usage what to do with the values.
 			Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
 			Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
 		},

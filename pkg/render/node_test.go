@@ -413,7 +413,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		component := render.Node(amazonVPCInstalllation, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(4))
+		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
 		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())

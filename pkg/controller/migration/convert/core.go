@@ -60,6 +60,26 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
+	// alp
+	vol := getVolume(c.node.Spec.Template.Spec, "flexvol-driver-host")
+	if vol != nil {
+		// prefer user-defined flexvolpath over detected value
+		if install.Spec.FlexVolumePath == "" {
+			if vol.HostPath == nil {
+				return ErrIncompatibleCluster{"volume 'flexvol-driver-host' must be a HostPath"}
+			}
+			if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv == nil {
+				return ErrIncompatibleCluster{"detected 'flexvol-driver-host' volume but no 'flexvol-driver' init container"}
+			}
+			install.Spec.FlexVolumePath = vol.HostPath.Path
+		}
+	} else {
+		// verify that no flexvol container is set
+		if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv != nil {
+			return ErrIncompatibleCluster{"detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume"}
+		}
+	}
+
 	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")

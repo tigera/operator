@@ -446,7 +446,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
+			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "none"},

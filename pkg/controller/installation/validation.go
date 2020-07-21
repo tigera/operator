@@ -101,6 +101,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				}
 			case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 			case operatorv1.EncapsulationNone:
+				// Unencapsulated currently requires BGP to be running in order to program routes.
+				if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+					return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+				}
 			default:
 				return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
 					v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))

@@ -43,6 +43,8 @@ var _ = Describe("Installation validation tests", func() {
 	It("should not allow blocksize to exceed the pool size", func() {
 		// Try with an invalid block size.
 		var twentySix int32 = 26
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/27",
@@ -109,6 +111,8 @@ var _ = Describe("Installation validation tests", func() {
 		var blockSizeJustRight int32 = 32
 
 		// Start with a valid block size - /32 - just on the border.
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.0.0.0/8",

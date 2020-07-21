@@ -45,12 +45,14 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(
+	k8s K8sServiceEndpoint,
 	installation *operator.Installation,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
 ) Component {
 	return &typhaComponent{
+		k8s:                k8s,
 		installation:       installation,
 		typhaNodeTLS:       tnTLS,
 		amazonCloudInt:     aci,
@@ -59,6 +61,7 @@ func Typha(
 }
 
 type typhaComponent struct {
+	k8s                K8sServiceEndpoint
 	installation       *operator.Installation
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
@@ -492,6 +495,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 
 	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
+	typhaEnv = append(typhaEnv, c.k8s.EnvVars()...)
 
 	return typhaEnv
 }

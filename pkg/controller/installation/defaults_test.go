@@ -156,9 +156,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		fillDefaults(instance)
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
-		// CASEY: TODO: This is currently a validation error because we don't support
+
+		// TODO: This is currently a validation error because we don't support
 		// any CalicoNetwork options for non-Calico CNIs. But this will change.
-		// Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		Expect(validateCustomResource(instance)).To(HaveOccurred())
 	})
 
 	It("should correct missing slashes on registry", func() {

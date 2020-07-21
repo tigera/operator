@@ -887,10 +887,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cr) {
-		// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
-		// disabled, and VXLAN will optionally be configurable via IP pools. This works even if you're
-		// not actually using Calico VXLAN for networking (e.g., via an alternative CNI plugin).
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
+		if c.cr.Spec.CNI.Type == operator.PluginCalico {
+			// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
+			// disabled, and VXLAN will optionally be configurable via IP pools.
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
+		} else {
+			// If not using Calico networking at all, set the backend to "none".
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+		}
 	} else {
 		// BGP is enabled.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})

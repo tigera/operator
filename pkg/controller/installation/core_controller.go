@@ -57,6 +57,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+var k8sEndpoint render.K8sServiceEndpoint
+
+func init() {
+	// We read whatever is in the variable. We would read "" if they were not set.
+	// We decide at the point of usage what to do with the values.
+	k8sEndpoint = render.K8sServiceEndpoint{
+		Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
+		Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
+	}
+}
+
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
 
@@ -627,12 +638,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
-		render.K8sServiceEndpoint{
-			// We read whatever is in the variable. We would read "" if they were not set.
-			// We decide at the point of usage what to do with the values.
-			Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
-			Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
-		},
+		k8sEndpoint,
 		instance,
 		managementCluster,
 		managementClusterConnection,

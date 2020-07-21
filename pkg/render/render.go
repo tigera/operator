@@ -60,6 +60,7 @@ type TyphaNodeTLS struct {
 }
 
 func Calico(
+	k8s K8sServiceEndpoint,
 	cr *operator.Installation,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
@@ -132,6 +133,7 @@ func Calico(
 	}
 
 	return calicoRenderer{
+		k8s:                         k8s,
 		installation:                cr,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
@@ -204,6 +206,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
+	k8s                         K8sServiceEndpoint
 	installation                *operator.Installation
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
@@ -224,8 +227,8 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Namespaces(r.installation.Spec.KubernetesProvider == operator.ProviderOpenShift, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
-	components = appendNotNil(components, Typha(r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Typha(r.k8s, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Node(r.k8s, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret))
 	return components
 }

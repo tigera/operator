@@ -1,4 +1,4 @@
-package convert_test
+package convert
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/controller/migration/convert"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,7 +19,7 @@ var _ = Describe("Parser", func() {
 
 	It("should not detect an installation if none exists", func() {
 		c := fake.NewFakeClient()
-		Expect(convert.Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
 	It("should detect an installation if one exists", func() {
@@ -30,14 +29,14 @@ var _ = Describe("Parser", func() {
 				Namespace: "kube-system",
 			},
 		}, emptyKubeControllerSpec())
-		err := convert.Convert(ctx, c, &operatorv1.Installation{})
+		err := Convert(ctx, c, &operatorv1.Installation{})
 		// though it will detect an install, it will be in the form of an incompatible-cluster error
-		Expect(err).To(BeAssignableToTypeOf(convert.ErrIncompatibleCluster{}))
+		Expect(err).To(BeAssignableToTypeOf(ErrIncompatibleCluster{}))
 	})
 
 	It("should detect a valid installation", func() {
 		c := fake.NewFakeClient(emptyNodeSpec(), emptyKubeControllerSpec())
-		Expect(convert.Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
 	It("should error for unchecked env vars", func() {
@@ -47,7 +46,7 @@ var _ = Describe("Parser", func() {
 			Value: "bar",
 		}}
 		c := fake.NewFakeClient(node, emptyKubeControllerSpec())
-		err := convert.Convert(ctx, c, &operatorv1.Installation{})
+		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -66,7 +65,7 @@ var _ = Describe("Parser", func() {
 
 		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
 		cfg := &operatorv1.Installation{}
-		err := convert.Convert(ctx, c, cfg)
+		err := Convert(ctx, c, cfg)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
 		exp := int32(24)
@@ -81,7 +80,7 @@ var _ = Describe("Parser", func() {
 		}}
 
 		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		err := convert.Convert(ctx, c, &operatorv1.Installation{})
+		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -89,7 +88,7 @@ var _ = Describe("Parser", func() {
 	// 	ds := emptyNodeSpec()
 	// 	c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
 
-	// 	cfg, err := convert.Convert(ctx, c, &operatorv1.Installation{})
+	// 	cfg, err := Convert(ctx, c, &operatorv1.Installation{})
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(cfg).ToNot(BeNil())
 	// })

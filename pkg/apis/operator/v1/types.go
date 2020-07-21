@@ -181,8 +181,20 @@ func (nt HostPortsType) String() string {
 	return string(nt)
 }
 
+type BGPOption string
+
+const (
+	BGPEnabled  BGPOption = "Enabled"
+	BGPDisabled BGPOption = "Disabled"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
+	// BGP configures whether or not to enable Calico's BGP capabilities.
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	BGP *BGPOption `json:"bgp,omitempty"`
+
 	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
 	// address family may be specified. If omitted, a single pool will be configured if needed.
 	// +optional
@@ -251,13 +263,16 @@ type NodeAddressAutodetection struct {
 // options are: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None.
 type EncapsulationType string
 
+func (et EncapsulationType) String() string {
+	return string(et)
+}
+
 const (
 	EncapsulationIPIPCrossSubnet  EncapsulationType = "IPIPCrossSubnet"
 	EncapsulationIPIP             EncapsulationType = "IPIP"
 	EncapsulationVXLAN            EncapsulationType = "VXLAN"
 	EncapsulationVXLANCrossSubnet EncapsulationType = "VXLANCrossSubnet"
 	EncapsulationNone             EncapsulationType = "None"
-	EncapsulationDefault          EncapsulationType = EncapsulationIPIP
 )
 
 var EncapsulationTypes []EncapsulationType = []EncapsulationType{
@@ -273,10 +288,6 @@ var EncapsulationTypesString []string = []string{
 	EncapsulationVXLAN.String(),
 	EncapsulationVXLANCrossSubnet.String(),
 	EncapsulationNone.String(),
-}
-
-func (et EncapsulationType) String() string {
-	return string(et)
 }
 
 // NATOutgoingType describe the type of outgoing NAT to use.

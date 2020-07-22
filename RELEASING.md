@@ -43,7 +43,7 @@ You should have no local changes and tests should be passing.
 
 ## Updates for new Calico CRDs
 
-If the release includes new Calico CRDs, add the new CRDs to `hack/gen-csv/get-manifests.sh`.
+If the release includes new Calico CRDs, add the new CRDs to `hack/gen-csv/get-manifests.sh` and `hack/gen-csv/clusterserviceversion.template`.
 
 ## Publishing a release on RH Catalog
 

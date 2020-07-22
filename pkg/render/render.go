@@ -63,6 +63,7 @@ func Calico(
 	cr *operator.Installation,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
+	authentication interface{},
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
@@ -144,6 +145,7 @@ func Calico(
 		provider:                    p,
 		amazonCloudInt:              aci,
 		upgrade:                     up,
+		authentication:              authentication,
 	}, nil
 }
 
@@ -216,6 +218,7 @@ type calicoRenderer struct {
 	provider                    operator.Provider
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
+	authentication              interface{}
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -226,7 +229,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, Node(r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret))
+	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }
 

@@ -40,3 +40,33 @@ You should have no local changes and tests should be passing.
 1. Close the milestone for this release. https://github.com/tigera/operator/milestones
 
 1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist (e.g., next patch release)
+
+## Creating a release on RH Catalog
+
+1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the tag you released.
+
+1. Create the ClusterServiceVersion (CSV), using the tag version for VERSION and the version that this replaces in PREV_VERSION.
+   The versions are semver strings. For example:
+
+   ```
+   make gen-csv VERSION=1.3.1 PREV_VERSION=1.3.0
+   ```
+
+   This step will create the CSV and copy over its crds into `build/_output/bundle/tigera-operator/$VERSION` which will be used in the next step,
+   on master.
+
+3. Checkout `master` and create a new branch.
+
+4. Create the CSV bundle:
+
+   ```
+   make gen-bundle
+   ```
+
+   This step will add the CSV we generated earlier to `deploy/olm-catalog` and create a zip file in `build/_output/bundle/bundle.zip`.
+
+5. `git add deploy/olm-catalog`, commit the changes, and have the PR reviewed and merged into master.
+
+6. Login to our operator project metadata [submission page](https://connect.redhat.com/project/2072901/operator-metadata) and upload the bundle.zip
+
+7. The metadata validation job runs between 1-2 hours if it runs successfully. When it passes, we can go back to the same submission page and publish the new operator version.

@@ -179,6 +179,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
+
+		err = c.Watch(&source.Kind{Type: &operator.Authentication{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	return nil
@@ -566,8 +571,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		render.ManagerInternalSecretKeyName,
 	)
 
+	logStorageExists, err := utils.LogStorageExists(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error checking if LogStorage exists")
+		r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
+	var authentication interface{}
 	if r.enterpriseCRDsExist {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if managementCluster != nil {
@@ -589,6 +602,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
 			log.Error(err, "")
 			r.status.SetDegraded(err.Error(), "")
+			return reconcile.Result{}, err
+		}
+
+		authentication, err = utils.GetAuthentication(ctx, r.client)
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -647,8 +667,10 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// create or update them.
 	calico, err := render.Calico(
 		instance,
+		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
+		authentication,
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,

@@ -23,6 +23,7 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("calico-node", "FELIX_LOGSEVERITYSCREEN")
 	c.node.ignoreEnv("calico-node", "FELIX_HEALTHENABLED")
 	c.node.ignoreEnv("calico-node", "FELIX_USAGEREPORTINGENABLED")
+	c.node.ignoreEnv("calico-node", "FELIX_TYPHAK8SSERVICENAME")
 	c.node.ignoreEnv("upgrade-ipam", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
 	c.node.ignoreEnv("install-cni", "CNI_CONF_NAME")

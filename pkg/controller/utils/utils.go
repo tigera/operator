@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/oidc"
+
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -41,6 +43,7 @@ const (
 	// This is for development and testing purposes only. Do not use this annotation
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
+	OIDCSecretName              = "tigera-oidc-credentials"
 )
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
@@ -161,7 +164,7 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	return true
 }
 
-func IsLogStorageReady(ctx context.Context, cli client.Client) (bool, error) {
+func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	instance := &operatorv1.LogStorage{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
 	if err != nil {
@@ -171,9 +174,6 @@ func IsLogStorageReady(ctx context.Context, cli client.Client) (bool, error) {
 		return false, err
 	}
 
-	if instance.Status.State != operatorv1.LogStorageStatusReady {
-		return false, nil
-	}
 	return true, nil
 }
 
@@ -272,4 +272,64 @@ func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 	}
 
 	return instance, nil
+}
+
+// getAuthentication
+func GetAuthentication(ctx context.Context, client client.Client) (interface{}, error) {
+	var authenticationConfig interface{}
+
+	authenticationCR := &operatorv1.Authentication{}
+	if err := client.Get(ctx, DefaultTSEEInstanceKey, authenticationCR); err != nil {
+		if !kerrors.IsNotFound(err) {
+			return nil, err
+		}
+	} else {
+		if authenticationCR.Spec.Method == operatorv1.AuthMethodOIDC {
+			if authenticationCR.Spec.OIDC == nil {
+				return nil, fmt.Errorf("authentication method is OIDC but no OIDC configuration was provided")
+			}
+
+			wellKnownConfig, err := oidc.LookupWellKnownConfig(authenticationCR.Spec.OIDC.IssuerURL)
+			if err != nil {
+				return nil, err
+			}
+
+			oidcSecret := &corev1.Secret{}
+			err = client.Get(ctx, types.NamespacedName{Name: OIDCSecretName, Namespace: render.OperatorNamespace()}, oidcSecret)
+			if err != nil {
+				return nil, err
+			}
+
+			_, clientIDExists := oidcSecret.Data["clientID"]
+			_, clientSecretExists := oidcSecret.Data["clientSecret"]
+
+			if !clientIDExists || !clientSecretExists {
+				return nil, fmt.Errorf("%s must contain both the clientID and the clientSecret", OIDCSecretName)
+			}
+
+			// If no scopes were requests specifically request all of them
+			requestedScopes := authenticationCR.Spec.OIDC.RequestedScopes
+			if requestedScopes == nil || len(requestedScopes) == 0 {
+				requestedScopes = wellKnownConfig.ScopesSupported
+			}
+
+			authenticationConfig = render.OIDCAuthentication{
+				ClientID:              string(oidcSecret.Data["clientID"]),
+				Secret:                string(oidcSecret.Data["clientSecret"]),
+				IssuerURL:             authenticationCR.Spec.OIDC.IssuerURL,
+				RequestedScopes:       requestedScopes,
+				SiteURL:               authenticationCR.Spec.ManagerDomain,
+				UsernameClaim:         authenticationCR.Spec.OIDC.UsernameClaim,
+				UsernamePrefix:        authenticationCR.Spec.OIDC.UsernamePrefix,
+				GroupsClaim:           authenticationCR.Spec.OIDC.GroupsClaim,
+				GroupPrefix:           authenticationCR.Spec.OIDC.GroupsPrefix,
+				AuthorizationEndpoint: wellKnownConfig.AuthorizationEndpoint,
+				TokenEndpoint:         wellKnownConfig.TokenEndpoint,
+				JWKSetURI:             wellKnownConfig.JWKSetURI,
+				UserInfoEndpoint:      wellKnownConfig.UserInfoEndpoint,
+			}
+		}
+	}
+
+	return authenticationConfig, nil
 }

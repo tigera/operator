@@ -27,6 +27,9 @@ fi
 function downloadOperatorManifests() {
     curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator.yaml --output ${DEPLOY_DIR}/operator.yaml
     curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-role-tigera-operator.yaml --output ${DEPLOY_DIR}/role.yaml
+
+    # Download the installation CR so that the alm-examples annotation is generated.
+    curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${DEPLOY_DIR}/01-cr-installation.yaml
 }
 
 # Download the installation and tigerastatus CRDs.

@@ -2,17 +2,6 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    # Optional: provides example CRs to the user
-    alm-examples: |-
-      [
-        {
-          "apiVersion": "operator.tigera.io/v1",
-          "kind": "Installation",
-          "metadata": {
-            "name": "default"
-          }
-        }
-      ]
     # Indicates the operator's "capability level" i.e. an indication of how much the
     # operator automates. This appears on the operator's page in the embedded
     # OperatorHub within OpenShift Console.

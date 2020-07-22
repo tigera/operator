@@ -126,6 +126,8 @@ type OIDCAuthentication struct {
 	IssuerURL             string
 	SiteURL               string
 	UsernameClaim         string
+	UsernamePrefix        string
+	GroupPrefix           string
 	GroupsClaim           string
 	AuthorizationEndpoint string
 	TokenEndpoint         string

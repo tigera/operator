@@ -163,66 +163,52 @@ func handleNoCNIConfiguration(c *components, install *Installation) error {
 		return err
 	}
 
-	switch {
-	case prefix == nil:
+	if prefix == nil {
 		return ErrIncompatibleCluster{
 			fmt.Sprintf("with no CNI config, expected FELIX_INTERFACEPREFIX to be set", prefix),
 		}
-	case *prefix == "eni":
+	}
+	switch *prefix {
+	case "eni":
 		install.Spec.CNI.Type = PluginAmazonVPC
 		// For AmazonVPC, check that IPTABLESMANGLE is set Return
-		switch {
-		case mangleAllow == nil:
+		if mangleAllow == nil {
 			return ErrIncompatibleCluster{"detected AmazonVPC CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'."}
-		case *mangleAllow == "Return":
-		default:
+		} else if *mangleAllow != "Return" {
 			return ErrIncompatibleCluster{fmt.Sprintf("detected AmazonVPC CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was %s, expected it to be 'Return'.", *mangleAllow)}
 		}
 		// For AmazonVPC, check that IPTABLESFILTER is not set or the default Accept
-		switch {
-		case filterAllow == nil:
-		case *filterAllow == "Accept":
-		default:
+		if filterAllow != nil && *filterAllow != "Accept" {
 			return ErrIncompatibleCluster{fmt.Sprintf(
 				"detected AmazonVPC CNI plugin, FELIX_IPTABLESFILTERALLOWACTION was set to %s, expected it to be unset or 'Accept'.",
 				*filterAllow)}
 		}
-	case *prefix == "avz":
+	case "avz":
 		install.Spec.CNI.Type = PluginAzureVNET
 		// For AzureVNET, check that IPTABLESMANGLE is not set or the default Accept
-		switch {
-		case mangleAllow == nil:
-		case *mangleAllow == "Accept":
-		default:
+		if mangleAllow != nil && *mangleAllow != "Accept" {
 			return ErrIncompatibleCluster{fmt.Sprintf(
 				"detected AzureVNET CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was set to %s, expected it to be unset or 'Accept'.",
 				*mangleAllow)}
 		}
 		// For AzureVNET, check that IPTABLESFILTER is not set or the default Accept
-		switch {
-		case filterAllow == nil:
-		case *filterAllow == "Accept":
-		default:
+		if filterAllow != nil && *filterAllow != "Accept" {
 			return ErrIncompatibleCluster{fmt.Sprintf(
 				"detected AzureVNET CNI plugin, FELIX_IPTABLESFILTERALLOWACTION was set to %s, expected it to be unset or 'Accept'.",
 				*filterAllow)}
 		}
-	case *prefix == "gke":
+	case "gke":
 		install.Spec.CNI.Type = PluginGKE
 		// For GKE, check that IPTABLESMANGLE is set Return
-		switch {
-		case mangleAllow == nil:
+		if mangleAllow == nil {
 			return ErrIncompatibleCluster{"detected GKE CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'."}
-		case *mangleAllow == "Return":
-		default:
+		} else if *mangleAllow != "Return" {
 			return ErrIncompatibleCluster{fmt.Sprintf("detected GKE CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was %s, expected it to be 'Return'.", *mangleAllow)}
 		}
 		// For GKE, check that IPTABLESFILTER is set Return
-		switch {
-		case filterAllow == nil:
+		if filterAllow == nil {
 			return ErrIncompatibleCluster{"detected GKE CNI plugin, FELIX_IPTABLESFILTERALLOWACTION was unset, expected it to be 'Return'."}
-		case *filterAllow == "Return":
-		default:
+		} else if *filterAllow != "Return" {
 			return ErrIncompatibleCluster{fmt.Sprintf(
 				"detected GKE CNI plugin, FELIX_IPTABLESFILTERALLOWACTION was set to %s, expected it to be 'Return'.",
 				*filterAllow)}

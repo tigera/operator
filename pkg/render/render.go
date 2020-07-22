@@ -61,8 +61,10 @@ type TyphaNodeTLS struct {
 
 func Calico(
 	cr *operator.Installation,
+	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
+	authentication interface{},
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
@@ -133,6 +135,7 @@ func Calico(
 
 	return calicoRenderer{
 		installation:                cr,
+		logStorageExists:            logStorageExists,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		pullSecrets:                 pullSecrets,
@@ -144,6 +147,7 @@ func Calico(
 		provider:                    p,
 		amazonCloudInt:              aci,
 		upgrade:                     up,
+		authentication:              authentication,
 	}, nil
 }
 
@@ -205,6 +209,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	installation                *operator.Installation
+	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	pullSecrets                 []*corev1.Secret
@@ -216,6 +221,7 @@ type calicoRenderer struct {
 	provider                    operator.Provider
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
+	authentication              interface{}
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -226,7 +232,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, Node(r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret))
+	components = appendNotNil(components, KubeControllers(r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }
 

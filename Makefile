@@ -461,7 +461,8 @@ prepull-image:
 	@echo Pulling operator image...
 	docker pull quay.io/tigera/operator:v$(VERSION)
 
-# Get the digest for the image. 'docker inspect' returns output like the example
+# Get the digest for the image. This target runs docker commands on the host since the
+# build container doesn't have docker-in-docker. 'docker inspect' returns output like the example
 # below. RepoDigests may have more than one entry so we need to filter.
 # [
 #     {

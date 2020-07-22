@@ -9,8 +9,6 @@ CALICO_BASE_URL=https://docs.projectcalico.org
 
 if [ -f config/calico_versions.yml ]; then
     CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
-elif [ -f config/os_versions.yaml ]; then
-    CALICO_VERSION=$(yq read config/os_versions.yaml components.typha.version)
 else
     echo "Could not find Calico versions file."
     exit 1
@@ -37,7 +35,7 @@ function downloadOperatorCRDs() {
     curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-tigerastatus.yaml --output ${CSV_DIR}/operator.tigera.io_tigerastatuses_crd.yaml
 }
 
-function downloadCalicoCRDsLatest() {
+function downloadCalicoCRDs() {
     CALICO_RESOURCES="
 bgpconfigurations
 bgppeers
@@ -60,44 +58,6 @@ networksets
     for resource in $CALICO_RESOURCES; do
         curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${CSV_DIR}/crd.projectcalico.org_${resource}.yaml
     done
-}
-
-
-# URLs to Calico CRDs have slightly different paths between v3.14 and newer.
-function downloadCalicoCRDsBeforeV315() {
-    CALICO_RESOURCES="
-bgpconfiguration
-bgppeer
-blockaffinity
-clusterinformation
-felixconfiguration
-globalnetworkpolicy
-globalnetworkset
-hostendpoint
-ipamblock
-ipamconfig
-ipamhandle
-ippool
-networkpolicy
-networkset
-"
-    # kubecontrollersconfiguration was added in v3.14
-    if [ "${CALICO_VERSION}" == "v3.14" ]; then
-        CALICO_RESOURCES+=("kubecontrollersconfiguration")
-    fi
-
-    # Download the Calico CRDs into CSV dir.
-    for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/02-crd-${resource}.yaml --output ${CSV_DIR}/02-crd-${resource}.yaml
-    done
-}
-
-function downloadCalicoCRDs() {
-    if [ "${CALICO_VERSION}" == "v3.13" ] || [ "${CALICO_VERSION}" == "v3.14" ]; then
-        downloadCalicoCRDsBeforeV315
-    else
-        downloadCalicoCRDsLatest
-    fi
 }
 
 downloadOperatorManifests

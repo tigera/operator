@@ -65,7 +65,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.KubeControllers(instance, nil, nil, nil)
+		component := render.KubeControllers(instance, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -116,7 +116,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, nil, nil, nil)
+		component := render.KubeControllers(instance, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -158,7 +158,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret)
+		component := render.KubeControllers(instance, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -217,7 +217,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.KubeControllers(instance, nil, nil, nil)
+		component := render.KubeControllers(instance, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -251,7 +251,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		component := render.KubeControllers(instance, nil, nil, nil)
+		component := render.KubeControllers(instance, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")

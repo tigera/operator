@@ -12,4 +12,7 @@ type handler func(*components, *Installation) error
 var handlers = []handler{
 	handleNetwork,
 	handleCore,
+	handleFelixNodeMetrics,
+	handleCalicoCNI,
+	handleNonCalicoCNI,
 }

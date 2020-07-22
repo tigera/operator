@@ -220,6 +220,10 @@ func handleNoCNIConfiguration(c *components, install *Installation) error {
 			fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke' are supported.", *prefix),
 		}
 	}
+
+	c.node.ignoreEnv(containerCalicoNode, "IP")
+	c.node.ignoreEnv(containerCalicoNode, "NO_DEFAULT_POOLS")
+
 	return nil
 }
 

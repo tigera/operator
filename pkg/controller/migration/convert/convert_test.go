@@ -31,8 +31,8 @@ var _ = Describe("Parser", func() {
 			},
 		}, emptyKubeControllerSpec())
 		err := convert.Convert(ctx, c, &operatorv1.Installation{})
-		// though it will detect an install, it will be in the form of an incompatible-cluster error
-		Expect(err).To(BeAssignableToTypeOf(convert.ErrIncompatibleCluster{}))
+		// though it will detect an install, it will be missing the calico-node container
+		Expect(err).To(BeAssignableToTypeOf(convert.ErrContainerNotFound{}))
 	})
 
 	It("should detect a valid installation", func() {
@@ -93,6 +93,13 @@ var _ = Describe("Parser", func() {
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(cfg).ToNot(BeNil())
 	// })
+	Describe("handle alternate CNI conversion", func() {
+		It("should convert AWS CNI install", func() {
+			c := fake.NewFakeClient(awsCNIPolicyOnlyConfig()...)
+			err := convert.Convert(ctx, c, &operatorv1.Installation{})
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })
 
 func emptyNodeSpec() *appsv1.DaemonSet {

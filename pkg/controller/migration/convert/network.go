@@ -127,8 +127,8 @@ func handleCalicoCNI(c *components, install *Installation) error {
 }
 
 func handleNoCNIConfiguration(c *components, install *Installation) error {
-	c := getContainer(c.node.Spec.Template.Spec, containerInstallCNI)
-	if c != nil {
+	icc := getContainer(c.node.Spec.Template.Spec, containerInstallCNI)
+	if icc != nil {
 		return ErrIncompatibleCluster{
 			fmt.Sprintf("%s container on %s is not supported when there is no CNI configuration",
 				containerInstallCNI,
@@ -163,14 +163,16 @@ func handleNoCNIConfiguration(c *components, install *Installation) error {
 		return err
 	}
 
+	if install.Spec.CNI == nil {
+		install.Spec.CNI = &operatorv1.CNISpec{}
+	}
+
 	if prefix == nil {
-		return ErrIncompatibleCluster{
-			fmt.Sprintf("with no CNI config, expected FELIX_INTERFACEPREFIX to be set", prefix),
-		}
+		return ErrIncompatibleCluster{"with no CNI config, expected FELIX_INTERFACEPREFIX to be set"}
 	}
 	switch *prefix {
 	case "eni":
-		install.Spec.CNI.Type = PluginAmazonVPC
+		install.Spec.CNI.Type = operatorv1.PluginAmazonVPC
 		// For AmazonVPC, check that IPTABLESMANGLE is set Return
 		if mangleAllow == nil {
 			return ErrIncompatibleCluster{"detected AmazonVPC CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'."}
@@ -184,7 +186,7 @@ func handleNoCNIConfiguration(c *components, install *Installation) error {
 				*filterAllow)}
 		}
 	case "avz":
-		install.Spec.CNI.Type = PluginAzureVNET
+		install.Spec.CNI.Type = operatorv1.PluginAzureVNET
 		// For AzureVNET, check that IPTABLESMANGLE is not set or the default Accept
 		if mangleAllow != nil && *mangleAllow != "Accept" {
 			return ErrIncompatibleCluster{fmt.Sprintf(
@@ -198,7 +200,7 @@ func handleNoCNIConfiguration(c *components, install *Installation) error {
 				*filterAllow)}
 		}
 	case "gke":
-		install.Spec.CNI.Type = PluginGKE
+		install.Spec.CNI.Type = operatorv1.PluginGKE
 		// For GKE, check that IPTABLESMANGLE is set Return
 		if mangleAllow == nil {
 			return ErrIncompatibleCluster{"detected GKE CNI plugin, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'."}
@@ -215,7 +217,7 @@ func handleNoCNIConfiguration(c *components, install *Installation) error {
 		}
 	default:
 		return ErrIncompatibleCluster{
-			fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke' are supported.", prefix),
+			fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke' are supported.", *prefix),
 		}
 	}
 	return nil

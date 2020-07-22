@@ -14,6 +14,12 @@ import (
 func loadCNI(c *components) error {
 	cniConfig, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_NETWORK_CONFIG")
 	if err != nil {
+		if IsContainerNotFound(err) {
+			// It is valid to not have an install-cni container in the cases
+			// of non Calico CNI so nothing more to do in that case.
+			log.Print("no install-cni container detected on node")
+			return nil
+		}
 		return err
 	}
 	if cniConfig == nil {

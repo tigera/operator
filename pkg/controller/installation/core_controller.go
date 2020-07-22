@@ -179,6 +179,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
+
+		err = c.Watch(&source.Kind{Type: &operator.Authentication{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	return nil
@@ -640,6 +645,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil {
+		log.Error(err, err.Error())
+		r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -649,6 +661,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance,
 		managementCluster,
 		managementClusterConnection,
+		authentication,
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,

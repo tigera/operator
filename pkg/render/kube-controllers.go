@@ -36,12 +36,14 @@ func KubeControllers(
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
+	authentication interface{},
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		managerInternalSecret:       managerInternalSecret,
+		authentication:              authentication,
 	}
 }
 
@@ -50,6 +52,7 @@ type kubeControllersComponent struct {
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
+	authentication              interface{}
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -258,6 +261,14 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+
+		switch c.authentication.(type) {
+		case OIDCAuthentication:
+			env = append(env,
+				v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.(OIDCAuthentication).UsernamePrefix},
+				v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.(OIDCAuthentication).GroupPrefix},
+			)
 		}
 	}
 

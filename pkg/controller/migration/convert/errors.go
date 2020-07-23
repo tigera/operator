@@ -9,3 +9,16 @@ type ErrIncompatibleCluster struct {
 func (e ErrIncompatibleCluster) Error() string {
 	return e.err
 }
+
+type ErrContainerNotFound struct {
+	err string
+}
+
+func (e ErrContainerNotFound) Error() string {
+	return e.err
+}
+
+func IsContainerNotFound(e error) bool {
+	_, ok := e.(ErrContainerNotFound)
+	return ok
+}

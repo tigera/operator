@@ -48,7 +48,7 @@ func (r *CheckedDaemonSet) uncheckedVars() []string {
 func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, container string, key string) (*string, error) {
 	c := getContainer(r.Spec.Template.Spec, container)
 	if c == nil {
-		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+		return nil, ErrContainerNotFound{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
 	}
 	r.ignoreEnv(container, key)
 	return getEnv(ctx, client, c.Env, key)

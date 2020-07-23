@@ -420,13 +420,15 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v0.18.2
-OPERATOR_SDK=hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+OPERATOR_SDK_VERSION=v0.18.1
+OPERATOR_SDK_BARE=hack/bin/operator-sdk
+OPERATOR_SDK=$(OPERATOR_SDK_BARE)-$(OPERATOR_SDK_VERSION)
 $(OPERATOR_SDK):
 	mkdir -p hack/bin
 	curl --fail -L -o $@ \
 		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
 	chmod +x $@
+	ln -f -s operator-sdk-$(OPERATOR_SDK_VERSION) $(OPERATOR_SDK_BARE)
 
 ## Generating code after API changes.
 gen-files: $(OPERATOR_SDK)

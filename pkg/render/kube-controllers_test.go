@@ -244,7 +244,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		instance.Spec.ComponentResources = []*operator.ComponentResource{
+		instance.Spec.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameKubeControllers,
 				ResourceRequirements: rr,

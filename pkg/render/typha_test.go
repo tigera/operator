@@ -183,7 +183,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		installation.Spec.ComponentResources = []*operator.ComponentResource{
+		installation.Spec.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameTypha,
 				ResourceRequirements: rr,

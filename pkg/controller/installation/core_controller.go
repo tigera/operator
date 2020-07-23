@@ -167,16 +167,18 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-	}
+	if r.enterpriseCRDsExist {
+		// Watch for changes to primary resource ManagementCluster
+		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
 
-	// Watch for changes to primary resource ManagementClusterConnection
-	err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		// Watch for changes to primary resource ManagementClusterConnection
+		err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	return nil
@@ -327,12 +329,25 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
+		// Default BGP enablement based on CNI plugin. We default to BGP
+		// enabled for Calico CNI, but disabled for all others.
+		if instance.Spec.CalicoNetwork.BGP == nil {
+			enabled := operator.BGPEnabled
+			disabled := operator.BGPDisabled
+			switch instance.Spec.CNI.Type {
+			case operator.PluginCalico:
+				instance.Spec.CalicoNetwork.BGP = &enabled
+			default:
+				instance.Spec.CalicoNetwork.BGP = &disabled
+			}
+		}
+
 		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
-				v4pool.Encapsulation = operator.EncapsulationDefault
+				v4pool.Encapsulation = operator.EncapsulationIPIP
 			}
 			if v4pool.NATOutgoing == "" {
 				v4pool.NATOutgoing = operator.NATOutgoingEnabled
@@ -551,27 +566,31 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		render.ManagerInternalSecretKeyName,
 	)
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
-	if managementCluster != nil {
+	var managementCluster *operator.ManagementCluster
+	var managementClusterConnection *operator.ManagementClusterConnection
+	if r.enterpriseCRDsExist {
+		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
+		if managementCluster != nil {
+			if err != nil {
+				log.Error(err, "Error reading ManagementCluster")
+				r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
+		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
-			log.Error(err, "Invalid internal manager TLS Cert")
-			r.status.SetDegraded("Error validating internal manager TLS certificate", err.Error())
+			log.Error(err, "Error reading ManagementClusterConnection")
+			r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
 			return reconcile.Result{}, err
 		}
-	}
 
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading ManagementClusterConnection")
-		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	if managementClusterConnection != nil && managementCluster != nil {
-		err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
-		log.Error(err, "")
-		r.status.SetDegraded(err.Error(), "")
-		return reconcile.Result{}, err
+		if managementClusterConnection != nil && managementCluster != nil {
+			err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
+			log.Error(err, "")
+			r.status.SetDegraded(err.Error(), "")
+			return reconcile.Result{}, err
+		}
 	}
 
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()

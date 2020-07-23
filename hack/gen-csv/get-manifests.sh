@@ -27,7 +27,7 @@ fi
 # operator deployment manifest that doesn't include an init container and
 # volumes for creating install-time resources.
 function downloadOperatorManifests() {
-    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator-no-init.yaml --output ${DEPLOY_DIR}/operator.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator-no-resource-loading.yaml --output ${DEPLOY_DIR}/operator.yaml
     curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-role-tigera-operator.yaml --output ${DEPLOY_DIR}/role.yaml
 
     # Download the installation CR so that the alm-examples annotation is generated.

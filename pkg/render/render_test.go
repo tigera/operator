@@ -82,7 +82,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(instance, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		c, err := render.Calico(instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 5 + 1 + 1))
 	})
@@ -95,7 +95,7 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(instance, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		c, err := render.Calico(instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(((6 + 4 + 2 + 7 + 5 + 1) + 1 + 1)))
 	})
@@ -110,7 +110,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := render.Calico(instance, &operator.ManagementCluster{}, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		c, err := render.Calico(instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {

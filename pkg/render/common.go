@@ -19,8 +19,10 @@ import (
 	"crypto/sha1"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -370,4 +372,64 @@ func basePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 			ReadOnlyRootFilesystem: false,
 		},
 	}
+}
+
+// K8sServiceEndpoint is the Host/Port of the K8s endpoint.
+type K8sServiceEndpoint struct {
+	Host string
+	Port string
+}
+
+// EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
+// of the K8sServiceEndpoint were set. It returns a nil slice if either was empty as both
+// need to be set.
+func (k8s K8sServiceEndpoint) EnvVars() []v1.EnvVar {
+	if k8s.Host == "" || k8s.Port == "" {
+		return nil
+	}
+
+	return []v1.EnvVar{
+		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
+		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
+	}
+}
+
+// Validate makes sure that the port is a 16bit number and the host is a
+// parsable IP or domain name. It returns error if either is wrong.
+func (k8s K8sServiceEndpoint) Validate() error {
+	// Nothing is set, that is a correct input
+	if k8s.Host == "" && k8s.Port == "" {
+		return nil
+	}
+
+	if k8s.Host == "" || k8s.Port == "" {
+		return fmt.Errorf("Both values must be set")
+	}
+
+	port, err := strconv.Atoi(k8s.Port)
+	if err != nil {
+		return fmt.Errorf("Invalid port %q: %w", k8s.Port, err)
+	}
+
+	if port <= 0 || port >= (1<<16) {
+		return fmt.Errorf("Invalid port %q: not a 16-bit value", k8s.Port)
+	}
+
+	// Try if the host is a valid IP (easier to do this way due to ipv6 being
+	// [1234:abcd:...] in a valid URL
+	if ip := net.ParseIP(k8s.Host); ip != nil {
+		return nil
+	}
+
+	// add // to enforce parsing as host not as path
+	u, err := url.Parse("//" + k8s.Host)
+	if err != nil {
+		return fmt.Errorf("Invalid host %q: %w", k8s.Host, err)
+	}
+
+	if u.Hostname() != k8s.Host {
+		return fmt.Errorf("Invalid host %q", k8s.Host)
+	}
+
+	return nil
 }

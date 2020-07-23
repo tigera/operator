@@ -421,17 +421,17 @@ endif
 # Utilities
 ###############################################################################
 OPERATOR_SDK_VERSION=v0.18.1
-hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
+OPERATOR_SDK=hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+$(OPERATOR_SDK):
 	mkdir -p hack/bin
-	curl --fail -L -o hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) \
+	curl --fail -L -o $@ \
 		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
-	chmod +x hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	chmod +x $@
 
 ## Generating code after API changes.
-gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
-	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
-	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
-	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
+gen-files: $(OPERATOR_SDK)
+	$(CONTAINERIZED) $(OPERATOR_SDK) generate crds
+	$(CONTAINERIZED) $(OPERATOR_SDK) generate k8s
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml

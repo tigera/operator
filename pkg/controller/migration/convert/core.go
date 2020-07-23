@@ -49,7 +49,7 @@ func handleFelixNodeMetrics(c *components, install *Installation) error {
 	if err != nil {
 		return err
 	}
-	if metricsEnabled == nil || strings.ToLower(*metricsEnabled) == "true" {
+	if metricsEnabled != nil && strings.ToLower(*metricsEnabled) == "true" {
 		var _9091 int32 = 9091
 		install.Spec.NodeMetricsPort = &_9091
 		port, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")

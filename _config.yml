@@ -1,0 +1,13 @@
+exclude:
+  - "*.go"
+  - "*.conf"
+  - "*.md"
+  - "*.xml"
+  - "*.tpl"
+  - "Makefile"
+  - "LICENSE"
+  - "go.mod"
+  - "go.sum"
+  - "bin"
+  - "hack"
+  - "build"

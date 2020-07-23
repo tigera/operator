@@ -90,3 +90,6 @@ tags
 report/*
 cscope.*
 .idea/
+# jekyll manifest serving
+_site
+.jekyll-cache

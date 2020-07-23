@@ -420,13 +420,18 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v0.18.2
-OPERATOR_SDK=hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+OPERATOR_SDK_VERSION=v0.18.1
+OPERATOR_SDK_BARE=hack/bin/operator-sdk
+OPERATOR_SDK=$(OPERATOR_SDK_BARE)-$(OPERATOR_SDK_VERSION)
 $(OPERATOR_SDK):
 	mkdir -p hack/bin
 	curl --fail -L -o $@ \
 		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
 	chmod +x $@
+
+.PHONY: $(OPERATOR_SDK_BARE)
+$(OPERATOR_SDK_BARE): $(OPERATOR_SDK)
+	ln -f -s operator-sdk-$(OPERATOR_SDK_VERSION) $(OPERATOR_SDK_BARE)
 
 ## Generating code after API changes.
 gen-files: $(OPERATOR_SDK)
@@ -452,7 +457,7 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 # PREV_VERSION: the operator version that this CSV will replace. If there is
 #               no previous version, use 0.0.0
 .PHONY: gen-csv
-gen-csv: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) get-digest
+gen-csv: $(OPERATOR_SDK_BARE) get-digest
 	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
 	$(CONTAINERIZED) hack/gen-csv/csv.sh
 
@@ -486,7 +491,7 @@ get-digest: prepull-image
 ## Generate a CSV bundle zip file containing all CSVs and a package manifest.
 # E.g. make gen-bundle
 .PHONY: gen-bundle
-gen-bundle: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+gen-bundle:
 	$(CONTAINERIZED) hack/gen-csv/bundle.sh
 
 .PHONY: help

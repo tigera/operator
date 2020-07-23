@@ -339,4 +339,24 @@ var _ = Describe("Defaulting logic tests", func() {
 		table.Entry("GKE plugin", operator.PluginGKE),
 		table.Entry("AzureVNET plugin", operator.PluginAzureVNET),
 	)
+
+	// Tests for Calico Networking on EKS should go in this context.
+	Context("with Calico Networking on EKS", func() {
+		It("should default properly", func() {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderEKS,
+					CNI: &operator.CNISpec{
+						Type: operator.PluginCalico,
+					},
+				},
+			}
+			fillDefaults(instance)
+			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
+			Expect(*&instance.Spec.CalicoNetwork.IPPools[0].Encapsulation).To(Equal(operator.EncapsulationVXLAN))
+			Expect(*&instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+	})
+
 })

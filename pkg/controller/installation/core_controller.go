@@ -635,10 +635,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	// We revalidate the input on every iteration so that it is obvious from the
+	// latest logs what is wrong.
+	k8sSvcEP := k8sEndpoint
+	if err := k8sEndpoint.Validate(); err != nil {
+		r.status.SetDegraded("Error parsing KUBERNETES_SERVICE_HOST/PORT values", err.Error())
+		k8sSvcEP = render.K8sServiceEndpoint{}
+	}
+
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
-		k8sEndpoint,
+		k8sSvcEP,
 		instance,
 		managementCluster,
 		managementClusterConnection,

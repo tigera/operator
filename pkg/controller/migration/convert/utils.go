@@ -15,3 +15,12 @@ func getContainer(spec corev1.PodSpec, name string) *corev1.Container {
 	}
 	return nil
 }
+
+func getVolume(spec corev1.PodSpec, name string) *corev1.Volume {
+	for _, volume := range spec.Volumes {
+		if volume.Name == name {
+			return &volume
+		}
+	}
+	return nil
+}

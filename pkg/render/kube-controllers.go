@@ -33,15 +33,19 @@ var replicas int32 = 1
 
 func KubeControllers(
 	cr *operator.Installation,
+	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
+	authentication interface{},
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		managerInternalSecret:       managerInternalSecret,
+		logStorageExists:            logStorageExists,
+		authentication:              authentication,
 	}
 }
 
@@ -50,6 +54,8 @@ type kubeControllersComponent struct {
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
+	logStorageExists            bool
+	authentication              interface{}
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -246,10 +252,22 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		enabledControllers = append(enabledControllers, "service", "federatedservices", "authorization")
+		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
-		if c.managementClusterConnection == nil {
-			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")
+		if c.logStorageExists {
+			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
+			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
+			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
+
+			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
+			// them.
+			switch c.authentication.(type) {
+			case OIDCAuthentication:
+				env = append(env,
+					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.(OIDCAuthentication).UsernamePrefix},
+					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.(OIDCAuthentication).GroupPrefix},
+				)
+			}
 		}
 
 		if c.managementCluster != nil {

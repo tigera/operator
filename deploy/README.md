@@ -1,19 +1,10 @@
-# Deploy manifests for Kubernetes
+# Deploy CRDs and scripts for tests
 
-The manfiests in this directory can be used to install the operator on a Kubernetes cluster. They are
-primarily intended for developers, are not guaranteed to be stable, and may be changed or broken at
-any time without notice.
+This directory contains:
 
-## Using these manifests
+- CRDs used in tests
+- Scripts to provision test clusters
+- And the latest set of package manifests in `olm-catalog`
 
-1. First install the operator's CRD:
+For release versions of CRDs and operator manifests (deployment, RBAC, etc.), see the Calico [Kubernetes](https://docs.projectcalico.org/getting-started/kubernetes/quickstart) or [OpenShift](https://docs.projectcalico.org/getting-started/openshift/installation) installation instructions.
 
-	kubectl apply -f crds/operator-crd.yaml
-
-1. The operator manifests are found in this directory.
-
-	kubectl apply -f .
-
-1. Install the configuration CRD.
-
-	kubectl apply -f crds/default.yaml

@@ -46,20 +46,6 @@ func handleCore(c *components, install *Installation) error {
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
 
-	// node volumes
-	for _, vol := range c.node.Spec.Template.Spec.Volumes {
-		switch vol.Name {
-		case "flexvol-driver-host":
-			// prefer user-defined flexvolpath over detected value
-			if install.Spec.FlexVolumePath == "" {
-				if vol.HostPath == nil {
-					return ErrIncompatibleCluster{"volume 'flexvol-driver-host' must be a HostPath"}
-				}
-				install.Spec.FlexVolumePath = vol.HostPath.Path
-			}
-		}
-	}
-
 	// alp
 	vol := getVolume(c.node.Spec.Template.Spec, "flexvol-driver-host")
 	if vol != nil {
@@ -78,6 +64,7 @@ func handleCore(c *components, install *Installation) error {
 		if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv != nil {
 			return ErrIncompatibleCluster{"detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume"}
 		}
+		install.Spec.FlexVolumePath = "None"
 	}
 
 	// TODO: handle these vars appropriately

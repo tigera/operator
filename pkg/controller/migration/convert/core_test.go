@@ -107,7 +107,7 @@ var _ = Describe("core handler", func() {
 	Context("flexvol", func() {
 		It("should not be set by default", func() {
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.FlexVolumePath).To(Equal(""))
+			Expect(i.Spec.FlexVolumePath).To(Equal("None"))
 		})
 		It("should carry forward flexvolumepath", func() {
 			hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate

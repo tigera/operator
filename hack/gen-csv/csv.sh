@@ -76,7 +76,7 @@ CSV=${CSV_DIR}/tigera-operator.v${VERSION}.clusterserviceversion.yaml
 cp hack/gen-csv/clusterserviceversion.template ${CSV}
 
 # Finally, generate the ClusterServiceVersion (CSV). The resulting artifacts will be in ${CSV_DIR}.
-hack/bin/operator-sdk generate csv \
+hack/bin/operator-sdk-for-csv-gen generate csv \
   --operator-name tigera-operator \
   --csv-channel stable \
   --csv-version ${VERSION} \

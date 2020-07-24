@@ -24,7 +24,7 @@ metadata:
     # browser.
     marketplace.openshift.io/action-text: "Install-time Instructions"
     # Specify the URL the user is taken to when they click on the "Install-time Instructions" button.
-    marketplace.openshift.io/remote-workflow: "https://docs.projectcalico.org/getting-started/openshift/installation"
+    marketplace.openshift.io/remote-workflow: "https://docs.projectcalico.org/archive/v3.15/getting-started/openshift/installation"
     # Mark some CRDs as hidden so that they do not show up in the console.
     operators.operatorframework.io/internal-objects: '["blockaffinities.crd.projectcalico.org","clusterinformations.crd.projectcalico.org","ipamblocks.crd.projectcalico.org","ipamconfigs.crd.projectcalico.org","ipamhandles.crd.projectcalico.org"]'
   # This will be filled in when a subscription to the operator is created.
@@ -168,7 +168,7 @@ spec:
   - name: Calico Introduction
     url: https://docs.projectcalico.org/introduction/
   - name: Install an OpenShift v4 cluster with Calico
-    url: https://docs.projectcalico.org/getting-started/openshift/installation
+    url: https://docs.projectcalico.org/archive/v3.15/getting-started/openshift/installation
   # This contact info appears in the installed operator details within the embedded OperatorHub in OpenShift console.
   maintainers:
   - name: Project Calico Maintainers

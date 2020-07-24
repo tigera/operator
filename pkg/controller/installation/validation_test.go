@@ -161,21 +161,8 @@ var _ = Describe("Installation validation tests", func() {
 		err = validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
-
-	Describe("CalicoNetwork requires spec.cni.type=Calico", func() {
-		DescribeTable("non-calico plugins", func(t operator.CNIPluginType) {
-			instance.Spec.CNI.Type = t
-			err := validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
-		},
-			Entry("should disallow GKE", operator.PluginGKE),
-			Entry("should disallow AmazonVPC", operator.PluginAmazonVPC),
-			Entry("should disallow AzureVNET", operator.PluginAzureVNET),
-		)
-	})
 	Describe("validate non-calico CNI plugin Type", func() {
 		BeforeEach(func() {
-			instance.Spec.CalicoNetwork = nil
 			instance.Spec.CNI = &operator.CNISpec{}
 		})
 		It("should not allow empty CNI", func() {
@@ -187,19 +174,97 @@ var _ = Describe("Installation validation tests", func() {
 			err := validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
 		})
-		DescribeTable("test all plugins",
+		nonCalicoCNIEntries := []TableEntry{
+			Entry("GKE", operator.PluginGKE),
+			Entry("AmazonVPC", operator.PluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET),
+		}
+		DescribeTable("test all non-Calico plugins",
 			func(plugin operator.CNIPluginType) {
 				instance.Spec.CNI.Type = plugin
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			},
-
-			Entry("GKE", operator.PluginGKE),
-			Entry("AmazonVPC", operator.PluginAmazonVPC),
-			Entry("AzureVNET", operator.PluginAzureVNET),
+			nonCalicoCNIEntries...,
 		)
+		DescribeTable("not need CalicoNetwork",
+			func(plugin operator.CNIPluginType) {
+				instance.Spec.CalicoNetwork = nil
+				instance.Spec.CNI.Type = plugin
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			},
+			nonCalicoCNIEntries...,
+		)
+		DescribeTable("should disallow Calico only fields",
+			func(setField func(inst *operator.Installation)) {
+				instance.Spec.CNI.Type = operator.PluginGKE
+				setField(instance)
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("supported only for Calico CNI"))
+			},
+			Entry("HostPorts", func(inst *operator.Installation) {
+				hpe := operator.HostPortsEnabled
+				inst.Spec.CalicoNetwork.HostPorts = &hpe
+			}),
+			Entry("MultiInterfaceMode", func(inst *operator.Installation) {
+				mimm := operator.MultiInterfaceModeMultus
+				inst.Spec.CalicoNetwork.MultiInterfaceMode = &mimm
+			}),
+			Entry("ContainerIPForwarding", func(inst *operator.Installation) {
+				cipf := operator.ContainerIPForwardingEnabled
+				inst.Spec.CalicoNetwork.ContainerIPForwarding = &cipf
+			}),
+		)
+		DescribeTable("should allow IPPool", func(plugin operator.CNIPluginType) {
+			instance.Spec.CNI.Type = plugin
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "192.168.0.0/24",
+					Encapsulation: operator.EncapsulationNone,
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					NodeSelector:  "all()",
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		}, nonCalicoCNIEntries...)
+		DescribeTable("should disallow IPPool with IPIP", func(plugin operator.CNIPluginType) {
+			instance.Spec.CNI.Type = operator.PluginGKE
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "192.168.0.0/24",
+					Encapsulation: operator.EncapsulationIPIP,
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					NodeSelector:  "all()",
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		}, nonCalicoCNIEntries...)
+		DescribeTable("should disallow IPPool with non-all NodeSelector", func(plugin operator.CNIPluginType) {
+			instance.Spec.CNI.Type = plugin
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "192.168.0.0/24",
+					Encapsulation: operator.EncapsulationIPIP,
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					NodeSelector:  "anything()",
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		}, nonCalicoCNIEntries...)
+		DescribeTable("should not allow BGP", func(plugin operator.CNIPluginType) {
+			instance.Spec.CNI.Type = plugin
+			be := operator.BGPEnabled
+			instance.Spec.CalicoNetwork.BGP = &be
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		}, nonCalicoCNIEntries...)
 	})
-	Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
+	Describe("cross validate CNI.Type and kubernetesProvider", func() {
 		BeforeEach(func() {
 			instance.Spec.CalicoNetwork = nil
 			instance.Spec.CNI = &operator.CNISpec{}

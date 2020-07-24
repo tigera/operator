@@ -352,7 +352,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 }
 
 func (c *typhaComponent) nodeSelector() map[string]string {
-	return map[string]string{"beta.kubernetes.io/os": "linux"}
+	return map[string]string{"kubernetes.io/os": "linux"}
 }
 
 // tolerations creates the typha's tolerations.

@@ -7,8 +7,8 @@ set -ex
 # Get the base path for the Calico docs site. This will be used to download manifests.
 CALICO_BASE_URL=https://docs.projectcalico.org
 
-if [ -f config/calico_versions.yml ]; then
-    CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
+if [ -f config/os_versions.yaml ]; then
+    CALICO_VERSION=$(yq read config/os_versions.yaml components.typha.version)
 else
     echo "Could not find Calico versions file."
     exit 1
@@ -42,26 +42,25 @@ function downloadOperatorCRDs() {
 
 function downloadCalicoCRDs() {
     CALICO_RESOURCES="
-bgpconfigurations
-bgppeers
-blockaffinities
-clusterinformations
-felixconfigurations
-globalnetworkpolicies
-globalnetworksets
-hostendpoints
-ipamblocks
-ipamconfigs
-ipamhandles
-ippools
-kubecontrollersconfigurations
-networkpolicies
-networksets
+bgpconfiguration
+bgppeer
+blockaffinity
+clusterinformation
+felixconfiguration
+globalnetworkpolicy
+globalnetworkset
+hostendpoint
+ipamblock
+ipamconfig
+ipamhandle
+ippool
+networkpolicy
+networkset
 "
 
     # Download the Calico CRDs into CSV dir.
     for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${CSV_DIR}/crd.projectcalico.org_${resource}.yaml
+        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/02-crd-${resource}.yaml --output ${CSV_DIR}/02-crd-${resource}.yaml
     done
 }
 

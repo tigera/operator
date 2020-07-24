@@ -78,7 +78,7 @@ func getEnv(ctx context.Context, client client.Client, env []corev1.EnvVar, key 
 }
 
 func getEnvVar(ctx context.Context, client client.Client, e corev1.EnvVar) (string, error) {
-	if e.Value != "" {
+	if e.ValueFrom == nil {
 		return e.Value, nil
 	}
 	// if Value is empty, one of the ConfigMapKeyRefs must be used

@@ -774,7 +774,7 @@ func (es elasticsearchComponent) nodeSetTemplate() esv1.NodeSet {
 			"op.userinfo_endpoint":        oidcAuth.UserInfoEndpoint,
 			"rp.post_logout_redirect_uri": fmt.Sprintf("https://%s:9443/tigera-kibana/logged_out", oidcAuth.SiteURL),
 			"claims.principal":            oidcAuth.UsernameClaim,
-			"claims.group":                oidcAuth.GroupsClaim,
+			"claims.groups":               oidcAuth.GroupsClaim,
 		}
 	}
 

@@ -384,13 +384,16 @@ release-verify: release-prereqs
 	# Check the reported version is correct for each release artifact.
 	if ! docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
 
+release-publish-images: release-prereqs
+	# Push images.
+	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
+
 ## Pushes a github release and release artifacts produced by `make release-build`.
 release-publish: release-prereqs
 	# Push the git tag.
 	git push origin $(VERSION)
 
-	# Push images.
-	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
+	$(MAKE) release-publish-images IMAGETAG=$(VERSION)
 
 	@echo "Finalize the GitHub release based on the pushed tag."
 	@echo ""

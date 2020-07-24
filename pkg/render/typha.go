@@ -443,7 +443,6 @@ func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
 
 // typhaEnvVars creates the typha's envvars.
 func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
-	optional := true
 	typhaEnv := []v1.EnvVar{
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
@@ -463,7 +462,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 					Name: NodeTLSSecretName,
 				},
 				Key:      CommonName,
-				Optional: &optional,
+				Optional: Bool(true),
 			},
 		}},
 		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &v1.EnvVarSource{
@@ -472,7 +471,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 					Name: NodeTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: &optional,
+				Optional: Bool(true),
 			},
 		}},
 	}

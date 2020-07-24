@@ -489,7 +489,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"op.authorization_endpoint":   "authend",
 					"op.token_endpoint":           "tokenend",
 					"rp.post_logout_redirect_uri": "https://siteurl:9443/tigera-kibana/logged_out",
-					"claims.group":                "group",
+					"claims.groups":               "group",
 				},
 				"node.master": "true",
 				"node.data":   "true",

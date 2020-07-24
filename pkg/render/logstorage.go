@@ -947,6 +947,15 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	gracePeriod := int64(10)
 	defaultMode := int32(420)
 
+	hostNetwork := false
+	if es.installation.Spec.KubernetesProvider == operatorv1.ProviderEKS &&
+		es.installation.Spec.CNI.Type == operatorv1.PluginCalico {
+		// Workaround the fact that webhooks don't work for non-host-networked pods
+		// when in this networking mode on EKS, because the control plane nodes don't run
+		// Calico.
+		hostNetwork = true
+	}
+
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ECKOperatorName,
@@ -974,6 +983,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					HostNetwork:        hostNetwork,
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 						Name:  "manager",

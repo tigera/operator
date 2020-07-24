@@ -541,6 +541,15 @@ rules:
 func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	var replicas int32 = 1
 
+	hostNetwork := false
+	if c.installation.Spec.KubernetesProvider == operator.ProviderEKS &&
+		c.installation.Spec.CNI.Type == operator.PluginCalico {
+		// Workaround the fact that webhooks don't work for non-host-networked pods
+		// when in this networking mode on EKS, because the control plane nodes don't run
+		// Calico.
+		hostNetwork = true
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -571,6 +580,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					NodeSelector: map[string]string{
 						"kubernetes.io/os": "linux",
 					},
+					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),

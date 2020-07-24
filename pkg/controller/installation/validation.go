@@ -69,10 +69,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
-		// Currently, calicoNetwork is valid only when using the Calico CNI plugin.
-		if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-			return fmt.Errorf("spec.CalicoNetwork requires spec.cni.type 'Calico'")
-		}
 
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
@@ -199,6 +195,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if instance.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("spec.calicoNetwork.multiInterfaceMode is supported only for Calico CNI")
+			}
+		}
+
+		if instance.Spec.CalicoNetwork.ContainerIPForwarding != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.containerIPForwarding is supported only for Calico CNI")
 			}
 		}
 	}

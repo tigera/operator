@@ -161,20 +161,19 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	Describe("CalicoNetwork requires spec.cni.type=Calico", func() {
-		DescribeTable("non-calico plugins", func(t operator.CNIPluginType) {
+	Describe("CalicoNetwork is allowed", func() {
+		DescribeTable("with non-calico plugin", func(t operator.CNIPluginType) {
 			instance.Spec.CNI.Type = t
 			err := validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 		},
-			Entry("should disallow GKE", operator.PluginGKE),
-			Entry("should disallow AmazonVPC", operator.PluginAmazonVPC),
-			Entry("should disallow AzureVNET", operator.PluginAzureVNET),
+			Entry("GKE", operator.PluginGKE),
+			Entry("AmazonVPC", operator.PluginAmazonVPC),
+			Entry("AzureVNET", operator.PluginAzureVNET),
 		)
 	})
 	Describe("validate non-calico CNI plugin Type", func() {
 		BeforeEach(func() {
-			instance.Spec.CalicoNetwork = nil
 			instance.Spec.CNI = &operator.CNISpec{}
 		})
 		It("should not allow empty CNI", func() {
@@ -197,8 +196,28 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("AmazonVPC", operator.PluginAmazonVPC),
 			Entry("AzureVNET", operator.PluginAzureVNET),
 		)
+		DescribeTable("should disallow Calico only fields",
+			func(setField func(inst *operator.Installation)) {
+				instance.Spec.CNI.Type = operator.PluginGKE
+				setField(instance)
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+			},
+			Entry("HostPorts", func(inst *operator.Installation) {
+				hpe := operator.HostPortsEnabled
+				inst.Spec.CalicoNetwork.HostPorts = &hpe
+			}),
+			Entry("MultiInterfaceMode", func(inst *operator.Installation) {
+				mimm := operator.MultiInterfaceModeMultus
+				inst.Spec.CalicoNetwork.MultiInterfaceMode = &mimm
+			}),
+			Entry("ContainerIPForwarding", func(inst *operator.Installation) {
+				cipf := operator.ContainerIPForwardingEnabled
+				inst.Spec.CalicoNetwork.ContainerIPForwarding = &cipf
+			}),
+		)
 	})
-	Describe("cross validate ExternallyManagedNetwork.Plugin and kubernetesProvider", func() {
+	Describe("cross validate CNI.Type and kubernetesProvider", func() {
 		BeforeEach(func() {
 			instance.Spec.CalicoNetwork = nil
 			instance.Spec.CNI = &operator.CNISpec{}

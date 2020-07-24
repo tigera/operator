@@ -1058,12 +1058,10 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 }
 
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	trueBool := true
-	ptrBoolTrue := &trueBool
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
 	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.AllowPrivilegeEscalation = Bool(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp

@@ -1,5 +1,5 @@
 channels:
-- currentCSV: tigera-operator.v1.3.1
+- currentCSV: tigera-operator.v1.5.2
   name: stable
 defaultChannel: stable
 packageName: tigera-operator

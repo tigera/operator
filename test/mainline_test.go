@@ -17,6 +17,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-        "k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
 var _ = Describe("Mainline component function tests", func() {
@@ -72,13 +73,13 @@ var _ = Describe("Mainline component function tests", func() {
 
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
-                        patchF := func(n *corev1.Node) {
-                               for k, _ := range n.ObjectMeta.Annotations {
-                                        if strings.Contains(k, "projectcalico") {
-                                                delete(n.ObjectMeta.Annotations, k)
-                                        }
-                                }
-                       }
+			patchF := func(n *corev1.Node) {
+				for k, _ := range n.ObjectMeta.Annotations {
+					if strings.Contains(k, "projectcalico") {
+						delete(n.ObjectMeta.Annotations, k)
+					}
+				}
+			}
 
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 			nodes, err := cs.CoreV1().Nodes().List(metav1.ListOptions{})
@@ -171,6 +172,33 @@ var _ = Describe("Mainline component function tests", func() {
 			}
 			return assertAvailable(ts)
 		}, 60*time.Second).Should(BeNil())
+
+		By("Checking that the installation status is set correctly")
+		Eventually(func() error {
+			err := GetResource(c, instance)
+			if err != nil {
+				return err
+			}
+			if instance.Status.Variant != operator.Calico {
+				return fmt.Errorf("installation status not Calico yet")
+			}
+			return nil
+		}, 60*time.Second).Should(BeNil())
+
+		By("Checking that the installation status does not change")
+		Consistently(func() error {
+			err := GetResource(c, instance)
+			if err != nil {
+				return err
+			}
+			if reflect.DeepEqual(instance.Status, operator.InstallationStatus{}) {
+				return fmt.Errorf("installation status is empty")
+			}
+			if instance.Status.Variant != operator.Calico {
+				return fmt.Errorf("installation status was %v, expected: %v", instance.Status, operator.Calico)
+			}
+			return nil
+		}, 30*time.Second, 50*time.Millisecond).Should(BeNil())
 	})
 })
 

@@ -93,15 +93,16 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should error if CalicoNetwork is provided on EKS", func() {
+	It("should not error if CalicoNetwork is provided on EKS", func() {
 		instance := &operator.Installation{}
+		instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginCalico}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 		instance.Spec.KubernetesProvider = operator.ProviderEKS
 
 		// Fill in defaults and validate the result.
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
-		Expect(validateCustomResource(instance)).To(HaveOccurred())
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
 	It("should not allow out-of-bounds block sizes", func() {

@@ -42,26 +42,26 @@ function downloadOperatorCRDs() {
 
 function downloadCalicoCRDs() {
     CALICO_RESOURCES="
-bgpconfigurations
-bgppeers
-blockaffinities
-clusterinformations
-felixconfigurations
-globalnetworkpolicies
-globalnetworksets
-hostendpoints
-ipamblocks
-ipamconfigs
-ipamhandles
-ippools
-kubecontrollersconfigurations
-networkpolicies
-networksets
+bgpconfiguration
+bgppeer
+blockaffinity
+clusterinformation
+felixconfiguration
+globalnetworkpolicy
+globalnetworkset
+hostendpoint
+ipamblock
+ipamconfig
+ipamhandle
+ippool
+kubecontrollersconfiguration
+networkpolicy
+networkset
 "
 
     # Download the Calico CRDs into CSV dir.
     for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${CSV_DIR}/crd.projectcalico.org_${resource}.yaml
+        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/02-crd-${resource}.yaml --output ${CSV_DIR}/02-crd-${resource}.yaml
     done
 }
 

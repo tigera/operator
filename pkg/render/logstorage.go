@@ -483,14 +483,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
-	trueBool := true
-	falseBool := false
-	var user int64 = 0
 	initOSSettingsContainer := corev1.Container{
 		Name: "elastic-internal-init-os-settings",
 		SecurityContext: &corev1.SecurityContext{
-			Privileged: &trueBool,
-			RunAsUser:  &user,
+			Privileged: Bool(true),
+			RunAsUser:  Int64(0),
 		},
 		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 		Command: []string{
@@ -510,7 +507,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Name:  "elastic-internal-init-keystore",
 			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 			SecurityContext: &corev1.SecurityContext{
-				Privileged: &falseBool,
+				Privileged: Bool(false),
 			},
 			Command: []string{"/usr/bin/env", "bash", "-c", keystoreInitScript},
 			VolumeMounts: []corev1.VolumeMount{{

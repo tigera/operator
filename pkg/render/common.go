@@ -293,11 +293,9 @@ func OperatorNamespace() string {
 }
 
 func securityContext() *v1.SecurityContext {
-	runAsNonRoot := true
-	allowPriviledgeEscalation := false
 	return &v1.SecurityContext{
-		RunAsNonRoot:             &runAsNonRoot,
-		AllowPrivilegeEscalation: &allowPriviledgeEscalation,
+		RunAsNonRoot:             Bool(true),
+		AllowPrivilegeEscalation: Bool(false),
 	}
 }
 

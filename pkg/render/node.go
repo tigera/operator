@@ -636,7 +636,6 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 // cniContainer creates the node's init container that installs CNI.
 func (c *nodeComponent) cniContainer() v1.Container {
-	t := true
 	// Determine environment to pass to the CNI init container.
 	cniEnv := c.cniEnvvars()
 	cniVolumeMounts := []v1.VolumeMount{
@@ -656,7 +655,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: &t,
+			Privileged: Bool(true),
 		},
 	}
 }
@@ -664,7 +663,6 @@ func (c *nodeComponent) cniContainer() v1.Container {
 // flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
 func (c *nodeComponent) flexVolumeContainer() v1.Container {
-	t := true
 	flexVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
@@ -674,7 +672,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: &t,
+			Privileged: Bool(true),
 		},
 	}
 }
@@ -717,7 +715,6 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
-	isPrivileged := true
 
 	// Select which image to use.
 	image := components.GetReference(components.ComponentCalicoNode, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
@@ -728,7 +725,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 		Name:            "calico-node",
 		Image:           image,
 		Resources:       c.nodeResources(),
-		SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
+		SecurityContext: &v1.SecurityContext{Privileged: Bool(true)},
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -1105,12 +1102,10 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 }
 
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	trueBool := true
-	ptrBoolTrue := &trueBool
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.AllowPrivilegeEscalation = Bool(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny

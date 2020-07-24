@@ -394,9 +394,6 @@ release-publish-images: release-prereqs
 
 ## Pushes a github release and release artifacts produced by `make release-build`.
 release-publish: release-prereqs
-	# Push the git tag.
-	git push origin $(VERSION)
-
 	$(MAKE) release-publish-images IMAGETAG=$(VERSION)
 
 	@echo "Finalize the GitHub release based on the pushed tag."

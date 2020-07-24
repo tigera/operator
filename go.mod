@@ -35,7 +35,6 @@ require (
 
 // Pinned to kubernetes-1.14.1
 replace (
-	git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20190729075318-8280d4172234
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96
 	k8s.io/api => k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b

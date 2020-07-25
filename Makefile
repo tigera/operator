@@ -429,7 +429,7 @@ $(OPERATOR_SDK_CSV):
 
 ## Generating code after API changes.
 gen-files: $(OPERATOR_SDK)
-	$(CONTAINERIZED) $(OPERATOR_SDK) generate crds
+	$(CONTAINERIZED) $(OPERATOR_SDK) generate openapi
 	$(CONTAINERIZED) $(OPERATOR_SDK) generate k8s
 
 OS_VERSIONS?=config/os_versions.yaml

@@ -423,7 +423,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.KubernetesProvider = operator.ProviderEKS
 		defaultInstance.Spec.CalicoNetwork.BGP = &disabled
 		defaultInstance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		component := render.Node(defaultInstance, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -460,10 +460,6 @@ var _ = Describe("Node rendering tests", func() {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
-    },
-    {
-      "type": "bandwidth",
-      "capabilities": {"bandwidth": true}
     },
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]

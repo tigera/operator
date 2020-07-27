@@ -396,6 +396,10 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
     }%s
   ]
 }`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)
@@ -506,7 +510,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					NodeSelector:                  map[string]string{},
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Tolerations:                   c.nodeTolerations(),
 					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",

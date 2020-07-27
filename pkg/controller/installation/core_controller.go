@@ -331,6 +331,23 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if instance.Spec.CNI.IPAM == nil {
+		instance.Spec.CNI.IPAM = &operator.IPAMSpec{}
+	}
+
+	if instance.Spec.CNI.IPAM.Type == "" {
+		switch instance.Spec.CNI.Type {
+		case operator.PluginAzureVNET:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAzureVNET
+		case operator.PluginAmazonVPC:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		case operator.PluginGKE:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		default:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginCalico
+		}
+	}
+
 	// Default any unspecified fields within the CalicoNetworkSpec.
 	var v4pool, v6pool *operator.IPPool
 	if instance.Spec.CalicoNetwork != nil {

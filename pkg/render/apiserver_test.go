@@ -218,6 +218,13 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Key).To(Equal("config"))
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
 		Expect(len(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items)).To(Equal(1))
+
+		clusterRole := GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
+
+		clusterRole = GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
+
 	})
 
 	It("should render an API server with custom configuration", func() {
@@ -670,3 +677,184 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	Expect(err).Should(HaveOccurred())
 
 }
+
+var (
+	uiUserPolicyRules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{
+				"projectcalico.org",
+				"networking.k8s.io",
+				"extensions",
+				"",
+			},
+			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+			// more details).  Similar for all tiered policy resource types.
+			Resources: []string{
+				"tiers",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"namespaces",
+				"globalnetworksets",
+				"networksets",
+				"managedclusters",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+			},
+			Verbs: []string{"watch", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/proxy"},
+			ResourceNames: []string{
+				"https:tigera-api:8080", "calico-node-prometheus:9090",
+			},
+			Verbs: []string{"get", "create"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"tiers"},
+			ResourceNames: []string{"default"},
+			Verbs:         []string{"get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreports"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreporttypes"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalalerts",
+				"globalalerts/status",
+				"globalalerttemplates",
+				"globalthreatfeeds",
+				"globalthreatfeeds/status",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"lma.tigera.io"},
+			Resources: []string{"*"},
+			ResourceNames: []string{
+				"flows", "audit*", "events", "dns", "kibana_login",
+			},
+			Verbs: []string{"get"},
+		},
+	}
+	networkAdminPolicyRules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{
+				"projectcalico.org",
+				"networking.k8s.io",
+				"extensions",
+			},
+			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+			// more details).  Similar for all tiered policy resource types.
+			Resources: []string{
+				"tiers",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"globalnetworksets",
+				"networksets",
+				"managedclusters",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"watch", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/proxy"},
+			ResourceNames: []string{
+				"https:tigera-api:8080", "calico-node-prometheus:9090",
+			},
+			Verbs: []string{"get", "create"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreports"},
+			Verbs:     []string{"*"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreports/status"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreporttypes"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalalerts",
+				"globalalerts/status",
+				"globalalerttemplates",
+				"globalthreatfeeds",
+				"globalthreatfeeds/status",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"lma.tigera.io"},
+			Resources: []string{"*"},
+			ResourceNames: []string{
+				"flows", "audit*", "events", "dns", "elasticsearch_superuser",
+			},
+			Verbs: []string{"get"},
+		},
+	}
+)

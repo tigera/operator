@@ -925,15 +925,15 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
-	// cluster
+	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.managementClusterConnection == nil {
-		// Access to flow logs, audit logs, and statistics
+		// Access to flow logs, audit logs, and statistics.
+		// Access to log into Kibana for oidc users.
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "events", "dns",
+				"flows", "audit*", "events", "dns", "kibana_login",
 			},
 			Verbs: []string{"get"},
 		})
@@ -1044,15 +1044,15 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 	}
 
-	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
-	// cluster
+	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.managementClusterConnection == nil {
-		// Access to flow logs, audit logs, and statistics
+		// Access to flow logs, audit logs, and statistics.
+		// Elasticsearch superuser access once logged into Kibana.
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "events", "dns",
+				"flows", "audit*", "events", "dns", "elasticsearch_superuser",
 			},
 			Verbs: []string{"get"},
 		})

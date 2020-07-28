@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,6 +71,22 @@ func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, con
 			}
 
 			return nil, ErrIncompatibleCluster{"only configMapRef & explicit values supported for env vars at this time"}
+		}
+	}
+	return nil, nil
+}
+
+// getEnvVar returns a kubernetes envVar and marks that it has been checked.
+func (r *CheckedDaemonSet) getEnvVar(container string, key string) (*corev1.EnvVar, error) {
+	c := getContainer(r.Spec.Template.Spec, container)
+	if c == nil {
+		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+	}
+	r.ignoreEnv(container, key)
+
+	for _, e := range c.Env {
+		if e.Name == key {
+			return &e, nil
 		}
 	}
 	return nil, nil

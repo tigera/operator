@@ -12,6 +12,15 @@ import (
 // loadCNI loads CNI config into the components for all other handlers to use.
 // No verification is done here beyond checking for valid json.
 func loadCNI(c *components) error {
+
+	cntnr := getContainer(c.node.Spec.Template.Spec, containerInstallCNI)
+	if cntnr == nil {
+		// It is valid to not have an install-cni container in the cases
+		// of non Calico CNI so nothing more to do in that case.
+		log.Print("no install-cni container detected on node")
+		return nil
+	}
+
 	cniConfig, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_NETWORK_CONFIG")
 	if err != nil {
 		return err

@@ -39,6 +39,13 @@ spec:
                 description: CalicoNetwork specifies networking configuration options
                   for Calico.
                 properties:
+                  bgp:
+                    description: BGP configures whether or not to enable Calico's
+                      BGP capabilities.
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
                   containerIPForwarding:
                     description: 'ContainerIPForwarding configures whether ip forwarding
                       will be enabled for containers in the CNI configuration. Default:

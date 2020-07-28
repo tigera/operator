@@ -69,10 +69,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
-		// Currently, calicoNetwork is valid only when using the Calico CNI plugin.
-		if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-			return fmt.Errorf("spec.CalicoNetwork requires spec.cni.type 'Calico'")
-		}
 
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
@@ -92,30 +88,50 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
 			}
 
-			valid := false
-			for _, t := range operatorv1.EncapsulationTypes {
-				if v4pool.Encapsulation == t {
-					valid = true
+			if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+				// Verify the specified encapsulation type is valid.
+				switch v4pool.Encapsulation {
+				case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
+					// IPIP currently requires BGP to be running in order to program routes.
+					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+						return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+					}
+				case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
+				case operatorv1.EncapsulationNone:
+					// Unencapsulated currently requires BGP to be running in order to program routes.
+					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+						return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+					}
+				default:
+					return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+						v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 				}
-			}
-			if !valid {
-				return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
-					v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
-			}
-
-			valid = false
-			for _, t := range operatorv1.NATOutgoingTypes {
-				if v4pool.NATOutgoing == t {
-					valid = true
+			} else {
+				// Verify the specified encapsulation type is valid.
+				switch v4pool.Encapsulation {
+				case operatorv1.EncapsulationNone:
+				default:
+					return fmt.Errorf("%s is invalid for ipPool.encapsulation when using non-Calico CNI, should be None",
+						v4pool.Encapsulation)
 				}
-			}
-			if !valid {
-				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
-					v4pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
+				if instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+					return fmt.Errorf("BGP is not supported when using non-Calico CNI")
+				}
+				if v4pool.NodeSelector != "all()" {
+					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()'", v4pool.NodeSelector)
+				}
 			}
 
 			if v4pool.NodeSelector == "" {
 				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+
+			// Verify NAT outgoing values.
+			switch v4pool.NATOutgoing {
+			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
+			default:
+				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
+					v4pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
 			}
 
 			if v4pool.BlockSize != nil {
@@ -139,20 +155,23 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if v6pool.Encapsulation != operatorv1.EncapsulationNone {
-				return fmt.Errorf("Encapsulation is not supported in IPv6 pools, but it is set for %s", v6pool.CIDR)
+				return fmt.Errorf("Encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
 			}
 
-			valid := false
-			for _, t := range operatorv1.NATOutgoingTypes {
-				if v6pool.NATOutgoing == t {
-					valid = true
-				}
-			}
-			if !valid {
-				return fmt.Errorf("%s is invalid for v6 ipPool.natOutgoing, should be one of %s",
+			// Verify NAT outgoing values.
+			switch v6pool.NATOutgoing {
+			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
+				// Valid.
+			default:
+				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
 					v6pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
 			}
 
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				if v6pool.NodeSelector != "all()" {
+					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()' when using non-Calico CNI plugin", v6pool.NodeSelector)
+				}
+			}
 			if v6pool.NodeSelector == "" {
 				return fmt.Errorf("ipPool.nodeSelector should not be empty")
 			}
@@ -161,6 +180,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				if *v6pool.BlockSize > 128 || *v6pool.BlockSize < 116 {
 					return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
 				}
+
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
 				if int32(ones) > *v6pool.BlockSize {
@@ -196,6 +216,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if instance.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("spec.calicoNetwork.multiInterfaceMode is supported only for Calico CNI")
+			}
+		}
+
+		if instance.Spec.CalicoNetwork.ContainerIPForwarding != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.containerIPForwarding is supported only for Calico CNI")
 			}
 		}
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func handleCore(c *components, install *Installation) error {
-	dsType, err := c.node.getEnv(ctx, c.client, "calico-node", "DATASTORE_TYPE")
+	dsType, err := c.node.getEnvValue(ctx, c.client, "calico-node", "DATASTORE_TYPE")
 	if err != nil {
 		return err
 	}
@@ -75,10 +75,18 @@ func handleCore(c *components, install *Installation) error {
 		return err
 	}
 
+	// check that nodename is a ref
+	e, err := c.node.getEnvVar("calico-node", "NODENAME")
+	if err != nil {
+		return err
+	}
+	if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
+		return ErrIncompatibleCluster{"NODENAME on 'calico-node' container must be unset or be a FieldRef to 'spec.nodeName'"}
+	}
+
 	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")
-	c.node.ignoreEnv("calico-node", "NODENAME")
 	c.node.ignoreEnv("calico-node", "CALICO_DISABLE_FILE_LOGGING")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_IPIP")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_VXLAN")
@@ -101,14 +109,14 @@ func handleCore(c *components, install *Installation) error {
 }
 
 func handleFelixNodeMetrics(c *components, install *Installation) error {
-	metricsEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
+	metricsEnabled, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
 	if err != nil {
 		return err
 	}
 	if metricsEnabled != nil && strings.ToLower(*metricsEnabled) == "true" {
 		var _9091 int32 = 9091
 		install.Spec.NodeMetricsPort = &_9091
-		port, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
+		port, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
 		if err != nil {
 			return err
 		}

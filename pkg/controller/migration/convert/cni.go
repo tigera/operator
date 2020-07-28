@@ -21,7 +21,7 @@ func loadCNI(c *components) error {
 		return nil
 	}
 
-	cniConfig, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_NETWORK_CONFIG")
+	cniConfig, err := c.node.getEnvValue(ctx, c.client, containerInstallCNI, "CNI_NETWORK_CONFIG")
 	if err != nil {
 		return err
 	}

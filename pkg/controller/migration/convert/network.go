@@ -18,7 +18,7 @@ const (
 func handleNetwork(c *components, install *Installation) error {
 
 	// Verify FELIX_DEFAULTENDPOINTTOHOSTACTION is set to Accept because that is what the operator sets it to.
-	defaultWepAction, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION")
+	defaultWepAction, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION")
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	errCtx := fmt.Sprintf("detected %s CNI plugin", plugin)
 
 	// CALICO_NETWORKING_BACKEND
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	netBackend, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	}
 
 	// IP
-	ipMethod, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
+	ipMethod, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "IP")
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	}
 
 	// IP_AUTODETECTION_METHOD
-	am, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
+	am, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	if c.calicoCNIConfig.MTU == -1 {
 		// if MTU is -1, we assume it was us who replaced it when doing initial CNI
 		// config loading. We need to pull it from the correct source
-		mtu, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_MTU")
+		mtu, err := c.node.getEnvValue(ctx, c.client, containerInstallCNI, "CNI_MTU")
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func handleNonCalicoCNI(c *components, install *Installation) error {
 	}
 
 	// CALICO_NETWORKING_BACKEND
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	netBackend, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func handleNonCalicoCNI(c *components, install *Installation) error {
 		// Verify FELIX_IPTABLESMANGLEALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginAmazonVPC. The value is also expected to be necessary for Calico policy
 		// to correctly function with the AmazonVPC plugin.
-		mangleAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
+		mangleAllow, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ func handleNonCalicoCNI(c *components, install *Installation) error {
 		// Verify FELIX_IPTABLESMANGLEALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginGKE. The value is also expected to be necessary for Calico policy
 		// to correctly function with the GKE plugin.
-		mangleAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
+		mangleAllow, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
 		if err != nil {
 			return err
 		}
@@ -200,7 +200,7 @@ func handleNonCalicoCNI(c *components, install *Installation) error {
 		// Verify FELIX_IPTABLESFILTERALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginGKE. The value is also expected to be necessary for Calico policy
 		// to correctly function with the GKE plugin.
-		filterAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESFILTERALLOWACTION")
+		filterAllow, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESFILTERALLOWACTION")
 		if err != nil {
 			return err
 		}
@@ -218,7 +218,7 @@ func handleNonCalicoCNI(c *components, install *Installation) error {
 	// TODO: Handle configuration with IPs and Pools specified.
 	// We need to relax the restriction on CalicoNetwork and non-Calico CNI to do this.
 
-	ip, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
+	ip, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "IP")
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func handleNonCalicoCNI(c *components, install *Installation) error {
 		return ErrIncompatibleCluster{fmt.Sprintf("%s, IP was set to %s, it is only supported as empty or unset with non-Calico CNI.", errCtx, *ip)}
 	}
 
-	dp, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "NO_DEFAULT_POOLS")
+	dp, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "NO_DEFAULT_POOLS")
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func getAutoDetection(method string) (operatorv1.NodeAddressAutodetection, error
 }
 
 func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
-	prefix, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_INTERFACEPREFIX")
+	prefix, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_INTERFACEPREFIX")
 	if err != nil {
 		return "", err
 	}

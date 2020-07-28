@@ -44,14 +44,36 @@ func (r *CheckedDaemonSet) uncheckedVars() []string {
 	return unchecked
 }
 
-// getEnv gets the value of an environment variable and marks that it has been checked.
-func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, container string, key string) (*string, error) {
+// getEnvValue gets the value of an environment variable and marks that it has been checked.
+func (r *CheckedDaemonSet) getEnvValue(ctx context.Context, client client.Client, container string, key string) (*string, error) {
 	c := getContainer(r.Spec.Template.Spec, container)
 	if c == nil {
 		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
 	}
 	r.ignoreEnv(container, key)
-	return getEnv(ctx, client, c.Env, key)
+
+	for _, e := range c.Env {
+		if e.Name == key {
+			if e.ValueFrom == nil {
+				return &e.Value, nil
+			}
+			if e.ValueFrom.ConfigMapKeyRef != nil {
+				cm := v1.ConfigMap{}
+				err := client.Get(ctx, types.NamespacedName{
+					Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
+					Namespace: "kube-system",
+				}, &cm)
+				if err != nil {
+					return nil, err
+				}
+				v := cm.Data[e.ValueFrom.ConfigMapKeyRef.Key]
+				return &v, nil
+			}
+
+			return nil, ErrIncompatibleCluster{"only configMapRef & explicit values supported for env vars at this time"}
+		}
+	}
+	return nil, nil
 }
 
 // ignoreEnv marks an environment variable as checked so that the migrator
@@ -65,22 +87,7 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 	r.checkedVars[container].envVars[key] = true
 }
 
-// getEnv gets an environment variable from a container. Nil is returned
-// if the requested Key was not found.
-func getEnv(ctx context.Context, client client.Client, env []corev1.EnvVar, key string) (*string, error) {
-	for _, e := range env {
-		if e.Name == key {
-			val, err := getEnvVar(ctx, client, e)
-			return &val, err
-		}
-	}
-	return nil, nil
-}
-
-func getEnvVar(ctx context.Context, client client.Client, e corev1.EnvVar) (string, error) {
-	if e.ValueFrom == nil {
-		return e.Value, nil
-	}
+func getConfigMapRefValue(ctx context.Context, client client.Client, e corev1.EnvVar) (string, error) {
 	// if Value is empty, one of the ConfigMapKeyRefs must be used
 	if e.ValueFrom.ConfigMapKeyRef != nil {
 		cm := v1.ConfigMap{}

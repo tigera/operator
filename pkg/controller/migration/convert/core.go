@@ -9,7 +9,7 @@ import (
 )
 
 func handleCore(c *components, install *Installation) error {
-	dsType, err := c.node.getEnv(ctx, c.client, "calico-node", "DATASTORE_TYPE")
+	dsType, err := c.node.getEnvValue(ctx, c.client, "calico-node", "DATASTORE_TYPE")
 	if err != nil {
 		return err
 	}
@@ -101,14 +101,14 @@ func handleCore(c *components, install *Installation) error {
 }
 
 func handleFelixNodeMetrics(c *components, install *Installation) error {
-	metricsEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
+	metricsEnabled, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
 	if err != nil {
 		return err
 	}
 	if metricsEnabled != nil && strings.ToLower(*metricsEnabled) == "true" {
 		var _9091 int32 = 9091
 		install.Spec.NodeMetricsPort = &_9091
-		port, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
+		port, err := c.node.getEnvValue(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
 		if err != nil {
 			return err
 		}

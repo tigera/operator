@@ -1,6 +1,10 @@
 package convert
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
@@ -24,7 +28,7 @@ func handleCore(c *components, install *Installation) error {
 
 	// kube-controllers
 	kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
-	if len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0 {
+	if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
 		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
 			ComponentName:        operatorv1.ComponentNameKubeControllers,
 			ResourceRequirements: kubeControllers.Resources.DeepCopy(),
@@ -67,6 +71,10 @@ func handleCore(c *components, install *Installation) error {
 		install.Spec.FlexVolumePath = "None"
 	}
 
+	if err = handleFelixNodeMetrics(c, install); err != nil {
+		return err
+	}
+
 	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")
@@ -82,11 +90,41 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("calico-node", "FELIX_HEALTHENABLED")
 	c.node.ignoreEnv("calico-node", "FELIX_USAGEREPORTINGENABLED")
 	c.node.ignoreEnv("calico-node", "FELIX_TYPHAK8SSERVICENAME")
+	c.node.ignoreEnv("calico-node", "FELIX_LOGSEVERITYSYS")
 	c.node.ignoreEnv("upgrade-ipam", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
 	c.node.ignoreEnv("install-cni", "CNI_CONF_NAME")
 	c.node.ignoreEnv("install-cni", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("install-cni", "SLEEP")
+
+	return nil
+}
+
+func handleFelixNodeMetrics(c *components, install *Installation) error {
+	metricsEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
+	if err != nil {
+		return err
+	}
+	if metricsEnabled != nil && strings.ToLower(*metricsEnabled) == "true" {
+		var _9091 int32 = 9091
+		install.Spec.NodeMetricsPort = &_9091
+		port, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
+		if err != nil {
+			return err
+		}
+		if port != nil {
+			p, err := strconv.ParseInt(*port, 10, 32)
+			if err != nil || p <= 0 || p > 65535 {
+				return ErrIncompatibleCluster{fmt.Sprintf(
+					"invalid port defined in FELIX_PROMETHEUSMETRICSPORT(%s), it should be 1-65535 ", *port)}
+			}
+			i := int32(p)
+			install.Spec.NodeMetricsPort = &i
+		}
+	} else {
+		// Ignore the metrics port if metrics is disabled.
+		c.node.ignoreEnv(containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
+	}
 
 	return nil
 }

@@ -129,4 +129,39 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.FlexVolumePath).To(Equal(path))
 		})
 	})
+
+	Context("nodename", func() {
+		It("should not throw an error if nodeName is not set", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+		It("should not throw an error if nodeName is set to noderef", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name: "NODENAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			}}
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+		It("should throw an error if nodeName is set to a different fieldPath", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name: "NODENAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			}}
+			Expect(handleCore(&comps, i)).To(HaveOccurred())
+		})
+		It("should throw an error if nodeName is hardcoded to a value", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "NODENAME",
+				Value: "foobar",
+			}}
+			Expect(handleCore(&comps, i)).To(HaveOccurred())
+		})
+	})
 })

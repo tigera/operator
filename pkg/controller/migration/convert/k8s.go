@@ -70,7 +70,7 @@ func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, con
 				return &v, nil
 			}
 
-			return nil, ErrIncompatibleCluster{"only configMapRef & explicit values supported for env vars at this time"}
+			return nil, ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
 		}
 	}
 	return nil, nil

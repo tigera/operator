@@ -131,6 +131,9 @@ var _ = Describe("core handler", func() {
 	})
 
 	Context("nodename", func() {
+		It("should not throw an error if nodeName is not set", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
 		It("should not throw an error if nodeName is set to noderef", func() {
 			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name: "NODENAME",

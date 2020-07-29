@@ -84,6 +84,16 @@ func handleCore(c *components, install *Installation) error {
 		return ErrIncompatibleCluster{"NODENAME on 'calico-node' container must be unset or be a FieldRef to 'spec.nodeName'"}
 	}
 
+	if cni := getContainer(c.node.Spec.Template.Spec, "install-cni"); cni != nil {
+		e, err = c.node.getEnvVar("install-cni", "KUBERNETES_NODE_NAME")
+		if err != nil {
+			return err
+		}
+		if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
+			return ErrIncompatibleCluster{"KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'"}
+		}
+	}
+
 	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")
@@ -102,7 +112,6 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("upgrade-ipam", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
 	c.node.ignoreEnv("install-cni", "CNI_CONF_NAME")
-	c.node.ignoreEnv("install-cni", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
 	return nil

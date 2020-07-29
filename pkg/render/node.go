@@ -338,20 +338,6 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		mtu = *m
 	}
 
-	// Determine what address families to enable.
-	var assign_ipv4 string
-	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
-		assign_ipv4 = "true"
-	} else {
-		assign_ipv4 = "false"
-	}
-	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
-		assign_ipv6 = "true"
-	} else {
-		assign_ipv6 = "false"
-	}
-
 	// Determine per-provider settings.
 	nodenameFileOptional := false
 	switch c.cr.Spec.KubernetesProvider {
@@ -372,6 +358,11 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
+	ipam := c.getCalicoIPAM()
+	if c.cr.Spec.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+		ipam = c.getHostLocalIPAM()
+	}
+
 	// Build the CNI configuration json.
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
@@ -382,11 +373,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "datastore_type": "kubernetes",
       "mtu": %d,
       "nodename_file_optional": %v,
-      "ipam": {
-          "type": "calico-ipam",
-          "assign_ipv4" : "%s",
-          "assign_ipv6" : "%s"
-      },
+	  "ipam": %s,
       "container_settings": {
           "allow_ip_forwarding": %v
       },
@@ -402,7 +389,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -415,6 +402,29 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 			"config": config,
 		},
 	}
+}
+
+func (c *nodeComponent) getCalicoIPAM() string {
+	// Determine what address families to enable.
+	var assign_ipv4 string
+	var assign_ipv6 string
+	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
+		assign_ipv4 = "true"
+	} else {
+		assign_ipv4 = "false"
+	}
+	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
+		assign_ipv6 = "true"
+	} else {
+		assign_ipv6 = "false"
+	}
+	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"}`,
+		assign_ipv4, assign_ipv6,
+	)
+}
+
+func (c *nodeComponent) getHostLocalIPAM() string {
+	return `{ "type": "host-local", "subnet": "usePodCidr"}`
 }
 
 func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {

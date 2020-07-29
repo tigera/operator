@@ -48,7 +48,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 	})
 
-	const expectedResourcesNumber = 12
+	const expectedResourcesNumber = 10
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(instance, nil, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
@@ -65,8 +65,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ManagerTLSSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
@@ -134,6 +132,40 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"networksets",
+					"globalnetworksets",
+					"globalnetworkpolicies",
+					"tier.globalnetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+				},
+				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts", "namespaces"},
+				Verbs:     []string{"list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -211,8 +243,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "tigera-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-manager-pip", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
@@ -285,6 +315,40 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"authorization.k8s.io"},
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"networksets",
+					"globalnetworksets",
+					"globalnetworkpolicies",
+					"tier.globalnetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+				},
+				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts", "namespaces"},
+				Verbs:     []string{"list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},

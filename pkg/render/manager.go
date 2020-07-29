@@ -163,8 +163,6 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		managerServiceAccount(),
 		managerClusterRole(c.managementCluster != nil, false, c.openshift),
 		managerClusterRoleBinding(),
-		c.managerPolicyImpactPreviewClusterRole(),
-		c.managerPolicyImpactPreviewClusterRoleBinding(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
@@ -576,6 +574,40 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"networksets",
+					"globalnetworksets",
+					"globalnetworkpolicies",
+					"tier.globalnetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+				},
+				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts", "namespaces"},
+				Verbs:     []string{"list"},
+			},
 		},
 	}
 
@@ -625,71 +657,6 @@ func managerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     ManagerClusterRole,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ManagerServiceAccount,
-				Namespace: ManagerNamespace,
-			},
-		},
-	}
-}
-
-// managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func (c *managerComponent) managerPolicyImpactPreviewClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-manager-pip",
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"networksets",
-					"globalnetworksets",
-					"globalnetworkpolicies",
-					"tier.globalnetworkpolicies",
-					"networkpolicies",
-					"tier.networkpolicies",
-					"stagedglobalnetworkpolicies",
-					"tier.stagedglobalnetworkpolicies",
-					"stagednetworkpolicies",
-					"tier.stagednetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-				},
-				Verbs: []string{"list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{"networking.k8s.io"},
-				Resources: []string{"networkpolicies"},
-				Verbs:     []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces"},
-				Verbs:     []string{"list"},
-			},
-		},
-	}
-}
-
-func (c *managerComponent) managerPolicyImpactPreviewClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-pip"},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "tigera-manager-pip",
 		},
 		Subjects: []rbacv1.Subject{
 			{

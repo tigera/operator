@@ -40,6 +40,16 @@ var _ = Describe("Parser", func() {
 		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
+	It("should error if it detects a canal installation", func() {
+		c := fake.NewFakeClient(&appsv1.DaemonSet{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      "canal-node",
+				Namespace: "kube-system",
+			},
+		})
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(HaveOccurred())
+	})
+
 	It("should error for unchecked env vars", func() {
 		node := emptyNodeSpec()
 		node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{

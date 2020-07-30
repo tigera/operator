@@ -60,6 +60,17 @@ type components struct {
 // getComponents loads the main calico components into structs for later parsing.
 func getComponents(ctx context.Context, client client.Client) (*components, error) {
 	var ds = appsv1.DaemonSet{}
+
+	// verify canal isn't present, or block
+	if err := client.Get(ctx, types.NamespacedName{
+		Name:      "canal-node",
+		Namespace: metav1.NamespaceSystem,
+	}, &ds); err == nil {
+		return nil, fmt.Errorf("detected existing canal installation")
+	} else if !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("failed to check for existing canal installation: %v", err)
+	}
+
 	if err := client.Get(ctx, types.NamespacedName{
 		Name:      "calico-node",
 		Namespace: metav1.NamespaceSystem,

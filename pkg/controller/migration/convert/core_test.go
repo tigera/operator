@@ -203,5 +203,47 @@ var _ = Describe("core handler", func() {
 			})
 		})
 
+		Context("tolerations", func() {
+			// TestTolerations parameterizes the tests for tolerations to that they can be run
+			// on node, kubeControllers, and typha. These tests assume that the emptyComponents
+			// function initializes all components with the expected, valid tolerations (which it does).
+			// the first parameter is the existing tolerations, so that they can be adjusted.
+			// the second parameter is a function which updates the tolerations of the desired component.
+			TestTolerations := func(existingTolerations []v1.Toleration, setTolerations func([]v1.Toleration)) {
+				It("should not error if only expected tolerations are set", func() {
+					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				})
+				It("should error if no tolerations set", func() {
+					setTolerations([]v1.Toleration{})
+					Expect(handleCore(&comps, i)).To(HaveOccurred())
+				})
+				It("should error if missing just one toleration", func() {
+					comps.node.Spec.Template.Spec.Tolerations = existingTolerations[0:1]
+					Expect(handleCore(&comps, i)).To(HaveOccurred())
+				})
+				It("should error if additional toleration exists", func() {
+					setTolerations(append(existingTolerations, v1.Toleration{
+						Key:    "foo",
+						Effect: "bar",
+					}))
+					Expect(handleCore(&comps, i)).To(HaveOccurred())
+				})
+			}
+			Describe("calico-node", func() {
+				TestTolerations(comps.node.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
+					comps.node.Spec.Template.Spec.Tolerations = t
+				})
+			})
+			Describe("kube-controllers", func() {
+				TestTolerations(comps.kubeControllers.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
+					comps.kubeControllers.Spec.Template.Spec.Tolerations = t
+				})
+			})
+			Describe("typha", func() {
+				TestTolerations(comps.typha.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
+					comps.typha.Spec.Template.Spec.Tolerations = t
+				})
+			})
+		})
 	})
 })

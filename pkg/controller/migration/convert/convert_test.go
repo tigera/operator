@@ -194,6 +194,20 @@ func emptyNodeSpec() *appsv1.DaemonSet {
 		Spec: appsv1.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Effect:   corev1.TaintEffectNoSchedule,
+							Operator: corev1.TolerationOpExists,
+						},
+						{
+							Key:      "CriticalAddonsOnly",
+							Operator: corev1.TolerationOpExists,
+						},
+						{
+							Effect:   corev1.TaintEffectNoExecute,
+							Operator: corev1.TolerationOpExists,
+						},
+					},
 					InitContainers: []corev1.Container{{
 						Name: "install-cni",
 						Env: []corev1.EnvVar{{
@@ -269,6 +283,16 @@ func emptyKubeControllerSpec() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "CriticalAddonsOnly",
+							Operator: corev1.TolerationOpExists,
+						},
+						{
+							Effect: corev1.TaintEffectNoSchedule,
+							Key:    "node-role.kubernetes.io/master",
+						},
+					},
 					Containers: []corev1.Container{{
 						Name: "calico-kube-controllers",
 					}},
@@ -287,6 +311,10 @@ func emptyTyphaDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Tolerations: []corev1.Toleration{{
+						Key:      "CriticalAddonsOnly",
+						Operator: corev1.TolerationOpExists,
+					}},
 					Containers: []corev1.Container{{
 						Name: "calico-typha",
 					}},

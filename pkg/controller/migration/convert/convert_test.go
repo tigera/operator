@@ -40,6 +40,16 @@ var _ = Describe("Parser", func() {
 		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
+	It("should error if it detects a canal installation", func() {
+		c := fake.NewFakeClient(&appsv1.DaemonSet{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      "canal-node",
+				Namespace: "kube-system",
+			},
+		})
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(HaveOccurred())
+	})
+
 	It("should error for unchecked env vars", func() {
 		node := emptyNodeSpec()
 		node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
@@ -194,6 +204,20 @@ func emptyNodeSpec() *appsv1.DaemonSet {
 		Spec: appsv1.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Effect:   corev1.TaintEffectNoSchedule,
+							Operator: corev1.TolerationOpExists,
+						},
+						{
+							Key:      "CriticalAddonsOnly",
+							Operator: corev1.TolerationOpExists,
+						},
+						{
+							Effect:   corev1.TaintEffectNoExecute,
+							Operator: corev1.TolerationOpExists,
+						},
+					},
 					InitContainers: []corev1.Container{{
 						Name: "install-cni",
 						Env: []corev1.EnvVar{{
@@ -204,6 +228,56 @@ func emptyNodeSpec() *appsv1.DaemonSet {
 					Containers: []corev1.Container{{
 						Name: "calico-node",
 					}},
+					Volumes: []corev1.Volume{
+						{
+							Name: "lib-modules",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/lib/modules",
+								},
+							},
+						},
+						{
+							Name: "var-run-calico",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/run/calico",
+								},
+							},
+						},
+						{
+							Name: "var-lib-calico",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/lib/calico",
+								},
+							},
+						},
+						{
+							Name: "xtables-lock",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/run/xtables.lock",
+								},
+							},
+						},
+						{
+							Name: "cni-bin-dir",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/opt/cni/bin",
+								},
+							},
+						},
+						{
+							Name: "cni-net-dir",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/etc/cni/net.d",
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -219,6 +293,16 @@ func emptyKubeControllerSpec() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "CriticalAddonsOnly",
+							Operator: corev1.TolerationOpExists,
+						},
+						{
+							Effect: corev1.TaintEffectNoSchedule,
+							Key:    "node-role.kubernetes.io/master",
+						},
+					},
 					Containers: []corev1.Container{{
 						Name: "calico-kube-controllers",
 					}},
@@ -237,6 +321,10 @@ func emptyTyphaDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Tolerations: []corev1.Toleration{{
+						Key:      "CriticalAddonsOnly",
+						Operator: corev1.TolerationOpExists,
+					}},
 					Containers: []corev1.Container{{
 						Name: "calico-typha",
 					}},
@@ -255,6 +343,6 @@ func emptyComponents() components {
 			make(map[string]checkedFields),
 		},
 		kubeControllers: *emptyKubeControllerSpec(),
-		typha:           *emptyTyphaDeployment(),
+		typha:           emptyTyphaDeployment(),
 	}
 }

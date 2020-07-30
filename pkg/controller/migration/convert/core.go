@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func handleCore(c *components, install *Installation) error {
@@ -105,6 +106,46 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
+	// check node tolerations
+	if err := checkTolerations(c.node.Spec.Template.Spec.Tolerations,
+		corev1.Toleration{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		},
+		corev1.Toleration{
+			Effect:   corev1.TaintEffectNoSchedule,
+			Operator: corev1.TolerationOpExists,
+		},
+		corev1.Toleration{
+			Effect:   corev1.TaintEffectNoExecute,
+			Operator: corev1.TolerationOpExists,
+		}); err != nil {
+		return fmt.Errorf("calico-node has incompatible tolerations: %v", err)
+	}
+
+	// check kube-controller tolerations
+	if err := checkTolerations(c.kubeControllers.Spec.Template.Spec.Tolerations,
+		corev1.Toleration{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		},
+		corev1.Toleration{
+			Effect: corev1.TaintEffectNoSchedule,
+			Key:    "node-role.kubernetes.io/master",
+		}); err != nil {
+		return fmt.Errorf("kube-controllers has incompatible tolerations: %v", err)
+	}
+
+	// check typha tolerations
+	if c.typha != nil {
+		if err := checkTolerations(c.typha.Spec.Template.Spec.Tolerations, corev1.Toleration{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		}); err != nil {
+			return fmt.Errorf("typha has incompatible tolerations: %v", err)
+		}
+	}
+
 	if err = handleFelixNodeMetrics(c, install); err != nil {
 		return err
 	}
@@ -175,6 +216,24 @@ func handleFelixNodeMetrics(c *components, install *Installation) error {
 	} else {
 		// Ignore the metrics port if metrics is disabled.
 		c.node.ignoreEnv(containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
+	}
+
+	return nil
+}
+
+func checkTolerations(existing []corev1.Toleration, expected ...corev1.Toleration) error {
+	if len(existing) != len(expected) {
+		return fmt.Errorf("missing expected tolerations. have: %+v. expecting: %+v", existing, expected)
+	}
+
+OUTER:
+	for _, t := range expected {
+		for _, k := range existing {
+			if k == t {
+				continue OUTER
+			}
+		}
+		return fmt.Errorf("missing expected toleration: %+v", t)
 	}
 
 	return nil

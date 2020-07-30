@@ -71,6 +71,34 @@ func handleCore(c *components, install *Installation) error {
 		install.Spec.FlexVolumePath = "None"
 	}
 
+	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
+	v := getVolume(c.node.Spec.Template.Spec, "lib-modules")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/lib/modules" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'lib-modules' with hostPath '/lib/modules'"}
+	}
+	v = getVolume(c.node.Spec.Template.Spec, "var-run-calico")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/run/calico" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-run-calico' with hostPath '/var/run/calico'"}
+	}
+	v = getVolume(c.node.Spec.Template.Spec, "var-lib-calico")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/lib/calico" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-lib-calico' with hostPath '/var/lib/calico'"}
+	}
+	v = getVolume(c.node.Spec.Template.Spec, "xtables-lock")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/run/xtables.lock" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'xtables-lock' with hostPath '/run/xtables.lock"}
+	}
+	if c.calicoCNIConfig != nil {
+		v = getVolume(c.node.Spec.Template.Spec, "cni-bin-dir")
+		if v == nil || v.HostPath == nil || v.HostPath.Path != "/opt/cni/bin" {
+			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-bin-dir' with hostPath '/opt/cni/bin'"}
+		}
+		v = getVolume(c.node.Spec.Template.Spec, "cni-net-dir")
+		if v == nil || v.HostPath == nil || v.HostPath.Path != "/etc/cni/net.d" {
+			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-net-dir' with hostPath '/opt/cni/bin'"}
+		}
+	}
+
 	if err = handleFelixNodeMetrics(c, install); err != nil {
 		return err
 	}

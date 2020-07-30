@@ -204,6 +204,56 @@ func emptyNodeSpec() *appsv1.DaemonSet {
 					Containers: []corev1.Container{{
 						Name: "calico-node",
 					}},
+					Volumes: []corev1.Volume{
+						{
+							Name: "lib-modules",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/lib/modules",
+								},
+							},
+						},
+						{
+							Name: "var-run-calico",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/run/calico",
+								},
+							},
+						},
+						{
+							Name: "var-lib-calico",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/lib/calico",
+								},
+							},
+						},
+						{
+							Name: "xtables-lock",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/run/xtables.lock",
+								},
+							},
+						},
+						{
+							Name: "cni-bin-dir",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/opt/cni/bin",
+								},
+							},
+						},
+						{
+							Name: "cni-net-dir",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/etc/cni/net.d",
+								},
+							},
+						},
+					},
 				},
 			},
 		},

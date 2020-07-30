@@ -43,7 +43,7 @@ type checkedFields struct {
 type components struct {
 	node            CheckedDaemonSet
 	kubeControllers appsv1.Deployment
-	typha           appsv1.Deployment
+	typha           *appsv1.Deployment
 
 	// Calico CNI conf
 	// TODO: is cni-private netconf different? is it ok to only use the OS one?
@@ -75,17 +75,17 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 		return nil, err
 	}
 
-	var t = appsv1.Deployment{}
+	var t = new(appsv1.Deployment)
 	if err := client.Get(ctx, types.NamespacedName{
 		Name:      "calico-typha",
 		Namespace: metav1.NamespaceSystem,
-	}, &t); err != nil {
+	}, t); err != nil {
 		if !errors.IsNotFound(err) {
-			return nil, err
-		} else {
-			// typha is optional, so just log.
-			log.Print("did not detect typha")
+			return nil, fmt.Errorf("failed to get typha deployment: %v", err)
 		}
+		// typha is optional, so just log.
+		log.Print("did not detect typha")
+		t = nil
 	}
 
 	comps := &components{

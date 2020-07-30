@@ -35,13 +35,15 @@ func handleCore(c *components, install *Installation) error {
 		})
 	}
 
-	// typha resource limits. typha is optional so check for nil first
-	typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
-	if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-			ComponentName:        operatorv1.ComponentNameTypha,
-			ResourceRequirements: typha.Resources.DeepCopy(),
-		})
+	if c.typha != nil {
+		// typha resource limits. typha is optional so check for nil first
+		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
+		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
+			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: typha.Resources.DeepCopy(),
+			})
+		}
 	}
 
 	// kube-controllers nodeSelector

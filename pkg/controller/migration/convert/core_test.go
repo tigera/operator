@@ -129,4 +129,79 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.FlexVolumePath).To(Equal(path))
 		})
 	})
+
+	Context("nodename", func() {
+		// AssertNodeName parameterizes the tests for Nodename so that they can be run
+		// on the install-cni container and the calico/node container, both of which use
+		// a different env var name.
+		// the 'setEnvVars' function is used to update the correct container's env vars
+		// for the given test.
+		AssertNodeName := func(nodeNameVarName string, setEnvVars func([]v1.EnvVar)) {
+			It("should not throw an error if set to noderef", func() {
+				setEnvVars([]v1.EnvVar{{
+					Name: nodeNameVarName,
+					ValueFrom: &v1.EnvVarSource{
+						FieldRef: &v1.ObjectFieldSelector{
+							FieldPath: "spec.nodeName",
+						},
+					},
+				}})
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should throw an error if set to a different fieldPath", func() {
+				setEnvVars([]v1.EnvVar{{
+					Name: nodeNameVarName,
+					ValueFrom: &v1.EnvVarSource{
+						FieldRef: &v1.ObjectFieldSelector{
+							FieldPath: "metadata.name",
+						},
+					},
+				}})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+			It("should throw an error if hardcoded to a value", func() {
+				setEnvVars([]v1.EnvVar{{
+					Name:  nodeNameVarName,
+					Value: "foobar",
+				}})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+		}
+
+		It("should not throw an error if no nodenames are set", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+
+		It("should not throw an error if both are set correctly", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name: "NODENAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			}}
+			comps.node.Spec.Template.Spec.InitContainers[0].Env = []v1.EnvVar{{
+				Name: "KUBERNETES_NODE_NAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			}}
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+
+		Context("on the calico/node container", func() {
+			AssertNodeName("NODENAME", func(envVars []v1.EnvVar) {
+				comps.node.Spec.Template.Spec.Containers[0].Env = envVars
+			})
+		})
+		Context("on the install-cni container", func() {
+			AssertNodeName("KUBERNETES_NODE_NAME", func(envVars []v1.EnvVar) {
+				comps.node.Spec.Template.Spec.InitContainers[0].Env = envVars
+			})
+		})
+
+	})
 })

@@ -192,6 +192,16 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 			Spec: appsv1.DeploymentSpec{
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
+						Tolerations: []corev1.Toleration{
+							{
+								Key:      "CriticalAddonsOnly",
+								Operator: corev1.TolerationOpExists,
+							},
+							{
+								Effect: corev1.TaintEffectNoSchedule,
+								Key:    "node-role.kubernetes.io/master",
+							},
+						},
 						Containers: []corev1.Container{{
 							Name: "calico-node",
 						}},

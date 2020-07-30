@@ -112,7 +112,7 @@ var _ = Describe("core handler", func() {
 		It("should carry forward flexvolumepath", func() {
 			hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
 			path := "/foo/bar/"
-			comps.node.Spec.Template.Spec.Volumes = []v1.Volume{{
+			comps.node.Spec.Template.Spec.Volumes = append(comps.node.Spec.Template.Spec.Volumes, v1.Volume{
 				Name: "flexvol-driver-host",
 				VolumeSource: v1.VolumeSource{
 					HostPath: &v1.HostPathVolumeSource{
@@ -120,7 +120,7 @@ var _ = Describe("core handler", func() {
 						Type: &hostPathDirectoryOrCreate,
 					},
 				},
-			}}
+			})
 			comps.node.Spec.Template.Spec.InitContainers = append(comps.node.Spec.Template.Spec.InitContainers, v1.Container{
 				Name: "flexvol-driver",
 			})

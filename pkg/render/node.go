@@ -1022,6 +1022,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 
+	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
+	}
+
 	if c.amazonCloudInt != nil {
 		nodeEnv = append(nodeEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
 		nodeEnv = append(nodeEnv, v1.EnvVar{

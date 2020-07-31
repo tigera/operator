@@ -720,7 +720,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	components = append(components, calico.Render()...)
 
 	for _, component := range components {
-		if err := handler.CreateOrUpdate(ctx, component, nil, utils.NoUserAddedMetadata); err != nil {
+		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

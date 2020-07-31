@@ -184,20 +184,5 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 				},
 			},
 		},
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "calico-kube-controllers",
-				Namespace: "kube-system",
-			},
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name: "calico-node",
-						}},
-					},
-				},
-			},
-		},
 	}
 }

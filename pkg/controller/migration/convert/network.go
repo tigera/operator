@@ -7,7 +7,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -97,25 +96,6 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	} else {
 		hp := v1.HostPortsDisabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
-	}
-
-	if c.calicoCNIConfig.MTU == -1 {
-		// if MTU is -1, we assume it was us who replaced it when doing initial CNI
-		// config loading. We need to pull it from the correct source
-		mtu, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_MTU")
-		if err != nil {
-			return err
-		}
-		if mtu != nil {
-			i := intstr.FromString(*mtu)
-			iv := int32(i.IntValue())
-			install.Spec.CalicoNetwork.MTU = &iv
-		}
-	} else {
-		// user must have hardcoded their CNI instead of using our cni templating engine.
-		// use the hardcoded value.
-		mtu := int32(c.calicoCNIConfig.MTU)
-		install.Spec.CalicoNetwork.MTU = &mtu
 	}
 
 	// CNI IPAM pools

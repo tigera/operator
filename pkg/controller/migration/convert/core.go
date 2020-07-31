@@ -81,28 +81,28 @@ func handleCore(c *components, install *Installation) error {
 	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
 	v := getVolume(c.node.Spec.Template.Spec, "lib-modules")
 	if v == nil || v.HostPath == nil || v.HostPath.Path != "/lib/modules" {
-		return ErrIncompatibleCluster{"must mount /lib/modules from host"}
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'lib-modules' with hostPath '/lib/modules'"}
 	}
 	v = getVolume(c.node.Spec.Template.Spec, "var-run-calico")
 	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/run/calico" {
-		return ErrIncompatibleCluster{"must mount /var/run/calico from host"}
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-run-calico' with hostPath '/var/run/calico'"}
 	}
 	v = getVolume(c.node.Spec.Template.Spec, "var-lib-calico")
 	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/lib/calico" {
-		return ErrIncompatibleCluster{"must mount /var/lib/calico from host"}
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-lib-calico' with hostPath '/var/lib/calico'"}
 	}
 	v = getVolume(c.node.Spec.Template.Spec, "xtables-lock")
 	if v == nil || v.HostPath == nil || v.HostPath.Path != "/run/xtables.lock" {
-		return ErrIncompatibleCluster{"must mount /run/xtables.lock"}
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'xtables-lock' with hostPath '/run/xtables.lock"}
 	}
 	if c.calicoCNIConfig != nil {
 		v = getVolume(c.node.Spec.Template.Spec, "cni-bin-dir")
 		if v == nil || v.HostPath == nil || v.HostPath.Path != "/opt/cni/bin" {
-			return ErrIncompatibleCluster{"must mount /opt/cni/bin"}
+			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-bin-dir' with hostPath '/opt/cni/bin'"}
 		}
 		v = getVolume(c.node.Spec.Template.Spec, "cni-net-dir")
 		if v == nil || v.HostPath == nil || v.HostPath.Path != "/etc/cni/net.d" {
-			return ErrIncompatibleCluster{"must mount /opt/cni/bin"}
+			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-net-dir' with hostPath '/opt/cni/bin'"}
 		}
 	}
 
@@ -120,7 +120,7 @@ func handleCore(c *components, install *Installation) error {
 			Effect:   corev1.TaintEffectNoExecute,
 			Operator: corev1.TolerationOpExists,
 		}); err != nil {
-		return fmt.Errorf("calico-node has incompatible tolerations: %v", err)
+		return ErrIncompatibleCluster{"calico-node has incompatible tolerations: " + err.Error()}
 	}
 
 	// check kube-controller tolerations
@@ -134,7 +134,7 @@ func handleCore(c *components, install *Installation) error {
 				Effect: corev1.TaintEffectNoSchedule,
 				Key:    "node-role.kubernetes.io/master",
 			}); err != nil {
-			return fmt.Errorf("kube-controllers has incompatible tolerations: %v", err)
+			return ErrIncompatibleCluster{"kube-controllers has incompatible tolerations: " + err.Error()}
 		}
 	}
 
@@ -144,7 +144,7 @@ func handleCore(c *components, install *Installation) error {
 			Key:      "CriticalAddonsOnly",
 			Operator: corev1.TolerationOpExists,
 		}); err != nil {
-			return fmt.Errorf("typha has incompatible tolerations: %v", err)
+			return ErrIncompatibleCluster{"typha has incompatible tolerations: " + err.Error()}
 		}
 	}
 
@@ -225,17 +225,20 @@ func handleFelixNodeMetrics(c *components, install *Installation) error {
 
 func checkTolerations(existing []corev1.Toleration, expected ...corev1.Toleration) error {
 	if len(existing) != len(expected) {
-		return fmt.Errorf("missing expected tolerations. have: %+v. expecting: %+v", existing, expected)
+		return ErrIncompatibleCluster{fmt.Sprintf("missing expected tolerations. have: %+v. expecting: %+v", existing, expected)}
 	}
 
-OUTER:
 	for _, t := range expected {
+		var found bool
 		for _, k := range existing {
 			if k == t {
-				continue OUTER
+				found = true
+				break
 			}
 		}
-		return fmt.Errorf("missing expected toleration: %+v", t)
+		if !found {
+			return ErrIncompatibleCluster{fmt.Sprintf("missing expected toleration: %+v", t)}
+		}
 	}
 
 	return nil

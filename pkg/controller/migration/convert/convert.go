@@ -42,7 +42,7 @@ type checkedFields struct {
 
 type components struct {
 	node            CheckedDaemonSet
-	kubeControllers appsv1.Deployment
+	kubeControllers *appsv1.Deployment
 	typha           *appsv1.Deployment
 
 	// Calico CNI conf
@@ -67,12 +67,16 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 		return nil, err
 	}
 
-	var kc = appsv1.Deployment{}
+	var kc = new(appsv1.Deployment)
 	if err := client.Get(ctx, types.NamespacedName{
 		Name:      "calico-kube-controllers",
 		Namespace: metav1.NamespaceSystem,
-	}, &kc); err != nil {
-		return nil, err
+	}, kc); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get kube-controllers deployment: %v", err)
+		}
+		log.Print("did not detect kube-controllers")
+		kc = nil
 	}
 
 	var t = new(appsv1.Deployment)

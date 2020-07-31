@@ -304,7 +304,7 @@ func emptyComponents() components {
 			*emptyNodeSpec(),
 			make(map[string]checkedFields),
 		},
-		kubeControllers: *emptyKubeControllerSpec(),
+		kubeControllers: emptyKubeControllerSpec(),
 		typha:           emptyTyphaDeployment(),
 	}
 }

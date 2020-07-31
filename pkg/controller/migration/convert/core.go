@@ -27,12 +27,14 @@ func handleCore(c *components, install *Installation) error {
 	}
 
 	// kube-controllers
-	kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
-	if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-			ComponentName:        operatorv1.ComponentNameKubeControllers,
-			ResourceRequirements: kubeControllers.Resources.DeepCopy(),
-		})
+	if c.kubeControllers != nil {
+		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
+		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
+			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: kubeControllers.Resources.DeepCopy(),
+			})
+		}
 	}
 
 	if c.typha != nil {
@@ -47,7 +49,9 @@ func handleCore(c *components, install *Installation) error {
 	}
 
 	// kube-controllers nodeSelector
-	install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
+	if c.kubeControllers != nil {
+		install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
+	}
 
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy

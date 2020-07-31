@@ -8,93 +8,89 @@ import (
 )
 
 func handleMTU(c *components, install *Installation) error {
-	var detectedMTU *int32
+	var (
+		curMTU    *int32
+		curMTUSrc string
+	)
 
-	m, err := c.node.getEnv(ctx, c.client, "calico-node", "FELIX_IPINIPMTU")
-	if err != nil {
-		return err
-	}
-	detectedMTU, err = compareMTU(m, detectedMTU)
-	if err != nil {
-		return err
-	}
+	for _, src := range []string{"FELIX_IPINIPMTU", "FELIX_VXLANMTU", "FELIX_WIREGUARDMTU"} {
+		mtu, err := getMTU(c, containerCalicoNode, src)
+		if err != nil {
+			return fmt.Errorf("failed to parse %s: %v", src, err)
+		}
 
-	m, err = c.node.getEnv(ctx, c.client, "calico-node", "FELIX_VXLANMTU")
-	if err != nil {
-		return err
-	}
-	detectedMTU, err = compareMTU(m, detectedMTU)
-	if err != nil {
-		return err
-	}
+		// if this mtu source is not set, ignore
+		if mtu == nil {
+			continue
+		}
 
-	m, err = c.node.getEnv(ctx, c.client, "calico-node", "FELIX_WIREGUARDMTU")
-	if err != nil {
-		return err
-	}
-	detectedMTU, err = compareMTU(m, detectedMTU)
-	if err != nil {
-		return err
+		// compare against current mtu.
+		if curMTU != nil && *curMTU != *mtu {
+			return fmt.Errorf("detected mtu %s=%d does not match detected mtu %s=%d", src, *mtu, curMTUSrc, *curMTU)
+		}
+
+		curMTU, curMTUSrc = mtu, src
 	}
 
 	if c.calicoCNIConfig != nil {
 		if c.calicoCNIConfig.MTU == -1 {
 			// if MTU is -1, we assume it was us who replaced it when doing initial CNI
 			// config loading. We need to pull it from the correct source
-			mtuEnv, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_MTU")
-			if err != nil {
-				return err
-			}
-			detectedMTU, err = compareMTU(mtuEnv, detectedMTU)
+			mtu, err := getMTU(c, containerInstallCNI, "CNI_MTU")
 			if err != nil {
 				return err
 			}
 
-		} else {
-			// user must have hardcoded their CNI instead of using our cni templating engine.
-			// use the hardcoded value.
-			if m := int32(c.calicoCNIConfig.MTU); m != 0 {
-				if detectedMTU != nil {
-					// compare against detected MTU. they must match.
-					if m != *detectedMTU {
-						return ErrIncompatibleCluster{"MTUs across IPIP, VXLAN, and Wireguard must match."}
-					}
-				} else {
-					// set detected MTU for later comparison against other sources
-					detectedMTU = &m
-				}
+			if mtu == nil {
+				// if not set, install-cni will use a known default mtu of 1500
+				mtu = new(int32)
+				*mtu = 1500
 			}
+
+			// compare against current mtu.
+			if curMTU != nil && *curMTU != *mtu {
+				return fmt.Errorf("detected mtu %s=%d does not match detected mtu %s=%d", "CNI_MTU", *mtu, curMTUSrc, *curMTU)
+			}
+			curMTU, curMTUSrc = mtu, "CNI_MTU"
+
+		} else {
+			// user must have hardcoded their CNI instead of using the cni templating engine.
+			// use the hardcoded value.
+			mtu := int32(c.calicoCNIConfig.MTU)
+			if curMTU != nil && *curMTU != mtu {
+				return ErrIncompatibleCluster{"MTUs across IPIP, VXLAN, and Wireguard must match."}
+			}
+			// set detected MTU for later comparison against other sources
+			curMTU = &mtu
 		}
 	}
 
-	if detectedMTU != nil {
+	if curMTU != nil {
 		if install.Spec.CalicoNetwork == nil {
 			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
 		}
-		install.Spec.CalicoNetwork.MTU = detectedMTU
+		install.Spec.CalicoNetwork.MTU = curMTU
 	}
 
 	return nil
 }
 
-// compareMTU compares two MTU values and ensures they match if both are set
-func compareMTU(m *string, detectedMTU *int32) (*int32, error) {
+// getMTU retrieves an mtu value from the calico-node container, returning the
+func getMTU(c *components, container, key string) (*int32, error) {
+	m, err := c.node.getEnv(ctx, c.client, container, key)
+	if err != nil {
+		return nil, err
+	}
+
 	if m == nil {
-		// if this mtu source is nil, return the currently detected mtu
-		return detectedMTU, nil
+		return nil, nil
 	}
 
 	// if it's not nil, convert it to a number, and compare it against the currently detected mtu
-	i, err := strconv.Atoi(*m)
+	i, err := strconv.ParseInt(*m, 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't convert %s to integer: %v", *m, err)
 	}
 	mtu := int32(i)
-	if detectedMTU != nil {
-		// compare against detected MTU. they must match.
-		if mtu != *detectedMTU {
-			return nil, ErrIncompatibleCluster{"MTUs across IPIP, VXLAN, and Wireguard must match."}
-		}
-	}
 	return &mtu, nil
 }

@@ -144,6 +144,13 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should validate controlPlaneNodeSelector", func() {
+		instance.Spec.ControlPlaneNodeSelector = map[string]string{
+			"kubernetes.io/os": "windows",
+		}
+		Expect(validateCustomResource(instance)).To(HaveOccurred())
+	})
+
 	It("should validate HostPorts", func() {
 		instance.Spec.CalicoNetwork.HostPorts = nil
 		err := validateCustomResource(instance)

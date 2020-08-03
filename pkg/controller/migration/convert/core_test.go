@@ -73,15 +73,70 @@ var _ = Describe("core handler", func() {
 	})
 
 	Context("nodeSelector", func() {
-		It("should not set nodeSelector if none is set", func() {
-			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ControlPlaneNodeSelector).To(BeEmpty())
+		TestNodeSelectors := func(f func(map[string]string)) {
+			It("should error for unexpected nodeSelectors", func() {
+				f(map[string]string{"foo": "bar"})
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("should not error for beta.kubernetes.io/os=linux nodeSelector", func() {
+				f(map[string]string{"beta.kubernetes.io/os": "linux"})
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for kubernetes.io/os=linux", func() {
+				f(map[string]string{"kubernetes.io/os": "linux"})
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error for other kubernetes.io/os nodeSelectors", func() {
+				f(map[string]string{"kubernetes.io/os": "windows"})
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("should still error even if a valid and invalid nodeselector are set", func() {
+				f(map[string]string{
+					"kubernetes.io/os": "linux",
+					"foo":              "bar",
+				})
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("should not panic for nil nodeselectors", func() {
+				f(nil)
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+		}
+		Describe("calico-node", func() {
+			TestNodeSelectors(func(nodeSelectors map[string]string) {
+				comps.node.Spec.Template.Spec.NodeSelector = nodeSelectors
+			})
 		})
-		It("should carry forward nodeSelector", func() {
-			nodeSelector := map[string]string{"foo": "bar"}
-			comps.kubeControllers.Spec.Template.Spec.NodeSelector = nodeSelector
-			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(nodeSelector))
+		Describe("typha", func() {
+			TestNodeSelectors(func(nodeSelectors map[string]string) {
+				comps.typha.Spec.Template.Spec.NodeSelector = nodeSelectors
+			})
+		})
+
+		// kube-controllers has a configurable nodeSelector which should
+		// be carried forward
+		Context("kube-controllers", func() {
+			It("should carry forward custom nodeSelector on kube-controllers, but drop the os nodeselector", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
+					"kubernetes.io/os": "linux",
+					"foo":              "bar",
+				}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+			})
+
+			It("should carry forward other kubernetes.io/os nodeSelectors", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
+					"kubernetes.io/os": "windows",
+				}
+				// we don't expect an error to occur here, because the final validation handler should catch this.
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"kubernetes.io/os": "windows"}))
+			})
+			It("should not set nodeSelector if none is set", func() {
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.ControlPlaneNodeSelector).To(BeNil())
+			})
 		})
 	})
 

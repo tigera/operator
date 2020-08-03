@@ -148,6 +148,10 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
+	if err := handleAnnotations(c); err != nil {
+		return err
+	}
+
 	if err = handleFelixNodeMetrics(c, install); err != nil {
 		return err
 	}
@@ -189,6 +193,57 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
 	return nil
+}
+
+func handleAnnotations(c *components) error {
+	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
+		return ErrIncompatibleCluster{fmt.Sprintf("calico-node daemonset has unexpected annotation: %v", a)}
+	}
+	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
+		return ErrIncompatibleCluster{fmt.Sprintf("calico-node podTemplateSpec has unexpected annotation: %v", a)}
+	}
+
+	if c.kubeControllers != nil {
+		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers deployment has unexpected annotation: %v", a)}
+		}
+		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers podTemplateSpec has unexpected annotation: %v", a)}
+		}
+	}
+
+	if c.typha != nil {
+		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("typha deployment has unexpected annotation: %v", a)}
+		}
+		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
+			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
+		}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("typha podTemplateSpec has unexpected annotation: %v", a)}
+		}
+	}
+	return nil
+}
+
+// removeExpectedAnnotations returns the given annotations with common k8s-native annotations removed.
+// this function also accepts a second argument of additional annotations to remove.
+func removeExpectedAnnotations(existing, ignore map[string]string) map[string]string {
+	a := existing
+	for key, val := range existing {
+		if key == "kubectl.kubernetes.io/last-applied-configuration" ||
+			key == "deprecated.daemonset.template.generation" ||
+			key == "deployment.kubernetes.io/revision" ||
+			key == "scheduler.alpha.kubernetes.io/critical-pod" {
+			delete(a, key)
+			continue
+		}
+
+		if v, ok := ignore[key]; ok && v == val {
+			delete(a, key)
+		}
+	}
+
+	return a
 }
 
 func handleFelixNodeMetrics(c *components, install *Installation) error {

@@ -183,6 +183,10 @@ func (nt HostPortsType) String() string {
 
 type BGPOption string
 
+func BGPOptionPtr(b BGPOption) *BGPOption {
+	return &b
+}
+
 const (
 	BGPEnabled  BGPOption = "Enabled"
 	BGPDisabled BGPOption = "Disabled"

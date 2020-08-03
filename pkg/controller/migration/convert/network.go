@@ -41,19 +41,8 @@ func handleCalicoCNI(c *components, install *Installation) error {
 
 	errCtx := fmt.Sprintf("detected %s CNI plugin", plugin)
 
-	// CALICO_NETWORKING_BACKEND
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
-	if err != nil {
-		return err
-	}
-
-	if netBackend != nil && *netBackend != "" && *netBackend != "bird" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, only CALICO_NETWORKING_BACKEND=bird is supported at this time", errCtx)}
-	}
-
-	// Calico CNI
 	if c.calicoCNIConfig == nil {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, required cni config was not found ", errCtx)}
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, required Calico cni config was not found ", errCtx)}
 	}
 
 	if install.Spec.CNI == nil {
@@ -61,8 +50,56 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	}
 	install.Spec.CNI.Type = plugin
 
+	if install.Spec.CNI.IPAM == nil {
+		install.Spec.CNI.IPAM = &operatorv1.IPAMSpec{}
+	}
+
 	if install.Spec.CalicoNetwork == nil {
 		install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+	}
+
+	// CALICO_NETWORKING_BACKEND
+	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	if err != nil {
+		return err
+	}
+
+	switch c.calicoCNIConfig.IPAM.Type {
+	case "calico-ipam":
+		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
+		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
+		switch {
+		case netBackend == nil:
+		case *netBackend == "":
+		case *netBackend == "bird":
+		case *netBackend == "vxlan":
+			install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
+		default:
+			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM plugin %s, CALICO_NETWORKING_BACKEND %s is not valid",
+				errCtx, c.calicoCNIConfig.IPAM.Type, *netBackend)}
+		}
+
+		if err := subhandleCalicoIPAM(c, install); err != nil {
+			return err
+		}
+	case "host-local":
+		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
+		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
+		switch {
+		case netBackend == nil:
+		case *netBackend == "":
+		case *netBackend == "bird":
+		case *netBackend == "none":
+			install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
+		default:
+			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM plugin %s, CALICO_NETWORKING_BACKEND %s is not valid",
+				errCtx, c.calicoCNIConfig.IPAM.Type, *netBackend)}
+		}
+		if err := subhandleHostLocalIPAM(c, install); err != nil {
+			return err
+		}
+	default:
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, unrecognized IPAM plugin %s, expected calico-ipam or host-local", errCtx, c.calicoCNIConfig.IPAM.Type)}
 	}
 
 	// IP
@@ -110,8 +147,121 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	if c.calicoCNIConfig.FeatureControl.IPAddrsNoIpam {
 		return ErrIncompatibleCluster{"IpAddrsNoIpam not supported"}
 	}
+	if c.calicoCNIConfig.ContainerSettings.AllowIPForwarding {
+		return ErrIncompatibleCluster{"AllowIPForwarding not supported"}
+	}
 
 	return nil
+}
+
+func subhandleCalicoIPAM(c *components, install *Installation) error {
+	if c.calicoCNIConfig.IPAM.Type != "calico-ipam" {
+		// I don't know if this should be an error or not, the way it is written
+		// this check is just double checking what the caller should have already
+		// validated.
+		return nil
+	}
+
+	// TODO: Is there anything we need to do with the Name field on the CNI plugin or IPAM
+	// plugin? We obviously don't have a way currently to persist them.
+
+	invalidFields := []string{}
+	if c.calicoCNIConfig.IPAM.Subnet != "" {
+		invalidFields = append(invalidFields, "ipam.subnet field is unsupported")
+	}
+
+	// TODO: Check these fields when we're setting the Installation IPPools since those
+	// settings will drive these fields.
+	// c.calicoCNIConfig.IPAM.AssignIpv4
+	// c.calicoCNIConfig.IPAM.AssignIpv6
+
+	if len(c.calicoCNIConfig.IPAM.IPv4Pools) != 0 {
+		invalidFields = append(invalidFields, "ipam.ipv4pools field is unsupported")
+	}
+	if len(c.calicoCNIConfig.IPAM.IPv6Pools) != 0 {
+		invalidFields = append(invalidFields, "ipam.ipv6pools field is unsupported")
+	}
+
+	if len(invalidFields) > 0 {
+		return ErrIncompatibleCluster{"calico IPAM configuration could not be migrated: " + strings.Join(invalidFields, ",")}
+	}
+	return nil
+}
+
+const UnsupportedMsg = "is unsupported"
+
+// subhandleHostLocalIPAM checks all fields in the Host Local IPAM configuration,
+// if any fields have unexpected values an error message will be returned.
+// The function tries to collect all the errors and report one message.
+// If there are no errors and the config can be added to the 'install' passed
+// in then nil is returned.
+func subhandleHostLocalIPAM(c *components, install *Installation) error {
+	if c.calicoCNIConfig.IPAM.Type != "host-local" {
+		// I don't know if this should be an error or not, the way it is written
+		// this check is just double checking what the caller should have already
+		// validated.
+		return nil
+	}
+
+	if c.hostLocalIPAMConfig == nil {
+		return ErrIncompatibleCluster{"host-local ipam type but no configuration"}
+	}
+
+	cfg := c.hostLocalIPAMConfig
+
+	invalidFields := []string{}
+	if cfg.Range != nil {
+		invalidFields = checkRange("", *cfg.Range)
+	}
+	if len(cfg.Routes) != 0 {
+		invalidFields = append(invalidFields, "routes "+UnsupportedMsg)
+	}
+	if cfg.DataDir != "" {
+		invalidFields = append(invalidFields, "dataDir "+UnsupportedMsg)
+	}
+	if cfg.ResolvConf != "" {
+		invalidFields = append(invalidFields, "resolveConf "+UnsupportedMsg)
+	}
+	switch len(cfg.Ranges) {
+	case 0:
+	case 1:
+		switch len(cfg.Ranges[0]) {
+		case 0:
+		case 1:
+			invalidFields = append(invalidFields, checkRange("ranges.", cfg.Ranges[0][0])...)
+		default:
+			invalidFields = append(invalidFields, "only zero or one range is valid in the ranges field")
+		}
+	default:
+		invalidFields = append(invalidFields, "only zero or one range is valid in the ranges field")
+	}
+
+	if len(invalidFields) > 0 {
+		return ErrIncompatibleCluster{"host-local IPAM configuration configuration could not be migrated: " + strings.Join(invalidFields, ",")}
+	}
+
+	return nil
+}
+
+// checkRange checks the fields in r for invalid values for HostLocal IPAM configuration.
+func checkRange(prefix string, r Range) []string {
+	bf := []string{}
+	if r.Subnet != "" {
+		if r.Subnet != "usePodCidr" {
+			bf = append(bf, prefix+"subnet has invalid value "+r.Subnet)
+		}
+	}
+	if r.RangeStart != "" {
+		bf = append(bf, prefix+"rangeStart "+UnsupportedMsg)
+	}
+	if r.RangeEnd != "" {
+		bf = append(bf, prefix+"rangeEnd "+UnsupportedMsg)
+	}
+	if len(r.Gateway) != 0 {
+		bf = append(bf, prefix+"gateway "+UnsupportedMsg)
+	}
+
+	return bf
 }
 
 func handleNonCalicoCNI(c *components, install *Installation) error {

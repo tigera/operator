@@ -1,13 +1,46 @@
 package convert
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
+	"reflect"
 	"strings"
 
 	"github.com/containernetworking/cni/libcni"
+	"github.com/containernetworking/cni/pkg/types"
 )
+
+// Used to parse the IPAM section out of the full CNI configuration
+type CNIHostLocalIPAM struct {
+	IPAM json.RawMessage `json:"ipam"`
+}
+
+// IPAMConfig represents the IP related network configuration.
+// This nests Range because we initially only supported a single
+// range directly, and wish to preserve backwards compatability
+type HostLocalIPAMConfig struct {
+	*Range
+	Name       string
+	Type       string         `json:"type"`
+	Routes     []*types.Route `json:"routes"`
+	DataDir    string         `json:"dataDir"`
+	ResolvConf string         `json:"resolvConf"`
+	Ranges     []RangeSet     `json:"ranges"`
+	IPArgs     []net.IP       `json:"-"` // Requested IPs from CNI_ARGS and args
+}
+
+type RangeSet []Range
+
+type Range struct {
+	RangeStart string `json:"rangeStart,omitempty"` // The first ip, inclusive
+	RangeEnd   string `json:"rangeEnd,omitempty"`   // The last ip, inclusive
+	Subnet     string `json:"subnet"`
+	Gateway    net.IP `json:"gateway,omitempty"`
+}
 
 // loadCNI loads CNI config into the components for all other handlers to use.
 // No verification is done here beyond checking for valid json.
@@ -42,11 +75,30 @@ func loadCNI(c *components) error {
 			if err := json.Unmarshal(plugin.Bytes, &c.calicoCNIConfig); err != nil {
 				return fmt.Errorf("failed to parse calico cni config: %w", err)
 			}
+			if plugin.Network.IPAM.Type == "host-local" {
+				// First load the IPAM json section so we can Unmarshal it below.
+				// We load the IPAM as raw json so we can isolate it from the rest of the
+				// CNI config.
+				raw := CNIHostLocalIPAM{}
+				if err := json.Unmarshal(plugin.Bytes, &raw); err != nil {
+					return fmt.Errorf("failed to parse cni config for raw IPAM: %w", err)
+				}
+
+				// Use a Decoder so we can set DisallowUnknownFields so if there are
+				// any unknown fields we will detect that.
+				x := HostLocalIPAMConfig{}
+				dec := json.NewDecoder(bytes.NewReader(raw.IPAM))
+				dec.DisallowUnknownFields()
+				if err := dec.Decode(&x); err != nil && err != io.EOF {
+					return fmt.Errorf("failed to parse HostLocal IPAM config: %w", err)
+				}
+				c.hostLocalIPAMConfig = &x
+			}
 		} else {
 			plugins[plugin.Network.Type] = plugin
 		}
 	}
-
+	c.pluginCNIConfig = plugins
 	return nil
 }
 
@@ -71,4 +123,15 @@ func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
 	}
 
 	return libcni.ConfListFromConf(conf)
+}
+
+func JSONBytesEqual(a, b []byte) (bool, error) {
+	var j, j2 interface{}
+	if err := json.Unmarshal(a, &j); err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal(b, &j2); err != nil {
+		return false, err
+	}
+	return reflect.DeepEqual(j2, j), nil
 }

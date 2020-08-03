@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func handleCore(c *components, install *Installation) error {
@@ -27,25 +28,31 @@ func handleCore(c *components, install *Installation) error {
 	}
 
 	// kube-controllers
-	kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
-	if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-			ComponentName:        operatorv1.ComponentNameKubeControllers,
-			ResourceRequirements: kubeControllers.Resources.DeepCopy(),
-		})
+	if c.kubeControllers != nil {
+		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
+		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
+			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: kubeControllers.Resources.DeepCopy(),
+			})
+		}
 	}
 
-	// typha resource limits. typha is optional so check for nil first
-	typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
-	if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-			ComponentName:        operatorv1.ComponentNameTypha,
-			ResourceRequirements: typha.Resources.DeepCopy(),
-		})
+	if c.typha != nil {
+		// typha resource limits. typha is optional so check for nil first
+		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
+		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
+			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: typha.Resources.DeepCopy(),
+			})
+		}
 	}
 
 	// kube-controllers nodeSelector
-	install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
+	if c.kubeControllers != nil {
+		install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
+	}
 
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
@@ -69,6 +76,76 @@ func handleCore(c *components, install *Installation) error {
 			return ErrIncompatibleCluster{"detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume"}
 		}
 		install.Spec.FlexVolumePath = "None"
+	}
+
+	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
+	v := getVolume(c.node.Spec.Template.Spec, "lib-modules")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/lib/modules" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'lib-modules' with hostPath '/lib/modules'"}
+	}
+	v = getVolume(c.node.Spec.Template.Spec, "var-run-calico")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/run/calico" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-run-calico' with hostPath '/var/run/calico'"}
+	}
+	v = getVolume(c.node.Spec.Template.Spec, "var-lib-calico")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/lib/calico" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-lib-calico' with hostPath '/var/lib/calico'"}
+	}
+	v = getVolume(c.node.Spec.Template.Spec, "xtables-lock")
+	if v == nil || v.HostPath == nil || v.HostPath.Path != "/run/xtables.lock" {
+		return ErrIncompatibleCluster{"expected calico-node to have volume 'xtables-lock' with hostPath '/run/xtables.lock"}
+	}
+	if c.calicoCNIConfig != nil {
+		v = getVolume(c.node.Spec.Template.Spec, "cni-bin-dir")
+		if v == nil || v.HostPath == nil || v.HostPath.Path != "/opt/cni/bin" {
+			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-bin-dir' with hostPath '/opt/cni/bin'"}
+		}
+		v = getVolume(c.node.Spec.Template.Spec, "cni-net-dir")
+		if v == nil || v.HostPath == nil || v.HostPath.Path != "/etc/cni/net.d" {
+			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-net-dir' with hostPath '/opt/cni/bin'"}
+		}
+	}
+
+	// check node tolerations
+	if err := checkTolerations(c.node.Spec.Template.Spec.Tolerations,
+		corev1.Toleration{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		},
+		corev1.Toleration{
+			Effect:   corev1.TaintEffectNoSchedule,
+			Operator: corev1.TolerationOpExists,
+		},
+		corev1.Toleration{
+			Effect:   corev1.TaintEffectNoExecute,
+			Operator: corev1.TolerationOpExists,
+		}); err != nil {
+		return ErrIncompatibleCluster{"calico-node has incompatible tolerations: " + err.Error()}
+	}
+
+	// check kube-controller tolerations
+	if c.kubeControllers != nil {
+		if err := checkTolerations(c.kubeControllers.Spec.Template.Spec.Tolerations,
+			corev1.Toleration{
+				Key:      "CriticalAddonsOnly",
+				Operator: corev1.TolerationOpExists,
+			},
+			corev1.Toleration{
+				Effect: corev1.TaintEffectNoSchedule,
+				Key:    "node-role.kubernetes.io/master",
+			}); err != nil {
+			return ErrIncompatibleCluster{"kube-controllers has incompatible tolerations: " + err.Error()}
+		}
+	}
+
+	// check typha tolerations
+	if c.typha != nil {
+		if err := checkTolerations(c.typha.Spec.Template.Spec.Tolerations, corev1.Toleration{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		}); err != nil {
+			return ErrIncompatibleCluster{"typha has incompatible tolerations: " + err.Error()}
+		}
 	}
 
 	if err = handleFelixNodeMetrics(c, install); err != nil {
@@ -141,6 +218,27 @@ func handleFelixNodeMetrics(c *components, install *Installation) error {
 	} else {
 		// Ignore the metrics port if metrics is disabled.
 		c.node.ignoreEnv(containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
+	}
+
+	return nil
+}
+
+func checkTolerations(existing []corev1.Toleration, expected ...corev1.Toleration) error {
+	if len(existing) != len(expected) {
+		return ErrIncompatibleCluster{fmt.Sprintf("missing expected tolerations. have: %+v. expecting: %+v", existing, expected)}
+	}
+
+	for _, t := range expected {
+		var found bool
+		for _, k := range existing {
+			if k == t {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ErrIncompatibleCluster{fmt.Sprintf("missing expected toleration: %+v", t)}
+		}
 	}
 
 	return nil

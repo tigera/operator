@@ -399,6 +399,22 @@ func (c *apiServerComponent) authClusterRole() *rbacv1.ClusterRole {
 					"extension-apiserver-authentication",
 				},
 			},
+			{
+				APIGroups: []string{
+					"rbac.authorization.k8s.io",
+				},
+				Resources: []string{
+					"clusterroles",
+					"clusterrolebindings",
+					"roles",
+					"rolebindings",
+				},
+				Verbs: []string{
+					"get",
+					"list",
+					"watch",
+				},
+			},
 		},
 	}
 }
@@ -923,9 +939,11 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		// A POST to AuthenticationReviews can be compared with a POST to the TokenReviews endpoint.
 		// This api is added to circumvent a bug in the k8s-apiserver that is present in k8s
 		// versions up to v1.18 (kubernetes/pull/87612) when oidc audiences are enabled.
+		//
+		// Also include AuthorizationReviews that the UI uses to determine what features it can enable.
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			Resources: []string{"authenticationreviews", "authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
 	}
@@ -1042,9 +1060,11 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		// A POST to AuthenticationReviews can be compared with a POST to the TokenReviews endpoint.
 		// This api is added to circumvent a bug in the k8s-apiserver that is present in k8s
 		// versions up to v1.18 (kubernetes/pull/87612) when oidc audiences are enabled.
+		//
+		// Also include AuthorizationReviews that the UI uses to determine what features it can enable.
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			Resources: []string{"authenticationreviews", "authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
 	}

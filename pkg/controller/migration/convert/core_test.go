@@ -72,6 +72,23 @@ var _ = Describe("core handler", func() {
 		})
 	})
 
+	Context("FELIX_DEFAULTENDPOINTHOSTACTION", func() {
+		It("should allow supported FELIX_DEFAULTENDPOINTHOSTACTION", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_DEFAULTENDPOINTHOSTACTION",
+				Value: "ACCEPT",
+			}}
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+		It("should block unsupported FELIX_DEFAULTENDPOINTHOSTACTION", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_DEFAULTENDPOINTHOSTACTION",
+				Value: "RETURN",
+			}}
+			Expect(handleCore(&comps, i)).To(HaveOccurred())
+		})
+	})
+
 	Context("nodeSelector", func() {
 		It("should not set nodeSelector if none is set", func() {
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())

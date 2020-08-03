@@ -156,6 +156,14 @@ func handleCore(c *components, install *Installation) error {
 		return err
 	}
 
+	epHostAction, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTHOSTACTION")
+	if err != nil {
+		return err
+	}
+	if epHostAction != nil && *epHostAction != "ACCEPT" {
+		return ErrIncompatibleCluster{"only FELIX_DEFAULTENDPOINTHOSTACTION=ACCEPT on calico-node container is suported"}
+	}
+
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")
 	if err != nil {

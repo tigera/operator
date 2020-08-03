@@ -218,7 +218,7 @@ var _ = Describe("core handler", func() {
 					Expect(handleCore(&comps, i)).To(HaveOccurred())
 				})
 				It("should error if missing just one toleration", func() {
-					comps.node.Spec.Template.Spec.Tolerations = existingTolerations[0:1]
+					setTolerations(existingTolerations[0 : len(existingTolerations)-1])
 					Expect(handleCore(&comps, i)).To(HaveOccurred())
 				})
 				It("should error if additional toleration exists", func() {

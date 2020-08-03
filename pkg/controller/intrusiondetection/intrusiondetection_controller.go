@@ -230,7 +230,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 	)
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status, utils.NoUserAddedMetadata); err != nil {
+	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

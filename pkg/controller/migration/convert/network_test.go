@@ -89,9 +89,6 @@ var _ = Describe("Convert network tests", func() {
 					MTU:       &_1440,
 					HostPorts: operatorv1.HostPortsTypePtr(operatorv1.HostPortsEnabled),
 				},
-				ControlPlaneNodeSelector: map[string]string{
-					"kubernetes.io/os": "linux",
-				},
 				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: "RollingUpdate",

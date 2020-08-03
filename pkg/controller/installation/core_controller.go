@@ -590,17 +590,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		render.ManagerInternalSecretKeyName,
 	)
 
-	logStorageExists, err := utils.LogStorageExists(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error checking if LogStorage exists")
-		r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
+	var logStorageExists bool
 	var authentication interface{}
 	if r.enterpriseCRDsExist {
+		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
+		if err != nil {
+			log.Error(err, "Error checking if LogStorage exists")
+			r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if managementCluster != nil {
 			if err != nil {

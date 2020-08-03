@@ -15,4 +15,5 @@ var handlers = []handler{
 	handleFelixNodeMetrics,
 	handleCalicoCNI,
 	handleNonCalicoCNI,
+	handleMTU,
 }

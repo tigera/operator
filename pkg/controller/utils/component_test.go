@@ -175,7 +175,7 @@ func (c *fakeComponent) Ready() bool {
 	return true
 }
 
-func (c *fakeComponent) Objects() ([]runtime.Object, []runtime.Object) {
+func (c *fakeComponent) Objects() []runtime.Object {
 	objsToCreate := []runtime.Object{
 		&v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -186,5 +186,5 @@ func (c *fakeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 			},
 		},
 	}
-	return objsToCreate, nil
+	return objsToCreate
 }

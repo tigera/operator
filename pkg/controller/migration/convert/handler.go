@@ -13,6 +13,7 @@ var handlers = []handler{
 	handleNetwork,
 	handleCore,
 	handleAnnotations,
+	handleNodeSelectors,
 	handleFelixNodeMetrics,
 	handleCalicoCNI,
 	handleNonCalicoCNI,

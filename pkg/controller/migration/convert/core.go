@@ -49,11 +49,6 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
-	// kube-controllers nodeSelector
-	if c.kubeControllers != nil {
-		install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
-	}
-
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
 
@@ -236,6 +231,55 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 	}
 
 	return a
+}
+
+func handleNodeSelectors(c *components, install *Installation) error {
+	// check calico-node nodeSelectors
+	if c.node.Spec.Template.Spec.Affinity != nil {
+		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
+	}
+	if nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
+		return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+	}
+
+	// check typha nodeSelectors
+	if c.typha != nil {
+		if c.typha.Spec.Template.Spec.Affinity != nil {
+			return ErrIncompatibleCluster{"node affinity not supported for typha deployment"}
+		}
+		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel)}
+		}
+	}
+
+	// check kube-controllers nodeSelectors
+	if c.kubeControllers != nil {
+		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
+			return ErrIncompatibleCluster{"node affinity not supported for kube-controller deployment"}
+		}
+
+		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
+		// operator rendering code will automatically set the kubernetes.io/os=linux selector, so we just
+		// want to set the field to any other nodeSelectors set on it.
+		if sels := removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector); len(sels) != 0 {
+			install.Spec.ControlPlaneNodeSelector = sels
+		}
+	}
+
+	return nil
+}
+
+// removeOSNodeSelectors returns the given nodeSelectors with [beta.]kubernetes.io/os=linux nodeSelectors removed.
+func removeOSNodeSelectors(existing map[string]string) map[string]string {
+	var nodeSel = map[string]string{}
+	for key, val := range existing {
+		if (key == "kubernetes.io/os" || key == "beta.kubernetes.io/os") && val == "linux" {
+			continue
+		}
+		nodeSel[key] = val
+	}
+
+	return nodeSel
 }
 
 func handleFelixNodeMetrics(c *components, install *Installation) error {

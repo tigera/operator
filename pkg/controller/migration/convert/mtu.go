@@ -39,7 +39,7 @@ func handleMTU(c *components, install *Installation) error {
 			var src = "CNI_MTU"
 			mtu, err := getMTU(c, containerInstallCNI, src)
 			if err != nil {
-				return ErrIncompatibleCluster{fmt.Sprintf("failed to parse %s: %v", src, err)}
+				return ErrIncompatibleCluster{fmt.Sprintf("failed to parse mtu from %s: %v", src, err)}
 			}
 
 			if mtu == nil {
@@ -59,10 +59,8 @@ func handleMTU(c *components, install *Installation) error {
 			// use the hardcoded value.
 			mtu := int32(c.calicoCNIConfig.MTU)
 			if curMTU != nil && *curMTU != mtu {
-				// return ErrIncompatibleCluster{"MTUs across IPIP, VXLAN, and Wireguard must match."}
 				return ErrIncompatibleCluster{fmt.Sprintf("mtu '%d' specified in CNI config does not match mtu %s=%d", mtu, curMTUSrc, *curMTU)}
 			}
-			// set detected MTU for later comparison against other sources
 			curMTU = &mtu
 		}
 	}

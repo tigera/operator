@@ -246,4 +246,54 @@ var _ = Describe("core handler", func() {
 			})
 		})
 	})
+
+	Context("annotations", func() {
+		ExpectAnnotations := func(updateAnnotations func(map[string]string)) {
+			It("should not error for no annotations", func() {
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error for unexpected annotations", func() {
+				updateAnnotations(map[string]string{"foo": "bar"})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+			It("should not error for acceptable annotations", func() {
+				updateAnnotations(map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "{}"})
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not panic for nil annotations", func() {
+				updateAnnotations(nil)
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+		}
+		Context("calico-node", func() {
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.node.Annotations = annotations
+			})
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.node.Spec.Template.Annotations = annotations
+			})
+		})
+		Context("kube-controllers", func() {
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.kubeControllers.Annotations = annotations
+			})
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.kubeControllers.Spec.Template.Annotations = annotations
+			})
+		})
+		Context("typha", func() {
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.typha.Annotations = annotations
+			})
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.typha.Spec.Template.Annotations = annotations
+			})
+			It("should not error if typha's safe-to-evict annotation is set", func() {
+				comps.typha.Spec.Template.Annotations = map[string]string{
+					"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
+				}
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+		})
+	})
 })

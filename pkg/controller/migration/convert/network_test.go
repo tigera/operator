@@ -10,7 +10,10 @@ import (
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -68,6 +71,45 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
 			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
 			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
+		})
+		It("should convert Calico v3.15 manifest", func() {
+			c := fake.NewFakeClient(calicoDefaultConfig()...)
+			cfg := operatorv1.Installation{}
+			err := Convert(ctx, c, &cfg)
+			Expect(err).NotTo(HaveOccurred())
+			var _1440 int32 = 1440
+			_1intstr := intstr.FromInt(1)
+			Expect(cfg).To(Equal(operatorv1.Installation{Spec: operatorv1.InstallationSpec{
+				CNI: &operatorv1.CNISpec{
+					Type: operatorv1.PluginCalico,
+					IPAM: &operatorv1.IPAMSpec{Type: operatorv1.IPAMPluginCalico},
+				},
+				CalicoNetwork: &operatorv1.CalicoNetworkSpec{
+					BGP:       operatorv1.BGPOptionPtr(operatorv1.BGPEnabled),
+					MTU:       &_1440,
+					HostPorts: operatorv1.HostPortsTypePtr(operatorv1.HostPortsEnabled),
+				},
+				ControlPlaneNodeSelector: map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds",
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: "RollingUpdate",
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &_1intstr,
+					},
+				},
+				ComponentResources: []*operatorv1.ComponentResource{
+					&operatorv1.ComponentResource{
+						ComponentName: operatorv1.ComponentNameNode,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("250m"),
+							},
+						},
+					},
+				},
+			}}))
 		})
 		It("migrate cloud route config", func() {
 			ds := emptyNodeSpec()

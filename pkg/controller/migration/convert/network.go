@@ -428,3 +428,12 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 		}
 	}
 }
+
+func handleIPPool(c *components, install *Installation) error {
+
+	// TODO: Until we're migrating IPPools
+	c.node.ignoreEnv("calico-node", "CALICO_IPv4POOL_IPIP")
+	c.node.ignoreEnv("calico-node", "CALICO_IPv4POOL_VXLAN")
+
+	return nil
+}

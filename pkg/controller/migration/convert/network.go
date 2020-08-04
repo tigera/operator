@@ -122,6 +122,28 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	return nil
 }
 
+func getNetworkingBackend(c *components) (string, error) {
+	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	if err != nil {
+		return "", err
+	}
+
+	switch {
+	case netBackend == nil:
+		return "bird", nil
+	case *netBackend == "":
+		return "bird", nil
+	case *netBackend == "bird":
+		return "bird", nil
+	case *netBackend == "vxlan":
+		return "vxlan", nil
+	case *netBackend == "none":
+		return "none", nil
+	default:
+		return "", fmt.Errorf("CALICO_NETWORKING_BACKEND %s is not valid", *netBackend)
+	}
+}
+
 func subhandleCalicoIPAM(c *components, install *Installation) error {
 	if c.calicoCNIConfig.IPAM.Type != "calico-ipam" {
 		// I don't know if this should be an error or not, the way it is written
@@ -133,21 +155,18 @@ func subhandleCalicoIPAM(c *components, install *Installation) error {
 	// TODO: Is there anything we need to do with the Name field on the CNI plugin or IPAM
 	// plugin? We obviously don't have a way currently to persist them.
 
-	// CALICO_NETWORKING_BACKEND
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	netBackend, err := getNetworkingBackend(c)
 	if err != nil {
 		return err
 	}
 
-	install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
-	switch {
-	case netBackend == nil:
-	case *netBackend == "":
-	case *netBackend == "bird":
-	case *netBackend == "vxlan":
+	switch netBackend {
+	case "bird":
+		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
+	case "vxlan":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
 	default:
-		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", *netBackend)}
+		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend)}
 	}
 
 	invalidFields := []string{}
@@ -187,20 +206,17 @@ func subhandleHostLocalIPAM(c *components, install *Installation) error {
 		return ErrIncompatibleCluster{"no configuration"}
 	}
 
-	// CALICO_NETWORKING_BACKEND
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	netBackend, err := getNetworkingBackend(c)
 	if err != nil {
 		return err
 	}
-	install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
-	switch {
-	case netBackend == nil:
-	case *netBackend == "":
-	case *netBackend == "bird":
-	case *netBackend == "none":
+	switch netBackend {
+	case "bird":
+		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
+	case "none":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
 	default:
-		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", *netBackend)}
+		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend)}
 	}
 
 	cfg := c.hostLocalIPAMConfig

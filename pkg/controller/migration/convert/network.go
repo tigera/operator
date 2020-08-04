@@ -135,11 +135,6 @@ func handleCalicoCNI(c *components, install *Installation) error {
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	}
 
-	// CNI IPAM pools
-	if len(c.calicoCNIConfig.IPAM.IPv4Pools) != 0 {
-		return ErrIncompatibleCluster{"specifying ipv4_pools in cni config is not supported."}
-	}
-
 	// Other CNI features
 	if c.calicoCNIConfig.FeatureControl.FloatingIPs {
 		return ErrIncompatibleCluster{"floating IPs not supported"}
@@ -169,11 +164,6 @@ func subhandleCalicoIPAM(c *components, install *Installation) error {
 	if c.calicoCNIConfig.IPAM.Subnet != "" {
 		invalidFields = append(invalidFields, "ipam.subnet field is unsupported")
 	}
-
-	// TODO: Check these fields when we're setting the Installation IPPools since those
-	// settings will drive these fields.
-	// c.calicoCNIConfig.IPAM.AssignIpv4
-	// c.calicoCNIConfig.IPAM.AssignIpv6
 
 	if len(c.calicoCNIConfig.IPAM.IPv4Pools) != 0 {
 		invalidFields = append(invalidFields, "ipam.ipv4pools field is unsupported")
@@ -434,6 +424,11 @@ func handleIPPool(c *components, install *Installation) error {
 	// TODO: Until we're migrating IPPools
 	c.node.ignoreEnv("calico-node", "CALICO_IPv4POOL_IPIP")
 	c.node.ignoreEnv("calico-node", "CALICO_IPv4POOL_VXLAN")
+
+	// TODO: Check these fields when we're setting the Installation IPPools since those
+	// settings will drive these fields.
+	// c.calicoCNIConfig.IPAM.AssignIpv4
+	// c.calicoCNIConfig.IPAM.AssignIpv6
 
 	return nil
 }

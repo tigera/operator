@@ -360,7 +360,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 
 	ipam := c.getCalicoIPAM()
 	if c.cr.Spec.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
-		ipam = c.getHostLocalIPAM()
+		ipam = BuildHostLocalIPAM(c.cr.Spec.CalicoNetwork)
 	}
 
 	// Build the CNI configuration json.
@@ -423,7 +423,7 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	)
 }
 
-func (c *nodeComponent) getHostLocalIPAM() string {
+func BuildHostLocalIPAM(cns *operator.CalicoNetworkSpec) string {
 	return `{ "type": "host-local", "subnet": "usePodCidr"}`
 }
 

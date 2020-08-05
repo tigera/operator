@@ -108,15 +108,19 @@ func handleCalicoCNI(c *components, install *Installation) error {
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	}
 
+	if c.calicoCNIConfig.Name != "k8s-pod-network" {
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, only 'k8s-pod-network' supported in CNI name field, found %s", errCtx, c.calicoCNIConfig.Name)}
+	}
+
 	// Other CNI features
 	if c.calicoCNIConfig.FeatureControl.FloatingIPs {
-		return ErrIncompatibleCluster{"floating IPs not supported"}
+		return ErrIncompatibleCluster{errCtx + ", floating IPs not supported"}
 	}
 	if c.calicoCNIConfig.FeatureControl.IPAddrsNoIpam {
-		return ErrIncompatibleCluster{"IpAddrsNoIpam not supported"}
+		return ErrIncompatibleCluster{errCtx + ", IpAddrsNoIpam not supported"}
 	}
 	if c.calicoCNIConfig.ContainerSettings.AllowIPForwarding {
-		return ErrIncompatibleCluster{"AllowIPForwarding not supported"}
+		return ErrIncompatibleCluster{errCtx + ", AllowIPForwarding not supported"}
 	}
 
 	return nil
@@ -145,16 +149,6 @@ func getNetworkingBackend(c *components) (string, error) {
 }
 
 func subhandleCalicoIPAM(c *components, install *Installation) error {
-	if c.calicoCNIConfig.IPAM.Type != "calico-ipam" {
-		// I don't know if this should be an error or not, the way it is written
-		// this check is just double checking what the caller should have already
-		// validated.
-		return nil
-	}
-
-	// TODO: Is there anything we need to do with the Name field on the CNI plugin or IPAM
-	// plugin? We obviously don't have a way currently to persist them.
-
 	netBackend, err := getNetworkingBackend(c)
 	if err != nil {
 		return err
@@ -168,6 +162,9 @@ func subhandleCalicoIPAM(c *components, install *Installation) error {
 	default:
 		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend)}
 	}
+
+	// ignored fields:
+	//   - c.calicoCNIConfig.IPAM.Name
 
 	invalidFields := []string{}
 	if c.calicoCNIConfig.IPAM.Subnet != "" {
@@ -220,6 +217,9 @@ func subhandleHostLocalIPAM(c *components, install *Installation) error {
 	}
 
 	cfg := c.hostLocalIPAMConfig
+
+	// ignored fields:
+	//   - cfg.Name
 
 	invalidFields := []string{}
 	if cfg.Range != nil {

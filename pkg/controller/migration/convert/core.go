@@ -160,6 +160,14 @@ func handleCore(c *components, install *Installation) error {
 		if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
 			return ErrIncompatibleCluster{"KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'"}
 		}
+
+		n, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME")
+		if err != nil {
+			return err
+		}
+		if n != nil && *n != "10-calico.conflist" {
+			return ErrIncompatibleCluster{"CNI_CONF_NAME on 'install-cni' container must be '10-calico.conflist'"}
+		}
 	}
 
 	// TODO: handle these vars appropriately
@@ -176,7 +184,6 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("calico-node", "FELIX_LOGSEVERITYSYS")
 	c.node.ignoreEnv("upgrade-ipam", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
-	c.node.ignoreEnv("install-cni", "CNI_CONF_NAME")
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
 	return nil

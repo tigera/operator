@@ -61,11 +61,16 @@ func handleCalicoCNI(c *components, install *Installation) error {
 		install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
 	}
 
+	netBackend, err := getNetworkingBackend(c.node, c.client)
+	if err != nil {
+		return err
+	}
+
 	switch c.calicoCNIConfig.IPAM.Type {
 	case "calico-ipam":
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
 
-		if err := subhandleCalicoIPAM(c.node, c.client, *c.calicoCNIConfig, install); err != nil {
+		if err := subhandleCalicoIPAM(netBackend, *c.calicoCNIConfig, install); err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM calico-ipam, %s", errCtx, err.Error())}
 		}
 	case "host-local":
@@ -75,7 +80,7 @@ func handleCalicoCNI(c *components, install *Installation) error {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM host-local, but no IPAM configuration available", errCtx)}
 		}
 
-		if err := subhandleHostLocalIPAM(c.node, c.client, *c.hostLocalIPAMConfig, install); err != nil {
+		if err := subhandleHostLocalIPAM(netBackend, *c.hostLocalIPAMConfig, install); err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM plugin %s, %s",
 				errCtx, c.calicoCNIConfig.IPAM.Type, err.Error())}
 		}
@@ -161,12 +166,7 @@ func getNetworkingBackend(node CheckedDaemonSet, client client.Client) (string, 
 // The function tries to collect all the errors and report one message.
 // If there are no errors and the config can be added to the passed in 'install'
 // then nil is returned.
-func subhandleCalicoIPAM(node CheckedDaemonSet, client client.Client, cnicfg calicocni.NetConf, install *Installation) error {
-	netBackend, err := getNetworkingBackend(node, client)
-	if err != nil {
-		return err
-	}
-
+func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *Installation) error {
 	switch netBackend {
 	case "bird":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
@@ -204,12 +204,7 @@ const UnsupportedMsg = "is unsupported"
 // The function tries to collect all the errors and report one message.
 // If there are no errors and the config can be added to the passed in 'install'
 // then nil is returned.
-func subhandleHostLocalIPAM(node CheckedDaemonSet, client client.Client, ipamcfg HostLocalIPAMConfig, install *Installation) error {
-
-	netBackend, err := getNetworkingBackend(node, client)
-	if err != nil {
-		return err
-	}
+func subhandleHostLocalIPAM(netBackend string, ipamcfg HostLocalIPAMConfig, install *Installation) error {
 	switch netBackend {
 	case "bird":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)

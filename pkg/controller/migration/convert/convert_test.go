@@ -4,7 +4,6 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -70,7 +69,7 @@ var _ = Describe("Parser", func() {
 			},
 			{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "mtu": __CNI_MTU__}`,
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam":{"type":"calico-ipam"}, "mtu": __CNI_MTU__}`,
 			},
 		}
 
@@ -160,39 +159,6 @@ var _ = Describe("Parser", func() {
 			Expect(*cfg.Spec.NodeMetricsPort).To(Equal(int32(7777)))
 		})
 	})
-	Describe("handle alternate CNI migration", func() {
-		DescribeTable("non-calico plugins", func(envs []corev1.EnvVar, plugin operatorv1.CNIPluginType) {
-			ds := emptyNodeSpec()
-			ds.Spec.Template.Spec.InitContainers = nil
-			ds.Spec.Template.Spec.Containers[0].Env = append(envs, corev1.EnvVar{
-				Name:  "CALICO_NETWORKING_BACKEND",
-				Value: "none",
-			})
-
-			c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, cfg)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg).ToNot(BeNil())
-			Expect(cfg.Spec.CNI.Type).To(Equal(plugin))
-		},
-			Entry("AzureVNET", []corev1.EnvVar{{Name: "FELIX_INTERFACEPREFIX", Value: "avz"}}, operatorv1.PluginAzureVNET),
-			Entry("AmazonVPC", []corev1.EnvVar{
-				{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
-				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
-			}, operatorv1.PluginAmazonVPC),
-			Entry("GKE", []corev1.EnvVar{
-				{Name: "FELIX_INTERFACEPREFIX", Value: "gke"},
-				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
-				{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"},
-			}, operatorv1.PluginGKE),
-		)
-		It("should convert AWS CNI install", func() {
-			c := fake.NewFakeClient(awsCNIPolicyOnlyConfig()...)
-			err := Convert(ctx, c, &operatorv1.Installation{})
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
 })
 
 func emptyNodeSpec() *appsv1.DaemonSet {
@@ -222,7 +188,7 @@ func emptyNodeSpec() *appsv1.DaemonSet {
 						Name: "install-cni",
 						Env: []corev1.EnvVar{{
 							Name:  "CNI_NETWORK_CONFIG",
-							Value: `{"type": "calico"}`,
+							Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 						}},
 					}},
 					Containers: []corev1.Container{{

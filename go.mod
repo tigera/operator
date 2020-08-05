@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/cloudflare/cfssl v1.4.1
 	github.com/containernetworking/cni v0.8.0
+	github.com/containernetworking/plugins v0.8.6
 	github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0

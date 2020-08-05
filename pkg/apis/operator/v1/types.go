@@ -166,6 +166,14 @@ var HostPortsTypesString []string = []string{
 	HostPortsDisabled.String(),
 }
 
+func HostPortsTypePtr(h HostPortsType) *HostPortsType {
+	return &h
+}
+
+func (nt HostPortsType) String() string {
+	return string(nt)
+}
+
 type MultiInterfaceMode string
 
 func (m MultiInterfaceMode) Value() string {
@@ -177,11 +185,11 @@ const (
 	MultiInterfaceModeMultus MultiInterfaceMode = "Multus"
 )
 
-func (nt HostPortsType) String() string {
-	return string(nt)
-}
-
 type BGPOption string
+
+func BGPOptionPtr(b BGPOption) *BGPOption {
+	return &b
+}
 
 const (
 	BGPEnabled  BGPOption = "Enabled"

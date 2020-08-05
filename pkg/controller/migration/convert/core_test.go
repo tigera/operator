@@ -357,4 +357,21 @@ var _ = Describe("core handler", func() {
 			})
 		})
 	})
+
+	Context("cni", func() {
+		It("should not raise an error if CNI_CONF_NAME is 10-calico.conflist", func() {
+			comps.node.Spec.Template.Spec.InitContainers[0].Env = []v1.EnvVar{{
+				Name:  "CNI_CONF_NAME",
+				Value: "10-calico.conflist",
+			}}
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+		It("should raise error if CNI_CONF_NAME isn't 10-calico.conflist", func() {
+			comps.node.Spec.Template.Spec.InitContainers[0].Env = []v1.EnvVar{{
+				Name:  "CNI_CONF_NAME",
+				Value: "2-calico.conflist",
+			}}
+			Expect(handleCore(&comps, i)).To(HaveOccurred())
+		})
+	})
 })

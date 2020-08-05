@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
@@ -62,12 +65,17 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	case "calico-ipam":
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
 
-		if err := subhandleCalicoIPAM(c, install); err != nil {
+		if err := subhandleCalicoIPAM(c.node, c.client, *c.calicoCNIConfig, install); err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM calico-ipam, %s", errCtx, err.Error())}
 		}
 	case "host-local":
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
-		if err := subhandleHostLocalIPAM(c, install); err != nil {
+
+		if c.hostLocalIPAMConfig == nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM host-local, but no IPAM configuration available", errCtx)}
+		}
+
+		if err := subhandleHostLocalIPAM(c.node, c.client, *c.hostLocalIPAMConfig, install); err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM plugin %s, %s",
 				errCtx, c.calicoCNIConfig.IPAM.Type, err.Error())}
 		}
@@ -108,8 +116,8 @@ func handleCalicoCNI(c *components, install *Installation) error {
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	}
 
-	if c.calicoCNIConfig.Name != "k8s-pod-network" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, only 'k8s-pod-network' supported in CNI name field, found %s", errCtx, c.calicoCNIConfig.Name)}
+	if c.cniConfigName != "k8s-pod-network" {
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, only 'k8s-pod-network' is supported as CNI name, found %s", errCtx, c.cniConfigName)}
 	}
 
 	// Other CNI features
@@ -126,8 +134,8 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	return nil
 }
 
-func getNetworkingBackend(c *components) (string, error) {
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+func getNetworkingBackend(node CheckedDaemonSet, client client.Client) (string, error) {
+	netBackend, err := node.getEnv(ctx, client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
 	if err != nil {
 		return "", err
 	}
@@ -148,8 +156,13 @@ func getNetworkingBackend(c *components) (string, error) {
 	}
 }
 
-func subhandleCalicoIPAM(c *components, install *Installation) error {
-	netBackend, err := getNetworkingBackend(c)
+// subhandleCalicoIPAM checks all fields in the Calico IPAM configuration,
+// if any fields have unexpected values an error message will be returned.
+// The function tries to collect all the errors and report one message.
+// If there are no errors and the config can be added to the passed in 'install'
+// then nil is returned.
+func subhandleCalicoIPAM(node CheckedDaemonSet, client client.Client, cnicfg calicocni.NetConf, install *Installation) error {
+	netBackend, err := getNetworkingBackend(node, client)
 	if err != nil {
 		return err
 	}
@@ -167,14 +180,14 @@ func subhandleCalicoIPAM(c *components, install *Installation) error {
 	//   - c.calicoCNIConfig.IPAM.Name
 
 	invalidFields := []string{}
-	if c.calicoCNIConfig.IPAM.Subnet != "" {
+	if cnicfg.IPAM.Subnet != "" {
 		invalidFields = append(invalidFields, "ipam.subnet field is unsupported")
 	}
 
-	if len(c.calicoCNIConfig.IPAM.IPv4Pools) != 0 {
+	if len(cnicfg.IPAM.IPv4Pools) != 0 {
 		invalidFields = append(invalidFields, "ipam.ipv4pools field is unsupported")
 	}
-	if len(c.calicoCNIConfig.IPAM.IPv6Pools) != 0 {
+	if len(cnicfg.IPAM.IPv6Pools) != 0 {
 		invalidFields = append(invalidFields, "ipam.ipv6pools field is unsupported")
 	}
 
@@ -189,21 +202,11 @@ const UnsupportedMsg = "is unsupported"
 // subhandleHostLocalIPAM checks all fields in the Host Local IPAM configuration,
 // if any fields have unexpected values an error message will be returned.
 // The function tries to collect all the errors and report one message.
-// If there are no errors and the config can be added to the 'install' passed
-// in then nil is returned.
-func subhandleHostLocalIPAM(c *components, install *Installation) error {
-	if c.calicoCNIConfig.IPAM.Type != "host-local" {
-		// I don't know if this should be an error or not, the way it is written
-		// this check is just double checking what the caller should have already
-		// validated.
-		return nil
-	}
+// If there are no errors and the config can be added to the passed in 'install'
+// then nil is returned.
+func subhandleHostLocalIPAM(node CheckedDaemonSet, client client.Client, ipamcfg HostLocalIPAMConfig, install *Installation) error {
 
-	if c.hostLocalIPAMConfig == nil {
-		return ErrIncompatibleCluster{"no configuration"}
-	}
-
-	netBackend, err := getNetworkingBackend(c)
+	netBackend, err := getNetworkingBackend(node, client)
 	if err != nil {
 		return err
 	}
@@ -216,31 +219,29 @@ func subhandleHostLocalIPAM(c *components, install *Installation) error {
 		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend)}
 	}
 
-	cfg := c.hostLocalIPAMConfig
-
 	// ignored fields:
-	//   - cfg.Name
+	//   - ipamcfg.Name
 
 	invalidFields := []string{}
-	if cfg.Range != nil {
-		invalidFields = checkRange("", *cfg.Range)
+	if ipamcfg.Range != nil {
+		invalidFields = checkRange("", *ipamcfg.Range)
 	}
-	if len(cfg.Routes) != 0 {
+	if len(ipamcfg.Routes) != 0 {
 		invalidFields = append(invalidFields, "routes "+UnsupportedMsg)
 	}
-	if cfg.DataDir != "" {
+	if ipamcfg.DataDir != "" {
 		invalidFields = append(invalidFields, "dataDir "+UnsupportedMsg)
 	}
-	if cfg.ResolvConf != "" {
+	if ipamcfg.ResolvConf != "" {
 		invalidFields = append(invalidFields, "resolveConf "+UnsupportedMsg)
 	}
-	switch len(cfg.Ranges) {
+	switch len(ipamcfg.Ranges) {
 	case 0:
 	case 1:
-		switch len(cfg.Ranges[0]) {
+		switch len(ipamcfg.Ranges[0]) {
 		case 0:
 		case 1:
-			invalidFields = append(invalidFields, checkRange("ranges.", cfg.Ranges[0][0])...)
+			invalidFields = append(invalidFields, checkRange("ranges.", ipamcfg.Ranges[0][0])...)
 		default:
 			invalidFields = append(invalidFields, "only zero or one range is valid in the ranges field")
 		}

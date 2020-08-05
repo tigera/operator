@@ -123,7 +123,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 							"k8s-app": "calico-typha",
 						},
 						Annotations: map[string]string{
-							"cluster-autoscaler.kubernetes.io/safe-to-evict": "'true'",
+							"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
 						},
 					},
 					Spec: corev1.PodSpec{

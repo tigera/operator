@@ -72,16 +72,73 @@ var _ = Describe("core handler", func() {
 		})
 	})
 
-	Context("nodeSelector", func() {
-		It("should not set nodeSelector if none is set", func() {
+	Context("FELIX_DEFAULTENDPOINTHOSTACTION", func() {
+		It("should allow supported FELIX_DEFAULTENDPOINTHOSTACTION", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_DEFAULTENDPOINTHOSTACTION",
+				Value: "ACCEPT",
+			}}
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ControlPlaneNodeSelector).To(BeEmpty())
 		})
-		It("should carry forward nodeSelector", func() {
-			nodeSelector := map[string]string{"foo": "bar"}
-			comps.kubeControllers.Spec.Template.Spec.NodeSelector = nodeSelector
-			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(nodeSelector))
+		It("should block unsupported FELIX_DEFAULTENDPOINTHOSTACTION", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_DEFAULTENDPOINTHOSTACTION",
+				Value: "RETURN",
+			}}
+			Expect(handleCore(&comps, i)).To(HaveOccurred())
+		})
+	})
+
+	Context("nodeSelector", func() {
+		// kube-controllers has a configurable nodeSelector which should
+		// be carried forward
+		Context("kube-controllers", func() {
+			It("should not set nodeSelector if none is set", func() {
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.ControlPlaneNodeSelector).To(BeEmpty())
+			})
+			It("should carry forward nodeSelector on kube-controllers", func() {
+				nodeSelector := map[string]string{"foo": "bar"}
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = nodeSelector
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(nodeSelector))
+			})
+		})
+
+		TestNodeSelectors := func(f func(map[string]string)) {
+			It("should error for unexpected nodeSelectors", func() {
+				f(map[string]string{"foo": "bar"})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+			It("should not error for beta.kubernetes.io/os=linux nodeSelector", func() {
+				f(map[string]string{"beta.kubernetes.io/os": "linux"})
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for kubernetes.io/os=linux", func() {
+				f(map[string]string{"kubernetes.io/os": "linux"})
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error for other kubernetes.io/os nodeSelectors", func() {
+				f(map[string]string{"kubernetes.io/os": "windows"})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+			It("should still error even if a valid and invalid nodeselector are set", func() {
+				f(map[string]string{
+					"kubernetes.io/os": "linux",
+					"foo":              "bar",
+				})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+		}
+		Describe("calico-node", func() {
+			TestNodeSelectors(func(nodeSelectors map[string]string) {
+				comps.node.Spec.Template.Spec.NodeSelector = nodeSelectors
+			})
+		})
+		Describe("typha", func() {
+			TestNodeSelectors(func(nodeSelectors map[string]string) {
+				comps.typha.Spec.Template.Spec.NodeSelector = nodeSelectors
+			})
 		})
 	})
 
@@ -243,6 +300,46 @@ var _ = Describe("core handler", func() {
 				TestTolerations(comps.typha.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
 					comps.typha.Spec.Template.Spec.Tolerations = t
 				})
+			})
+		})
+	})
+
+	Context("annotations", func() {
+		ExpectAnnotations := func(updateAnnotations func(map[string]string)) {
+			It("should not error for no annotations", func() {
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error for unexpected annotations", func() {
+				updateAnnotations(map[string]string{"foo": "bar"})
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+			It("should not error for acceptable annotations", func() {
+				updateAnnotations(map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "{}"})
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+		}
+		Context("calico-node", func() {
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.node.Annotations = annotations
+			})
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.node.Spec.Template.Annotations = annotations
+			})
+		})
+		Context("kube-controllers", func() {
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.kubeControllers.Annotations = annotations
+			})
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.kubeControllers.Spec.Template.Annotations = annotations
+			})
+		})
+		Context("typha", func() {
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.typha.Annotations = annotations
+			})
+			ExpectAnnotations(func(annotations map[string]string) {
+				comps.typha.Spec.Template.Annotations = annotations
 			})
 		})
 	})

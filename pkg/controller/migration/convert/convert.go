@@ -48,6 +48,7 @@ type components struct {
 	// Calico CNI conf
 	// TODO: is cni-private netconf different? is it ok to only use the OS one?
 	// TODO: where do cni config 'routes' & 'ranges' come into play between these datastructures?
+	cniConfigName       string
 	calicoCNIConfig     *calicocni.NetConf
 	hostLocalIPAMConfig *HostLocalIPAMConfig
 

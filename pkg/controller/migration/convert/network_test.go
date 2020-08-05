@@ -115,7 +115,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "ipam": {"type": "host-local"}}`,
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -134,7 +134,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "ipam": {"type": "calico-ipam"}}`,
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -154,7 +154,7 @@ var _ = Describe("Convert network tests", func() {
 				ds := emptyNodeSpec()
 				ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 					Name:  "CNI_NETWORK_CONFIG",
-					Value: fmt.Sprintf(`{"type": "calico", "ipam": {"type": "%s"}}`, ipam),
+					Value: fmt.Sprintf(`{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "%s"}}`, ipam),
 				}}
 				ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "CALICO_NETWORKING_BACKEND",
@@ -172,7 +172,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "ipam": {"type": "unknown"}}`,
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "unknown"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -189,7 +189,7 @@ var _ = Describe("Convert network tests", func() {
 					ds := emptyNodeSpec()
 					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 						Name:  "CNI_NETWORK_CONFIG",
-						Value: `{"type": "calico", "ipam": {"type": "host-local"}}`,
+						Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}}`,
 					}}
 					ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 						Name:  "CALICO_NETWORKING_BACKEND",
@@ -206,6 +206,94 @@ var _ = Describe("Convert network tests", func() {
 				},
 				Entry("bird backend", "bird"),
 				Entry("<empty> backend", ""),
+			)
+			DescribeTable("test CNI config name",
+				func(cni string) {
+					ds := emptyNodeSpec()
+					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+						Name:  "CNI_NETWORK_CONFIG",
+						Value: cni,
+					}}
+					ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+						Name:  "CALICO_NETWORKING_BACKEND",
+						Value: "bird",
+					}}
+					c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+					cfg := &operatorv1.Installation{}
+					err := Convert(ctx, c, cfg)
+					Expect(err).NotTo(HaveOccurred())
+				},
+				Entry("name in conflist", `{"name": "k8s-pod-network",
+	"plugins": [
+	  {
+		"type": "calico",
+		"datastore_type": "kubernetes",
+		"nodename": "__KUBERNETES_NODE_NAME__",
+		"ipam": {"type": "host-local"},
+		"policy": {"type": "k8s"}
+	  }
+	]
+  }`),
+				Entry("name in single conf", `{"name": "k8s-pod-network",
+		"type": "calico",
+		"datastore_type": "kubernetes",
+		"nodename": "__KUBERNETES_NODE_NAME__",
+		"ipam": {"type": "host-local"},
+		"policy": {"type": "k8s"}
+  }`),
+			)
+			DescribeTable("test bad CNI config name",
+				func(cni string) {
+					ds := emptyNodeSpec()
+					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+						Name:  "CNI_NETWORK_CONFIG",
+						Value: cni,
+					}}
+					ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+						Name:  "CALICO_NETWORKING_BACKEND",
+						Value: "bird",
+					}}
+					c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+					cfg := &operatorv1.Installation{}
+					err := Convert(ctx, c, cfg)
+					Expect(err).To(HaveOccurred())
+				},
+				Entry("no name in conflist", `{
+	"plugins": [
+	  {
+		"type": "calico",
+		"datastore_type": "kubernetes",
+		"nodename": "__KUBERNETES_NODE_NAME__",
+		"ipam": {"type": "host-local"},
+		"policy": {"type": "k8s"}
+	  }
+	]
+  }`),
+				Entry("no name in single conf", `{
+		"type": "calico",
+		"datastore_type": "kubernetes",
+		"nodename": "__KUBERNETES_NODE_NAME__",
+		"ipam": {"type": "host-local"},
+		"policy": {"type": "k8s"}
+  }`),
+				Entry("wrong name in conflist", `{"name": "wrong-name",
+	"plugins": [
+	  {
+		"type": "calico",
+		"datastore_type": "kubernetes",
+		"nodename": "__KUBERNETES_NODE_NAME__",
+		"ipam": {"type": "host-local"},
+		"policy": {"type": "k8s"}
+	  }
+	]
+  }`),
+				Entry("wrong name in single conf", `{"name": "wrong-name",
+		"type": "calico",
+		"datastore_type": "kubernetes",
+		"nodename": "__KUBERNETES_NODE_NAME__",
+		"ipam": {"type": "host-local"},
+		"policy": {"type": "k8s"}
+  }`),
 			)
 			DescribeTable("test unsupported CNI config",
 				func(ipamExtra string) {

@@ -68,6 +68,8 @@ func loadCNI(c *components) error {
 		return fmt.Errorf("failed to parse CNI config: %w", err)
 	}
 
+	c.cniConfigName = conflist.Name
+
 	// convert to a map for simpler checks
 	plugins := map[string]*libcni.NetworkConfig{}
 	for _, plugin := range conflist.Plugins {

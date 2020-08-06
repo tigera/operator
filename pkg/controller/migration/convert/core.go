@@ -49,9 +49,8 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
-	// kube-controllers nodeSelector
-	if c.kubeControllers != nil {
-		install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
+	if err := handleNodeSelectors(c, install); err != nil {
+		return err
 	}
 
 	// node update-strategy
@@ -148,8 +147,20 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
+	if err := handleAnnotations(c); err != nil {
+		return err
+	}
+
 	if err = handleFelixNodeMetrics(c, install); err != nil {
 		return err
+	}
+
+	epHostAction, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTHOSTACTION")
+	if err != nil {
+		return err
+	}
+	if epHostAction != nil && *epHostAction != "ACCEPT" {
+		return ErrIncompatibleCluster{"only FELIX_DEFAULTENDPOINTHOSTACTION=ACCEPT on calico-node container is suported"}
 	}
 
 	// check that nodename is a ref
@@ -169,6 +180,14 @@ func handleCore(c *components, install *Installation) error {
 		if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
 			return ErrIncompatibleCluster{"KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'"}
 		}
+
+		n, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME")
+		if err != nil {
+			return err
+		}
+		if n != nil && *n != "10-calico.conflist" {
+			return ErrIncompatibleCluster{"CNI_CONF_NAME on 'install-cni' container must be '10-calico.conflist'"}
+		}
 	}
 
 	// TODO: handle these vars appropriately
@@ -185,10 +204,106 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("calico-node", "FELIX_LOGSEVERITYSYS")
 	c.node.ignoreEnv("upgrade-ipam", "KUBERNETES_NODE_NAME")
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
-	c.node.ignoreEnv("install-cni", "CNI_CONF_NAME")
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
 	return nil
+}
+
+func handleAnnotations(c *components) error {
+	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
+		return ErrIncompatibleCluster{fmt.Sprintf("calico-node daemonset has unexpected annotation: %v", a)}
+	}
+	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
+		return ErrIncompatibleCluster{fmt.Sprintf("calico-node podTemplateSpec has unexpected annotation: %v", a)}
+	}
+
+	if c.kubeControllers != nil {
+		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers deployment has unexpected annotation: %v", a)}
+		}
+		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers podTemplateSpec has unexpected annotation: %v", a)}
+		}
+	}
+
+	if c.typha != nil {
+		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("typha deployment has unexpected annotation: %v", a)}
+		}
+		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
+			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
+		}); len(a) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("typha podTemplateSpec has unexpected annotation: %v", a)}
+		}
+	}
+	return nil
+}
+
+// removeExpectedAnnotations returns the given annotations with common k8s-native annotations removed.
+// this function also accepts a second argument of additional annotations to remove.
+func removeExpectedAnnotations(existing, ignore map[string]string) map[string]string {
+	a := existing
+	for key, val := range existing {
+		if key == "kubectl.kubernetes.io/last-applied-configuration" ||
+			key == "deprecated.daemonset.template.generation" ||
+			key == "deployment.kubernetes.io/revision" ||
+			key == "scheduler.alpha.kubernetes.io/critical-pod" {
+			delete(a, key)
+			continue
+		}
+
+		if v, ok := ignore[key]; ok && v == val {
+			delete(a, key)
+		}
+	}
+
+	return a
+}
+
+func handleNodeSelectors(c *components, install *Installation) error {
+	// check calico-node nodeSelectors
+	if c.node.Spec.Template.Spec.Affinity != nil {
+		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
+	}
+	if nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
+		return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+	}
+
+	// check typha nodeSelectors
+	if c.typha != nil {
+		if c.typha.Spec.Template.Spec.Affinity != nil {
+			return ErrIncompatibleCluster{"node affinity not supported for typha deployment"}
+		}
+		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
+			return ErrIncompatibleCluster{fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel)}
+		}
+	}
+
+	// check kube-controllers nodeSelectors
+	if c.kubeControllers != nil {
+		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
+			return ErrIncompatibleCluster{"node affinity not supported for kube-controller deployment"}
+		}
+
+		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
+		// operator rendering code will automatically set the kubernetes.io/os=linux selector, so we just
+		// want to set the field to any other nodeSelectors set on it.
+		install.Spec.ControlPlaneNodeSelector = removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector)
+	}
+
+	return nil
+}
+
+// removeOSNodeSelectors returns the given nodeSelectors with [beta.]kubernetes.io/os=linux nodeSelectors removed.
+func removeOSNodeSelectors(existing map[string]string) map[string]string {
+	nodeSel := existing
+	for key, val := range existing {
+		if (key == "kubernetes.io/os" || key == "beta.kubernetes.io/os") && val == "linux" {
+			delete(nodeSel, key)
+		}
+	}
+
+	return nodeSel
 }
 
 func handleFelixNodeMetrics(c *components, install *Installation) error {

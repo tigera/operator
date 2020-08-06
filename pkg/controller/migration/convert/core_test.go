@@ -368,4 +368,38 @@ var _ = Describe("core handler", func() {
 			Expect(handleCore(&comps, i)).To(HaveOccurred())
 		})
 	})
+	Context("kube-controllers", func() {
+		Context("ENABLED_CONTROLLERS", func() {
+			It("should not error if ENABLED_CONTROLLERS is expected value", func() {
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+					Name:  "ENABLED_CONTROLLERS",
+					Value: "node",
+				}}
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error if ENABLED_CONTROLLERS is not expected value", func() {
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+					Name:  "ENABLED_CONTROLLERS",
+					Value: "hep",
+				}}
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+		})
+		Context("AUTO_HOST_ENDPOINTS", func() {
+			It("should not error if AUTO_HOST_ENDPOINTS is expected value", func() {
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+					Name:  "AUTO_HOST_ENDPOINTS",
+					Value: "disabled",
+				}}
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error if AUTO_HOST_ENDPOINTS is not expected value", func() {
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+					Name:  "AUTO_HOST_ENDPOINTS",
+					Value: "enabled",
+				}}
+				Expect(handleCore(&comps, i)).To(HaveOccurred())
+			})
+		})
+	})
 })

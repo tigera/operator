@@ -18,18 +18,6 @@ const (
 )
 
 func handleNetwork(c *components, install *Installation) error {
-
-	// Verify FELIX_DEFAULTENDPOINTTOHOSTACTION is set to Accept because that is what the operator sets it to.
-	defaultWepAction, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION")
-	if err != nil {
-		return err
-	}
-	if defaultWepAction != nil && strings.ToLower(*defaultWepAction) != "accept" {
-		return ErrIncompatibleCluster{
-			fmt.Sprintf("unexpected FELIX_DEFAULTENDPOINTTOHOSTACTION: '%s'. Only 'accept' is supported.", *defaultWepAction),
-		}
-	}
-
 	return nil
 }
 

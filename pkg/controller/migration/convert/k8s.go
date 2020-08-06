@@ -46,34 +46,13 @@ func (r *CheckedDaemonSet) uncheckedVars() []string {
 
 // getEnv gets the value of an environment variable and marks that it has been checked.
 func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, container string, key string) (*string, error) {
-	c := getContainer(r.Spec.Template.Spec, container)
-	if c == nil {
-		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+	v, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
+	if err != nil {
+		return nil, ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
 	}
 	r.ignoreEnv(container, key)
 
-	for _, e := range c.Env {
-		if e.Name == key {
-			if e.ValueFrom == nil {
-				return &e.Value, nil
-			}
-			if e.ValueFrom.ConfigMapKeyRef != nil {
-				cm := v1.ConfigMap{}
-				err := client.Get(ctx, types.NamespacedName{
-					Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
-					Namespace: "kube-system",
-				}, &cm)
-				if err != nil {
-					return nil, err
-				}
-				v := cm.Data[e.ValueFrom.ConfigMapKeyRef.Key]
-				return &v, nil
-			}
-
-			return nil, ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
-		}
-	}
-	return nil, nil
+	return v, nil
 }
 
 // getEnvVar returns a kubernetes envVar and marks that it has been checked.
@@ -101,4 +80,35 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 		}
 	}
 	r.checkedVars[container].envVars[key] = true
+}
+
+// getEnv gets the value of an environment variable and marks that it has been checked.
+func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, container, key string) (*string, error) {
+	c := getContainer(pts, container)
+	if c == nil {
+		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+	}
+
+	for _, e := range c.Env {
+		if e.Name == key {
+			if e.ValueFrom == nil {
+				return &e.Value, nil
+			}
+			if e.ValueFrom.ConfigMapKeyRef != nil {
+				cm := v1.ConfigMap{}
+				err := client.Get(ctx, types.NamespacedName{
+					Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
+					Namespace: "kube-system",
+				}, &cm)
+				if err != nil {
+					return nil, err
+				}
+				v := cm.Data[e.ValueFrom.ConfigMapKeyRef.Key]
+				return &v, nil
+			}
+
+			return nil, fmt.Errorf("failed to read %s: only configMapRef & explicit values supported for env vars at this time", key)
+		}
+	}
+	return nil, nil
 }

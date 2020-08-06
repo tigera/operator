@@ -274,6 +274,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			instance.Spec.NodeUpdateStrategy.RollingUpdate)
 	}
 
+	if instance.Spec.ControlPlaneNodeSelector != nil {
+		if v, ok := instance.Spec.ControlPlaneNodeSelector["beta.kubernetes.io/os"]; ok && v != "linux" {
+			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'beta.kubernetes.io/os=%s' is not supported", v)
+		}
+		if v, ok := instance.Spec.ControlPlaneNodeSelector["kubernetes.io/os"]; ok && v != "linux" {
+			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'kubernetes.io/os=%s' is not supported", v)
+		}
+	}
+
 	return nil
 }
 

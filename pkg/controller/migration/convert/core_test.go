@@ -76,30 +76,30 @@ var _ = Describe("core handler", func() {
 		TestNodeSelectors := func(f func(map[string]string)) {
 			It("should error for unexpected nodeSelectors", func() {
 				f(map[string]string{"foo": "bar"})
-				Expect(handleCore(&comps, i)).To(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("should not error for beta.kubernetes.io/os=linux nodeSelector", func() {
 				f(map[string]string{"beta.kubernetes.io/os": "linux"})
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should not error for kubernetes.io/os=linux", func() {
 				f(map[string]string{"kubernetes.io/os": "linux"})
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should error for other kubernetes.io/os nodeSelectors", func() {
 				f(map[string]string{"kubernetes.io/os": "windows"})
-				Expect(handleCore(&comps, i)).To(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("should still error even if a valid and invalid nodeselector are set", func() {
 				f(map[string]string{
 					"kubernetes.io/os": "linux",
 					"foo":              "bar",
 				})
-				Expect(handleCore(&comps, i)).To(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("should not panic for nil nodeselectors", func() {
 				f(nil)
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 		}
 		Describe("calico-node", func() {
@@ -121,7 +121,7 @@ var _ = Describe("core handler", func() {
 					"kubernetes.io/os": "linux",
 					"foo":              "bar",
 				}
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 			})
 
@@ -130,11 +130,11 @@ var _ = Describe("core handler", func() {
 					"kubernetes.io/os": "windows",
 				}
 				// we don't expect an error to occur here, because the final validation handler should catch this.
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"kubernetes.io/os": "windows"}))
 			})
 			It("should not set nodeSelector if none is set", func() {
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.ControlPlaneNodeSelector).To(BeNil())
 			})
 		})
@@ -305,19 +305,19 @@ var _ = Describe("core handler", func() {
 	Context("annotations", func() {
 		ExpectAnnotations := func(updateAnnotations func(map[string]string)) {
 			It("should not error for no annotations", func() {
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should error for unexpected annotations", func() {
 				updateAnnotations(map[string]string{"foo": "bar"})
-				Expect(handleCore(&comps, i)).To(HaveOccurred())
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should not error for acceptable annotations", func() {
 				updateAnnotations(map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "{}"})
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should not panic for nil annotations", func() {
 				updateAnnotations(nil)
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
 		}
 		Context("calico-node", func() {

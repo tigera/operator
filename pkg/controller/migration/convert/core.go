@@ -49,10 +49,6 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
-	if err := handleNodeSelectors(c, install); err != nil {
-		return err
-	}
-
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
 
@@ -147,14 +143,6 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
-	if err := handleAnnotations(c); err != nil {
-		return err
-	}
-
-	if err = handleFelixNodeMetrics(c, install); err != nil {
-		return err
-	}
-
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")
 	if err != nil {
@@ -201,7 +189,7 @@ func handleCore(c *components, install *Installation) error {
 	return nil
 }
 
-func handleAnnotations(c *components) error {
+func handleAnnotations(c *components, _ *Installation) error {
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
 		return ErrIncompatibleCluster{fmt.Sprintf("calico-node daemonset has unexpected annotation: %v", a)}
 	}

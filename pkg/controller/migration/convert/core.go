@@ -148,10 +148,6 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
-	if err = handleFelixNodeMetrics(c, install); err != nil {
-		return err
-	}
-
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")
 	if err != nil {

@@ -281,7 +281,7 @@ func handleNodeSelectors(c *components, install *Installation) error {
 		// operator rendering code will automatically set the kubernetes.io/os=linux selector, so we just
 		// want to set the field to any other nodeSelectors set on it.
 		if sels := removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector); len(sels) != 0 {
-			install.Spec.ControlPlaneNodeSelector = removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector)
+			install.Spec.ControlPlaneNodeSelector = sels
 		}
 	}
 
@@ -290,11 +290,12 @@ func handleNodeSelectors(c *components, install *Installation) error {
 
 // removeOSNodeSelectors returns the given nodeSelectors with [beta.]kubernetes.io/os=linux nodeSelectors removed.
 func removeOSNodeSelectors(existing map[string]string) map[string]string {
-	nodeSel := existing
+	var nodeSel = map[string]string{}
 	for key, val := range existing {
 		if (key == "kubernetes.io/os" || key == "beta.kubernetes.io/os") && val == "linux" {
-			delete(nodeSel, key)
+			continue
 		}
+		nodeSel[key] = val
 	}
 
 	return nodeSel

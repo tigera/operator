@@ -29,7 +29,7 @@ func handleCore(c *components, install *Installation) error {
 
 	// kube-controllers
 	if c.kubeControllers != nil {
-		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
+		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
 		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
 			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameKubeControllers,

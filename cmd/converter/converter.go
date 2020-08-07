@@ -24,6 +24,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/client/generated/clientset"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,14 +44,21 @@ func run() error {
 		return err
 	}
 
-	cl, err := client.New(config.GetConfigOrDie(), client.Options{})
+	config := config.GetConfigOrDie()
+
+	cl, err := client.New(config, client.Options{})
+	if err != nil {
+		return err
+	}
+
+	clientset, err := clientset.NewForConfig(config)
 	if err != nil {
 		return err
 	}
 
 	var i = &operatorv1.Installation{}
 
-	if err := convert.Convert(context.Background(), cl, i); err != nil {
+	if err := convert.Convert(context.Background(), cl, clientset.CrdV1(), i); err != nil {
 		return err
 	}
 	if i == nil {

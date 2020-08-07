@@ -28,6 +28,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/client/generated/clientset"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -226,7 +227,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
-func getInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
+func getInstallation(ctx context.Context, client client.Client, config *rest.Config, provider operator.Provider) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
@@ -234,8 +235,13 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 		return nil, err
 	}
 
+	clientset, err := clientset.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
 	// grab existing install
-	if err := convert.Convert(ctx, client, instance); err != nil {
+	if err := convert.Convert(ctx, client, clientset.CrdV1(), instance); err != nil {
 		return nil, err
 	}
 
@@ -532,7 +538,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.OnCRFound()
 
 	// Query for the installation object.
-	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider)
+	instance, err := getInstallation(ctx, r.client, r.config, r.autoDetectedProvider)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

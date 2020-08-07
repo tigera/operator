@@ -29,7 +29,7 @@ func handleCore(c *components, install *Installation) error {
 
 	// kube-controllers
 	if c.kubeControllers != nil {
-		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, "calico-kube-controllers")
+		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
 		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
 			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameKubeControllers,
@@ -46,6 +46,29 @@ func handleCore(c *components, install *Installation) error {
 				ComponentName:        operatorv1.ComponentNameTypha,
 				ResourceRequirements: typha.Resources.DeepCopy(),
 			})
+		}
+	}
+
+	// kube-controllers nodeSelector
+	if c.kubeControllers != nil {
+		install.Spec.ControlPlaneNodeSelector = c.kubeControllers.Spec.Template.Spec.NodeSelector
+
+		// kube-controllers enabled controllers
+		enabledControllers, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "ENABLED_CONTROLLERS")
+		if err != nil {
+			return err
+		}
+		if enabledControllers != nil && *enabledControllers != "node" {
+			return ErrIncompatibleCluster{"only ENABLED_CONTROLLERS=node supported"}
+		}
+
+		// auto heps
+		autoHeps, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "AUTO_HOST_ENDPOINTS")
+		if err != nil {
+			return err
+		}
+		if autoHeps != nil && strings.ToLower(*autoHeps) != "disabled" {
+			return ErrIncompatibleCluster{"only AUTO_HOST_ENDPOINTS=disabled supported"}
 		}
 	}
 

@@ -2,11 +2,13 @@ package convert
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func handleCore(c *components, install *Installation) error {
@@ -264,13 +266,31 @@ func handleNodeSelectors(c *components, install *Installation) error {
 		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
 	}
 	if nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
+		if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; !ok || len(nodeSel) != 1 {
+			return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+		}
 	}
 
 	// check typha nodeSelectors
 	if c.typha != nil {
-		if c.typha.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{"node affinity not supported for typha deployment"}
+		// raise error if an affinity exists that isn't the one used during migration
+		if af := c.typha.Spec.Template.Spec.Affinity; af != nil {
+			if !reflect.DeepEqual(*af, corev1.Affinity{
+				PodAffinity: &corev1.PodAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{{
+						Namespaces: []string{"kube-system"},
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"k8s-app": "calico-typha",
+							},
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					}},
+				},
+			}) {
+				return ErrIncompatibleCluster{"node affinity not supported for typha deployment"}
+			}
 		}
 		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
 			return ErrIncompatibleCluster{fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel)}

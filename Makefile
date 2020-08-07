@@ -445,6 +445,35 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
+$(BINDIR)/client-gen:
+	mkdir -p $(BINDIR)
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	go build -o $@ k8s.io/code-generator/cmd/client-gen'
+$(BINDIR)/deepcopy-gen:
+	mkdir -p $(BINDIR)
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	go build -o $@ k8s.io/code-generator/cmd/deepcopy-gen'
+
+.PHONY: gen-datastore-bindings
+gen-datastore-bindings: $(BINDIR)/client-gen $(BINDIR)/deepcopy-gen
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	$(BINDIR)/client-gen \
+	     --go-header-file "/go/src/$(PACKAGE_NAME)/hack/boilerplate/boilerplate.go.txt" \
+	     --input-base "$(PACKAGE_NAME)/pkg/apis/" \
+	     --input crd.projectcalico.org/v1 \
+	     --clientset-path "$(PACKAGE_NAME)/pkg/client/generated/" \
+	     --clientset-name "clientset"'
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	$(BINDIR)/deepcopy-gen \
+	     --go-header-file "/go/src/$(PACKAGE_NAME)/hack/boilerplate/boilerplate.go.txt" \
+	     --input-dirs "$(PACKAGE_NAME)/pkg/apis/crd.projectcalico.org/v1" \
+	     --bounding-dirs "$(PACKAGE_NAME)" \
+	     --output-file-base zz_generated.deepcopy'
+
 .PHONY: help
 ## Display this help text
 help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383502660

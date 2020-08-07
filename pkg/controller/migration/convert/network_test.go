@@ -746,7 +746,7 @@ var _ = Describe("Convert network tests", func() {
 			p, err := convertPool(crdPool)
 			if success {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(*p).To(Equal(opPool))
+				Expect(p).To(Equal(opPool))
 			} else {
 				Expect(err).To(HaveOccurred())
 			}

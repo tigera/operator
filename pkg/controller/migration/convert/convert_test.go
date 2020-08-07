@@ -21,7 +21,6 @@ var _ = Describe("Parser", func() {
 	var ctx = context.Background()
 	var fakeCrd clientset.Interface
 	BeforeEach(func() {
-		fakeCrd = fakecrd.NewSimpleClientset()
 		pool := crdv1.NewIPPool()
 		pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",

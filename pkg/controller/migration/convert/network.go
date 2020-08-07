@@ -440,6 +440,12 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 	}
 }
 
+// handleIPPools sets the install.Spec.CalicoNetwork.IPPools field. We check the pools
+// in the datastore prefering the ones specified by CALICO_IPV*POOL_CIDR.
+// We read the pools from the datastore and select the appropriate ones.
+// See selectInitialPool for details on which pool will be selected.
+// Since the operator only supports one v4 and one v6 only one of each will be picked
+// if they exist.
 func handleIPPools(c *components, install *Installation) error {
 	pools, err := c.crdClientset.CrdV1().IPPools().List(metav1.ListOptions{})
 	if err != nil {
@@ -500,20 +506,20 @@ func handleIPPools(c *components, install *Installation) error {
 		}
 	}
 
-	// Covert any found CRD pools into Operator pools and add them.
+	// Convert any found CRD pools into Operator pools and add them.
 	if v4pool != nil {
 		pool, err := convertPool(*v4pool)
 		if err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error())}
 		}
-		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, *pool)
+		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 	}
 	if v6pool != nil {
 		pool, err := convertPool(*v6pool)
 		if err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
 		}
-		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, *pool)
+		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 	}
 
 	// Ignore the initial pool variables (other than CIDR), we'll pick up everything we need from the datastore
@@ -616,24 +622,30 @@ func selectInitialPool(pools []crdv1.IPPool, cidr *string, isver func(ip net.IP)
 }
 
 // convertPool converts the src (CRD) pool into an Installation/Operator IPPool
-func convertPool(src crdv1.IPPool) (*operatorv1.IPPool, error) {
+func convertPool(src crdv1.IPPool) (operatorv1.IPPool, error) {
 	p := operatorv1.IPPool{CIDR: src.Spec.CIDR}
 
 	ip := src.Spec.IPIPMode
+	if ip == "" {
+		ip = crdv1.IPIPModeNever
+	}
 	vx := src.Spec.VXLANMode
+	if vx == "" {
+		vx = crdv1.VXLANModeNever
+	}
 	switch {
-	case (ip == crdv1.IPIPModeNever || ip == "") && (vx == crdv1.VXLANModeNever || vx == ""):
+	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeNever:
 		p.Encapsulation = operatorv1.EncapsulationNone
-	case (ip == "" || ip == crdv1.IPIPModeNever) && vx == crdv1.VXLANModeAlways:
+	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeAlways:
 		p.Encapsulation = operatorv1.EncapsulationVXLAN
-	case (ip == "" || ip == crdv1.IPIPModeNever) && vx == crdv1.VXLANModeCrossSubnet:
+	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeCrossSubnet:
 		p.Encapsulation = operatorv1.EncapsulationVXLANCrossSubnet
-	case (vx == "" || vx == crdv1.VXLANModeNever) && ip == crdv1.IPIPModeAlways:
+	case vx == crdv1.VXLANModeNever && ip == crdv1.IPIPModeAlways:
 		p.Encapsulation = operatorv1.EncapsulationIPIP
-	case (vx == "" || vx == crdv1.VXLANModeNever) && ip == crdv1.IPIPModeCrossSubnet:
+	case vx == crdv1.VXLANModeNever && ip == crdv1.IPIPModeCrossSubnet:
 		p.Encapsulation = operatorv1.EncapsulationIPIPCrossSubnet
 	default:
-		return nil, fmt.Errorf("unexpected encapsulation combination for pool %+v", src)
+		return p, fmt.Errorf("unexpected encapsulation combination for pool %+v", src)
 	}
 
 	p.NATOutgoing = operatorv1.NATOutgoingEnabled
@@ -648,5 +660,5 @@ func convertPool(src crdv1.IPPool) (*operatorv1.IPPool, error) {
 
 	p.NodeSelector = src.Spec.NodeSelector
 
-	return &p, nil
+	return p, nil
 }

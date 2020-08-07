@@ -1,7 +1,6 @@
 #!/bin/bash
 
-tag=$(git describe --exact-match --tags HEAD)
-if [[ -z "${tag}" ]]; then
+if ! tag=$(git describe --exact-match --tags HEAD); then
 	echo "Not on a tag - no need to release";
 	exit 0
 fi

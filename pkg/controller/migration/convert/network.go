@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	containerCalicoNode = "calico-node"
-	containerInstallCNI = "install-cni"
+	containerCalicoNode      = "calico-node"
+	containerInstallCNI      = "install-cni"
+	containerKubeControllers = "calico-kube-controllers"
 )
 
 func handleNetwork(c *components, install *Installation) error {

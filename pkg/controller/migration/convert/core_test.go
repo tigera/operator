@@ -106,6 +106,20 @@ var _ = Describe("core handler", func() {
 			TestNodeSelectors(func(nodeSelectors map[string]string) {
 				comps.node.Spec.Template.Spec.NodeSelector = nodeSelectors
 			})
+
+			It("should not error if the migration nodeSelector is set", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
+					"projectcalico.org/operator-node-migration": "pre-operator",
+				}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error if a nodeSelector is set alongside the migration nodeSelector", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
+					"foo": "bar",
+					"projectcalico.org/operator-node-migration": "pre-operator",
+				}
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
 		})
 		Describe("typha", func() {
 			TestNodeSelectors(func(nodeSelectors map[string]string) {

@@ -10,8 +10,8 @@ import (
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	clientset "github.com/tigera/operator/pkg/client/generated/clientset"
 	fakecrd "github.com/tigera/operator/pkg/client/generated/clientset/fake"
-	crdv1client "github.com/tigera/operator/pkg/client/generated/clientset/typed/crd.projectcalico.org/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,16 +34,16 @@ func int32Ptr(x int32) *int32 {
 
 var _ = Describe("Convert network tests", func() {
 	var ctx = context.Background()
-	var fakeCrd crdv1client.CrdV1Interface
+	var fakeCrd clientset.Interface
 	BeforeEach(func() {
-		fakeCrd = fakecrd.NewSimpleClientset().CrdV1()
+		fakeCrd = fakecrd.NewSimpleClientset()
 		pool := crdv1.NewIPPool()
 		pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
 			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
-		fakeCrd = fakecrd.NewSimpleClientset(pool).CrdV1()
+		fakeCrd = fakecrd.NewSimpleClientset(pool)
 	})
 
 	Describe("handle alternate CNI migration", func() {
@@ -100,7 +100,7 @@ var _ = Describe("Convert network tests", func() {
 				IPIPMode:    crdv1.IPIPModeAlways,
 				NATOutgoing: true,
 			}
-			fakeCrd = fakecrd.NewSimpleClientset(pool).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(pool)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).NotTo(HaveOccurred())
 			var _1440 int32 = 1440
@@ -599,7 +599,7 @@ var _ = Describe("Convert network tests", func() {
 			}}
 			c := fake.NewFakeClient(ds)
 			cfg := operatorv1.Installation{}
-			fakeCrd = fakecrd.NewSimpleClientset(v4pool1).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(v4pool1)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(Equal([]operatorv1.IPPool{{
@@ -620,7 +620,7 @@ var _ = Describe("Convert network tests", func() {
 			}}
 			c := fake.NewFakeClient(ds)
 			cfg := operatorv1.Installation{}
-			fakeCrd = fakecrd.NewSimpleClientset(v4pool1, v4pool2, v4pooldefault).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(v4pool1, v4pool2, v4pooldefault)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -645,7 +645,7 @@ var _ = Describe("Convert network tests", func() {
 			}}
 			c := fake.NewFakeClient(ds)
 			cfg := operatorv1.Installation{}
-			fakeCrd = fakecrd.NewSimpleClientset(v6pool1, v6pool2, v6pooldefault).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(v6pool1, v6pool2, v6pooldefault)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -666,7 +666,7 @@ var _ = Describe("Convert network tests", func() {
 			c := fake.NewFakeClient(ds)
 			cfg := operatorv1.Installation{}
 			v4pool1.Spec.CIDR = "1.168.0/24"
-			fakeCrd = fakecrd.NewSimpleClientset(v4pool1).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(v4pool1)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).To(HaveOccurred())
 		})
@@ -684,7 +684,7 @@ var _ = Describe("Convert network tests", func() {
 			c := fake.NewFakeClient(ds)
 			cfg := operatorv1.Installation{}
 			v4pooldefault.Spec.Disabled = true
-			fakeCrd = fakecrd.NewSimpleClientset(v4pooldefault, v4pool2).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(v4pooldefault, v4pool2)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -698,7 +698,7 @@ var _ = Describe("Convert network tests", func() {
 			}}
 			c := fake.NewFakeClient(ds)
 			cfg := operatorv1.Installation{}
-			fakeCrd = fakecrd.NewSimpleClientset(v4pool1, v6pool1).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(v4pool1, v6pool1)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ConsistOf([]operatorv1.IPPool{{
@@ -730,7 +730,7 @@ var _ = Describe("Convert network tests", func() {
 				}
 				pools = append(pools, p)
 			}
-			fakeCrd = fakecrd.NewSimpleClientset(pools...).CrdV1()
+			fakeCrd = fakecrd.NewSimpleClientset(pools...)
 			err := Convert(ctx, c, fakeCrd, &cfg)
 			Expect(err).To(HaveOccurred())
 		},

@@ -241,7 +241,7 @@ func getInstallation(ctx context.Context, client client.Client, config *rest.Con
 	}
 
 	// grab existing install
-	if err := convert.Convert(ctx, client, clientset.CrdV1(), instance); err != nil {
+	if err := convert.Convert(ctx, client, clientset, instance); err != nil {
 		return nil, err
 	}
 

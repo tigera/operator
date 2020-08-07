@@ -58,7 +58,7 @@ func run() error {
 
 	var i = &operatorv1.Installation{}
 
-	if err := convert.Convert(context.Background(), cl, clientset.CrdV1(), i); err != nil {
+	if err := convert.Convert(context.Background(), cl, clientset, i); err != nil {
 		return err
 	}
 	if i == nil {

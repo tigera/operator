@@ -441,7 +441,7 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 }
 
 func handleIPPools(c *components, install *Installation) error {
-	pools, err := c.crdClient.IPPools().List(metav1.ListOptions{})
+	pools, err := c.crdClientset.CrdV1().IPPools().List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}

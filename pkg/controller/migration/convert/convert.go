@@ -9,7 +9,7 @@ import (
 	"log"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	crdv1 "github.com/tigera/operator/pkg/client/generated/clientset/typed/crd.projectcalico.org/v1"
+	clientset "github.com/tigera/operator/pkg/client/generated/clientset"
 
 	"github.com/containernetworking/cni/libcni"
 	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
@@ -59,12 +59,12 @@ type components struct {
 	// client is used to resolve spec fields that reference other data sources
 	client client.Client
 
-	// crdClient is used to access Calico datastore information (IPPools)
-	crdClient crdv1.CrdV1Interface
+	// crdClientset is used to access Calico datastore information (IPPools)
+	crdClientset clientset.Interface
 }
 
 // getComponents loads the main calico components into structs for later parsing.
-func getComponents(ctx context.Context, client client.Client, crdcli crdv1.CrdV1Interface) (*components, error) {
+func getComponents(ctx context.Context, client client.Client, crdcs clientset.Interface) (*components, error) {
 	var ds = appsv1.DaemonSet{}
 
 	// verify canal isn't present, or block
@@ -110,8 +110,8 @@ func getComponents(ctx context.Context, client client.Client, crdcli crdv1.CrdV1
 	}
 
 	comps := &components{
-		client:    client,
-		crdClient: crdcli,
+		client:       client,
+		crdClientset: crdcs,
 		node: CheckedDaemonSet{
 			ds,
 			map[string]checkedFields{},
@@ -128,9 +128,9 @@ func getComponents(ctx context.Context, client client.Client, crdcli crdv1.CrdV1
 // GetExistingInstallation creates an Installation resource from an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
-func Convert(ctx context.Context, client client.Client, crdclient crdv1.CrdV1Interface, install *operatorv1.Installation) error {
+func Convert(ctx context.Context, client client.Client, crdcs clientset.Interface, install *operatorv1.Installation) error {
 	config := &Installation{install, []corev1.EnvVar{}, ""}
-	comps, err := getComponents(ctx, client, crdclient)
+	comps, err := getComponents(ctx, client, crdcs)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			log.Print("no existing install found: ", err)

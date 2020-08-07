@@ -8,8 +8,8 @@ import (
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	clientset "github.com/tigera/operator/pkg/client/generated/clientset"
 	fakecrd "github.com/tigera/operator/pkg/client/generated/clientset/fake"
-	crdv1client "github.com/tigera/operator/pkg/client/generated/clientset/typed/crd.projectcalico.org/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,16 +19,16 @@ import (
 
 var _ = Describe("Parser", func() {
 	var ctx = context.Background()
-	var fakeCrd crdv1client.CrdV1Interface
+	var fakeCrd clientset.Interface
 	BeforeEach(func() {
-		fakeCrd = fakecrd.NewSimpleClientset().CrdV1()
+		fakeCrd = fakecrd.NewSimpleClientset()
 		pool := crdv1.NewIPPool()
 		pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
 			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
-		fakeCrd = fakecrd.NewSimpleClientset(pool).CrdV1()
+		fakeCrd = fakecrd.NewSimpleClientset(pool)
 	})
 
 	It("should not detect an installation if none exists", func() {

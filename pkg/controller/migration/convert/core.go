@@ -264,7 +264,10 @@ func handleNodeSelectors(c *components, install *Installation) error {
 		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
 	}
 	if nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
+		if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; !ok || len(nodeSel) != 1 {
+			return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+		}
 	}
 
 	// check typha nodeSelectors

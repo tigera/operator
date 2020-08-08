@@ -23,6 +23,7 @@ blocks:
       secrets:
         - name: private-repo
         - name: quay-robot-semaphore_v2
+        - name: operator-redhat-connect
       prologue:
         commands:
           - checkout

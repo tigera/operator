@@ -603,12 +603,16 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 
+	t := true
 	return v1.Container{
 		Name:         "install-cni",
 		Image:        image,
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &t,
+		},
 	}
 }
 

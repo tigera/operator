@@ -61,14 +61,6 @@ type IPPoolSpec struct {
 
 	// Allows IPPool to allocate for a specific node by label selector.
 	NodeSelector string `json:"nodeSelector,omitempty" validate:"omitempty,selector"`
-
-	// Deprecated: this field is only used for APIv1 backwards compatibility.
-	// Setting this field is not allowed, this field is for internal use only.
-	IPIP *IPIPConfiguration `json:"ipip,omitempty" validate:"omitempty,mustBeNil"`
-
-	// Deprecated: this field is only used for APIv1 backwards compatibility.
-	// Setting this field is not allowed, this field is for internal use only.
-	NATOutgoingV1 bool `json:"nat-outgoing,omitempty" validate:"omitempty,mustBeFalse"`
 }
 
 type VXLANMode string

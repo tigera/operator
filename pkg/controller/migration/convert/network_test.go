@@ -608,7 +608,7 @@ var _ = Describe("Convert network tests", func() {
 				NATOutgoing:   operatorv1.NATOutgoingEnabled,
 			}}))
 		})
-		DescribeTable("should pick v4 pool based on CIDR env", func(envcidr, expectcidr string) {
+		DescribeTable("should pick v4 default pool", func(envcidr, expectcidr string) {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
@@ -627,11 +627,10 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg.Spec.CalicoNetwork.IPPools[0].NATOutgoing).To(Equal(operatorv1.NATOutgoingEnabled))
 			Expect(cfg.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal(expectcidr))
 		},
-			Entry("find pool 1", "1.168.4.0/24", "1.168.4.0/24"),
-			Entry("find pool 2", "2.168.4.0/24", "2.168.4.0/24"),
-			Entry("find default pool", "5.168.4.0/24", "3.168.4.0/24"),
+			Entry("find default pool even when CIDR suggests other", "1.168.4.0/24", "3.168.4.0/24"),
+			Entry("find default pool", "3.168.4.0/24", "3.168.4.0/24"),
 		)
-		DescribeTable("should pick v6 pool based on CIDR env", func(envcidr, expectcidr string) {
+		DescribeTable("should pick v6 default pool", func(envcidr, expectcidr string) {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name: "CNI_NETWORK_CONFIG",
@@ -651,9 +650,8 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg.Spec.CalicoNetwork.IPPools[0].NATOutgoing).To(Equal(operatorv1.NATOutgoingEnabled))
 			Expect(cfg.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal(expectcidr))
 		},
-			Entry("find pool 1", "ff00:0001::/24", "ff00:0001::/24"),
-			Entry("find pool 2", "ff00:0002::/24", "ff00:0002::/24"),
-			Entry("find default pool", "ff00:0005::/24", "ff00:0003::/24"),
+			Entry("find default pool even when CIDR suggests other", "ff00:0001::/24", "ff00:0003::/24"),
+			Entry("find default pool", "ff00:0003::/24", "ff00:0003::/24"),
 		)
 		It("should error on bad pool CIDR", func() {
 			ds := emptyNodeSpec()

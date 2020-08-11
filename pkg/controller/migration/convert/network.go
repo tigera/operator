@@ -440,8 +440,8 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 	}
 }
 
-// handleIPPools sets the install.Spec.CalicoNetwork.IPPools field. We check the pools
-// in the datastore prefering the ones specified by CALICO_IPV*POOL_CIDR.
+// handleIPPools sets the install.Spec.CalicoNetwork.IPPools field based on the
+// pools in the datastore.
 // We read the pools from the datastore and select the appropriate ones.
 // See selectInitialPool for details on which pool will be selected.
 // Since the operator only supports one v4 and one v6 only one of each will be picked
@@ -456,24 +456,12 @@ func handleIPPools(c *components, install *Installation) error {
 		return fmt.Errorf("failed to list IPPools %v", err)
 	}
 
-	// Get the initial CIDR for the v4 IPPool so if there is a pool that matches we will pick
-	// it to load.
-	v4cidr, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_IPV4POOL_CIDR")
-	if err != nil {
-		return err
-	}
-	v4pool, err := selectInitialPool(pools.Items, v4cidr, isIpv4)
+	v4pool, err := selectInitialPool(pools.Items, isIpv4)
 	if err != nil {
 		return ErrIncompatibleCluster{err.Error()}
 	}
 
-	// Get the initial CIDR for the v6 IPPool so if there is a pool that matches we will pick
-	// it to load.
-	v6cidr, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_IPV6POOL_CIDR")
-	if err != nil {
-		return err
-	}
-	v6pool, err := selectInitialPool(pools.Items, v6cidr, isIpv6)
+	v6pool, err := selectInitialPool(pools.Items, isIpv6)
 	if err != nil {
 		return ErrIncompatibleCluster{err.Error()}
 	}
@@ -528,12 +516,14 @@ func handleIPPools(c *components, install *Installation) error {
 
 	// Ignore the initial pool variables (other than CIDR), we'll pick up everything we need from the datastore
 	// V4
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_CIDR")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_BLOCK_SIZE")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_IPIP")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_VXLAN")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_NAT_OUTGOING")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_NODE_SELECTOR")
 	// V6
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_CIDR")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_BLOCK_SIZE")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_IPIP")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_VXLAN")
@@ -575,27 +565,19 @@ func isIpv6(ip net.IP) bool {
 
 // selectInitialPool searches through pools for enabled pools, returning the
 // first to match one of the following:
-//   1. the passed in cidr
-//   2. one prefixed with default and matching the isver IP version
-//   3. one matching isver IP version
+//   1. one prefixed with default-ipv and matching the isver IP version
+//   2. one matching isver IP version
 // if none match then nil, nil is returned
 // if there is an error parsing the cidr in a pool then that error will be returned
-func selectInitialPool(pools []crdv1.IPPool, cidr *string, isver func(ip net.IP) bool) (*crdv1.IPPool, error) {
-	// Get IP pool if there is one that matches the initial CIDR
-	if cidr != nil {
-		pool, _ := getIPPool(pools, func(p crdv1.IPPool) (bool, error) { return p.Spec.CIDR == *cidr, nil })
-		if pool != nil {
-			return pool, nil
-		}
-	}
-	// If we don't have a pool then try finding one with the right version that is prefixed with 'default'
+func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1.IPPool, error) {
+	// Select pools prefixed with 'default-ipv' and isver is true
 	pool, err := getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
 		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
 		if err != nil {
 			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %s", p.Name, err.Error())
 		}
 		if isver(ip) {
-			if strings.HasPrefix(p.Name, "default") {
+			if strings.HasPrefix(p.Name, "default-ipv") {
 				return true, nil
 			}
 		}

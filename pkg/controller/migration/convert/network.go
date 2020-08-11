@@ -3,13 +3,16 @@ package convert
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -438,16 +441,229 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 	}
 }
 
-func handleIPPool(c *components, install *Installation) error {
+// handleIPPools sets the install.Spec.CalicoNetwork.IPPools field. We check the pools
+// in the datastore prefering the ones specified by CALICO_IPV*POOL_CIDR.
+// We read the pools from the datastore and select the appropriate ones.
+// See selectInitialPool for details on which pool will be selected.
+// Since the operator only supports one v4 and one v6 only one of each will be picked
+// if they exist.
+func handleIPPools(c *components, install *Installation) error {
+	//pools, err := c.crdClientset.CrdV1().IPPools().List(metav1.ListOptions{})
+	//if err != nil {
+	//	return err
+	//}
+	pools := crdv1.IPPoolList{}
+	if err := c.client.List(ctx, &pools); err != nil && !kerrors.IsNotFound(err) {
+		return fmt.Errorf("failed to list IPPools %v", err)
+	}
 
-	// TODO: Until we're migrating IPPools
-	c.node.ignoreEnv("calico-node", "CALICO_IPv4POOL_IPIP")
-	c.node.ignoreEnv("calico-node", "CALICO_IPv4POOL_VXLAN")
+	// Get the initial CIDR for the v4 IPPool so if there is a pool that matches we will pick
+	// it to load.
+	v4cidr, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_IPV4POOL_CIDR")
+	if err != nil {
+		return err
+	}
+	v4pool, err := selectInitialPool(pools.Items, v4cidr, isIpv4)
+	if err != nil {
+		return ErrIncompatibleCluster{err.Error()}
+	}
 
-	// TODO: Check these fields when we're setting the Installation IPPools since those
-	// settings will drive these fields.
-	// c.calicoCNIConfig.IPAM.AssignIpv4
-	// c.calicoCNIConfig.IPAM.AssignIpv6
+	// Get the initial CIDR for the v6 IPPool so if there is a pool that matches we will pick
+	// it to load.
+	v6cidr, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_IPV6POOL_CIDR")
+	if err != nil {
+		return err
+	}
+	v6pool, err := selectInitialPool(pools.Items, v6cidr, isIpv6)
+	if err != nil {
+		return ErrIncompatibleCluster{err.Error()}
+	}
+	// Only if there is at least one v4 or v6 pool will we initialize CalicoNetwork
+	if v4pool != nil || v6pool != nil {
+		if install.Spec.CalicoNetwork == nil {
+			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+		}
+
+		if install.Spec.CalicoNetwork.IPPools == nil {
+			install.Spec.CalicoNetwork.IPPools = []operatorv1.IPPool{}
+		}
+	}
+
+	// If IPAM is calico then check that the assign_ipv* fields match the IPPools that have been detected
+	if c.calicoCNIConfig != nil && c.calicoCNIConfig.IPAM.Type == "calico-ipam" {
+		if c.calicoCNIConfig.IPAM.AssignIpv4 == nil || strings.ToLower(*c.calicoCNIConfig.IPAM.AssignIpv4) == "true" {
+			if v4pool == nil {
+				return ErrIncompatibleCluster{"CNI config indicates assign_ipv4 true but there were no valid V4 pools found"}
+			}
+		} else {
+			if v4pool != nil {
+				return ErrIncompatibleCluster{"CNI config indicates assig_ipv4 false but a V4 pool was found"}
+			}
+		}
+		if c.calicoCNIConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.calicoCNIConfig.IPAM.AssignIpv6) == "true" {
+			if v6pool == nil {
+				return ErrIncompatibleCluster{"CNI config indicates assign_ipv6 true but there were no valid V6 pools found"}
+			}
+		} else {
+			if v6pool != nil {
+				return ErrIncompatibleCluster{"CNI config indicates assig_ipv6 false but a V6 pool was found"}
+			}
+		}
+	}
+
+	// Convert any found CRD pools into Operator pools and add them.
+	if v4pool != nil {
+		pool, err := convertPool(*v4pool)
+		if err != nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error())}
+		}
+		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+	}
+	if v6pool != nil {
+		pool, err := convertPool(*v6pool)
+		if err != nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
+		}
+		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+	}
+
+	// Ignore the initial pool variables (other than CIDR), we'll pick up everything we need from the datastore
+	// V4
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_BLOCK_SIZE")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_IPIP")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_VXLAN")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_NAT_OUTGOING")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_NODE_SELECTOR")
+	// V6
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_BLOCK_SIZE")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_IPIP")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_VXLAN")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_NAT_OUTGOING")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_NODE_SELECTOR")
 
 	return nil
+}
+
+// getIPPools searches through the pools passed in using the matcher function passed in to see if the pool
+// should be selected, the first pool that the matcher returns true on is returned.
+// If there is an error returned from the matcher then that error is returned.
+// If no pool is found and there is no error then nil,nil is returned.
+func getIPPool(pools []crdv1.IPPool, matcher func(crdv1.IPPool) (bool, error)) (*crdv1.IPPool, error) {
+	for _, pool := range pools {
+		if pool.Spec.Disabled {
+			continue
+		}
+		yes, err := matcher(pool)
+		if err != nil {
+			return nil, err
+		}
+		if yes {
+			return &pool, nil
+		}
+	}
+	return nil, nil
+}
+
+// isIPv4 check if the IP is an IPv4 address
+func isIpv4(ip net.IP) bool {
+	return ip.To4() != nil
+}
+
+// isIPv6 checks if the IP is an IPv6 address
+func isIpv6(ip net.IP) bool {
+	return ip.To4() == nil
+}
+
+// selectInitialPool searches through pools for enabled pools, returning the
+// first to match one of the following:
+//   1. the passed in cidr
+//   2. one prefixed with default and matching the isver IP version
+//   3. one matching isver IP version
+// if none match then nil, nil is returned
+// if there is an error parsing the cidr in a pool then that error will be returned
+func selectInitialPool(pools []crdv1.IPPool, cidr *string, isver func(ip net.IP) bool) (*crdv1.IPPool, error) {
+	// Get IP pool if there is one that matches the initial CIDR
+	if cidr != nil {
+		pool, _ := getIPPool(pools, func(p crdv1.IPPool) (bool, error) { return p.Spec.CIDR == *cidr, nil })
+		if pool != nil {
+			return pool, nil
+		}
+	}
+	// If we don't have a pool then try finding one with the right version that is prefixed with 'default'
+	pool, err := getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
+		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %s", p.Name, err.Error())
+		}
+		if isver(ip) {
+			if strings.HasPrefix(p.Name, "default") {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if pool != nil {
+		return pool, nil
+	}
+
+	// If we don't have a pool then just grab any that has the right version
+	pool, err = getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
+		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %s", p.Name, err.Error())
+		}
+		return isver(ip), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if pool != nil {
+		return pool, nil
+	}
+	return nil, nil
+}
+
+// convertPool converts the src (CRD) pool into an Installation/Operator IPPool
+func convertPool(src crdv1.IPPool) (operatorv1.IPPool, error) {
+	p := operatorv1.IPPool{CIDR: src.Spec.CIDR}
+
+	ip := src.Spec.IPIPMode
+	if ip == "" {
+		ip = crdv1.IPIPModeNever
+	}
+	vx := src.Spec.VXLANMode
+	if vx == "" {
+		vx = crdv1.VXLANModeNever
+	}
+	switch {
+	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeNever:
+		p.Encapsulation = operatorv1.EncapsulationNone
+	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeAlways:
+		p.Encapsulation = operatorv1.EncapsulationVXLAN
+	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeCrossSubnet:
+		p.Encapsulation = operatorv1.EncapsulationVXLANCrossSubnet
+	case vx == crdv1.VXLANModeNever && ip == crdv1.IPIPModeAlways:
+		p.Encapsulation = operatorv1.EncapsulationIPIP
+	case vx == crdv1.VXLANModeNever && ip == crdv1.IPIPModeCrossSubnet:
+		p.Encapsulation = operatorv1.EncapsulationIPIPCrossSubnet
+	default:
+		return p, fmt.Errorf("unexpected encapsulation combination for pool %+v", src)
+	}
+
+	p.NATOutgoing = operatorv1.NATOutgoingEnabled
+	if !src.Spec.NATOutgoing {
+		p.NATOutgoing = operatorv1.NATOutgoingDisabled
+	}
+
+	if src.Spec.BlockSize != 0 {
+		bs := int32(src.Spec.BlockSize)
+		p.BlockSize = &bs
+	}
+
+	p.NodeSelector = src.Spec.NodeSelector
+
+	return p, nil
 }

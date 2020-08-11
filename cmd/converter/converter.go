@@ -23,6 +23,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/tigera/operator/pkg/apis"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 
@@ -42,8 +43,13 @@ func run() error {
 	if err := appsv1.AddToScheme(scheme.Scheme); err != nil {
 		return err
 	}
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		return err
+	}
 
-	cl, err := client.New(config.GetConfigOrDie(), client.Options{})
+	config := config.GetConfigOrDie()
+
+	cl, err := client.New(config, client.Options{})
 	if err != nil {
 		return err
 	}

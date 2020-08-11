@@ -179,8 +179,8 @@ func calicoDefaultConfig() []runtime.Object {
 								},
 								{Name: "CLUSTER_TYPE", Value: "k8s,bgp"},
 								{Name: "IP", Value: "autodetect"},
-								{Name: "CALICO_IPv4POOL_IPIP", Value: "Always"},
-								{Name: "CALICO_IPv4POOL_VXLAN", Value: "Never"},
+								{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
+								{Name: "CALICO_IPV4POOL_VXLAN", Value: "Never"},
 								{Name: "FELIX_IPINIPMTU",
 									ValueFrom: &corev1.EnvVarSource{
 										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{

@@ -603,12 +603,16 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	}
 
+	t := true
 	return v1.Container{
 		Name:         "install-cni",
 		Image:        image,
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &t,
+		},
 	}
 }
 
@@ -619,10 +623,14 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
 
+	t := true
 	return v1.Container{
 		Name:         "flexvol-driver",
 		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		VolumeMounts: flexVolumeMounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &t,
+		},
 	}
 }
 

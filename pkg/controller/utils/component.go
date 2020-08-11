@@ -193,6 +193,13 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	desiredMeta.SetUID(currentMeta.GetUID())
 	desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
 
+	// Merge annotations by reconciling the ones that components expect, but leaving everything else
+	// as-is.
+	currentAnnotations := mapExistsOrInitialize(currentMeta.GetAnnotations())
+	desiredAnnotations := mapExistsOrInitialize(desiredMeta.GetAnnotations())
+	mergedAnnotations := mergeAnnotations(currentAnnotations, desiredAnnotations)
+	desiredMeta.SetAnnotations(mergedAnnotations)
+
 	switch desired.(type) {
 	case *v1.Service:
 		// Services are a special case since some fields (namely ClusterIP) are defaulted
@@ -269,4 +276,23 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// Default to just using the desired state, with an updated RV.
 		return desired
 	}
+}
+
+// mergeAnnotations merges current and desired annotations. If both current and desired annotations contain the same key, the
+// desired annotation, i.e, the ones that the operators Components specify take preference.
+func mergeAnnotations(current, desired map[string]string) map[string]string {
+	for k, v := range current {
+		// Copy over annotations that should be copied.
+		if _, ok := desired[k]; !ok {
+			desired[k] = v
+		}
+	}
+	return desired
+}
+
+func mapExistsOrInitialize(m map[string]string) map[string]string {
+	if m != nil {
+		return m
+	}
+	return make(map[string]string)
 }

@@ -6,60 +6,64 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	clientset "github.com/tigera/operator/pkg/client/generated/clientset"
-	fakecrd "github.com/tigera/operator/pkg/client/generated/clientset/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Parser", func() {
 	var ctx = context.Background()
-	var fakeCrd clientset.Interface
+	var pool *crdv1.IPPool
+	var scheme *runtime.Scheme
 	BeforeEach(func() {
-		pool := crdv1.NewIPPool()
+		scheme = kscheme.Scheme
+		err := apis.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+		pool = crdv1.NewIPPool()
 		pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
 			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
-		fakeCrd = fakecrd.NewSimpleClientset(pool)
 	})
 
 	It("should not detect an installation if none exists", func() {
-		c := fake.NewFakeClient()
-		Expect(Convert(ctx, c, fakeCrd, &operatorv1.Installation{})).To(BeNil())
+		c := fake.NewFakeClientWithScheme(scheme)
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
 	It("should detect an installation if one exists", func() {
-		c := fake.NewFakeClient(&appsv1.DaemonSet{
+		c := fake.NewFakeClientWithScheme(scheme, &appsv1.DaemonSet{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      "calico-node",
 				Namespace: "kube-system",
 			},
-		}, emptyKubeControllerSpec())
-		err := Convert(ctx, c, fakeCrd, &operatorv1.Installation{})
+		}, emptyKubeControllerSpec(), pool)
+		err := Convert(ctx, c, &operatorv1.Installation{})
 		// though it will detect an install, it will be in the form of an incompatible-cluster error
 		Expect(err).To(BeAssignableToTypeOf(ErrIncompatibleCluster{}))
 	})
 
 	It("should detect a valid installation", func() {
-		c := fake.NewFakeClient(emptyNodeSpec(), emptyKubeControllerSpec())
-		Expect(Convert(ctx, c, fakeCrd, &operatorv1.Installation{})).To(BeNil())
+		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool)
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
 	It("should error if it detects a canal installation", func() {
-		c := fake.NewFakeClient(&appsv1.DaemonSet{
+		c := fake.NewFakeClientWithScheme(scheme, &appsv1.DaemonSet{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      "canal-node",
 				Namespace: "kube-system",
 			},
-		})
-		Expect(Convert(ctx, c, fakeCrd, &operatorv1.Installation{})).To(HaveOccurred())
+		}, pool)
+		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(HaveOccurred())
 	})
 
 	It("should error for unchecked env vars", func() {
@@ -68,8 +72,8 @@ var _ = Describe("Parser", func() {
 			Name:  "FOO",
 			Value: "bar",
 		}}
-		c := fake.NewFakeClient(node, emptyKubeControllerSpec())
-		err := Convert(ctx, c, fakeCrd, &operatorv1.Installation{})
+		c := fake.NewFakeClientWithScheme(scheme, node, emptyKubeControllerSpec(), pool)
+		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -86,9 +90,9 @@ var _ = Describe("Parser", func() {
 			},
 		}
 
-		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
 		cfg := &operatorv1.Installation{}
-		err := Convert(ctx, c, fakeCrd, cfg)
+		err := Convert(ctx, c, cfg)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
 		exp := int32(24)
@@ -102,16 +106,16 @@ var _ = Describe("Parser", func() {
 			Value: "{",
 		}}
 
-		c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		err := Convert(ctx, c, fakeCrd, &operatorv1.Installation{})
+		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
 	// It("should parse cni", func() {
 	// 	ds := emptyNodeSpec()
-	// 	c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+	// 	c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
 
-	// 	cfg, err := Convert(ctx, c, fakeCrd, &operatorv1.Installation{})
+	// 	cfg, err := Convert(ctx, c, &operatorv1.Installation{})
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(cfg).ToNot(BeNil())
 	// })
@@ -119,9 +123,9 @@ var _ = Describe("Parser", func() {
 		It("defaults prometheus off when no prometheus environment variables set", func() {
 			ds := emptyNodeSpec()
 
-			c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
 			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, fakeCrd, cfg)
+			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(cfg.Spec.NodeMetricsPort).To(BeNil())
@@ -133,9 +137,9 @@ var _ = Describe("Parser", func() {
 				Value: "true",
 			}}
 
-			c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
 			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, fakeCrd, cfg)
+			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(*cfg.Spec.NodeMetricsPort).To(Equal(int32(9091)))
@@ -147,9 +151,9 @@ var _ = Describe("Parser", func() {
 				Value: "5555",
 			}}
 
-			c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
 			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, fakeCrd, cfg)
+			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(cfg.Spec.NodeMetricsPort).To(BeNil())
@@ -164,9 +168,9 @@ var _ = Describe("Parser", func() {
 				Value: "7777",
 			}}
 
-			c := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
 			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, fakeCrd, cfg)
+			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(*cfg.Spec.NodeMetricsPort).To(Equal(int32(7777)))

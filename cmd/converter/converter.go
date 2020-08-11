@@ -23,8 +23,8 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/tigera/operator/pkg/apis"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/client/generated/clientset"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,6 +43,9 @@ func run() error {
 	if err := appsv1.AddToScheme(scheme.Scheme); err != nil {
 		return err
 	}
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		return err
+	}
 
 	config := config.GetConfigOrDie()
 
@@ -51,14 +54,9 @@ func run() error {
 		return err
 	}
 
-	clientset, err := clientset.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-
 	var i = &operatorv1.Installation{}
 
-	if err := convert.Convert(context.Background(), cl, clientset, i); err != nil {
+	if err := convert.Convert(context.Background(), cl, i); err != nil {
 		return err
 	}
 	if i == nil {

@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -447,9 +447,13 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 // Since the operator only supports one v4 and one v6 only one of each will be picked
 // if they exist.
 func handleIPPools(c *components, install *Installation) error {
-	pools, err := c.crdClientset.CrdV1().IPPools().List(metav1.ListOptions{})
-	if err != nil {
-		return err
+	//pools, err := c.crdClientset.CrdV1().IPPools().List(metav1.ListOptions{})
+	//if err != nil {
+	//	return err
+	//}
+	pools := crdv1.IPPoolList{}
+	if err := c.client.List(ctx, &pools); err != nil && !kerrors.IsNotFound(err) {
+		return fmt.Errorf("failed to list IPPools %v", err)
 	}
 
 	// Get the initial CIDR for the v4 IPPool so if there is a pool that matches we will pick

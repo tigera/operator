@@ -28,7 +28,6 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	"github.com/tigera/operator/pkg/client/generated/clientset"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -235,13 +234,8 @@ func getInstallation(ctx context.Context, client client.Client, config *rest.Con
 		return nil, err
 	}
 
-	clientset, err := clientset.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
 	// grab existing install
-	if err := convert.Convert(ctx, client, clientset, instance); err != nil {
+	if err := convert.Convert(ctx, client, instance); err != nil {
 		return nil, err
 	}
 

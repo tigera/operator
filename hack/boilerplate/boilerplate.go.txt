@@ -1,1 +1,0 @@
-// Copyright (c) YEAR Tigera, Inc. All rights reserved.

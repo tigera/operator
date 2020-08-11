@@ -431,6 +431,9 @@ hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
 	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
+	# we don't need this CRD but there don't seem to be any flags to have generate
+	# skip the ippools api so just remove this file until there is something better
+	rm deploy/crds/crd.projectcalico.org_ippools_crd.yaml
 	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
 
 OS_VERSIONS?=config/calico_versions.yml
@@ -444,35 +447,6 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
-
-$(BINDIR)/client-gen:
-	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) \
-	go build -o $@ k8s.io/code-generator/cmd/client-gen'
-$(BINDIR)/deepcopy-gen:
-	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) \
-	go build -o $@ k8s.io/code-generator/cmd/deepcopy-gen'
-
-.PHONY: gen-datastore-bindings
-gen-datastore-bindings: $(BINDIR)/client-gen $(BINDIR)/deepcopy-gen
-	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) \
-	$(BINDIR)/client-gen \
-	     --go-header-file "/go/src/$(PACKAGE_NAME)/hack/boilerplate/boilerplate.go.txt" \
-	     --input-base "$(PACKAGE_NAME)/pkg/apis/" \
-	     --input crd.projectcalico.org/v1 \
-	     --clientset-path "$(PACKAGE_NAME)/pkg/client/generated/" \
-	     --clientset-name "clientset"'
-	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) \
-	$(BINDIR)/deepcopy-gen \
-	     --go-header-file "/go/src/$(PACKAGE_NAME)/hack/boilerplate/boilerplate.go.txt" \
-	     --input-dirs "$(PACKAGE_NAME)/pkg/apis/crd.projectcalico.org/v1" \
-	     --bounding-dirs "$(PACKAGE_NAME)" \
-	     --output-file-base zz_generated.deepcopy'
 
 .PHONY: help
 ## Display this help text

@@ -575,12 +575,16 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
+	t := true
 	return v1.Container{
 		Name:         "install-cni",
 		Image:        constructImage(CNIImageName, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		Command:      []string{"/install-cni.sh"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &t,
+		},
 	}
 }
 

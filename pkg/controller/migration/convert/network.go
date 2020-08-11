@@ -447,10 +447,6 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 // Since the operator only supports one v4 and one v6 only one of each will be picked
 // if they exist.
 func handleIPPools(c *components, install *Installation) error {
-	//pools, err := c.crdClientset.CrdV1().IPPools().List(metav1.ListOptions{})
-	//if err != nil {
-	//	return err
-	//}
 	pools := crdv1.IPPoolList{}
 	if err := c.client.List(ctx, &pools); err != nil && !kerrors.IsNotFound(err) {
 		return fmt.Errorf("failed to list IPPools %v", err)

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,8 +23,6 @@ const (
 	KindIPPoolList = "IPPoolList"
 )
 
-// +genclient
-// +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // IPPool contains information about an IPPool resource.
@@ -108,25 +106,4 @@ func NewIPPoolList() *IPPoolList {
 			APIVersion: "crd.projectcalico.org/v1",
 		},
 	}
-}
-
-type Mode string
-
-const (
-	Undefined   Mode = ""
-	Always           = "always"
-	CrossSubnet      = "cross-subnet"
-)
-
-type IPIPConfiguration struct {
-	// When enabled is true, ipip tunneling will be used to deliver packets to
-	// destinations within this pool.
-	Enabled bool `json:"enabled,omitempty"`
-
-	// The IPIP mode.  This can be one of "always" or "cross-subnet".  A mode
-	// of "always" will also use IPIP tunneling for routing to destination IP
-	// addresses within this pool.  A mode of "cross-subnet" will only use IPIP
-	// tunneling when the destination node is on a different subnet to the
-	// originating node.  The default value (if not specified) is "always".
-	Mode Mode `json:"mode,omitempty" validate:"ipIpMode"`
 }

@@ -226,7 +226,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
-func getInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
+func getInstallation(ctx context.Context, client client.Client, config *rest.Config, provider operator.Provider) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
@@ -532,7 +532,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.OnCRFound()
 
 	// Query for the installation object.
-	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider)
+	instance, err := getInstallation(ctx, r.client, r.config, r.autoDetectedProvider)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

@@ -176,6 +176,12 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 			c.complianceSnapshotterPodSecurityPolicy())
 	}
 
+	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
+	// host path volumes requires cluster admin permissions.
+	if c.installation.Spec.KubernetesProvider == operatorv1.ProviderDockerEE {
+		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
+	}
+
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
 	return complianceObjs, objsToDelete
@@ -290,6 +296,26 @@ func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.C
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     "tigera-compliance-controller",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-compliance-controller",
+				Namespace: ComplianceNamespace,
+			},
+		},
+	}
+}
+
+// This clusterRoleBinding is only needed in DockerEE since a pod starting pods with host path volumes requires cluster admin permissions.
+func (c *complianceComponent) complianceControllerClusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
 		},
 		Subjects: []rbacv1.Subject{
 			{

@@ -608,6 +608,20 @@ var _ = Describe("Convert network tests", func() {
 				NATOutgoing:   operatorv1.NATOutgoingEnabled,
 			}}))
 		})
+		It("should handle no pools", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers = nil
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+				{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
+				{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
+				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+			}
+
+			c := fake.NewFakeClientWithScheme(scheme, ds)
+			cfg := operatorv1.Installation{}
+			err := Convert(ctx, c, &cfg)
+			Expect(err).NotTo(HaveOccurred())
+		})
 		DescribeTable("should pick v4 default pool", func(envcidr, expectcidr string) {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{

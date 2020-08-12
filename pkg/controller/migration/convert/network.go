@@ -470,6 +470,22 @@ func handleIPPools(c *components, install *Installation) error {
 		if install.Spec.CalicoNetwork.IPPools == nil {
 			install.Spec.CalicoNetwork.IPPools = []operatorv1.IPPool{}
 		}
+
+		// Convert any found CRD pools into Operator pools and add them.
+		if render.GetIPv4Pool(install.Spec.CalicoNetwork.IPPools) == nil && v4pool != nil {
+			pool, err := convertPool(*v4pool)
+			if err != nil {
+				return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error())}
+			}
+			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+		}
+		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
+			pool, err := convertPool(*v6pool)
+			if err != nil {
+				return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
+			}
+			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+		}
 	}
 
 	// If IPAM is calico then check that the assign_ipv* fields match the IPPools that have been detected
@@ -492,22 +508,6 @@ func handleIPPools(c *components, install *Installation) error {
 				return ErrIncompatibleCluster{"CNI config indicates assig_ipv6 false but a V6 pool was found"}
 			}
 		}
-	}
-
-	// Convert any found CRD pools into Operator pools and add them.
-	if render.GetIPv4Pool(install.Spec.CalicoNetwork.IPPools) == nil && v4pool != nil {
-		pool, err := convertPool(*v4pool)
-		if err != nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error())}
-		}
-		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
-	}
-	if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
-		pool, err := convertPool(*v6pool)
-		if err != nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
-		}
-		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 	}
 
 	// Ignore the initial pool variables (other than CIDR), we'll pick up everything we need from the datastore

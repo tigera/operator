@@ -108,14 +108,19 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
-			return fmt.Errorf("Only one IPPool per version is allowed.")
+			return fmt.Errorf("Only one IPPool per version is allowed, pools: %+v.", instance.Spec.CalicoNetwork.IPPools)
 		}
 
 		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
-		if nPools == 2 && (v4pool == nil || v6pool == nil) {
-			return fmt.Errorf("Only one IPPool per version is allowed.")
+		if nPools == 2 {
+			if v4pool == nil {
+				return fmt.Errorf("Only one IPPool per version is allowed, multiple V6: %+v.", instance.Spec.CalicoNetwork.IPPools)
+			}
+			if v6pool == nil {
+				return fmt.Errorf("Only one IPPool per version is allowed, multiple V4: %+v", instance.Spec.CalicoNetwork.IPPools)
+			}
 		}
 
 		if v4pool != nil {

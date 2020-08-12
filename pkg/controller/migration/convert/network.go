@@ -12,6 +12,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/render"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -201,8 +202,6 @@ func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *I
 	return nil
 }
 
-const UnsupportedMsg = "is unsupported"
-
 // subhandleHostLocalIPAM checks all fields in the Host Local IPAM configuration,
 // if any fields have unexpected values an error message will be returned.
 // The function tries to collect all the errors and report one message.
@@ -226,13 +225,13 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg HostLocalIPAMConfig, inst
 		invalidFields = checkRange("", *ipamcfg.Range)
 	}
 	if len(ipamcfg.Routes) != 0 {
-		invalidFields = append(invalidFields, "routes "+UnsupportedMsg)
+		invalidFields = append(invalidFields, "routes is unsupported")
 	}
 	if ipamcfg.DataDir != "" {
-		invalidFields = append(invalidFields, "dataDir "+UnsupportedMsg)
+		invalidFields = append(invalidFields, "dataDir is unsupported")
 	}
 	if ipamcfg.ResolvConf != "" {
-		invalidFields = append(invalidFields, "resolveConf "+UnsupportedMsg)
+		invalidFields = append(invalidFields, "resolveConf is unsupported")
 	}
 	switch len(ipamcfg.Ranges) {
 	case 0:
@@ -264,13 +263,13 @@ func checkRange(prefix string, r Range) []string {
 		}
 	}
 	if r.RangeStart != "" {
-		bf = append(bf, prefix+"rangeStart "+UnsupportedMsg)
+		bf = append(bf, prefix+"rangeStart is unsupported")
 	}
 	if r.RangeEnd != "" {
-		bf = append(bf, prefix+"rangeEnd "+UnsupportedMsg)
+		bf = append(bf, prefix+"rangeEnd is unsupported")
 	}
 	if len(r.Gateway) != 0 {
-		bf = append(bf, prefix+"gateway "+UnsupportedMsg)
+		bf = append(bf, prefix+"gateway is unsupported")
 	}
 
 	return bf
@@ -496,14 +495,14 @@ func handleIPPools(c *components, install *Installation) error {
 	}
 
 	// Convert any found CRD pools into Operator pools and add them.
-	if v4pool != nil {
+	if render.GetIPv4Pool(install.Spec.CalicoNetwork.IPPools) == nil && v4pool != nil {
 		pool, err := convertPool(*v4pool)
 		if err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error())}
 		}
 		install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 	}
-	if v6pool != nil {
+	if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
 		pool, err := convertPool(*v6pool)
 		if err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}

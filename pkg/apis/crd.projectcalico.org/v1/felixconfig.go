@@ -12,21 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/projectcalico/libcalico-go/lib/numorstring"
+	// "github.com/projectcalico/libcalico-go/lib/numorstring"
 )
 
 type IptablesBackend string
 
 const (
-	KindFelixConfiguration     = "FelixConfiguration"
-	KindFelixConfigurationList = "FelixConfigurationList"
-	IptablesBackendLegacy      = "Legacy"
-	IptablesBackendNFTables    = "NFT"
+	KindFelixConfiguration = "FelixConfiguration"
+	// KindFelixConfigurationList = "FelixConfigurationList"
+	IptablesBackendLegacy   = "Legacy"
+	IptablesBackendNFTables = "NFT"
 )
 
 // +kubebuilder:validation:Enum=DoNothing;Enable;Disable
@@ -229,7 +228,7 @@ type FelixConfigurationSpec struct {
 
 	// KubeNodePortRanges holds list of port ranges used for service node ports. Only used if felix detects kube-proxy running in ipvs mode.
 	// Felix uses these ranges to separate host and workload traffic. [Default: 30000:32767].
-	KubeNodePortRanges *[]numorstring.Port `json:"kubeNodePortRanges,omitempty" validate:"omitempty,dive"`
+	// KubeNodePortRanges *[]numorstring.Port `json:"kubeNodePortRanges,omitempty" validate:"omitempty,dive"`
 
 	// PolicySyncPathPrefix is used to by Felix to communicate policy changes to external services,
 	// like Application layer policy. [Default: Empty]
@@ -245,7 +244,7 @@ type FelixConfigurationSpec struct {
 
 	// NATPortRange specifies the range of ports that is used for port mapping when doing outgoing NAT. When unset the default behavior of the
 	// network stack is used.
-	NATPortRange *numorstring.Port `json:"natPortRange,omitempty"`
+	// NATPortRange *numorstring.Port `json:"natPortRange,omitempty"`
 
 	// NATOutgoingAddress specifies an address to use when performing source NAT for traffic in a natOutgoing pool that
 	// is leaving the network. By default the address used is an address on the interface the traffic is leaving on
@@ -363,30 +362,30 @@ type ProtoPort struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // FelixConfigurationList contains a list of FelixConfiguration resources.
-type FelixConfigurationList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
-	Items           []FelixConfiguration `json:"items"`
-}
+// type FelixConfigurationList struct {
+// 	metav1.TypeMeta `json:",inline"`
+// 	metav1.ListMeta `json:"metadata"`
+// 	Items           []FelixConfiguration `json:"items"`
+// }
 
-// New FelixConfiguration creates a new (zeroed) FelixConfiguration struct with the TypeMetadata
-// initialized to the current version.
-func NewFelixConfiguration() *FelixConfiguration {
-	return &FelixConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       KindFelixConfiguration,
-			APIVersion: GroupVersionCurrent,
-		},
-	}
-}
+// // New FelixConfiguration creates a new (zeroed) FelixConfiguration struct with the TypeMetadata
+// // initialized to the current version.
+// func NewFelixConfiguration() *FelixConfiguration {
+// 	return &FelixConfiguration{
+// 		TypeMeta: metav1.TypeMeta{
+// 			Kind:       KindFelixConfiguration,
+// 			APIVersion: GroupVersionCurrent,
+// 		},
+// 	}
+// }
 
-// NewFelixConfigurationList creates a new (zeroed) FelixConfigurationList struct with the TypeMetadata
-// initialized to the current version.
-func NewFelixConfigurationList() *FelixConfigurationList {
-	return &FelixConfigurationList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       KindFelixConfigurationList,
-			APIVersion: GroupVersionCurrent,
-		},
-	}
-}
+// // NewFelixConfigurationList creates a new (zeroed) FelixConfigurationList struct with the TypeMetadata
+// // initialized to the current version.
+// func NewFelixConfigurationList() *FelixConfigurationList {
+// 	return &FelixConfigurationList{
+// 		TypeMeta: metav1.TypeMeta{
+// 			Kind:       KindFelixConfigurationList,
+// 			APIVersion: GroupVersionCurrent,
+// 		},
+// 	}
+// }

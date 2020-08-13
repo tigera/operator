@@ -644,20 +644,15 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	command := "/install-cni.sh"
-
 	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-		// Enterprise release-v3.2 has cni changes that converted shell script to golang binary. The same change
-		// is not in the corresponding os version.
-		command = "/opt/cni/bin/install"
 	}
 
 	return v1.Container{
 		Name:         "install-cni",
 		Image:        image,
-		Command:      []string{command},
+		Command:      []string{"/opt/cni/bin/install"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &v1.SecurityContext{

@@ -116,6 +116,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_file_path": "__LOG_FILE_PATH__",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
@@ -452,6 +453,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_file_path": "__LOG_FILE_PATH__",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
@@ -1433,6 +1435,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_file_path": "__LOG_FILE_PATH__",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
@@ -1512,6 +1515,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_file_path": "__LOG_FILE_PATH__",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",

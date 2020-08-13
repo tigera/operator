@@ -45,14 +45,14 @@ var _ = Describe("Parser", func() {
 				Name:      "calico-node",
 				Namespace: "kube-system",
 			},
-		}, emptyKubeControllerSpec(), pool)
+		}, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		err := Convert(ctx, c, &operatorv1.Installation{})
 		// though it will detect an install, it will be in the form of an incompatible-cluster error
 		Expect(err).To(BeAssignableToTypeOf(ErrIncompatibleCluster{}))
 	})
 
 	It("should detect a valid installation", func() {
-		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool)
+		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
 	})
 
@@ -62,7 +62,7 @@ var _ = Describe("Parser", func() {
 				Name:      "canal-node",
 				Namespace: "kube-system",
 			},
-		}, pool)
+		}, pool, emptyFelixConfig())
 		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(HaveOccurred())
 	})
 
@@ -72,7 +72,7 @@ var _ = Describe("Parser", func() {
 			Name:  "FOO",
 			Value: "bar",
 		}}
-		c := fake.NewFakeClientWithScheme(scheme, node, emptyKubeControllerSpec(), pool)
+		c := fake.NewFakeClientWithScheme(scheme, node, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
@@ -90,7 +90,7 @@ var _ = Describe("Parser", func() {
 			},
 		}
 
-		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		cfg := &operatorv1.Installation{}
 		err := Convert(ctx, c, cfg)
 		Expect(err).ToNot(HaveOccurred())
@@ -106,14 +106,14 @@ var _ = Describe("Parser", func() {
 			Value: "{",
 		}}
 
-		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
 	})
 
 	// It("should parse cni", func() {
 	// 	ds := emptyNodeSpec()
-	// 	c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+	// 	c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 
 	// 	cfg, err := Convert(ctx, c, &operatorv1.Installation{})
 	// 	Expect(err).ToNot(HaveOccurred())
@@ -123,7 +123,7 @@ var _ = Describe("Parser", func() {
 		It("defaults prometheus off when no prometheus environment variables set", func() {
 			ds := emptyNodeSpec()
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -137,7 +137,7 @@ var _ = Describe("Parser", func() {
 				Value: "true",
 			}}
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -151,7 +151,7 @@ var _ = Describe("Parser", func() {
 				Value: "5555",
 			}}
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -168,7 +168,7 @@ var _ = Describe("Parser", func() {
 				Value: "7777",
 			}}
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -327,5 +327,13 @@ func emptyComponents() components {
 		},
 		kubeControllers: emptyKubeControllerSpec(),
 		typha:           emptyTyphaDeployment(),
+	}
+}
+
+func emptyFelixConfig() *crdv1.FelixConfiguration {
+	return &crdv1.FelixConfiguration{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "default",
+		},
 	}
 }

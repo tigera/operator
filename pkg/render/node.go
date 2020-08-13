@@ -382,6 +382,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "datastore_type": "kubernetes",
       "mtu": %d,
       "nodename_file_optional": %v,
+      "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%s",

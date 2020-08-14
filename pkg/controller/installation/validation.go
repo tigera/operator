@@ -233,6 +233,9 @@ func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error
 	if ad.FirstFound != nil && *ad.FirstFound {
 		numEnabled++
 	}
+	if len(ad.CIDRS) != 0 {
+		numEnabled++
+	}
 
 	if numEnabled > 1 {
 		return fmt.Errorf("no more than one node address autodetection method can be specified per-family")

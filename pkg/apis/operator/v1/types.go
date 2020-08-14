@@ -257,6 +257,10 @@ type NodeAddressAutodetection struct {
 	// specified IP or domain.
 	// +optional
 	CanReach string `json:"canReach,omitempty"`
+
+	// CIDRS enables IP auto-detection based on which addresses on the nodes are within
+	// one of the provided CIDRs.
+	CIDRS []string `json:"cidrs,omitempty"`
 }
 
 // EncapsulationType is the type of encapsulation to use on an IP pool. Valid

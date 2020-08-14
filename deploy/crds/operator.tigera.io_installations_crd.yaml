@@ -127,6 +127,12 @@ spec:
                           source address on the node is used to reach the specified
                           IP or domain.
                         type: string
+                      cidrs:
+                        description: CIDRS enables IP auto-detection based on which
+                          addresses on the nodes are within one of the provided CIDRs.
+                        items:
+                          type: string
+                        type: array
                       firstFound:
                         description: FirstFound uses default interface matching parameters
                           to select an interface, performing best-effort filtering
@@ -151,6 +157,12 @@ spec:
                           source address on the node is used to reach the specified
                           IP or domain.
                         type: string
+                      cidrs:
+                        description: CIDRS enables IP auto-detection based on which
+                          addresses on the nodes are within one of the provided CIDRs.
+                        items:
+                          type: string
+                        type: array
                       firstFound:
                         description: FirstFound uses default interface matching parameters
                           to select an interface, performing best-effort filtering

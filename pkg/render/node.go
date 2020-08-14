@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -1146,6 +1147,9 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 		}
 		if ad.FirstFound != nil && *ad.FirstFound {
 			return "first-found"
+		}
+		if len(ad.CIDRS) != 0 {
+			return fmt.Sprintf("cidr=%s", strings.Join(ad.CIDRS, ","))
 		}
 	}
 	return ""

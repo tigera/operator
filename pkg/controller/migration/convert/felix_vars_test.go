@@ -22,7 +22,7 @@ var _ = Describe("Parser", func() {
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/useInternalDataplaneDriver",
-			Value: "true",
+			Value: true,
 		}))
 	})
 })

@@ -479,12 +479,29 @@ func handleIPPools(c *components, install *Installation) error {
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 		}
+
+		// while we are checking for any ipv6 pools, also ensure that the value for FELIX_IPV6SUPPORT is correct.
+		enableIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
+		if err != nil {
+			return err
+		}
+
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
 			pool, err := convertPool(*v6pool)
 			if err != nil {
 				return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+
+			// ensure ipv6 is enabled
+			if enableIpv6 != nil && strings.ToLower(*enableIpv6) != "true" {
+				return ErrIncompatibleCluster{"detected an ipv6 pool but ipv6 is disabled"}
+			}
+		} else {
+			// ensure ipv6 is disabled
+			if enableIpv6 != nil && strings.ToLower(*enableIpv6) != "false" {
+				return ErrIncompatibleCluster{"didn't detect an ipv6 pool but ipv6 is enabled"}
+			}
 		}
 	}
 

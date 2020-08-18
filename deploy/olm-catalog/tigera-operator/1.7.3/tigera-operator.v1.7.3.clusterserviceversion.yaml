@@ -177,6 +177,7 @@ spec:
                 - get
                 - list
                 - update
+                - patch
                 - delete
                 - watch
             - apiGroups:

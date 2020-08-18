@@ -136,7 +136,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 						ServiceAccountName: "calico-node",
 						SecurityContext:    &corev1.PodSecurityContext{FSGroup: &_65534},
 						Containers: []corev1.Container{{
-							Name:  "calico-node",
+							Name:  "calico-typha",
 							Image: "quay.io/calico/typha:v3.13.4",
 							Ports: []corev1.ContainerPort{
 								{Name: "calico-typha", Protocol: corev1.ProtocolTCP, ContainerPort: 5473},

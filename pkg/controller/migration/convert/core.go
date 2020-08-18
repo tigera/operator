@@ -194,7 +194,6 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("calico-node", "CALICO_DISABLE_FILE_LOGGING")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_IPIP")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_VXLAN")
-	c.node.ignoreEnv("calico-node", "FELIX_IPV6SUPPORT")
 	c.node.ignoreEnv("calico-node", "FELIX_LOGSEVERITYSCREEN")
 	c.node.ignoreEnv("calico-node", "FELIX_HEALTHENABLED")
 	c.node.ignoreEnv("calico-node", "FELIX_USAGEREPORTINGENABLED")

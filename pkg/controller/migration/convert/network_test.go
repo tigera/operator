@@ -76,6 +76,7 @@ var _ = Describe("Convert network tests", func() {
 			}, operatorv1.PluginGKE),
 		)
 		It("should convert AWS CNI install", func() {
+			Skip("eks not supported until typha prometheus metrics support is added")
 			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{pool}, awsCNIPolicyOnlyConfig()...)...)
 			err := Convert(ctx, c, &operatorv1.Installation{})
 			Expect(err).NotTo(HaveOccurred())

@@ -20,6 +20,7 @@ const (
 	containerCalicoNode      = "calico-node"
 	containerInstallCNI      = "install-cni"
 	containerKubeControllers = "calico-kube-controllers"
+	containerTypha           = "calico-typha"
 )
 
 func handleNetwork(c *components, install *Installation) error {
@@ -115,6 +116,37 @@ func handleCalicoCNI(c *components, install *Installation) error {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s, error parsing IP_AUTODETECTION_METHOD: %s", errCtx, err.Error())}
 		}
 		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &tam
+	}
+
+	// IP6_AUTODETECTION_METHOD
+	am6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6_AUTODETECTION_METHOD")
+	if err != nil {
+		return err
+	}
+	if am6 == nil || *am6 == "" {
+		// unlike ivp4 autodetection, an empty string signifies that ipv6 autodetection is off,
+		// and ipv6 should be disabled. verify that all other ipv6 settings are as expected
+		ip6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+		if err != nil {
+			return err
+		}
+		if ip6 != nil && *ip6 != "" {
+			return ErrIncompatibleCluster{"no ipv6 autodetection method specified, but IP6 is set"}
+		}
+
+		ip6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+		if err != nil {
+			return err
+		}
+		if ip6 != nil && *ip6 != "" {
+			return ErrIncompatibleCluster{"no ipv6 autodetection method specified, but IP6 is set"}
+		}
+	} else {
+		tam6, err := getAutoDetection(*am6)
+		if err != nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, error parsing IP6_AUTODETECTION_METHOD: %s", errCtx, err.Error())}
+		}
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &tam6
 	}
 
 	// CNI portmap plugin
@@ -479,12 +511,30 @@ func handleIPPools(c *components, install *Installation) error {
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 		}
+
+		// while we are checking for ipv6 pools, also ensure that the value for FELIX_IPV6SUPPORT matches the presence
+		// of .
+		enableIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
+		if err != nil {
+			return err
+		}
+
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
 			pool, err := convertPool(*v6pool)
 			if err != nil {
 				return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+
+			// ensure ipv6 is enabled
+			if enableIpv6 != nil && strings.ToLower(*enableIpv6) != "true" {
+				return ErrIncompatibleCluster{"detected an ipv6 pool but ipv6 is disabled"}
+			}
+		} else {
+			// ensure ipv6 is disabled
+			if enableIpv6 != nil && strings.ToLower(*enableIpv6) != "false" {
+				return ErrIncompatibleCluster{"didn't detect an ipv6 pool but ipv6 is enabled"}
+			}
 		}
 	}
 

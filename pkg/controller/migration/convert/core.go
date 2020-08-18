@@ -161,6 +161,17 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
+	// check typha prometheus config
+	if c.typha != nil {
+		e, err := getEnv(ctx, c.client, c.typha.Spec.Template.Spec, containerTypha, "TYPHA_PROMETHEUSMETRICSENABLED")
+		if err != nil {
+			return err
+		}
+		if e != nil && *e != "false" {
+			return ErrIncompatibleCluster{"typha metrics not supported at this time"}
+		}
+	}
+
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")
 	if err != nil {
@@ -194,7 +205,6 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("calico-node", "CALICO_DISABLE_FILE_LOGGING")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_IPIP")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_VXLAN")
-	c.node.ignoreEnv("calico-node", "FELIX_IPV6SUPPORT")
 	c.node.ignoreEnv("calico-node", "FELIX_LOGSEVERITYSCREEN")
 	c.node.ignoreEnv("calico-node", "FELIX_HEALTHENABLED")
 	c.node.ignoreEnv("calico-node", "FELIX_USAGEREPORTINGENABLED")

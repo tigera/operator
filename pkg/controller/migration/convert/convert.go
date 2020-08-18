@@ -140,6 +140,10 @@ func Convert(ctx context.Context, client client.Client, install *operatorv1.Inst
 		}
 	}
 
+	if err := handleFelixVars(comps); err != nil {
+		return err
+	}
+
 	// check for unchecked env vars
 	if uncheckedVars := comps.node.uncheckedVars(); len(uncheckedVars) != 0 {
 		return ErrIncompatibleCluster{fmt.Sprintf("unexpected env var: %s", uncheckedVars)}

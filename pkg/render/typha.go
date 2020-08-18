@@ -270,6 +270,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"tiers",
+					"packetcaptures",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

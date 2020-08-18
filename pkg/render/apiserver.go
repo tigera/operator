@@ -331,6 +331,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 				"blockaffinities",
 				"remoteclusterconfigurations",
 				"managedclusters",
+				"packetcaptures",
 			},
 			Verbs: []string{"*"},
 		},

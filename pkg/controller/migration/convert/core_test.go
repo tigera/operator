@@ -70,6 +70,42 @@ var _ = Describe("core handler", func() {
 				ResourceRequirements: &rqs,
 			}))
 		})
+		It("should migrate resources from all 3 components", func() {
+			rqs = v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					v1.ResourceCPU: resource.MustParse("500m"),
+				},
+			}
+			expectedCompRsrc := []*operatorv1.ComponentResource{&operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: rqs.DeepCopy(),
+			}}
+			comps.node.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
+			rqs.Limits[v1.ResourceCPU] = resource.MustParse("400m")
+			expectedCompRsrc = append(expectedCompRsrc, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: rqs.DeepCopy(),
+			})
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
+			rqs.Limits[v1.ResourceCPU] = resource.MustParse("300m")
+			expectedCompRsrc = append(expectedCompRsrc, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: rqs.DeepCopy(),
+			})
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(ConsistOf(expectedCompRsrc))
+		})
+
+		It("should not add a duplicate resources when already set", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, &operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: &rqs,
+			})
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(1))
+		})
 	})
 
 	Context("nodeSelector", func() {

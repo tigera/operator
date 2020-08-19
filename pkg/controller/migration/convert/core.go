@@ -2,6 +2,7 @@ package convert
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -21,20 +22,18 @@ func handleCore(c *components, install *Installation) error {
 	// node resource limits
 	node := getContainer(c.node.Spec.Template.Spec, "calico-node")
 	if len(node.Resources.Limits) > 0 || len(node.Resources.Requests) > 0 {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-			ComponentName:        operatorv1.ComponentNameNode,
-			ResourceRequirements: node.Resources.DeepCopy(),
-		})
+		if err = addResources(install, operatorv1.ComponentNameNode, &node.Resources); err != nil {
+			return ErrIncompatibleCluster{err.Error()}
+		}
 	}
 
 	// kube-controllers
 	if c.kubeControllers != nil {
 		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
 		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
-			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameKubeControllers,
-				ResourceRequirements: kubeControllers.Resources.DeepCopy(),
-			})
+			if err = addResources(install, operatorv1.ComponentNameKubeControllers, &kubeControllers.Resources); err != nil {
+				return ErrIncompatibleCluster{err.Error()}
+			}
 		}
 	}
 
@@ -42,10 +41,9 @@ func handleCore(c *components, install *Installation) error {
 		// typha resource limits. typha is optional so check for nil first
 		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
 		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
-			install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameTypha,
-				ResourceRequirements: typha.Resources.DeepCopy(),
-			})
+			if err = addResources(install, operatorv1.ComponentNameTypha, &typha.Resources); err != nil {
+				return ErrIncompatibleCluster{err.Error()}
+			}
 		}
 	}
 
@@ -205,6 +203,36 @@ func handleCore(c *components, install *Installation) error {
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
 	return nil
+}
+
+// addResources adds the rescReq resource for the specified component if none was previously set. If installation
+// already had a resource for compName then they are compared and if they are different then an error is returned.
+// If the Resource is added to installation or the existing one matches then nil is returned.
+func addResources(install *Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
+	if install.Spec.ComponentResources == nil {
+		install.Spec.ComponentResources = []*operatorv1.ComponentResource{}
+	}
+
+	var existingRR *corev1.ResourceRequirements
+	// See if there is already a ComponentResource with the name
+	for _, x := range install.Spec.ComponentResources {
+		if x.ComponentName == compName {
+			existingRR = x.ResourceRequirements
+			break
+		}
+	}
+	if existingRR == nil {
+		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
+			ComponentName:        compName,
+			ResourceRequirements: rescReq.DeepCopy(),
+		})
+		return nil
+	}
+	if reflect.DeepEqual(existingRR, rescReq) {
+		return nil
+	}
+
+	return ErrIncompatibleCluster{fmt.Sprintf("ResourcesRequirements for component %s did not match between Installation and migration source", compName)}
 }
 
 func handleAnnotations(c *components, _ *Installation) error {

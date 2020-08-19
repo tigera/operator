@@ -67,14 +67,34 @@ var _ = Describe("Parser", func() {
 	})
 
 	It("converts a RouteTableRange", func() {
-		// RouteTableRange
-		// routeTableRange
 		fe, err := patchFromVal("routetablerange", "22-44")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/routeTableRange",
 			Value: &crdv1.RouteTableRange{Min: 22, Max: 44},
+		}))
+	})
+
+	It("converts a AWSSrcDstCheckOption", func() {
+		d := crdv1.AWSSrcDstCheckOptionDisable
+		fe, err := patchFromVal("awssrcdstcheck", "Disable")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(fe.Value).To(Equal(&d))
+		Expect(fe).To(Equal(patch{
+			Op:    "replace",
+			Path:  "/spec/awsSrcDstCheck",
+			Value: &d,
+		}))
+	})
+
+	It("converts a *[]string", func() {
+		fe, err := patchFromVal("externalnodescidrlist", "1.1.1.1,2.2.2.2")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(fe).To(Equal(patch{
+			Op:    "replace",
+			Path:  "/spec/externalNodesList",
+			Value: &[]string{"1.1.1.1", "2.2.2.2"},
 		}))
 	})
 

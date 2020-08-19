@@ -103,8 +103,10 @@ func patchFromVal(key, val string) (patch, error) {
 // if <t> is a struct, it relies on <value> which is assumed to be an
 // instance of type <t>.
 func convert(t reflect.Type, value reflect.Value, str string) (interface{}, error) {
+	ptr := false
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
+		ptr = true
 	}
 	switch t.Kind() {
 	case reflect.Bool:
@@ -127,6 +129,9 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 		}
 		return i, nil
 	case reflect.String:
+		if ptr {
+			return &str, nil
+		}
 		return str, nil
 	case reflect.Slice:
 		switch value.Interface().(type) {
@@ -148,7 +153,11 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 				})
 			}
 			return &pps, nil
+		case *[]string:
+			ss := strings.Split(str, ",")
+			return &ss, nil
 		}
+
 	case reflect.Struct:
 		switch value.Interface().(type) {
 		case *metav1.Duration:
@@ -178,7 +187,6 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 		}
 
 		// *[]string
-		// *AWSSrcDstCheckOption
 	}
 
 	return nil, fmt.Errorf("unrecognized type: %s", t.Kind())

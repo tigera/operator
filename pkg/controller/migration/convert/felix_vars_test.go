@@ -26,12 +26,13 @@ var _ = Describe("Parser", func() {
 	})
 
 	It("should convert a boolean", func() {
+		t := true
 		fe, err := patchFromVal("useinternaldataplanedriver", "true")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/useInternalDataplaneDriver",
-			Value: true,
+			Value: &t,
 		}))
 	})
 
@@ -52,7 +53,7 @@ var _ = Describe("Parser", func() {
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/iptablesMarkMask",
-			Value: m,
+			Value: &m,
 		}))
 	})
 
@@ -77,7 +78,7 @@ var _ = Describe("Parser", func() {
 	})
 
 	It("converts a AWSSrcDstCheckOption", func() {
-		d := crdv1.AWSSrcDstCheckOptionDisable
+		d := crdv1.AWSSrcDstCheckOption(crdv1.AWSSrcDstCheckOptionDisable)
 		fe, err := patchFromVal("awssrcdstcheck", "Disable")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(fe.Value).To(Equal(&d))

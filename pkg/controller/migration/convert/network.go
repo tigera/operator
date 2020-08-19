@@ -20,6 +20,7 @@ const (
 	containerCalicoNode      = "calico-node"
 	containerInstallCNI      = "install-cni"
 	containerKubeControllers = "calico-kube-controllers"
+	containerTypha           = "calico-typha"
 )
 
 func handleNetwork(c *components, install *Installation) error {

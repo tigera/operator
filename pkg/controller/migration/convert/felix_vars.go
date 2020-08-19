@@ -128,6 +128,27 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 		return i, nil
 	case reflect.String:
 		return str, nil
+	case reflect.Slice:
+		switch value.Interface().(type) {
+		case *[]crdv1.ProtoPort:
+			pps := []crdv1.ProtoPort{}
+			ppsStr := strings.Split(str, ",")
+			for _, ppStr := range ppsStr {
+				vals := strings.Split(ppStr, ":")
+				if len(vals) != 2 {
+					return nil, fmt.Errorf("could not convert protoport: must be of form <proto>:<port>")
+				}
+				port, err := strconv.Atoi(vals[1])
+				if err != nil {
+					return nil, fmt.Errorf("could not convert port to number: %s", vals[0])
+				}
+				pps = append(pps, crdv1.ProtoPort{
+					Port:     uint16(port),
+					Protocol: vals[0],
+				})
+			}
+			return &pps, nil
+		}
 	case reflect.Struct:
 		switch value.Interface().(type) {
 		case *metav1.Duration:
@@ -137,8 +158,6 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 			}
 			return metav1.Duration{d}, nil
 		}
-
-		// *[]ProtoPort
 		// *[]string
 		// *RouteTableRange
 		// *AWSSrcDstCheckOption

@@ -56,6 +56,16 @@ var _ = Describe("Parser", func() {
 		}))
 	})
 
+	It("converts a slice of protoports", func() {
+		fe, err := patchFromVal("failsafeinboundhostports", "tcp:10250")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(fe).To(Equal(patch{
+			Op:    "replace",
+			Path:  "/spec/failsafeInboundHostPorts",
+			Value: &[]crdv1.ProtoPort{{Port: 10250, Protocol: "tcp"}},
+		}))
+	})
+
 	Context("", func() {
 		var c = emptyComponents()
 

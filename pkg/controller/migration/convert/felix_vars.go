@@ -157,9 +157,27 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 				return nil, err
 			}
 			return metav1.Duration{d}, nil
+		case *crdv1.RouteTableRange:
+			minMax := strings.Split(str, "-")
+			if len(minMax) != 2 {
+				return nil, fmt.Errorf("")
+			}
+			min, err := strconv.Atoi(minMax[0])
+			if err != nil {
+				return nil, err
+			}
+			max, err := strconv.Atoi(minMax[1])
+			if err != nil {
+				return nil, err
+			}
+
+			return &crdv1.RouteTableRange{
+				Min: min,
+				Max: max,
+			}, nil
 		}
+
 		// *[]string
-		// *RouteTableRange
 		// *AWSSrcDstCheckOption
 	}
 

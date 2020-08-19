@@ -66,6 +66,18 @@ var _ = Describe("Parser", func() {
 		}))
 	})
 
+	It("converts a RouteTableRange", func() {
+		// RouteTableRange
+		// routeTableRange
+		fe, err := patchFromVal("routetablerange", "22-44")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(fe).To(Equal(patch{
+			Op:    "replace",
+			Path:  "/spec/routeTableRange",
+			Value: &crdv1.RouteTableRange{Min: 22, Max: 44},
+		}))
+	})
+
 	Context("", func() {
 		var c = emptyComponents()
 

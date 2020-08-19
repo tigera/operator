@@ -100,7 +100,7 @@ func patchFromVal(key, val string) (patch, error) {
 }
 
 // convert transforms a string representation to the desired type <t>.
-// if <t> is a struct, it relies on <value> which is assumed to be ain
+// if <t> is a struct, it relies on <value> which is assumed to be an
 // instance of type <t>.
 func convert(t reflect.Type, value reflect.Value, str string) (interface{}, error) {
 	if t.Kind() == reflect.Ptr {
@@ -113,6 +113,12 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 			return nil, err
 		}
 		return b, nil
+	case reflect.Uint32:
+		i, err := strconv.ParseInt(str, 10, 33)
+		if err != nil {
+			return nil, err
+		}
+		return uint32(i), nil
 
 	case reflect.Int:
 		i, err := strconv.Atoi(str)
@@ -131,8 +137,7 @@ func convert(t reflect.Type, value reflect.Value, str string) (interface{}, erro
 			}
 			return metav1.Duration{d}, nil
 		}
-		// IptablesBackend ?
-		// *uint32
+
 		// *[]ProtoPort
 		// *[]string
 		// *RouteTableRange

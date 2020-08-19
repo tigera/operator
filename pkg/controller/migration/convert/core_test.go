@@ -416,4 +416,24 @@ var _ = Describe("core handler", func() {
 			})
 		})
 	})
+
+	Context("typha prometheus metrics", func() {
+		It("shouldn't error if unset", func() {
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+		It("shouldn't error if disabled", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "TYPHA_PROMETHEUSMETRICSENABLED",
+				Value: "false",
+			}}
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+		})
+		It("should error if enabled", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "TYPHA_PROMETHEUSMETRICSENABLED",
+				Value: "true",
+			}}
+			Expect(handleCore(&comps, i)).To(HaveOccurred())
+		})
+	})
 })

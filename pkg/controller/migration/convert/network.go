@@ -20,6 +20,7 @@ const (
 	containerCalicoNode      = "calico-node"
 	containerInstallCNI      = "install-cni"
 	containerKubeControllers = "calico-kube-controllers"
+	containerTypha           = "calico-typha"
 )
 
 func handleNetwork(c *components, install *Installation) error {
@@ -140,6 +141,28 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	if c.calicoCNIConfig.ContainerSettings.AllowIPForwarding {
 		return ErrIncompatibleCluster{errCtx + ", AllowIPForwarding not supported"}
 	}
+
+	return nil
+}
+
+func handleIpv6(c *components, _ *Installation) error {
+	felixIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
+	if err != nil {
+		return err
+	}
+	if felixIpv6 != nil && strings.ToLower(*felixIpv6) != "false" {
+		return ErrIncompatibleCluster{"calico-node/FELIX_IPV6SUPPORT not supported"}
+	}
+
+	ipv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+	if err != nil {
+		return err
+	}
+	if ipv6 != nil && *ipv6 != "none" {
+		return ErrIncompatibleCluster{"migration of IP6 clusters not supported at this time"}
+	}
+
+	c.node.ignoreEnv(containerCalicoNode, "IP6_AUTODETECTION_METHOD")
 
 	return nil
 }
@@ -479,6 +502,7 @@ func handleIPPools(c *components, install *Installation) error {
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 		}
+
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
 			pool, err := convertPool(*v6pool)
 			if err != nil {

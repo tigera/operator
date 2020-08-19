@@ -83,7 +83,7 @@ func patchFromVal(key, val string) (patch, error) {
 		if strings.ToLower(key) == strings.ToLower(field.Name) {
 			fieldName := strings.Split(field.Tag.Get("json"), ",")[0]
 
-			v, err := convert(field.Type, value, val)
+			v, err := convert(value.Interface(), val)
 			if err != nil {
 				return patch{}, err
 			}
@@ -100,94 +100,93 @@ func patchFromVal(key, val string) (patch, error) {
 }
 
 // convert transforms a string representation to the desired type <t>.
-// if <t> is a struct, it relies on <value> which is assumed to be an
-// instance of type <t>.
-func convert(t reflect.Type, value reflect.Value, str string) (interface{}, error) {
+func convert(t interface{}, str string) (interface{}, error) {
 	ptr := false
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-		ptr = true
-	}
-	switch t.Kind() {
-	case reflect.Bool:
+	switch t.(type) {
+	case bool:
 		b, err := strconv.ParseBool(str)
 		if err != nil {
 			return nil, err
 		}
 		return b, nil
-	case reflect.Uint32:
+	case *bool:
+		b, err := strconv.ParseBool(str)
+		if err != nil {
+			return nil, err
+		}
+		return &b, nil
+	case *uint32:
 		i, err := strconv.ParseInt(str, 10, 33)
 		if err != nil {
 			return nil, err
 		}
-		return uint32(i), nil
+		u := uint32(i)
+		return &u, nil
 
-	case reflect.Int:
+	case int:
 		i, err := strconv.Atoi(str)
 		if err != nil {
 			return nil, err
 		}
 		return i, nil
-	case reflect.String:
+	case string:
 		if ptr {
 			return &str, nil
 		}
 		return str, nil
-	case reflect.Slice:
-		switch value.Interface().(type) {
-		case *[]crdv1.ProtoPort:
-			pps := []crdv1.ProtoPort{}
-			ppsStr := strings.Split(str, ",")
-			for _, ppStr := range ppsStr {
-				vals := strings.Split(ppStr, ":")
-				if len(vals) != 2 {
-					return nil, fmt.Errorf("could not convert protoport: must be of form <proto>:<port>")
-				}
-				port, err := strconv.Atoi(vals[1])
-				if err != nil {
-					return nil, fmt.Errorf("could not convert port to number: %s", vals[0])
-				}
-				pps = append(pps, crdv1.ProtoPort{
-					Port:     uint16(port),
-					Protocol: vals[0],
-				})
+	case *crdv1.IptablesBackend:
+		v := crdv1.IptablesBackend(str)
+		return &v, nil
+	case *crdv1.AWSSrcDstCheckOption:
+		v := crdv1.AWSSrcDstCheckOption(str)
+		return &v, nil
+	case *[]crdv1.ProtoPort:
+		pps := []crdv1.ProtoPort{}
+		ppsStr := strings.Split(str, ",")
+		for _, ppStr := range ppsStr {
+			vals := strings.Split(ppStr, ":")
+			if len(vals) != 2 {
+				return nil, fmt.Errorf("could not convert protoport: must be of form <proto>:<port>")
 			}
-			return &pps, nil
-		case *[]string:
-			ss := strings.Split(str, ",")
-			return &ss, nil
+			port, err := strconv.Atoi(vals[1])
+			if err != nil {
+				return nil, fmt.Errorf("could not convert port to number: %s", vals[0])
+			}
+			pps = append(pps, crdv1.ProtoPort{
+				Port:     uint16(port),
+				Protocol: vals[0],
+			})
+		}
+		return &pps, nil
+	case *[]string:
+		ss := strings.Split(str, ",")
+		return &ss, nil
+
+	case *metav1.Duration:
+		d, err := time.ParseDuration(str)
+		if err != nil {
+			return nil, err
+		}
+		return metav1.Duration{d}, nil
+	case *crdv1.RouteTableRange:
+		minMax := strings.Split(str, "-")
+		if len(minMax) != 2 {
+			return nil, fmt.Errorf("")
+		}
+		min, err := strconv.Atoi(minMax[0])
+		if err != nil {
+			return nil, err
+		}
+		max, err := strconv.Atoi(minMax[1])
+		if err != nil {
+			return nil, err
 		}
 
-	case reflect.Struct:
-		switch value.Interface().(type) {
-		case *metav1.Duration:
-			d, err := time.ParseDuration(str)
-			if err != nil {
-				return nil, err
-			}
-			return metav1.Duration{d}, nil
-		case *crdv1.RouteTableRange:
-			minMax := strings.Split(str, "-")
-			if len(minMax) != 2 {
-				return nil, fmt.Errorf("")
-			}
-			min, err := strconv.Atoi(minMax[0])
-			if err != nil {
-				return nil, err
-			}
-			max, err := strconv.Atoi(minMax[1])
-			if err != nil {
-				return nil, err
-			}
-
-			return &crdv1.RouteTableRange{
-				Min: min,
-				Max: max,
-			}, nil
-		}
-
-		// *[]string
+		return &crdv1.RouteTableRange{
+			Min: min,
+			Max: max,
+		}, nil
 	}
 
-	return nil, fmt.Errorf("unrecognized type: %s", t.Kind())
+	return nil, fmt.Errorf("unrecognized type: %s", t)
 }

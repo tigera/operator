@@ -42,7 +42,7 @@ var _ = Describe("Parser", func() {
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/routeRefreshInterval",
-			Value: metav1.Duration{4 * time.Second},
+			Value: &metav1.Duration{4 * time.Second},
 		}))
 	})
 

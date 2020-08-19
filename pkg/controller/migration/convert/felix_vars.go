@@ -100,21 +100,33 @@ func patchFromVal(key, val string) (patch, error) {
 }
 
 // convert transforms a string representation to the desired type <t>.
+// the only types supported are the known types of FelixConfigurationSpec.
 func convert(t interface{}, str string) (interface{}, error) {
-	ptr := false
 	switch t.(type) {
-	case bool:
-		b, err := strconv.ParseBool(str)
-		if err != nil {
-			return nil, err
-		}
-		return b, nil
+	case string:
+		return str, nil
+
+	case *string:
+		return &str, nil
+
+	case *[]string:
+		ss := strings.Split(str, ",")
+		return &ss, nil
+
 	case *bool:
 		b, err := strconv.ParseBool(str)
 		if err != nil {
 			return nil, err
 		}
 		return &b, nil
+
+	case *int:
+		i, err := strconv.Atoi(str)
+		if err != nil {
+			return nil, err
+		}
+		return &i, nil
+
 	case *uint32:
 		i, err := strconv.ParseInt(str, 10, 33)
 		if err != nil {
@@ -123,23 +135,13 @@ func convert(t interface{}, str string) (interface{}, error) {
 		u := uint32(i)
 		return &u, nil
 
-	case int:
-		i, err := strconv.Atoi(str)
-		if err != nil {
-			return nil, err
-		}
-		return i, nil
-	case string:
-		if ptr {
-			return &str, nil
-		}
-		return str, nil
 	case *crdv1.IptablesBackend:
 		v := crdv1.IptablesBackend(str)
 		return &v, nil
 	case *crdv1.AWSSrcDstCheckOption:
 		v := crdv1.AWSSrcDstCheckOption(str)
 		return &v, nil
+
 	case *[]crdv1.ProtoPort:
 		pps := []crdv1.ProtoPort{}
 		ppsStr := strings.Split(str, ",")
@@ -158,16 +160,14 @@ func convert(t interface{}, str string) (interface{}, error) {
 			})
 		}
 		return &pps, nil
-	case *[]string:
-		ss := strings.Split(str, ",")
-		return &ss, nil
 
 	case *metav1.Duration:
 		d, err := time.ParseDuration(str)
 		if err != nil {
 			return nil, err
 		}
-		return metav1.Duration{d}, nil
+		return &metav1.Duration{d}, nil
+
 	case *crdv1.RouteTableRange:
 		minMax := strings.Split(str, "-")
 		if len(minMax) != 2 {

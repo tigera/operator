@@ -144,6 +144,42 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	return nil
 }
 
+func handleIpv6(c *components, install *Installation) error {
+	// IP6_AUTODETECTION_METHOD
+	am6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6_AUTODETECTION_METHOD")
+	if err != nil {
+		return err
+	}
+	ipv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+	if err != nil {
+		return err
+	}
+	felixIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
+	if err != nil {
+		return err
+	}
+
+	if am6 == nil || *am6 == "" {
+		// unlike ivp4 autodetection, an empty string signifies that ipv6 autodetection is off,
+		// and ipv6 should be disabled. verify that all other ipv6 settings are as expected
+		if ipv6 != nil && *ipv6 != "" {
+			return ErrIncompatibleCluster{"no ipv6 autodetection method specified, but IP6 is set"}
+		}
+
+		if felixIpv6 != nil && *felixIpv6 != "" {
+			return ErrIncompatibleCluster{"no ipv6 autodetection method specified, but FELIX_IPV6SUPPORT is set"}
+		}
+	} else {
+		tam6, err := getAutoDetection(*am6)
+		if err != nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("error parsing IP6_AUTODETECTION_METHOD: %v", err)}
+		}
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &tam6
+	}
+
+	return nil
+}
+
 func getNetworkingBackend(node CheckedDaemonSet, client client.Client) (string, error) {
 	netBackend, err := node.getEnv(ctx, client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
 	if err != nil {

@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/projectcalico/libcalico-go/lib/numorstring"
+	"github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
+
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

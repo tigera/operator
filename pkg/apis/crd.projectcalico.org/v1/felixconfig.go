@@ -15,7 +15,8 @@
 package v1
 
 import (
-	"github.com/projectcalico/libcalico-go/lib/numorstring"
+	"github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

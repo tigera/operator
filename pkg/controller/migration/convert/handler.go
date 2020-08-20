@@ -11,6 +11,7 @@ type handler func(*components, *Installation) error
 
 var handlers = []handler{
 	handleNetwork,
+	handleIpv6,
 	handleCore,
 	handleAnnotations,
 	handleNodeSelectors,

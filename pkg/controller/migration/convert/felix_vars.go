@@ -129,7 +129,7 @@ func convert(t interface{}, str string) (interface{}, error) {
 		return &i, nil
 
 	case *uint32:
-		i, err := strconv.ParseInt(str, 10, 33)
+		i, err := strconv.ParseUint(str, 10, 32)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +151,7 @@ func convert(t interface{}, str string) (interface{}, error) {
 			if len(vals) != 2 {
 				return nil, fmt.Errorf("could not convert protoport: must be of form <proto>:<port>")
 			}
-			port, err := strconv.Atoi(vals[1])
+			port, err := strconv.ParseUint(vals[1], 10, 16)
 			if err != nil {
 				return nil, fmt.Errorf("could not convert port to number: %s", vals[0])
 			}

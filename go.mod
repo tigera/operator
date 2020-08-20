@@ -18,6 +18,7 @@ require (
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/pkg/errors v0.8.1
 	github.com/projectcalico/cni-plugin v3.8.9+incompatible
+	github.com/projectcalico/libcalico-go v1.7.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	github.com/tigera/api v0.0.0-20200311151854-a6d8502444cd

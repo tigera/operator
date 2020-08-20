@@ -144,6 +144,28 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	return nil
 }
 
+func handleIpv6(c *components, _ *Installation) error {
+	felixIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
+	if err != nil {
+		return err
+	}
+	if felixIpv6 != nil && strings.ToLower(*felixIpv6) != "false" {
+		return ErrIncompatibleCluster{"calico-node/FELIX_IPV6SUPPORT not supported"}
+	}
+
+	ipv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+	if err != nil {
+		return err
+	}
+	if ipv6 != nil && *ipv6 != "none" {
+		return ErrIncompatibleCluster{"migration of IP6 clusters not supported at this time"}
+	}
+
+	c.node.ignoreEnv(containerCalicoNode, "IP6_AUTODETECTION_METHOD")
+
+	return nil
+}
+
 func getNetworkingBackend(node CheckedDaemonSet, client client.Client) (string, error) {
 	netBackend, err := node.getEnv(ctx, client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
 	if err != nil {
@@ -479,6 +501,7 @@ func handleIPPools(c *components, install *Installation) error {
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 		}
+
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
 			pool, err := convertPool(*v6pool)
 			if err != nil {

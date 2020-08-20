@@ -5,6 +5,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/projectcalico/libcalico-go/lib/numorstring"
+
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	v1 "k8s.io/api/core/v1"
@@ -96,6 +98,16 @@ var _ = Describe("Parser", func() {
 			Op:    "replace",
 			Path:  "/spec/externalNodesList",
 			Value: &[]string{"1.1.1.1", "2.2.2.2"},
+		}))
+	})
+
+	It("converts a numorstring", func() {
+		fe, err := patchFromVal("kubenodeportranges", "10250:10260")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(fe).To(Equal(patch{
+			Op:    "replace",
+			Path:  "/spec/kubeNodePortRanges",
+			Value: &[]numorstring.Port{{MinPort: 10250, MaxPort: 10260}},
 		}))
 	})
 

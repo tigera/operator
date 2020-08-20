@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/projectcalico/libcalico-go/lib/numorstring"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -160,6 +161,18 @@ func convert(t interface{}, str string) (interface{}, error) {
 			})
 		}
 		return &pps, nil
+
+	case *[]numorstring.Port:
+		ports := []numorstring.Port{}
+		strs := strings.Split(str, ",")
+		for _, p := range strs {
+			port, err := numorstring.PortFromString(p)
+			if err != nil {
+				return nil, err
+			}
+			ports = append(ports, port)
+		}
+		return &ports, nil
 
 	case *metav1.Duration:
 		d, err := time.ParseDuration(str)

@@ -15,8 +15,8 @@
 package v1
 
 import (
+	"github.com/projectcalico/libcalico-go/lib/numorstring"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "github.com/projectcalico/libcalico-go/lib/numorstring"
 )
 
 type IptablesBackend string
@@ -228,7 +228,7 @@ type FelixConfigurationSpec struct {
 
 	// KubeNodePortRanges holds list of port ranges used for service node ports. Only used if felix detects kube-proxy running in ipvs mode.
 	// Felix uses these ranges to separate host and workload traffic. [Default: 30000:32767].
-	// KubeNodePortRanges *[]numorstring.Port `json:"kubeNodePortRanges,omitempty" validate:"omitempty,dive"`
+	KubeNodePortRanges *[]numorstring.Port `json:"kubeNodePortRanges,omitempty" validate:"omitempty,dive"`
 
 	// PolicySyncPathPrefix is used to by Felix to communicate policy changes to external services,
 	// like Application layer policy. [Default: Empty]
@@ -244,7 +244,7 @@ type FelixConfigurationSpec struct {
 
 	// NATPortRange specifies the range of ports that is used for port mapping when doing outgoing NAT. When unset the default behavior of the
 	// network stack is used.
-	// NATPortRange *numorstring.Port `json:"natPortRange,omitempty"`
+	NATPortRange *numorstring.Port `json:"natPortRange,omitempty"`
 
 	// NATOutgoingAddress specifies an address to use when performing source NAT for traffic in a natOutgoing pool that
 	// is leaving the network. By default the address used is an address on the interface the traffic is leaving on

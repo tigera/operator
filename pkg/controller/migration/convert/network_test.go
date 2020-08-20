@@ -58,7 +58,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "none",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -77,7 +77,7 @@ var _ = Describe("Convert network tests", func() {
 			}, operatorv1.PluginGKE),
 		)
 		It("should convert AWS CNI install", func() {
-			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{pool}, awsCNIPolicyOnlyConfig()...)...)
+			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{pool, emptyFelixConfig()}, awsCNIPolicyOnlyConfig()...)...)
 			err := Convert(ctx, c, &operatorv1.Installation{})
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -85,7 +85,7 @@ var _ = Describe("Convert network tests", func() {
 
 	Describe("handle Calico CNI migration", func() {
 		It("migrate default", func() {
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -101,7 +101,7 @@ var _ = Describe("Convert network tests", func() {
 				IPIPMode:    crdv1.IPIPModeAlways,
 				NATOutgoing: true,
 			}
-			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{pool}, calicoDefaultConfig()...)...)
+			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{pool, emptyFelixConfig()}, calicoDefaultConfig()...)...)
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -151,7 +151,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_NETWORKING_BACKEND",
 				Value: "none",
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -170,7 +170,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_NETWORKING_BACKEND",
 				Value: "vxlan",
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -190,7 +190,7 @@ var _ = Describe("Convert network tests", func() {
 					Name:  "CALICO_NETWORKING_BACKEND",
 					Value: backend,
 				}}
-				c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+				c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 				cfg := &operatorv1.Installation{}
 				err := Convert(ctx, c, cfg)
 				Expect(err).To(HaveOccurred())
@@ -208,7 +208,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_NETWORKING_BACKEND",
 				Value: "none",
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 			cfg := &operatorv1.Installation{}
 			err := Convert(ctx, c, cfg)
 			Expect(err).To(HaveOccurred())
@@ -225,7 +225,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: backend,
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).ToNot(HaveOccurred())
@@ -248,7 +248,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).NotTo(HaveOccurred())
@@ -283,7 +283,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).To(HaveOccurred())
@@ -358,7 +358,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).To(HaveOccurred())
@@ -401,7 +401,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).NotTo(HaveOccurred())
@@ -444,7 +444,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).ToNot(HaveOccurred())
@@ -490,7 +490,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 					cfg := &operatorv1.Installation{}
 					err := Convert(ctx, c, cfg)
 					Expect(err).ToNot(HaveOccurred())
@@ -530,7 +530,7 @@ var _ = Describe("Convert network tests", func() {
 					Name:  "CALICO_NETWORKING_BACKEND",
 					Value: "bird",
 				}}
-				c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool)
+				c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 				cfg := &operatorv1.Installation{}
 				err := Convert(ctx, c, cfg)
 				Expect(err).To(HaveOccurred())
@@ -599,7 +599,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CNI_NETWORK_CONFIG",
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1)
+			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, emptyFelixConfig())
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -618,7 +618,7 @@ var _ = Describe("Convert network tests", func() {
 				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			}
 
-			c := fake.NewFakeClientWithScheme(scheme, ds)
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyFelixConfig())
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -633,7 +633,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_IPV4POOL_CIDR",
 				Value: envcidr,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, v4pool2, v4pooldefault)
+			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, v4pool2, v4pooldefault, emptyFelixConfig())
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -656,7 +656,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_IPV6POOL_CIDR",
 				Value: envcidr,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v6pool1, v6pool2, v6pooldefault)
+			c := fake.NewFakeClientWithScheme(scheme, ds, v6pool1, v6pool2, v6pooldefault, emptyFelixConfig())
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -692,7 +692,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "3.168.4.0/24",
 			}}
 			v4pooldefault.Spec.Disabled = true
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pooldefault, v4pool2)
+			c := fake.NewFakeClientWithScheme(scheme, ds, v4pooldefault, v4pool2, emptyFelixConfig())
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())
@@ -705,7 +705,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CNI_NETWORK_CONFIG",
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv6":"true"}}`,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, v6pool1)
+			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, v6pool1, emptyFelixConfig())
 			cfg := operatorv1.Installation{}
 			err := Convert(ctx, c, &cfg)
 			Expect(err).NotTo(HaveOccurred())

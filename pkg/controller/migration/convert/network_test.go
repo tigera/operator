@@ -14,6 +14,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -897,5 +898,52 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{}),
 		)
+	})
+
+	Describe("handle ipv6", func() {
+		var (
+			c = emptyComponents()
+			i = &Installation{}
+		)
+
+		BeforeEach(func() {
+			c = emptyComponents()
+			i = &Installation{
+				Installation: &operatorv1.Installation{},
+				CNIConfig:    "",
+				FelixEnvVars: []v1.EnvVar{},
+			}
+		})
+		It("should not error if ipv6 settings are untouched", func() {
+			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())
+		})
+		It("should not error if IP6 is none", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "IP6",
+				Value: "none",
+			}}
+			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())
+		})
+		It("should error if IP6 is not none", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "IP6",
+				Value: "autodetect",
+			}}
+			Expect(handleIpv6(&c, i)).To(HaveOccurred())
+		})
+		It("should not error if FELIX_IPV6SUPPORT is false", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_IPV6SUPPORT",
+				Value: "false",
+			}}
+			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())
+		})
+		It("should error if FELIX_IPV6SUPPORT is not false", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_IPV6SUPPORT",
+				Value: "true",
+			}}
+			Expect(handleIpv6(&c, i)).To(HaveOccurred())
+		})
 	})
 })

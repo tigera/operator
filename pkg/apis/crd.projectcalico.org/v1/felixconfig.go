@@ -23,7 +23,7 @@ type IptablesBackend string
 
 const (
 	KindFelixConfiguration = "FelixConfiguration"
-	// KindFelixConfigurationList = "FelixConfigurationList"
+
 	IptablesBackendLegacy   = "Legacy"
 	IptablesBackendNFTables = "NFT"
 )
@@ -358,34 +358,3 @@ type ProtoPort struct {
 	Protocol string `json:"protocol"`
 	Port     uint16 `json:"port"`
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-// FelixConfigurationList contains a list of FelixConfiguration resources.
-// type FelixConfigurationList struct {
-// 	metav1.TypeMeta `json:",inline"`
-// 	metav1.ListMeta `json:"metadata"`
-// 	Items           []FelixConfiguration `json:"items"`
-// }
-
-// // New FelixConfiguration creates a new (zeroed) FelixConfiguration struct with the TypeMetadata
-// // initialized to the current version.
-// func NewFelixConfiguration() *FelixConfiguration {
-// 	return &FelixConfiguration{
-// 		TypeMeta: metav1.TypeMeta{
-// 			Kind:       KindFelixConfiguration,
-// 			APIVersion: GroupVersionCurrent,
-// 		},
-// 	}
-// }
-
-// // NewFelixConfigurationList creates a new (zeroed) FelixConfigurationList struct with the TypeMetadata
-// // initialized to the current version.
-// func NewFelixConfigurationList() *FelixConfigurationList {
-// 	return &FelixConfigurationList{
-// 		TypeMeta: metav1.TypeMeta{
-// 			Kind:       KindFelixConfigurationList,
-// 			APIVersion: GroupVersionCurrent,
-// 		},
-// 	}
-// }

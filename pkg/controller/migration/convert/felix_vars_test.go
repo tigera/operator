@@ -16,8 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = Describe("Parser", func() {
-	It("should convert a string", func() {
+var _ = Describe("felix env parser", func() {
+	It("converts a string", func() {
 		fe, err := patchFromVal("dataplanedriver", "foo")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(fe).To(Equal(patch{
@@ -27,7 +27,7 @@ var _ = Describe("Parser", func() {
 		}))
 	})
 
-	It("should convert a boolean", func() {
+	It("converts a boolean", func() {
 		t := true
 		fe, err := patchFromVal("useinternaldataplanedriver", "true")
 		Expect(err).ToNot(HaveOccurred())
@@ -111,7 +111,7 @@ var _ = Describe("Parser", func() {
 		}))
 	})
 
-	Context("", func() {
+	Context("creating a felixconfiguration", func() {
 		var c = emptyComponents()
 
 		BeforeEach(func() {

@@ -302,6 +302,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"tiers",
+					"packetcaptures",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

@@ -752,7 +752,7 @@ var (
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			Resources: []string{"authenticationreviews", "authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
 		{
@@ -839,7 +839,7 @@ var (
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			Resources: []string{"authenticationreviews", "authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
 		{

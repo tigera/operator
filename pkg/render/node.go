@@ -334,22 +334,8 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 
 	// Determine MTU to use for veth interfaces.
 	var mtu int32 = 1410
-	if c.cr.Spec.CalicoNetwork.MTU != nil {
-		mtu = *c.cr.Spec.CalicoNetwork.MTU
-	}
-
-	// Determine what address families to enable.
-	var assign_ipv4 string
-	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
-		assign_ipv4 = "true"
-	} else {
-		assign_ipv4 = "false"
-	}
-	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
-		assign_ipv6 = "true"
-	} else {
-		assign_ipv6 = "false"
+	if m := getMTU(c.cr); m != nil {
+		mtu = *m
 	}
 
 	// Determine per-provider settings.
@@ -372,6 +358,11 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
+	ipam := c.getCalicoIPAM()
+	if c.cr.Spec.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+		ipam = buildHostLocalIPAM(c.cr.Spec.CalicoNetwork)
+	}
+
 	// Build the CNI configuration json.
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
@@ -382,11 +373,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "datastore_type": "kubernetes",
       "mtu": %d,
       "nodename_file_optional": %v,
-      "ipam": {
-          "type": "calico-ipam",
-          "assign_ipv4" : "%s",
-          "assign_ipv6" : "%s"
-      },
+	  "ipam": %s,
       "container_settings": {
           "allow_ip_forwarding": %v
       },
@@ -396,9 +383,13 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -411,6 +402,29 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 			"config": config,
 		},
 	}
+}
+
+func (c *nodeComponent) getCalicoIPAM() string {
+	// Determine what address families to enable.
+	var assign_ipv4 string
+	var assign_ipv6 string
+	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
+		assign_ipv4 = "true"
+	} else {
+		assign_ipv4 = "false"
+	}
+	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
+		assign_ipv6 = "true"
+	} else {
+		assign_ipv6 = "false"
+	}
+	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"}`,
+		assign_ipv4, assign_ipv6,
+	)
+}
+
+func buildHostLocalIPAM(cns *operator.CalicoNetworkSpec) string {
+	return `{ "type": "host-local", "subnet": "usePodCidr"}`
 }
 
 func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {
@@ -506,7 +520,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					NodeSelector:                  map[string]string{},
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Tolerations:                   c.nodeTolerations(),
 					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
@@ -794,8 +810,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",aks"
 	}
 
-	if c.cr.Spec.CNI.Type == operator.PluginCalico {
-		// TODO: This isn't right.
+	if bgpEnabled(c.cr) {
 		clusterType = clusterType + ",bgp"
 	}
 
@@ -847,49 +862,12 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}},
 	}
 
-	// Set networking-specific configuration.
-	if c.cr.Spec.CNI.Type != operator.PluginCalico {
-		// TODO: Casey: This isn't strictly correct (e.g., Calico CNI w/ host-local and cloud provider routes)
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+	// If there are no IP pools specified, then configure no default IP pools.
+	if c.cr.Spec.CalicoNetwork == nil || len(c.cr.Spec.CalicoNetwork.IPPools) == 0 {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
-
-		// It may seem like defining and setting FELIX_IPV6SUPPORT to false is redundant, since IPv6
-		// support is usually disabled by default. But FELIX_IPV6SUPPORT maps to 'configParams.Ipv6Support'
-		// in felix and its default has been 'true' since earlier versions. So not having it here and set
-		// to false would cause IPv6 to be enabled by default in felix.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	} else {
-		// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
-		// MTU of 1460.
-		ipipMtu := "1440"
-		vxlanMtu := "1410"
-		wireguardMtu := "1400"
-		if c.cr.Spec.CalicoNetwork.MTU != nil {
-			ipipMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
-			vxlanMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
-			wireguardMtu = strconv.Itoa(int(*c.cr.Spec.CalicoNetwork.MTU))
-		}
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-
-		v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools)
-		v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools)
-
-		// Env based on IPv4 auto-detection configuration.
-		v4Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
-		if v4Method != "" {
-			// IPv4 Auto-detection is enabled.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
-		} else {
-			// IPv4 Auto-detection is disabled.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
-		}
-
-		if v4pool != nil {
+		// Configure IPv4 pool
+		if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
 
 			switch v4pool.Encapsulation {
@@ -918,49 +896,98 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			if v4pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
 			}
-		} else {
-			// If there's also no IPv6 pool, set NO_DEFAULT_POOLS to "true".
-			if v6pool == nil {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
-			}
 		}
 
-		// Env based on IPv6 auto-detection and ippool configuration.
-		v6Method := getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
-		if v6Method != "" {
-			// IPv6 Auto-detection is enabled.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
-
-			// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
-			if v4Method == "" {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
-			}
-		} else {
-			// IPv6 Auto-detection is disabled.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
-		}
-
-		if v6pool != nil {
+		// Configure IPv6 pool.
+		if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
 
 			if v6pool.BlockSize != nil {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
 			}
 			if v6pool.NATOutgoing == operator.NATOutgoingDisabled {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING",
-					Value: "false"})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "false"})
 			}
 			if v6pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR",
-					Value: v6pool.NodeSelector})
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
 			}
 		}
+
+	}
+
+	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
+	// MTU of 1460.
+	ipipMtu := "1440"
+	vxlanMtu := "1410"
+	wireguardMtu := "1400"
+	if m := getMTU(c.cr); m != nil {
+		ipipMtu = strconv.Itoa(int(*m))
+		vxlanMtu = strconv.Itoa(int(*m))
+		wireguardMtu = strconv.Itoa(int(*m))
+	}
+	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+
+	// Configure whether or not BGP should be enabled.
+	if !bgpEnabled(c.cr) {
+		if c.cr.Spec.CNI.Type == operator.PluginCalico {
+			if c.cr.Spec.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+				// If BGP is disabled and using HostLocal, then that means routing is done
+				// by Cloud routing, so networking backend is none. (because we don't support
+				// vxlan with HostLocal.)
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+			} else {
+				// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
+				// disabled, and VXLAN will optionally be configurable via IP pools.
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
+			}
+		} else {
+			// If not using Calico networking at all, set the backend to "none".
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+		}
+	} else {
+		// BGP is enabled.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+	}
+
+	// IPv4 auto-detection configuration.
+	var v4Method string
+	if c.cr.Spec.CalicoNetwork != nil {
+		v4Method = getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
+	}
+	if v4Method != "" {
+		// IPv4 Auto-detection is enabled.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
+	} else {
+		// IPv4 Auto-detection is disabled.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
+	}
+
+	// IPv6 auto-detection and ippool configuration.
+	var v6Method string
+	if c.cr.Spec.CalicoNetwork != nil {
+		v6Method = getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
+	}
+	if v6Method != "" {
+		// IPv6 Auto-detection is enabled.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
+
+		// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
+		if v4Method == "" {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
+		}
+	} else {
+		// IPv6 Auto-detection is disabled.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort)},
@@ -1035,14 +1062,13 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 
-	// want to check for BGP metrics server if this is enterprise
+	// Want to check for BGP metrics server if this is enterprise
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
-	// If not using calico networking, don't check bird status (or bgp metrics server).
-	if c.cr.Spec.CNI.Type != operator.PluginCalico {
-		// TODO: Casey: This isn't quite right either.
+	// If not using BGP, don't check bird status (or bgp metrics server for enterprise).
+	if !bgpEnabled(c.cr) {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 
@@ -1089,13 +1115,13 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			Selector: map[string]string{"k8s-app": "calico-node"},
 			Type:     v1.ServiceTypeClusterIP,
 			Ports: []v1.ServicePort{
-				v1.ServicePort{
+				{
 					Name:       "calico-metrics-port",
 					Port:       nodeReporterPort,
 					TargetPort: intstr.FromInt(int(nodeReporterPort)),
 					Protocol:   v1.ProtocolTCP,
 				},
-				v1.ServicePort{
+				{
 					Name:       "calico-bgp-metrics-port",
 					Port:       nodeBGPReporterPort,
 					TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
@@ -1165,4 +1191,20 @@ func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
 	}
 
 	return nil
+}
+
+// bgpEnabled returns true if the given Installation enables BGP, false otherwise.
+func bgpEnabled(instance *operator.Installation) bool {
+	return instance.Spec.CalicoNetwork != nil &&
+		instance.Spec.CalicoNetwork.BGP != nil &&
+		*instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled
+}
+
+// getMTU returns the MTU configured in the Installation if there is one, nil otherwise.
+func getMTU(instance *operator.Installation) *int32 {
+	var mtu *int32
+	if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
+		mtu = instance.Spec.CalicoNetwork.MTU
+	}
+	return mtu
 }

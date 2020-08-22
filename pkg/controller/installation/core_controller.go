@@ -331,14 +331,63 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if instance.Spec.CNI.IPAM == nil {
+		instance.Spec.CNI.IPAM = &operator.IPAMSpec{}
+	}
+
+	if instance.Spec.CNI.IPAM.Type == "" {
+		switch instance.Spec.CNI.Type {
+		case operator.PluginAzureVNET:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAzureVNET
+		case operator.PluginAmazonVPC:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		case operator.PluginGKE:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		default:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginCalico
+		}
+	}
+
 	// Default any unspecified fields within the CalicoNetworkSpec.
 	var v4pool, v6pool *operator.IPPool
 	if instance.Spec.CalicoNetwork != nil {
 		// Default IP pools, only if it is nil. If it is an empty slice then that
 		// means no default IPPools should be created.
 		if instance.Spec.CalicoNetwork.IPPools == nil {
-			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-				{CIDR: "192.168.0.0/16"},
+			switch instance.Spec.KubernetesProvider {
+			case operator.ProviderEKS:
+				// On EKS, default to a CIDR that doesn't overlap with the host range,
+				// and also use VXLAN encap by default.
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{
+						CIDR:          "172.16.0.0/16",
+						Encapsulation: operator.EncapsulationVXLAN,
+					},
+				}
+			default:
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{CIDR: "192.168.0.0/16"},
+				}
+			}
+		}
+
+		// Default BGP enablement based on CNI plugin and provider.
+		if instance.Spec.CalicoNetwork.BGP == nil {
+			enabled := operator.BGPEnabled
+			disabled := operator.BGPDisabled
+			switch instance.Spec.CNI.Type {
+			case operator.PluginCalico:
+				switch instance.Spec.KubernetesProvider {
+				case operator.ProviderEKS:
+					// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
+					instance.Spec.CalicoNetwork.BGP = &disabled
+				default:
+					// Other platforms assume BGP is needed.
+					instance.Spec.CalicoNetwork.BGP = &enabled
+				}
+			default:
+				// For non-Calico CNIs, assume BGP should be off.
+				instance.Spec.CalicoNetwork.BGP = &disabled
 			}
 		}
 
@@ -347,7 +396,11 @@ func fillDefaults(instance *operator.Installation) error {
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
-				v4pool.Encapsulation = operator.EncapsulationDefault
+				if instance.Spec.CNI.Type == operator.PluginCalico {
+					v4pool.Encapsulation = operator.EncapsulationIPIP
+				} else {
+					v4pool.Encapsulation = operator.EncapsulationNone
+				}
 			}
 			if v4pool.NATOutgoing == "" {
 				v4pool.NATOutgoing = operator.NATOutgoingEnabled

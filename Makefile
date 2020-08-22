@@ -431,6 +431,10 @@ hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 gen-files: hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
 	cp hack/bin/operator-sdk-$(OPERATOR_SDK_VERSION) hack/bin/operator-sdk
 	$(CONTAINERIZED) hack/bin/operator-sdk generate crds
+	# we don't need this CRD but there don't seem to be any flags to have generate
+	# skip the ippools api so just remove this file until there is something better
+	rm deploy/crds/crd.projectcalico.org_ippools_crd.yaml
+	rm deploy/crds/crd.projectcalico.org_felixconfigurations_crd.yaml
 	$(CONTAINERIZED) hack/bin/operator-sdk generate k8s
 
 OS_VERSIONS?=config/calico_versions.yml

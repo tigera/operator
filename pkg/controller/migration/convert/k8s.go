@@ -46,12 +46,29 @@ func (r *CheckedDaemonSet) uncheckedVars() []string {
 
 // getEnv gets the value of an environment variable and marks that it has been checked.
 func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, container string, key string) (*string, error) {
+	v, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
+	if err != nil {
+		return nil, ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
+	}
+	r.ignoreEnv(container, key)
+
+	return v, nil
+}
+
+// getEnvVar returns a kubernetes envVar and marks that it has been checked.
+func (r *CheckedDaemonSet) getEnvVar(container string, key string) (*corev1.EnvVar, error) {
 	c := getContainer(r.Spec.Template.Spec, container)
 	if c == nil {
 		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
 	}
 	r.ignoreEnv(container, key)
-	return getEnv(ctx, client, c.Env, key)
+
+	for _, e := range c.Env {
+		if e.Name == key {
+			return &e, nil
+		}
+	}
+	return nil, nil
 }
 
 // ignoreEnv marks an environment variable as checked so that the migrator
@@ -65,37 +82,33 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 	r.checkedVars[container].envVars[key] = true
 }
 
-// getEnv gets an environment variable from a container. Nil is returned
-// if the requested Key was not found.
-func getEnv(ctx context.Context, client client.Client, env []corev1.EnvVar, key string) (*string, error) {
-	for _, e := range env {
+// getEnv gets the value of an environment variable.
+func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, container, key string) (*string, error) {
+	c := getContainer(pts, container)
+	if c == nil {
+		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+	}
+
+	for _, e := range c.Env {
 		if e.Name == key {
-			val, err := getEnvVar(ctx, client, e)
-			return &val, err
+			if e.ValueFrom == nil {
+				return &e.Value, nil
+			}
+			if e.ValueFrom.ConfigMapKeyRef != nil {
+				cm := v1.ConfigMap{}
+				err := client.Get(ctx, types.NamespacedName{
+					Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
+					Namespace: "kube-system",
+				}, &cm)
+				if err != nil {
+					return nil, err
+				}
+				v := cm.Data[e.ValueFrom.ConfigMapKeyRef.Key]
+				return &v, nil
+			}
+
+			return nil, fmt.Errorf("failed to read %s: only configMapRef & explicit values supported for env vars at this time", key)
 		}
 	}
 	return nil, nil
-}
-
-func getEnvVar(ctx context.Context, client client.Client, e corev1.EnvVar) (string, error) {
-	if e.Value != "" {
-		return e.Value, nil
-	}
-	// if Value is empty, one of the ConfigMapKeyRefs must be used
-	if e.ValueFrom.ConfigMapKeyRef != nil {
-		cm := v1.ConfigMap{}
-		err := client.Get(ctx, types.NamespacedName{
-			Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
-			Namespace: "kube-system",
-		}, &cm)
-		if err != nil {
-			return "", err
-		}
-		v := cm.Data[e.ValueFrom.ConfigMapKeyRef.Key]
-		return v, nil
-	}
-
-	// TODO: if we just need to check that a variable _is_ a secretRef, fieldRef, and resourceFieldRef,
-	// we'll need to add a different method.
-	return "", ErrIncompatibleCluster{"only configMapRef & explicit values supported for env vars at this time"}
 }

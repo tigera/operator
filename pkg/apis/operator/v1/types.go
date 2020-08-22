@@ -166,6 +166,14 @@ var HostPortsTypesString []string = []string{
 	HostPortsDisabled.String(),
 }
 
+func HostPortsTypePtr(h HostPortsType) *HostPortsType {
+	return &h
+}
+
+func (nt HostPortsType) String() string {
+	return string(nt)
+}
+
 type MultiInterfaceMode string
 
 func (m MultiInterfaceMode) Value() string {
@@ -177,12 +185,24 @@ const (
 	MultiInterfaceModeMultus MultiInterfaceMode = "Multus"
 )
 
-func (nt HostPortsType) String() string {
-	return string(nt)
+type BGPOption string
+
+func BGPOptionPtr(b BGPOption) *BGPOption {
+	return &b
 }
+
+const (
+	BGPEnabled  BGPOption = "Enabled"
+	BGPDisabled BGPOption = "Disabled"
+)
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
+	// BGP configures whether or not to enable Calico's BGP capabilities.
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	BGP *BGPOption `json:"bgp,omitempty"`
+
 	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
 	// address family may be specified. If omitted, a single pool will be configured if needed.
 	// +optional
@@ -251,13 +271,16 @@ type NodeAddressAutodetection struct {
 // options are: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None.
 type EncapsulationType string
 
+func (et EncapsulationType) String() string {
+	return string(et)
+}
+
 const (
 	EncapsulationIPIPCrossSubnet  EncapsulationType = "IPIPCrossSubnet"
 	EncapsulationIPIP             EncapsulationType = "IPIP"
 	EncapsulationVXLAN            EncapsulationType = "VXLAN"
 	EncapsulationVXLANCrossSubnet EncapsulationType = "VXLANCrossSubnet"
 	EncapsulationNone             EncapsulationType = "None"
-	EncapsulationDefault          EncapsulationType = EncapsulationIPIP
 )
 
 var EncapsulationTypes []EncapsulationType = []EncapsulationType{
@@ -273,10 +296,6 @@ var EncapsulationTypesString []string = []string{
 	EncapsulationVXLAN.String(),
 	EncapsulationVXLANCrossSubnet.String(),
 	EncapsulationNone.String(),
-}
-
-func (et EncapsulationType) String() string {
-	return string(et)
 }
 
 // NATOutgoingType describe the type of outgoing NAT to use.
@@ -358,11 +377,58 @@ func (cp CNIPluginType) String() string {
 	return string(cp)
 }
 
+type IPAMPluginType string
+
+const (
+	IPAMPluginCalico    IPAMPluginType = "Calico"
+	IPAMPluginHostLocal IPAMPluginType = "HostLocal"
+	IPAMPluginAmazonVPC IPAMPluginType = "AmazonVPC"
+	IPAMPluginAzureVNET IPAMPluginType = "AzureVNET"
+)
+
+var IPAMPluginTypes []IPAMPluginType = []IPAMPluginType{
+	IPAMPluginCalico,
+	IPAMPluginHostLocal,
+	IPAMPluginAmazonVPC,
+	IPAMPluginAzureVNET,
+}
+
+var IPAMPluginTypesString []string = []string{
+	IPAMPluginCalico.String(),
+	IPAMPluginHostLocal.String(),
+	IPAMPluginAmazonVPC.String(),
+	IPAMPluginAzureVNET.String(),
+}
+
+func (cp IPAMPluginType) String() string {
+	return string(cp)
+}
+
+// IPAMSpec contains configuration for pod IP address management.
+type IPAMSpec struct {
+	// Specifies the IPAM plugin that will be used in the Calico or Calico Enterprise installation.
+	// * For CNI Plugin Calico, this field defaults to Calico.
+	// * For CNI Plugin GKE, this field defaults to HostLocal.
+	// * For CNI Plugin AzureVNET, this field defaults to AzureVNET.
+	// * For CNI Plugin AmazonVPC, this field defaults to AmazonVPC.
+	//
+	// The IPAM plugin is installed and configured only if the CNI plugin is set to Calico,
+	// for all other values of the CNI plugin the plugin binaries and CNI config is a dependency
+	// that is expected to be installed separately.
+	//
+	// Default: Calico
+	// +kubebuilder:validation:Enum=Calico;HostLocal;AmazonVPC;AzureVNET
+	Type IPAMPluginType `json:"type"`
+}
+
+// CNISpec contains configuration for the CNI plugin.
 type CNISpec struct {
 	// Specifies the CNI plugin that will be used in the Calico or Calico Enterprise installation.
-	// For KubernetesProvider GKE, this field defaults to GKE. For KubernetesProvider AKE, this field
-	// defaults to AzureVNET. For KubernetesProvider EKS, this field defaults to AmazonVPC. For all other
-	// KubernetesProviders this field defaults to Calico.
+	// * For KubernetesProvider GKE, this field defaults to GKE.
+	// * For KubernetesProvider AKS, this field defaults to AzureVNET.
+	// * For KubernetesProvider EKS, this field defaults to AmazonVPC.
+	// * For all other KubernetesProviders this field defaults to Calico.
+	//
 	// For the value Calico, the CNI plugin binaries and CNI config will be installed as part of deployment,
 	// for all other values the CNI plugin binaries and CNI config is a dependency that is expected
 	// to be installed separately.
@@ -370,6 +436,11 @@ type CNISpec struct {
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
 	Type CNIPluginType `json:"type"`
+
+	// IPAM specifies the pod IP address management that will be used in the Calico or
+	// Calico Enterprise installation.
+	// +optional
+	IPAM *IPAMSpec `json:"ipam"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

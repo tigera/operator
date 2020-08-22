@@ -41,6 +41,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).To(BeNil())
 		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
+		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
+		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -56,6 +59,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*v4pool.BlockSize).To(Equal(int32(26)))
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).To(BeNil())
+		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
+		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
 	It("should not override custom configuration", func() {
@@ -67,6 +73,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var one intstr.IntOrString = intstr.FromInt(1)
 
 		hpEnabled := operator.HostPortsEnabled
+		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
@@ -80,12 +87,15 @@ var _ = Describe("Defaulting logic tests", func() {
 						Name: "pullSecret2",
 					},
 				},
-				CNI: &operator.CNISpec{Type: operator.PluginCalico},
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",
-							Encapsulation: "IPIPCrossSubnet",
+							Encapsulation: "VXLANCrossSubnet",
 							NATOutgoing:   "Enabled",
 							NodeSelector:  "has(thiskey)",
 							BlockSize:     &twentySeven,
@@ -99,6 +109,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 					},
 					MTU: &mtu,
+					BGP: &disabled,
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
@@ -121,6 +132,35 @@ var _ = Describe("Defaulting logic tests", func() {
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
 		fillDefaults(instanceCopy)
 		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should default BGP to enabled for Calico CNI", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+				},
+			},
+		}
+		fillDefaults(instance)
+		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should default BGP to disabled for other CNI plugins", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginAmazonVPC,
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{},
+			},
+		}
+		fillDefaults(instance)
+		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
+
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
 	It("should correct missing slashes on registry", func() {
@@ -131,6 +171,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		fillDefaults(instance)
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
 	It("should properly fill defaults for an IPv6-only instance", func() {
@@ -152,6 +193,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(v6pool.CIDR).To(Equal("fd00::0/64"))
 		Expect(v6pool.BlockSize).NotTo(BeNil())
 		Expect(*v6pool.BlockSize).To(Equal(int32(122)))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
 	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",
@@ -168,6 +210,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork.IPPools)
 				Expect(v6pool).To(BeNil())
 			}
+			Expect(validateCustomResource(i)).NotTo(HaveOccurred())
 		},
 
 		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
@@ -263,6 +306,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 	table.DescribeTable("should default CNI type based on KubernetesProvider for hosted providers",
 		func(provider operator.Provider, plugin operator.CNIPluginType) {
@@ -272,13 +316,14 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
 			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
 		table.Entry("EKS provider defaults to AmazonVPC plugin", operator.ProviderEKS, operator.PluginAmazonVPC),
 		table.Entry("GKE provider defaults to GKE plugin", operator.ProviderGKE, operator.PluginGKE),
 		table.Entry("AKS provider defaults to AzureVNET plugin", operator.ProviderAKS, operator.PluginAzureVNET),
 	)
-	table.DescribeTable("setting CNI Provider should default CalicoNetwork to nil",
+	table.DescribeTable("setting non-Calico CNI Plugin should default CalicoNetwork to nil",
 		func(plugin operator.CNIPluginType) {
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -288,10 +333,47 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
 			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
 		table.Entry("AmazonVPC plugin", operator.PluginAmazonVPC),
 		table.Entry("GKE plugin", operator.PluginGKE),
 		table.Entry("AzureVNET plugin", operator.PluginAzureVNET),
+	)
+
+	// Tests for Calico Networking on EKS should go in this context.
+	Context("with Calico Networking on EKS", func() {
+		It("should default properly", func() {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderEKS,
+					CNI: &operator.CNISpec{
+						Type: operator.PluginCalico,
+					},
+				},
+			}
+			fillDefaults(instance)
+			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
+			Expect(*&instance.Spec.CalicoNetwork.IPPools[0].Encapsulation).To(Equal(operator.EncapsulationVXLAN))
+			Expect(*&instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+	})
+
+	table.DescribeTable("should default IPAM type based on CNI type",
+		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType) {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CNI: &operator.CNISpec{Type: cni},
+				},
+			}
+			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+			Expect(instance.Spec.CNI.IPAM.Type).To(Equal(ipam))
+		},
+
+		table.Entry("AmazonVPC CNI defaults to AmazonVPC IPAM", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC),
+		table.Entry("GKE CNI defaults to HostLocal IPAM", operator.PluginGKE, operator.IPAMPluginHostLocal),
+		table.Entry("AzureVNET CNI defaults to AzureVNET IPAM", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
+		table.Entry("Calico CNI defaults to Calico IPAM", operator.PluginCalico, operator.IPAMPluginCalico),
 	)
 })

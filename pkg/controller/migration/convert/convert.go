@@ -42,13 +42,15 @@ type checkedFields struct {
 
 type components struct {
 	node            CheckedDaemonSet
-	kubeControllers appsv1.Deployment
-	typha           appsv1.Deployment
+	kubeControllers *appsv1.Deployment
+	typha           *appsv1.Deployment
 
 	// Calico CNI conf
 	// TODO: is cni-private netconf different? is it ok to only use the OS one?
 	// TODO: where do cni config 'routes' & 'ranges' come into play between these datastructures?
-	calicoCNIConfig *calicocni.NetConf
+	cniConfigName       string
+	calicoCNIConfig     *calicocni.NetConf
+	hostLocalIPAMConfig *HostLocalIPAMConfig
 
 	// other CNI plugins in the conflist.
 	pluginCNIConfig map[string]*libcni.NetworkConfig
@@ -60,6 +62,17 @@ type components struct {
 // getComponents loads the main calico components into structs for later parsing.
 func getComponents(ctx context.Context, client client.Client) (*components, error) {
 	var ds = appsv1.DaemonSet{}
+
+	// verify canal isn't present, or block
+	if err := client.Get(ctx, types.NamespacedName{
+		Name:      "canal-node",
+		Namespace: metav1.NamespaceSystem,
+	}, &ds); err == nil {
+		return nil, fmt.Errorf("detected existing canal installation")
+	} else if !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("failed to check for existing canal installation: %v", err)
+	}
+
 	if err := client.Get(ctx, types.NamespacedName{
 		Name:      "calico-node",
 		Namespace: metav1.NamespaceSystem,
@@ -67,25 +80,29 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 		return nil, err
 	}
 
-	var kc = appsv1.Deployment{}
+	var kc = new(appsv1.Deployment)
 	if err := client.Get(ctx, types.NamespacedName{
 		Name:      "calico-kube-controllers",
 		Namespace: metav1.NamespaceSystem,
-	}, &kc); err != nil {
-		return nil, err
+	}, kc); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get kube-controllers deployment: %v", err)
+		}
+		log.Print("did not detect kube-controllers")
+		kc = nil
 	}
 
-	var t = appsv1.Deployment{}
+	var t = new(appsv1.Deployment)
 	if err := client.Get(ctx, types.NamespacedName{
 		Name:      "calico-typha",
 		Namespace: metav1.NamespaceSystem,
-	}, &t); err != nil {
+	}, t); err != nil {
 		if !errors.IsNotFound(err) {
-			return nil, err
-		} else {
-			// typha is optional, so just log.
-			log.Print("did not detect typha")
+			return nil, fmt.Errorf("failed to get typha deployment: %v", err)
 		}
+		// typha is optional, so just log.
+		log.Print("did not detect typha")
+		t = nil
 	}
 
 	comps := &components{
@@ -121,6 +138,12 @@ func Convert(ctx context.Context, client client.Client, install *operatorv1.Inst
 		if err := hdlr(comps, config); err != nil {
 			return err
 		}
+	}
+
+	// Handle the remaining FelixVars last because we only want to take env vars which weren't accounted
+	// for by the other handlers
+	if err := handleFelixVars(comps); err != nil {
+		return err
 	}
 
 	// check for unchecked env vars

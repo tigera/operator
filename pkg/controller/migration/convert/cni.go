@@ -6,17 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"reflect"
 	"strings"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
 )
-
-// Used to parse the IPAM section out of the full CNI configuration
-type CNIHostLocalIPAM struct {
-	IPAM json.RawMessage `json:"ipam"`
-}
 
 // IPAMConfig represents the IP related network configuration.
 // This nests Range because we initially only supported a single
@@ -41,30 +35,16 @@ type Range struct {
 	Gateway    net.IP `json:"gateway,omitempty"`
 }
 
-// loadCNI loads CNI config into the components for all other handlers to use.
+// parseCNIConfig loads CNI config into the components for all other handlers to use.
 // No verification is done here beyond checking for valid json.
-func loadCNI(c *components) error {
+// Calico CNI is parsed into the special Calico CNI data type.
+// All other CNI types
+func parseCNIConfig(cniConfig string) (networkComponents, error) {
+	c := networkComponents{}
 
-	cntnr := getContainer(c.node.Spec.Template.Spec, containerInstallCNI)
-	if cntnr == nil {
-		// It is valid to not have an install-cni container in the cases
-		// of non Calico CNI so nothing more to do in that case.
-		log.Info("no install-cni container detected on node")
-		return nil
-	}
-
-	cniConfig, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_NETWORK_CONFIG")
+	conflist, err := unmarshalCNIConfList(cniConfig)
 	if err != nil {
-		return err
-	}
-	if cniConfig == nil {
-		log.Info("no CNI_NETWORK_CONFIG detected on node")
-		return nil
-	}
-
-	conflist, err := unmarshalCNIConfList(*cniConfig)
-	if err != nil {
-		return fmt.Errorf("failed to parse CNI config: %w", err)
+		return c, fmt.Errorf("failed to parse CNI config: %w", err)
 	}
 
 	c.cniConfigName = conflist.Name
@@ -74,15 +54,17 @@ func loadCNI(c *components) error {
 	for _, plugin := range conflist.Plugins {
 		if plugin.Network.Type == "calico" {
 			if err := json.Unmarshal(plugin.Bytes, &c.calicoCNIConfig); err != nil {
-				return fmt.Errorf("failed to parse calico cni config: %w", err)
+				return c, fmt.Errorf("failed to parse calico cni config: %w", err)
 			}
 			if plugin.Network.IPAM.Type == "host-local" {
 				// First load the IPAM json section so we can Unmarshal it below.
 				// We load the IPAM as raw json so we can isolate it from the rest of the
 				// CNI config.
-				raw := CNIHostLocalIPAM{}
+				var raw struct {
+					IPAM json.RawMessage `json:"ipam"`
+				}
 				if err := json.Unmarshal(plugin.Bytes, &raw); err != nil {
-					return fmt.Errorf("failed to parse cni config for raw IPAM: %w", err)
+					return c, fmt.Errorf("failed to parse cni config for raw IPAM: %w", err)
 				}
 
 				// Use a Decoder so we can set DisallowUnknownFields so if there are
@@ -91,7 +73,7 @@ func loadCNI(c *components) error {
 				dec := json.NewDecoder(bytes.NewReader(raw.IPAM))
 				dec.DisallowUnknownFields()
 				if err := dec.Decode(&x); err != nil && err != io.EOF {
-					return fmt.Errorf("failed to parse HostLocal IPAM config: %w", err)
+					return c, fmt.Errorf("failed to parse HostLocal IPAM config: %w", err)
 				}
 				c.hostLocalIPAMConfig = &x
 			}
@@ -100,7 +82,8 @@ func loadCNI(c *components) error {
 		}
 	}
 	c.pluginCNIConfig = plugins
-	return nil
+
+	return c, nil
 }
 
 func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
@@ -124,15 +107,4 @@ func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
 	}
 
 	return libcni.ConfListFromConf(conf)
-}
-
-func JSONBytesEqual(a, b []byte) (bool, error) {
-	var j, j2 interface{}
-	if err := json.Unmarshal(a, &j); err != nil {
-		return false, err
-	}
-	if err := json.Unmarshal(b, &j2); err != nil {
-		return false, err
-	}
-	return reflect.DeepEqual(j2, j), nil
 }

@@ -33,18 +33,19 @@ type components struct {
 	kubeControllers *appsv1.Deployment
 	typha           *appsv1.Deployment
 
-	// Calico CNI conf
-	// TODO: is cni-private netconf different? is it ok to only use the OS one?
-	// TODO: where do cni config 'routes' & 'ranges' come into play between these datastructures?
+	// client is used to resolve spec fields that reference other data sources
+	client client.Client
+
+	networkComponents
+}
+
+type networkComponents struct {
 	cniConfigName       string
 	calicoCNIConfig     *calicocni.NetConf
 	hostLocalIPAMConfig *HostLocalIPAMConfig
 
 	// other CNI plugins in the conflist.
 	pluginCNIConfig map[string]*libcni.NetworkConfig
-
-	// client is used to resolve spec fields that reference other data sources
-	client client.Client
 }
 
 // getComponents loads the main calico components into structs for later parsing.
@@ -103,9 +104,32 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 		typha:           t,
 	}
 
-	err := loadCNI(comps)
+	// do some upfront processing of CNI by loading it into comps
+	var err error
+	comps.networkComponents, err = loadCNI(comps)
 
 	return comps, err
+}
+
+// loadCNI pulls the CNI network config from it's env var source within components
+// and then returns the parsed data.
+func loadCNI(comps *components) (networkComponents, error) {
+	nc := networkComponents{}
+	// do some upfront processing of CNI by loading it into comps
+	c := getContainer(comps.node.Spec.Template.Spec, containerInstallCNI)
+	if c == nil {
+		return nc, nil
+	}
+
+	cniConfig, err := comps.node.getEnv(ctx, comps.client, containerInstallCNI, "CNI_NETWORK_CONFIG")
+	if err != nil {
+		return nc, err
+	}
+	if cniConfig != nil {
+		nc, err = parseCNIConfig(*cniConfig)
+	}
+
+	return nc, err
 }
 
 // GetExistingInstallation creates an Installation resource from an existing Calico install (i.e.

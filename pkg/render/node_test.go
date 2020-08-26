@@ -425,7 +425,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Spec.KubernetesProvider = operator.ProviderEKS
 		defaultInstance.Spec.CalicoNetwork.BGP = &disabled
 		defaultInstance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
-		component := render.Node(defaultInstance, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 

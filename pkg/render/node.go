@@ -54,6 +54,7 @@ var (
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
+	k8sServiceEp K8sServiceEndpoint,
 	cr *operator.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
@@ -61,6 +62,7 @@ func Node(
 	migrate bool,
 ) Component {
 	return &nodeComponent{
+		k8sServiceEp:    k8sServiceEp,
 		cr:              cr,
 		birdTemplates:   bt,
 		typhaNodeTLS:    tnTLS,
@@ -70,6 +72,7 @@ func Node(
 }
 
 type nodeComponent struct {
+	k8sServiceEp    K8sServiceEndpoint
 	cr              *operator.Installation
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
@@ -710,6 +713,8 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
+	envVars = append(envVars, c.k8sServiceEp.EnvVars()...)
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -1030,6 +1035,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
 	}
+
+	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars()...)
+
 	return nodeEnv
 }
 

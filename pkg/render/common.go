@@ -371,3 +371,23 @@ func basePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 		},
 	}
 }
+
+// K8sServiceEndpoint is the Host/Port of the K8s endpoint.
+type K8sServiceEndpoint struct {
+	Host string
+	Port string
+}
+
+// EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
+// of the K8sServiceEndpoint were set. It returns a nil slice if either was empty as both
+// need to be set.
+func (k8s K8sServiceEndpoint) EnvVars() []v1.EnvVar {
+	if k8s.Host == "" || k8s.Port == "" {
+		return nil
+	}
+
+	return []v1.EnvVar{
+		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
+		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
+	}
+}

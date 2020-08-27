@@ -141,8 +141,12 @@ func isDockerEE(c kubernetes.Interface) (bool, error) {
 // we use for other platforms in autodetectFromGroup.
 func isEKS(c kubernetes.Interface) (bool, error) {
 	cm, err := c.CoreV1().ConfigMaps("kube-system").Get("eks-certificates-controller", metav1.GetOptions{})
-	if err != nil && !kerrors.IsNotFound(err) {
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, err
 	}
+
 	return (cm != nil), nil
 }

@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"reflect"
 	"strings"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+var log = logf.Log.WithName("migration_convert")
 
 // Used to parse the IPAM section out of the full CNI configuration
 type CNIHostLocalIPAM struct {
@@ -50,7 +52,7 @@ func loadCNI(c *components) error {
 	if cntnr == nil {
 		// It is valid to not have an install-cni container in the cases
 		// of non Calico CNI so nothing more to do in that case.
-		log.Print("no install-cni container detected on node")
+		log.Info("no install-cni container detected on node")
 		return nil
 	}
 
@@ -59,7 +61,7 @@ func loadCNI(c *components) error {
 		return err
 	}
 	if cniConfig == nil {
-		log.Print("no CNI_NETWORK_CONFIG detected on node")
+		log.Info("no CNI_NETWORK_CONFIG detected on node")
 		return nil
 	}
 

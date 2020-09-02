@@ -6,12 +6,10 @@ package convert
 import (
 	"context"
 	"fmt"
-	"log"
-
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	"github.com/containernetworking/cni/libcni"
 	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
+	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -88,7 +86,7 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 		if !errors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to get kube-controllers deployment: %v", err)
 		}
-		log.Print("did not detect kube-controllers")
+		log.Info("did not detect kube-controllers")
 		kc = nil
 	}
 
@@ -101,7 +99,7 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 			return nil, fmt.Errorf("failed to get typha deployment: %v", err)
 		}
 		// typha is optional, so just log.
-		log.Print("did not detect typha")
+		log.Info("did not detect typha")
 		t = nil
 	}
 
@@ -128,7 +126,7 @@ func Convert(ctx context.Context, client client.Client, install *operatorv1.Inst
 	comps, err := getComponents(ctx, client)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			log.Print("no existing install found: ", err)
+			log.Error(err, "no existing install found: %v", err)
 			return nil
 		}
 		return err

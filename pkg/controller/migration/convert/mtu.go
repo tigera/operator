@@ -7,7 +7,7 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
-func handleMTU(c *components, install *Installation) error {
+func handleMTU(c *components, install *operatorv1.Installation) error {
 	var (
 		curMTU    *int32
 		curMTUSrc string

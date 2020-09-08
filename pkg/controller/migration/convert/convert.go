@@ -14,7 +14,6 @@ import (
 	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,18 +22,6 @@ import (
 )
 
 var ctx = context.Background()
-
-// Installation represents the configuration pulled from the existing install.
-type Installation struct {
-	*operatorv1.Installation
-
-	// The following fields are not yet exposed in the
-	// operator API, and serve as a temporary store during prototyping.
-	// The goal is to eventually remove them all and remove this type,
-	// using operatorv1.Installation directly.
-	FelixEnvVars []corev1.EnvVar
-	CNIConfig    string
-}
 
 type checkedFields struct {
 	envVars map[string]bool
@@ -124,7 +111,6 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
 func Convert(ctx context.Context, client client.Client, install *operatorv1.Installation) error {
-	config := &Installation{install, []corev1.EnvVar{}, ""}
 	comps, err := getComponents(ctx, client)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
@@ -135,7 +121,7 @@ func Convert(ctx context.Context, client client.Client, install *operatorv1.Inst
 	}
 
 	for _, hdlr := range handlers {
-		if err := hdlr(comps, config); err != nil {
+		if err := hdlr(comps, install); err != nil {
 			return err
 		}
 	}

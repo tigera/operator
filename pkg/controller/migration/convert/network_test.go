@@ -903,16 +903,12 @@ var _ = Describe("Convert network tests", func() {
 	Describe("handle ipv6", func() {
 		var (
 			c = emptyComponents()
-			i = &Installation{}
+			i = &operatorv1.Installation{}
 		)
 
 		BeforeEach(func() {
 			c = emptyComponents()
-			i = &Installation{
-				Installation: &operatorv1.Installation{},
-				CNIConfig:    "",
-				FelixEnvVars: []v1.EnvVar{},
-			}
+			i = &operatorv1.Installation{}
 		})
 		It("should not error if ipv6 settings are untouched", func() {
 			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())

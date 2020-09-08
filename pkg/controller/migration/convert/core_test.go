@@ -15,16 +15,12 @@ import (
 var _ = Describe("core handler", func() {
 	var (
 		comps = emptyComponents()
-		i     = &Installation{}
+		i     = &operatorv1.Installation{}
 	)
 
 	BeforeEach(func() {
 		comps = emptyComponents()
-		i = &Installation{
-			Installation: &operatorv1.Installation{},
-			CNIConfig:    "",
-			FelixEnvVars: []v1.EnvVar{},
-		}
+		i = &operatorv1.Installation{}
 	})
 	Context("resource migration", func() {
 		It("should not migrate resource requirements if none are set", func() {

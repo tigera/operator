@@ -7,9 +7,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containernetworking/cni/libcni"
-	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/migration/cni"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,16 +35,7 @@ type components struct {
 	// client is used to resolve spec fields that reference other data sources
 	client client.Client
 
-	networkComponents
-}
-
-type networkComponents struct {
-	cniConfigName       string
-	calicoCNIConfig     *calicocni.NetConf
-	hostLocalIPAMConfig *HostLocalIPAMConfig
-
-	// other CNI plugins in the conflist.
-	pluginCNIConfig map[string]*libcni.NetworkConfig
+	cni.Components
 }
 
 // getComponents loads the main calico components into structs for later parsing.
@@ -106,15 +96,15 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 
 	// do some upfront processing of CNI by loading it into comps
 	var err error
-	comps.networkComponents, err = loadCNI(comps)
+	comps.Components, err = loadCNI(comps)
 
 	return comps, err
 }
 
 // loadCNI pulls the CNI network config from it's env var source within components
 // and then returns the parsed data.
-func loadCNI(comps *components) (networkComponents, error) {
-	nc := networkComponents{}
+func loadCNI(comps *components) (cni.Components, error) {
+	nc := cni.Components{}
 	// do some upfront processing of CNI by loading it into comps
 	c := getContainer(comps.node.Spec.Template.Spec, containerInstallCNI)
 	if c == nil {
@@ -126,7 +116,7 @@ func loadCNI(comps *components) (networkComponents, error) {
 		return nc, err
 	}
 	if cniConfig != nil {
-		nc, err = parseCNIConfig(*cniConfig)
+		nc, err = cni.Parse(*cniConfig)
 	}
 
 	return nc, err

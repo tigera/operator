@@ -2,6 +2,7 @@ package convert
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -174,6 +175,53 @@ var _ = Describe("Parser", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(*cfg.Spec.NodeMetricsPort).To(Equal(int32(7777)))
+		})
+	})
+
+	Context("CNI", func() {
+		var _ = Describe("CNI", func() {
+			It("should load cni from correct fields on calico-node", func() {
+				ds := emptyNodeSpec()
+				ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{
+					{
+						Name: "CNI_NETWORK_CONFIG",
+						Value: `{
+							"name": "k8s-pod-network",
+							"cniVersion": "0.3.1",
+							"plugins": [
+							  {
+								"type": "calico",
+								"log_level": "info",
+								"datastore_type": "kubernetes",
+								"nodename": "__KUBERNETES_NODE_NAME__",
+								"mtu": __CNI_MTU__,
+								"ipam": {"type": "calico-ipam"},
+								"policy": {
+									"type": "k8s"
+								},
+								"kubernetes": {
+									"kubeconfig": "__KUBECONFIG_FILEPATH__"
+								}
+							  }
+							]
+						}`,
+					},
+				}
+
+				cli := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+				c := components{
+					node: CheckedDaemonSet{
+						DaemonSet:   *ds,
+						checkedVars: map[string]checkedFields{},
+					},
+					client: cli,
+				}
+
+				nc, err := loadCNI(&c)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(nc.CalicoCNIConfig).ToNot(BeNil())
+				Expect(nc.CalicoCNIConfig.IPAM.Type).To(Equal("calico-ipam"), fmt.Sprintf("Got %+v", c.CalicoCNIConfig))
+			})
 		})
 	})
 })

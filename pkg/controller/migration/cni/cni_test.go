@@ -1,10 +1,7 @@
-package convert
+package cni
 
 import (
 	"fmt"
-
-	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -43,41 +40,17 @@ const cniTemplate = `{
 var defaultCNI = fmt.Sprintf(cniTemplate, `{"type": "calico-ipam"}`)
 
 var _ = Describe("CNI", func() {
-	It("should load cni from correct fields on calico-node", func() {
-		ds := emptyNodeSpec()
-		ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{
-			{
-				Name:  "CNI_NETWORK_CONFIG",
-				Value: defaultCNI,
-			},
-		}
-
-		cli := fake.NewFakeClient(ds, emptyKubeControllerSpec())
-		c := components{
-			node: CheckedDaemonSet{
-				DaemonSet:   *ds,
-				checkedVars: map[string]checkedFields{},
-			},
-			client: cli,
-		}
-
-		nc, err := loadCNI(&c)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(nc.calicoCNIConfig).ToNot(BeNil())
-		Expect(nc.calicoCNIConfig.IPAM.Type).To(Equal("calico-ipam"), fmt.Sprintf("Got %+v", c.calicoCNIConfig))
-	})
-
 	It("should unmarshal a valid cni conf list", func() {
 		_, err := unmarshalCNIConfList(defaultCNI)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should parse basic calico cni", func() {
-		c, err := parseCNIConfig(defaultCNI)
+		c, err := Parse(defaultCNI)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(c.calicoCNIConfig).ToNot(BeNil())
+		Expect(c.CalicoCNIConfig).ToNot(BeNil())
 		// check that any field was unmarshaled correctly.
-		Expect(c.calicoCNIConfig.IPAM.Type).To(Equal("calico-ipam"), fmt.Sprintf("Got %+v", c.calicoCNIConfig))
+		Expect(c.CalicoCNIConfig.IPAM.Type).To(Equal("calico-ipam"), fmt.Sprintf("Got %+v", c.CalicoCNIConfig))
 	})
 
 	It("should parse ranges and routes", func() {
@@ -96,19 +69,19 @@ var _ = Describe("CNI", func() {
                 { "dst": "2001:db8::/96" }
             ]
         }`)
-		c, err := parseCNIConfig(cni)
+		c, err := Parse(cni)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(c.calicoCNIConfig).ToNot(BeNil())
-		Expect(c.calicoCNIConfig.IPAM.Type).To(Equal("host-local"), fmt.Sprintf("Got %+v", c.calicoCNIConfig))
-		Expect(c.hostLocalIPAMConfig.Ranges).To(HaveLen(2))
-		Expect(c.hostLocalIPAMConfig.Routes).To(HaveLen(2))
+		Expect(c.CalicoCNIConfig).ToNot(BeNil())
+		Expect(c.CalicoCNIConfig.IPAM.Type).To(Equal("host-local"), fmt.Sprintf("Got %+v", c.CalicoCNIConfig))
+		Expect(c.HostLocalIPAMConfig.Ranges).To(HaveLen(2))
+		Expect(c.HostLocalIPAMConfig.Routes).To(HaveLen(2))
 	})
 	It("should raise error if IPAM with unknown field is detected", func() {
 		cni := fmt.Sprintf(cniTemplate, `{
 			"type": "host-local",
 			"unknown": "whocares"
           }`)
-		_, err := parseCNIConfig(cni)
+		_, err := Parse(cni)
 		Expect(err).To(HaveOccurred())
 	})
 })

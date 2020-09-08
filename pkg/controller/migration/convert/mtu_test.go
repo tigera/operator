@@ -27,7 +27,7 @@ var _ = Describe("mtu handler", func() {
 	})
 
 	It("should read mtu from cni config", func() {
-		comps.calicoCNIConfig = &types.NetConf{
+		comps.CalicoCNIConfig = &types.NetConf{
 			MTU: 1234,
 		}
 		err := handleMTU(&comps, i)
@@ -71,7 +71,7 @@ var _ = Describe("mtu handler", func() {
 			Name:  "FELIX_IPINIPMTU",
 			Value: "1324",
 		}}
-		comps.calicoCNIConfig = &types.NetConf{
+		comps.CalicoCNIConfig = &types.NetConf{
 			MTU: 1234,
 		}
 		err := handleMTU(&comps, i)

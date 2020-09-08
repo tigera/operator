@@ -117,47 +117,7 @@ func handleCore(c *components, install *Installation) error {
 		}
 	}
 
-	// check node tolerations
-	if err := checkTolerations(c.node.Spec.Template.Spec.Tolerations,
-		corev1.Toleration{
-			Key:      "CriticalAddonsOnly",
-			Operator: corev1.TolerationOpExists,
-		},
-		corev1.Toleration{
-			Effect:   corev1.TaintEffectNoSchedule,
-			Operator: corev1.TolerationOpExists,
-		},
-		corev1.Toleration{
-			Effect:   corev1.TaintEffectNoExecute,
-			Operator: corev1.TolerationOpExists,
-		}); err != nil {
-		return ErrIncompatibleCluster{"calico-node has incompatible tolerations: " + err.Error()}
-	}
-
-	// check kube-controller tolerations
-	if c.kubeControllers != nil {
-		if err := checkTolerations(c.kubeControllers.Spec.Template.Spec.Tolerations,
-			corev1.Toleration{
-				Key:      "CriticalAddonsOnly",
-				Operator: corev1.TolerationOpExists,
-			},
-			corev1.Toleration{
-				Effect: corev1.TaintEffectNoSchedule,
-				Key:    "node-role.kubernetes.io/master",
-			}); err != nil {
-			return ErrIncompatibleCluster{"kube-controllers has incompatible tolerations: " + err.Error()}
-		}
-	}
-
-	// check typha tolerations
-	if c.typha != nil {
-		if err := checkTolerations(c.typha.Spec.Template.Spec.Tolerations, corev1.Toleration{
-			Key:      "CriticalAddonsOnly",
-			Operator: corev1.TolerationOpExists,
-		}); err != nil {
-			return ErrIncompatibleCluster{"typha has incompatible tolerations: " + err.Error()}
-		}
-	}
+	// ignore tolerations from source components
 
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")

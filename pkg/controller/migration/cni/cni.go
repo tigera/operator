@@ -1,4 +1,4 @@
-package convert
+package cni
 
 import (
 	"bytes"
@@ -10,7 +10,17 @@ import (
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
+	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 )
+
+type NetworkComponents struct {
+	ConfigName          string
+	CalicoConfig        *calicocni.NetConf
+	HostLocalIPAMConfig *HostLocalIPAMConfig
+
+	// other CNI plugins in the conflist.
+	Plugins map[string]*libcni.NetworkConfig
+}
 
 // IPAMConfig represents the IP related network configuration.
 // This nests Range because we initially only supported a single
@@ -35,25 +45,25 @@ type Range struct {
 	Gateway    net.IP `json:"gateway,omitempty"`
 }
 
-// parseCNIConfig loads CNI config into the components for all other handlers to use.
+// Parse loads CNI config into the components for all other handlers to use.
 // No verification is done here beyond checking for valid json.
 // Calico CNI is parsed into the special Calico CNI data type.
 // All other CNI types
-func parseCNIConfig(cniConfig string) (networkComponents, error) {
-	c := networkComponents{}
+func Parse(cniConfig string) (NetworkComponents, error) {
+	c := NetworkComponents{}
 
 	conflist, err := unmarshalCNIConfList(cniConfig)
 	if err != nil {
 		return c, fmt.Errorf("failed to parse CNI config: %w", err)
 	}
 
-	c.cniConfigName = conflist.Name
+	c.ConfigName = conflist.Name
 
 	// convert to a map for simpler checks
 	plugins := map[string]*libcni.NetworkConfig{}
 	for _, plugin := range conflist.Plugins {
 		if plugin.Network.Type == "calico" {
-			if err := json.Unmarshal(plugin.Bytes, &c.calicoCNIConfig); err != nil {
+			if err := json.Unmarshal(plugin.Bytes, &c.CalicoConfig); err != nil {
 				return c, fmt.Errorf("failed to parse calico cni config: %w", err)
 			}
 			if plugin.Network.IPAM.Type == "host-local" {
@@ -75,13 +85,13 @@ func parseCNIConfig(cniConfig string) (networkComponents, error) {
 				if err := dec.Decode(&x); err != nil && err != io.EOF {
 					return c, fmt.Errorf("failed to parse HostLocal IPAM config: %w", err)
 				}
-				c.hostLocalIPAMConfig = &x
+				c.HostLocalIPAMConfig = &x
 			}
 		} else {
 			plugins[plugin.Network.Type] = plugin
 		}
 	}
-	c.pluginCNIConfig = plugins
+	c.Plugins = plugins
 
 	return c, nil
 }

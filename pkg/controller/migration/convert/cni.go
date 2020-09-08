@@ -14,8 +14,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-var log = logf.Log.WithName("migration_convert")
-
 // Used to parse the IPAM section out of the full CNI configuration
 type CNIHostLocalIPAM struct {
 	IPAM json.RawMessage `json:"ipam"`

@@ -20,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var log = logf.Log.WithName("migration_convert")
+
 var ctx = context.Background()
 
 // Installation represents the configuration pulled from the existing install.

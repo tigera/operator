@@ -11,7 +11,6 @@ import (
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 // Used to parse the IPAM section out of the full CNI configuration

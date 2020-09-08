@@ -318,20 +318,20 @@ var _ = Describe("core handler", func() {
 				It("should not error if only expected tolerations are set", func() {
 					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 				})
-				It("should error if no tolerations set", func() {
+				It("should not error if no tolerations set", func() {
 					setTolerations([]v1.Toleration{})
-					Expect(handleCore(&comps, i)).To(HaveOccurred())
+					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
 				})
-				It("should error if missing just one toleration", func() {
+				It("should not error if missing just one toleration", func() {
 					setTolerations(existingTolerations[0 : len(existingTolerations)-1])
-					Expect(handleCore(&comps, i)).To(HaveOccurred())
+					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
 				})
-				It("should error if additional toleration exists", func() {
+				It("should not error if additional toleration exists", func() {
 					setTolerations(append(existingTolerations, v1.Toleration{
 						Key:    "foo",
 						Effect: "bar",
 					}))
-					Expect(handleCore(&comps, i)).To(HaveOccurred())
+					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
 				})
 			}
 			Describe("calico-node", func() {

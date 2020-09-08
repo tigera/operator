@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"reflect"
 	"strings"
@@ -50,7 +49,7 @@ func loadCNI(c *components) error {
 	if cntnr == nil {
 		// It is valid to not have an install-cni container in the cases
 		// of non Calico CNI so nothing more to do in that case.
-		log.Print("no install-cni container detected on node")
+		log.Info("no install-cni container detected on node")
 		return nil
 	}
 
@@ -59,7 +58,7 @@ func loadCNI(c *components) error {
 		return err
 	}
 	if cniConfig == nil {
-		log.Print("no CNI_NETWORK_CONFIG detected on node")
+		log.Info("no CNI_NETWORK_CONFIG detected on node")
 		return nil
 	}
 

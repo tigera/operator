@@ -35,7 +35,7 @@ type components struct {
 	// client is used to resolve spec fields that reference other data sources
 	client client.Client
 
-	cni.Components
+	cni cni.NetworkComponents
 }
 
 // getComponents loads the main calico components into structs for later parsing.
@@ -96,19 +96,18 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 
 	// do some upfront processing of CNI by loading it into comps
 	var err error
-	comps.Components, err = loadCNI(comps)
+	comps.cni, err = loadCNI(comps)
 
 	return comps, err
 }
 
 // loadCNI pulls the CNI network config from it's env var source within components
 // and then returns the parsed data.
-func loadCNI(comps *components) (cni.Components, error) {
-	nc := cni.Components{}
+func loadCNI(comps *components) (nc cni.NetworkComponents, err error) {
 	// do some upfront processing of CNI by loading it into comps
 	c := getContainer(comps.node.Spec.Template.Spec, containerInstallCNI)
 	if c == nil {
-		return nc, nil
+		return
 	}
 
 	cniConfig, err := comps.node.getEnv(ctx, comps.client, containerInstallCNI, "CNI_NETWORK_CONFIG")

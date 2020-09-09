@@ -106,7 +106,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	if v == nil || v.HostPath == nil || v.HostPath.Path != "/run/xtables.lock" {
 		return ErrIncompatibleCluster{"expected calico-node to have volume 'xtables-lock' with hostPath '/run/xtables.lock"}
 	}
-	if c.CalicoCNIConfig != nil {
+	if c.cni.CalicoConfig != nil {
 		v = getVolume(c.node.Spec.Template.Spec, "cni-bin-dir")
 		if v == nil || v.HostPath == nil || v.HostPath.Path != "/opt/cni/bin" {
 			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-bin-dir' with hostPath '/opt/cni/bin'"}

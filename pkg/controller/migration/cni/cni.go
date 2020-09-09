@@ -13,13 +13,13 @@ import (
 	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 )
 
-type Components struct {
-	CNIConfigName       string
-	CalicoCNIConfig     *calicocni.NetConf
+type NetworkComponents struct {
+	ConfigName          string
+	CalicoConfig        *calicocni.NetConf
 	HostLocalIPAMConfig *HostLocalIPAMConfig
 
 	// other CNI plugins in the conflist.
-	PluginCNIConfig map[string]*libcni.NetworkConfig
+	Plugins map[string]*libcni.NetworkConfig
 }
 
 // IPAMConfig represents the IP related network configuration.
@@ -49,21 +49,21 @@ type Range struct {
 // No verification is done here beyond checking for valid json.
 // Calico CNI is parsed into the special Calico CNI data type.
 // All other CNI types
-func Parse(cniConfig string) (Components, error) {
-	c := Components{}
+func Parse(cniConfig string) (NetworkComponents, error) {
+	c := NetworkComponents{}
 
 	conflist, err := unmarshalCNIConfList(cniConfig)
 	if err != nil {
 		return c, fmt.Errorf("failed to parse CNI config: %w", err)
 	}
 
-	c.CNIConfigName = conflist.Name
+	c.ConfigName = conflist.Name
 
 	// convert to a map for simpler checks
 	plugins := map[string]*libcni.NetworkConfig{}
 	for _, plugin := range conflist.Plugins {
 		if plugin.Network.Type == "calico" {
-			if err := json.Unmarshal(plugin.Bytes, &c.CalicoCNIConfig); err != nil {
+			if err := json.Unmarshal(plugin.Bytes, &c.CalicoConfig); err != nil {
 				return c, fmt.Errorf("failed to parse calico cni config: %w", err)
 			}
 			if plugin.Network.IPAM.Type == "host-local" {
@@ -91,7 +91,7 @@ func Parse(cniConfig string) (Components, error) {
 			plugins[plugin.Network.Type] = plugin
 		}
 	}
-	c.PluginCNIConfig = plugins
+	c.Plugins = plugins
 
 	return c, nil
 }

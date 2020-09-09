@@ -219,8 +219,8 @@ var _ = Describe("Parser", func() {
 
 				nc, err := loadCNI(&c)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(nc.CalicoCNIConfig).ToNot(BeNil())
-				Expect(nc.CalicoCNIConfig.IPAM.Type).To(Equal("calico-ipam"), fmt.Sprintf("Got %+v", c.CalicoCNIConfig))
+				Expect(nc.CalicoConfig).ToNot(BeNil())
+				Expect(nc.CalicoConfig.IPAM.Type).To(Equal("calico-ipam"), fmt.Sprintf("Got %+v", c.cni.CalicoConfig))
 			})
 		})
 	})

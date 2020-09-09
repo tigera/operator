@@ -32,8 +32,8 @@ func handleMTU(c *components, install *operatorv1.Installation) error {
 		curMTU, curMTUSrc = mtu, src
 	}
 
-	if c.CalicoCNIConfig != nil {
-		if c.CalicoCNIConfig.MTU == -1 {
+	if c.cni.CalicoConfig != nil {
+		if c.cni.CalicoConfig.MTU == -1 {
 			// if MTU is -1, we assume it was us who replaced it when doing initial CNI
 			// config loading. We need to pull it from the correct source
 			var src = "CNI_MTU"
@@ -57,7 +57,7 @@ func handleMTU(c *components, install *operatorv1.Installation) error {
 		} else {
 			// user must have hardcoded their CNI instead of using the cni templating engine.
 			// use the hardcoded value.
-			mtu := int32(c.CalicoCNIConfig.MTU)
+			mtu := int32(c.cni.CalicoConfig.MTU)
 			if curMTU != nil && *curMTU != mtu {
 				return ErrIncompatibleCluster{fmt.Sprintf("mtu '%d' specified in CNI config does not match mtu %s=%d", mtu, curMTUSrc, *curMTU)}
 			}

@@ -10,12 +10,11 @@ import (
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
-	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 )
 
 type NetworkComponents struct {
 	ConfigName          string
-	CalicoConfig        *calicocni.NetConf
+	CalicoConfig        *CalicoConf
 	HostLocalIPAMConfig *HostLocalIPAMConfig
 
 	// other CNI plugins in the conflist.

@@ -10,7 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func handleCore(c *components, install *Installation) error {
+func handleCore(c *components, install *operatorv1.Installation) error {
 	dsType, err := c.node.getEnv(ctx, c.client, "calico-node", "DATASTORE_TYPE")
 	if err != nil {
 		return err
@@ -167,7 +167,7 @@ func handleCore(c *components, install *Installation) error {
 // addResources adds the rescReq resource for the specified component if none was previously set. If installation
 // already had a resource for compName then they are compared and if they are different then an error is returned.
 // If the Resource is added to installation or the existing one matches then nil is returned.
-func addResources(install *Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
+func addResources(install *operatorv1.Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
 	if install.Spec.ComponentResources == nil {
 		install.Spec.ComponentResources = []*operatorv1.ComponentResource{}
 	}
@@ -194,7 +194,7 @@ func addResources(install *Installation, compName operatorv1.ComponentName, resc
 	return ErrIncompatibleCluster{fmt.Sprintf("ResourcesRequirements for component %s did not match between Installation and migration source", compName)}
 }
 
-func handleAnnotations(c *components, _ *Installation) error {
+func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
 		return ErrIncompatibleCluster{fmt.Sprintf("calico-node daemonset has unexpected annotation: %v", a)}
 	}
@@ -245,7 +245,7 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 	return a
 }
 
-func handleNodeSelectors(c *components, install *Installation) error {
+func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
 		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
@@ -297,7 +297,7 @@ func removeOSNodeSelectors(existing map[string]string) map[string]string {
 	return nodeSel
 }
 
-func handleFelixNodeMetrics(c *components, install *Installation) error {
+func handleFelixNodeMetrics(c *components, install *operatorv1.Installation) error {
 	metricsEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
 	if err != nil {
 		return err

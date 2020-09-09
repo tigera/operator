@@ -13,16 +13,12 @@ import (
 var _ = Describe("mtu handler", func() {
 	var (
 		comps = emptyComponents()
-		i     = &Installation{}
+		i     = &operatorv1.Installation{}
 	)
 
 	BeforeEach(func() {
 		comps = emptyComponents()
-		i = &Installation{
-			Installation: &operatorv1.Installation{},
-			CNIConfig:    "",
-			FelixEnvVars: []v1.EnvVar{},
-		}
+		i = &operatorv1.Installation{}
 	})
 	It("should not set mtu if none defined", func() {
 		err := handleMTU(&comps, i)

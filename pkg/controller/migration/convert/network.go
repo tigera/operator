@@ -22,7 +22,7 @@ const (
 	containerKubeControllers = "calico-kube-controllers"
 )
 
-func handleNetwork(c *components, install *Installation) error {
+func handleNetwork(c *components, install *operatorv1.Installation) error {
 
 	// Verify FELIX_DEFAULTENDPOINTTOHOSTACTION is set to Accept because that is what the operator sets it to.
 	defaultWepAction, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION")
@@ -38,7 +38,7 @@ func handleNetwork(c *components, install *Installation) error {
 	return nil
 }
 
-func handleCalicoCNI(c *components, install *Installation) error {
+func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	plugin, err := getCNIPlugin(c)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func handleCalicoCNI(c *components, install *Installation) error {
 	return nil
 }
 
-func handleIpv6(c *components, _ *Installation) error {
+func handleIpv6(c *components, _ *operatorv1.Installation) error {
 	felixIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
 	if err != nil {
 		return err
@@ -193,7 +193,7 @@ func getNetworkingBackend(node CheckedDaemonSet, client client.Client) (string, 
 // The function tries to collect all the errors and report one message.
 // If there are no errors and the config can be added to the passed in 'install'
 // then nil is returned.
-func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *Installation) error {
+func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *operatorv1.Installation) error {
 	switch netBackend {
 	case "bird":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
@@ -229,7 +229,7 @@ func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *I
 // The function tries to collect all the errors and report one message.
 // If there are no errors and the config can be added to the passed in 'install'
 // then nil is returned.
-func subhandleHostLocalIPAM(netBackend string, ipamcfg HostLocalIPAMConfig, install *Installation) error {
+func subhandleHostLocalIPAM(netBackend string, ipamcfg HostLocalIPAMConfig, install *operatorv1.Installation) error {
 	switch netBackend {
 	case "bird":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
@@ -297,7 +297,7 @@ func checkRange(prefix string, r Range) []string {
 	return bf
 }
 
-func handleNonCalicoCNI(c *components, install *Installation) error {
+func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	plugin, err := getCNIPlugin(c)
 	if err != nil {
 		return err
@@ -468,7 +468,7 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 // See selectInitialPool for details on which pool will be selected.
 // Since the operator only supports one v4 and one v6 only one of each will be picked
 // if they exist.
-func handleIPPools(c *components, install *Installation) error {
+func handleIPPools(c *components, install *operatorv1.Installation) error {
 	pools := crdv1.IPPoolList{}
 	if err := c.client.List(ctx, &pools); err != nil && !kerrors.IsNotFound(err) {
 		return fmt.Errorf("failed to list IPPools %v", err)

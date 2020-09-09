@@ -6,7 +6,6 @@ import (
 	"net"
 	"strings"
 
-	calicocni "github.com/projectcalico/cni-plugin/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -194,7 +193,7 @@ func getNetworkingBackend(node CheckedDaemonSet, client client.Client) (string, 
 // The function tries to collect all the errors and report one message.
 // If there are no errors and the config can be added to the passed in 'install'
 // then nil is returned.
-func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *operatorv1.Installation) error {
+func subhandleCalicoIPAM(netBackend string, cnicfg cni.CalicoConf, install *operatorv1.Installation) error {
 	switch netBackend {
 	case "bird":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)

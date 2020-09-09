@@ -12,6 +12,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/migration/cni"
 	"github.com/tigera/operator/pkg/render"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -49,7 +50,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 
 	errCtx := fmt.Sprintf("detected %s CNI plugin", plugin)
 
-	if c.calicoCNIConfig == nil {
+	if c.cni.CalicoConfig == nil {
 		return ErrIncompatibleCluster{fmt.Sprintf("%s, required Calico cni config was not found ", errCtx)}
 	}
 
@@ -71,26 +72,26 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return err
 	}
 
-	switch c.calicoCNIConfig.IPAM.Type {
+	switch c.cni.CalicoConfig.IPAM.Type {
 	case "calico-ipam":
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
 
-		if err := subhandleCalicoIPAM(netBackend, *c.calicoCNIConfig, install); err != nil {
+		if err := subhandleCalicoIPAM(netBackend, *c.cni.CalicoConfig, install); err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM calico-ipam, %s", errCtx, err.Error())}
 		}
 	case "host-local":
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
 
-		if c.hostLocalIPAMConfig == nil {
+		if c.cni.HostLocalIPAMConfig == nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM host-local, but no IPAM configuration available", errCtx)}
 		}
 
-		if err := subhandleHostLocalIPAM(netBackend, *c.hostLocalIPAMConfig, install); err != nil {
+		if err := subhandleHostLocalIPAM(netBackend, *c.cni.HostLocalIPAMConfig, install); err != nil {
 			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM plugin %s, %s",
-				errCtx, c.calicoCNIConfig.IPAM.Type, err.Error())}
+				errCtx, c.cni.CalicoConfig.IPAM.Type, err.Error())}
 		}
 	default:
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, unrecognized IPAM plugin %s, expected calico-ipam or host-local", errCtx, c.calicoCNIConfig.IPAM.Type)}
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, unrecognized IPAM plugin %s, expected calico-ipam or host-local", errCtx, c.cni.CalicoConfig.IPAM.Type)}
 	}
 
 	// IP
@@ -118,7 +119,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	// CNI portmap plugin
-	if _, ok := c.pluginCNIConfig["portmap"]; ok {
+	if _, ok := c.cni.Plugins["portmap"]; ok {
 		hp := v1.HostPortsEnabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	} else {
@@ -126,18 +127,18 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	}
 
-	if c.cniConfigName != "k8s-pod-network" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, only 'k8s-pod-network' is supported as CNI name, found %s", errCtx, c.cniConfigName)}
+	if c.cni.ConfigName != "k8s-pod-network" {
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, only 'k8s-pod-network' is supported as CNI name, found %s", errCtx, c.cni.ConfigName)}
 	}
 
 	// Other CNI features
-	if c.calicoCNIConfig.FeatureControl.FloatingIPs {
+	if c.cni.CalicoConfig.FeatureControl.FloatingIPs {
 		return ErrIncompatibleCluster{errCtx + ", floating IPs not supported"}
 	}
-	if c.calicoCNIConfig.FeatureControl.IPAddrsNoIpam {
+	if c.cni.CalicoConfig.FeatureControl.IPAddrsNoIpam {
 		return ErrIncompatibleCluster{errCtx + ", IpAddrsNoIpam not supported"}
 	}
-	if c.calicoCNIConfig.ContainerSettings.AllowIPForwarding {
+	if c.cni.CalicoConfig.ContainerSettings.AllowIPForwarding {
 		return ErrIncompatibleCluster{errCtx + ", AllowIPForwarding not supported"}
 	}
 
@@ -204,7 +205,7 @@ func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *o
 	}
 
 	// ignored fields:
-	//   - c.calicoCNIConfig.IPAM.Name
+	//   - c.cni.CalicoCNIConfig.IPAM.Name
 
 	invalidFields := []string{}
 	if cnicfg.IPAM.Subnet != "" {
@@ -229,7 +230,7 @@ func subhandleCalicoIPAM(netBackend string, cnicfg calicocni.NetConf, install *o
 // The function tries to collect all the errors and report one message.
 // If there are no errors and the config can be added to the passed in 'install'
 // then nil is returned.
-func subhandleHostLocalIPAM(netBackend string, ipamcfg HostLocalIPAMConfig, install *operatorv1.Installation) error {
+func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, install *operatorv1.Installation) error {
 	switch netBackend {
 	case "bird":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPEnabled)
@@ -277,7 +278,7 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg HostLocalIPAMConfig, inst
 }
 
 // checkRange checks the fields in r for invalid values for HostLocal IPAM configuration.
-func checkRange(prefix string, r Range) []string {
+func checkRange(prefix string, r cni.Range) []string {
 	bf := []string{}
 	if r.Subnet != "" {
 		if r.Subnet != "usePodCidr" {
@@ -512,8 +513,8 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 	}
 
 	// If IPAM is calico then check that the assign_ipv* fields match the IPPools that have been detected
-	if c.calicoCNIConfig != nil && c.calicoCNIConfig.IPAM.Type == "calico-ipam" {
-		if c.calicoCNIConfig.IPAM.AssignIpv4 == nil || strings.ToLower(*c.calicoCNIConfig.IPAM.AssignIpv4) == "true" {
+	if c.cni.CalicoConfig != nil && c.cni.CalicoConfig.IPAM.Type == "calico-ipam" {
+		if c.cni.CalicoConfig.IPAM.AssignIpv4 == nil || strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv4) == "true" {
 			if v4pool == nil {
 				return ErrIncompatibleCluster{"CNI config indicates assign_ipv4 true but there were no valid V4 pools found"}
 			}
@@ -522,7 +523,7 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 				return ErrIncompatibleCluster{"CNI config indicates assig_ipv4 false but a V4 pool was found"}
 			}
 		}
-		if c.calicoCNIConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.calicoCNIConfig.IPAM.AssignIpv6) == "true" {
+		if c.cni.CalicoConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv6) == "true" {
 			if v6pool == nil {
 				return ErrIncompatibleCluster{"CNI config indicates assign_ipv6 true but there were no valid V6 pools found"}
 			}

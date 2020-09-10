@@ -14,16 +14,13 @@ type CalicoConf struct {
 		IPv4Pools  []string `json:"ipv4_pools,omitempty"`
 		IPv6Pools  []string `json:"ipv6_pools,omitempty"`
 	} `json:"ipam,omitempty"`
-	// Args                 Args   `json:"args"`
-	MTU                  int    `json:"mtu"`
-	Nodename             string `json:"nodename"`
-	NodenameFileOptional bool   `json:"nodename_file_optional"`
-	DatastoreType        string `json:"datastore_type"`
-	EtcdEndpoints        string `json:"etcd_endpoints"`
-	EtcdDiscoverySrv     string `json:"etcd_discovery_srv"`
-	LogLevel             string `json:"log_level"`
-	// Policy               Policy `json:"policy"`
-	// Kubernetes           Kubernetes        `json:"kubernetes"`
+	MTU                  int               `json:"mtu"`
+	Nodename             string            `json:"nodename"`
+	NodenameFileOptional bool              `json:"nodename_file_optional"`
+	DatastoreType        string            `json:"datastore_type"`
+	EtcdEndpoints        string            `json:"etcd_endpoints"`
+	EtcdDiscoverySrv     string            `json:"etcd_discovery_srv"`
+	LogLevel             string            `json:"log_level"`
 	FeatureControl       FeatureControl    `json:"feature_control"`
 	EtcdScheme           string            `json:"etcd_scheme"`
 	EtcdKeyFile          string            `json:"etcd_key_file"`

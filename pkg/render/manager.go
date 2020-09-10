@@ -225,7 +225,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			NodeSelector: map[string]string{
-				"beta.kubernetes.io/os": "linux",
+				"kubernetes.io/os": "linux",
 			},
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),

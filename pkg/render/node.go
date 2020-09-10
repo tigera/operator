@@ -656,7 +656,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 	cniVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-		{MountPath: "/var/log/calico/cni", Name: "cni-log-dir"},
+		{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 	}
 
 	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
@@ -772,7 +772,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
-	} else {
+	} else if c.cr.Spec.CNI.Type == operator.PluginCalico {
 		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}

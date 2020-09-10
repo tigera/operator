@@ -94,30 +94,24 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 
 	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
-	v := getVolume(c.node.Spec.Template.Spec, "lib-modules")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/lib/modules" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'lib-modules' with hostPath '/lib/modules'"}
+	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "lib-modules", "/lib/modules"); err != nil {
+		return err
 	}
-	v = getVolume(c.node.Spec.Template.Spec, "var-run-calico")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/run/calico" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-run-calico' with hostPath '/var/run/calico'"}
+	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico"); err != nil {
+		return err
 	}
-	v = getVolume(c.node.Spec.Template.Spec, "var-lib-calico")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/lib/calico" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-lib-calico' with hostPath '/var/lib/calico'"}
+	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico"); err != nil {
+		return err
 	}
-	v = getVolume(c.node.Spec.Template.Spec, "xtables-lock")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/run/xtables.lock" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'xtables-lock' with hostPath '/run/xtables.lock"}
+	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "xtables-lock", "/run/xtables.lock"); err != nil {
+		return err
 	}
 	if c.cni.CalicoConfig != nil {
-		v = getVolume(c.node.Spec.Template.Spec, "cni-bin-dir")
-		if v == nil || v.HostPath == nil || v.HostPath.Path != "/opt/cni/bin" {
-			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-bin-dir' with hostPath '/opt/cni/bin'"}
+		if err := checkHostPathVolume(c.node.Spec.Template.Spec, "cni-bin-dir", "/opt/cni/bin"); err != nil {
+			return err
 		}
-		v = getVolume(c.node.Spec.Template.Spec, "cni-net-dir")
-		if v == nil || v.HostPath == nil || v.HostPath.Path != "/etc/cni/net.d" {
-			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-net-dir' with hostPath '/opt/cni/bin'"}
+		if err := checkHostPathVolume(c.node.Spec.Template.Spec, "cni-net-dir", "/etc/cni/net.d"); err != nil {
+			return err
 		}
 	}
 
@@ -165,6 +159,19 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
+	return nil
+}
+
+// checkHostPathVolume is a convenience function
+func checkHostPathVolume(spec corev1.PodSpec, name, path string) error {
+	v := getVolume(spec, name)
+	if v == nil || v.HostPath == nil || v.HostPath.Path != path {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("missing expected volume '%s' with hostPath '%s'", name, path),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("add the expected volume to %s", ComponentCalicoNode),
+		}
+	}
 	return nil
 }
 

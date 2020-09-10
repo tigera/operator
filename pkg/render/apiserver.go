@@ -583,7 +583,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					DNSPolicy: dnsPolicy,
 					NodeSelector: map[string]string{
-						"beta.kubernetes.io/os": "linux",
+						"kubernetes.io/os": "linux",
 					},
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",

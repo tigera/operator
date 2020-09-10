@@ -54,7 +54,10 @@ var _ = Describe("Node rendering tests", func() {
 		miMode := operator.MultiInterfaceModeNone
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{Type: "Calico"},
+				CNI: &operator.CNISpec{
+					Type:     "Calico",
+					LogLevel: "INFO",
+				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					BGP:                        &bgpEnabled,
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
@@ -116,6 +119,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_level": "INFO",
       "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -251,6 +255,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
 				Name: "typha-ca",
@@ -289,6 +294,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+			{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
@@ -453,6 +459,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_level": "INFO",
       "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -587,6 +594,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
 				Name: "typha-ca",
@@ -625,6 +633,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+			{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
@@ -652,8 +661,11 @@ var _ = Describe("Node rendering tests", func() {
 		amazonVPCInstalllation := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				KubernetesProvider: operator.ProviderEKS,
-				CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
-				FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				CNI: &operator.CNISpec{
+					Type:     operator.PluginAmazonVPC,
+					LogLevel: "INFO",
+				},
+				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			},
 		}
 
@@ -857,6 +869,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/cni/bin"}}},
 			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/multus/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{Name: "flexvol-driver-host", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 			{
@@ -1451,6 +1464,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_level": "INFO",
       "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -1507,6 +1521,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+			{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	})
@@ -1531,6 +1546,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
+      "log_level": "INFO",
       "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",

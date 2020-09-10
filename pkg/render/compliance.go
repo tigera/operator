@@ -1248,6 +1248,7 @@ func (c *complianceComponent) complianceGlobalReportNetworkAccess() *v3.GlobalRe
 				},
 			},
 			IncludeEndpointData: true,
+			IncludeEndpointFlowLogData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name: "ui-summary.json",
 				Template: `

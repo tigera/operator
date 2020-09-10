@@ -387,6 +387,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "datastore_type": "kubernetes",
       "mtu": %d,
       "nodename_file_optional": %v,
+      "log_level": "%s",
       "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -408,7 +409,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)
+}`, mtu, nodenameFileOptional, c.cr.Spec.CNI.LogLevel, assign_ipv4, assign_ipv6, ipForward, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -554,8 +555,8 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.
-func (c *nodeComponent) cniDirectories() (string, string) {
-	var cniBinDir, cniNetDir string
+func (c *nodeComponent) cniDirectories() (string, string, string) {
+	var cniBinDir, cniNetDir, cniLogDir string
 	switch c.cr.Spec.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		cniNetDir = "/var/run/multus/cni/net.d"
@@ -569,7 +570,8 @@ func (c *nodeComponent) cniDirectories() (string, string) {
 		cniBinDir = "/opt/cni/bin"
 		cniNetDir = "/etc/cni/net.d"
 	}
-	return cniNetDir, cniBinDir
+	cniLogDir = "/var/log/calico/cni"
+	return cniNetDir, cniBinDir, cniLogDir
 }
 
 // nodeVolumes creates the node's volumes.
@@ -606,9 +608,10 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cr.Spec.CNI.Type == operator.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
-		cniNetDir, cniBinDir := c.cniDirectories()
+		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
 		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
 		volumes = append(volumes, v1.Volume{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}})
+		volumes = append(volumes, v1.Volume{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniLogDir}}})
 	}
 
 	// Override with Tigera-specific config.
@@ -653,6 +656,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 	cniVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		{MountPath: "/var/log/calico/cni", Name: "cni-log-dir"},
 	}
 
 	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
@@ -696,7 +700,7 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 	}
 
 	// Determine directories to use for CNI artifacts based on the provider.
-	cniNetDir, _ := c.cniDirectories()
+	cniNetDir, _, _ := c.cniDirectories()
 
 	envVars := []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
@@ -768,6 +772,9 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
+	} else {
+		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
+		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
 
 	if c.birdTemplates != nil {

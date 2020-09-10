@@ -16,14 +16,18 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		return err
 	}
 	if dsType != nil && *dsType != "kubernetes" {
-		return ErrIncompatibleCluster{"only DATASTORE_TYPE=kubernetes is supported at this time"}
+		return ErrIncompatibleCluster{
+			err:       "only DATASTORE_TYPE=kubernetes is supported at this time",
+			component: ComponentCalicoNode,
+			fix:       FixFileFeatureRequest,
+		}
 	}
 
 	// node resource limits
 	node := getContainer(c.node.Spec.Template.Spec, "calico-node")
 	if len(node.Resources.Limits) > 0 || len(node.Resources.Requests) > 0 {
 		if err = addResources(install, operatorv1.ComponentNameNode, &node.Resources); err != nil {
-			return ErrIncompatibleCluster{err.Error()}
+			return err
 		}
 	}
 
@@ -32,7 +36,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
 		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
 			if err = addResources(install, operatorv1.ComponentNameKubeControllers, &kubeControllers.Resources); err != nil {
-				return ErrIncompatibleCluster{err.Error()}
+				return err
 			}
 		}
 	}
@@ -42,7 +46,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
 		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
 			if err = addResources(install, operatorv1.ComponentNameTypha, &typha.Resources); err != nil {
-				return ErrIncompatibleCluster{err.Error()}
+				return err
 			}
 		}
 	}
@@ -191,34 +195,38 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 		return nil
 	}
 
-	return ErrIncompatibleCluster{fmt.Sprintf("ResourcesRequirements for component %s did not match between Installation and migration source", compName)}
+	return ErrIncompatibleCluster{
+		err:       fmt.Sprintf("ResourcesRequirements for component %s did not match between Installation and migration source", compName),
+		component: string(compName),
+		fix:       fmt.Sprintf("remove the resource requirements / limits from your Installation resource, or remove them from the currently installed %s component", compName),
+	}
 }
 
 func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("calico-node daemonset has unexpected annotation: %v", a)}
+		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
 	}
 	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("calico-node podTemplateSpec has unexpected annotation: %v", a)}
+		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
 	}
 
 	if c.kubeControllers != nil {
 		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers deployment has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentKubecontrollers)
 		}
 		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers podTemplateSpec has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentKubecontrollers+" podTemplateSpec")
 		}
 	}
 
 	if c.typha != nil {
 		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("typha deployment has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentTypha)
 		}
 		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
 			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
 		}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("typha podTemplateSpec has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentTypha+" podTemplateSpec")
 		}
 	}
 	return nil

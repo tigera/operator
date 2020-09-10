@@ -132,6 +132,10 @@ var _ = Describe("Node rendering tests", func() {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
     },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
+    },
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]
 }`))
@@ -465,6 +469,7 @@ var _ = Describe("Node rendering tests", func() {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
     },
+	{"type": "bandwidth", "capabilities": {"bandwidth": true}},
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]
 }`))
@@ -1457,6 +1462,10 @@ var _ = Describe("Node rendering tests", func() {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
     }
   ]
 }`))
@@ -1533,6 +1542,10 @@ var _ = Describe("Node rendering tests", func() {
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
     },
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
   ]

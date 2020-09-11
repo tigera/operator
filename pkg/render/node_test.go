@@ -117,7 +117,7 @@ var _ = Describe("Node rendering tests", func() {
       "mtu": 1410,
       "nodename_file_optional": false,
       "log_level": "Info",
-      "log_file_path": "/host/var/log/calico/cni/cni.log",
+      "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
@@ -292,7 +292,6 @@ var _ = Describe("Node rendering tests", func() {
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-			{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
@@ -458,7 +457,7 @@ var _ = Describe("Node rendering tests", func() {
       "mtu": 1410,
       "nodename_file_optional": false,
       "log_level": "Info",
-      "log_file_path": "/host/var/log/calico/cni/cni.log",
+      "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
@@ -632,7 +631,6 @@ var _ = Describe("Node rendering tests", func() {
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-			{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
@@ -1461,7 +1459,7 @@ var _ = Describe("Node rendering tests", func() {
       "mtu": 1410,
       "nodename_file_optional": false,
       "log_level": "Info",
-      "log_file_path": "/host/var/log/calico/cni/cni.log",
+      "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",
@@ -1517,7 +1515,6 @@ var _ = Describe("Node rendering tests", func() {
 		expectedCNIVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-			{MountPath: "/host/var/log/calico/cni", Name: "cni-log-dir"},
 		}
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	})
@@ -1543,7 +1540,7 @@ var _ = Describe("Node rendering tests", func() {
       "mtu": 1410,
       "nodename_file_optional": false,
       "log_level": "Info",
-      "log_file_path": "/host/var/log/calico/cni/cni.log",
+      "log_file_path": "/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "true",

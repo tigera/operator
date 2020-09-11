@@ -374,7 +374,7 @@ func (cp CNIPluginType) String() string {
 }
 
 type CNISpec struct {
-	// Specifies the CNI plugin that will be used in the Calico or Calico Enterprise installation.
+	// CNIPluginType specifies the CNI plugin that will be used in the Calico or Calico Enterprise installation.
 	// For KubernetesProvider GKE, this field defaults to GKE. For KubernetesProvider AKE, this field
 	// defaults to AzureVNET. For KubernetesProvider EKS, this field defaults to AmazonVPC. For all other
 	// KubernetesProviders this field defaults to Calico.
@@ -385,6 +385,12 @@ type CNISpec struct {
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
 	Type CNIPluginType `json:"type"`
+
+	//LogLevel specifies the log level the CNI plugin is configured to run at.
+	// Default: INFO
+	// +optional
+	// +kubebuilder:validation:Enum=ERROR;WARNING;INFO;DEBUG
+	LogLevel string `json:"log_level"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

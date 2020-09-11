@@ -1402,27 +1402,30 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 // if user provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value,
 // if user provided just Requests, and Requests is >= default Limits, set Limits value as user's Requests value.
 func overrideResourceRequirements(defaultReq *corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) {
-	if userOverrides.Limits.Cpu().Value() != 0 {
+	if _, ok := userOverrides.Limits["cpu"]; ok {
 		defaultReq.Limits["cpu"] = *userOverrides.Limits.Cpu()
 		if userOverrides.Requests.Cpu().Value() == 0 && defaultReq.Requests.Cpu().Value() > userOverrides.Limits.Cpu().Value() {
 			defaultReq.Requests["cpu"] = *userOverrides.Limits.Cpu()
 		}
+		if _, ok := userOverrides.Requests["cpu"]; !ok && defaultReq.Requests.Cpu().Value() > userOverrides.Limits.Cpu().Value() {
+			defaultReq.Requests["cpu"] = *userOverrides.Limits.Cpu()
+		}
 	}
-	if userOverrides.Limits.Memory().Value() != 0 {
+	if _, ok := userOverrides.Limits["memory"]; ok {
 		defaultReq.Limits["memory"] = *userOverrides.Limits.Memory()
-		if userOverrides.Requests.Memory().Value() == 0 && defaultReq.Requests.Memory().Value() > userOverrides.Limits.Memory().Value() {
+		if _, ok := userOverrides.Requests["memory"]; !ok && defaultReq.Requests.Memory().Value() > userOverrides.Limits.Memory().Value() {
 			defaultReq.Requests["memory"] = *userOverrides.Limits.Memory()
 		}
 	}
-	if userOverrides.Requests.Cpu().Value() != 0 {
+	if _, ok := userOverrides.Requests["cpu"]; ok {
 		defaultReq.Requests["cpu"] = *userOverrides.Requests.Cpu()
-		if userOverrides.Limits.Cpu().Value() == 0 && defaultReq.Limits.Cpu().Value() < userOverrides.Requests.Cpu().Value() {
+		if _, ok := userOverrides.Limits["cpu"]; !ok && defaultReq.Limits.Cpu().Value() < userOverrides.Requests.Cpu().Value() {
 			defaultReq.Limits["cpu"] = *userOverrides.Requests.Cpu()
 		}
 	}
-	if userOverrides.Requests.Memory().Value() != 0 {
+	if _, ok := userOverrides.Requests["memory"]; ok {
 		defaultReq.Requests["memory"] = *userOverrides.Requests.Memory()
-		if userOverrides.Limits.Memory().Value() == 0 && defaultReq.Limits.Memory().Value() < userOverrides.Requests.Memory().Value() {
+		if _, ok := userOverrides.Limits["memory"]; !ok && defaultReq.Limits.Memory().Value() < userOverrides.Requests.Memory().Value() {
 			defaultReq.Limits["memory"] = *userOverrides.Requests.Memory()
 		}
 	}

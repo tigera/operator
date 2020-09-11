@@ -414,7 +414,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
 		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
-		overridePvcRequirements(&pvcTemplate.Spec.Resources, userOverrides)
+		pvcTemplate.Spec.Resources = overridePvcRequirements(pvcTemplate.Spec.Resources, userOverrides)
 	}
 
 	return pvcTemplate
@@ -447,7 +447,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
 		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
-		overrideResourceRequirements(&esContainer.Resources, userOverrides)
+		esContainer.Resources = overrideResourceRequirements(esContainer.Resources, userOverrides)
 
 		// Now extract the memory request value to compute the recommended heap size for ES container
 		recommendedHeapSize := memoryQuantityToJVMHeapSize(esContainer.Resources.Requests.Memory())
@@ -1396,46 +1396,47 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 	return psp
 }
 
-// If user has set ResourceRequirements, replace individual field's default value with user's value.
-// If user provided both Limits and Requests, use them.
-// As ResourceRequirements.Limits must be >= ResourceRequirements.Requests,
-// if user provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value,
-// if user provided just Requests, and Requests is >= default Limits, set Limits value as user's Requests value.
-func overrideResourceRequirements(defaultReq *corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) {
+// overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.
+// - If user provided both Limits and Requests, use them.
+// - If user provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value,
+// - If user provided just Requests, and Requests is >= default Limits, set Limits value as user's Requests value.
+func overrideResourceRequirements(defaultReq corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) corev1.ResourceRequirements {
+	updatedReq := defaultReq
 	if _, ok := userOverrides.Limits["cpu"]; ok {
-		defaultReq.Limits["cpu"] = *userOverrides.Limits.Cpu()
+		updatedReq.Limits["cpu"] = *userOverrides.Limits.Cpu()
 		if _, ok := userOverrides.Requests["cpu"]; !ok && defaultReq.Requests.Cpu().Value() > userOverrides.Limits.Cpu().Value() {
-			defaultReq.Requests["cpu"] = *userOverrides.Limits.Cpu()
+			updatedReq.Requests["cpu"] = *userOverrides.Limits.Cpu()
 		}
 	}
 	if _, ok := userOverrides.Limits["memory"]; ok {
-		defaultReq.Limits["memory"] = *userOverrides.Limits.Memory()
+		updatedReq.Limits["memory"] = *userOverrides.Limits.Memory()
 		if _, ok := userOverrides.Requests["memory"]; !ok && defaultReq.Requests.Memory().Value() > userOverrides.Limits.Memory().Value() {
-			defaultReq.Requests["memory"] = *userOverrides.Limits.Memory()
+			updatedReq.Requests["memory"] = *userOverrides.Limits.Memory()
 		}
 	}
 	if _, ok := userOverrides.Requests["cpu"]; ok {
 		defaultReq.Requests["cpu"] = *userOverrides.Requests.Cpu()
 		if _, ok := userOverrides.Limits["cpu"]; !ok && defaultReq.Limits.Cpu().Value() < userOverrides.Requests.Cpu().Value() {
-			defaultReq.Limits["cpu"] = *userOverrides.Requests.Cpu()
+			updatedReq.Limits["cpu"] = *userOverrides.Requests.Cpu()
 		}
 	}
 	if _, ok := userOverrides.Requests["memory"]; ok {
-		defaultReq.Requests["memory"] = *userOverrides.Requests.Memory()
+		updatedReq.Requests["memory"] = *userOverrides.Requests.Memory()
 		if _, ok := userOverrides.Limits["memory"]; !ok && defaultReq.Limits.Memory().Value() < userOverrides.Requests.Memory().Value() {
-			defaultReq.Limits["memory"] = *userOverrides.Requests.Memory()
+			updatedReq.Limits["memory"] = *userOverrides.Requests.Memory()
 		}
 	}
+	return updatedReq
 }
 
-// Storage is the only valid resource requirement for PVC, extract that if user has set it.
-// If user provided both Limits and Requests, use them
-// As ResourceRequirements.Limits must be >= ResourceRequirements.Requests,
-// If user has provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value.
+// overridePvcRequirements replaces default storage requirement value with user's value.
+// - If user provided both Limits and Requests, use them
+// - If user has provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value.
 // We don not set default Limits for storage, so don't have to handle case where user has set only Requests.
-func overridePvcRequirements(defaultReq *corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) {
+func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) corev1.ResourceRequirements {
+	updatedReq := defaultReq
 	if _, ok := userOverrides.Limits["storage"]; ok {
-		defaultReq.Limits = corev1.ResourceList{
+		updatedReq.Limits = corev1.ResourceList{
 			"storage": userOverrides.Limits["storage"],
 		}
 
@@ -1443,12 +1444,13 @@ func overridePvcRequirements(defaultReq *corev1.ResourceRequirements, userOverri
 			defaultStorage := defaultReq.Requests["storage"]
 			requestedStorage := userOverrides.Limits["storage"]
 			if defaultStorage.Value() > requestedStorage.Value() {
-				defaultReq.Requests["storage"] = userOverrides.Limits["storage"]
+				updatedReq.Requests["storage"] = userOverrides.Limits["storage"]
 			}
 		}
 	}
 
 	if _, ok := userOverrides.Requests["storage"]; ok {
-		defaultReq.Requests["storage"] = userOverrides.Requests["storage"]
+		updatedReq.Requests["storage"] = userOverrides.Requests["storage"]
 	}
+	return updatedReq
 }

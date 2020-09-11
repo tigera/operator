@@ -511,7 +511,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					NodeSelector:                  map[string]string{},
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Tolerations:                   c.nodeTolerations(),
 					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",

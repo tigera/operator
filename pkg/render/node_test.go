@@ -54,10 +54,7 @@ var _ = Describe("Node rendering tests", func() {
 		miMode := operator.MultiInterfaceModeNone
 		defaultInstance = &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{
-					Type:     "Calico",
-					LogLevel: "INFO",
-				},
+				CNI: &operator.CNISpec{Type: "Calico"},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					BGP:                        &bgpEnabled,
 					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
@@ -119,7 +116,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
-      "log_level": "INFO",
+      "log_level": "Info",
       "log_file_path": "/host/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -460,7 +457,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
-      "log_level": "INFO",
+      "log_level": "Info",
       "log_file_path": "/host/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -663,11 +660,8 @@ var _ = Describe("Node rendering tests", func() {
 		amazonVPCInstalllation := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				KubernetesProvider: operator.ProviderEKS,
-				CNI: &operator.CNISpec{
-					Type:     operator.PluginAmazonVPC,
-					LogLevel: "INFO",
-				},
-				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
+				FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			},
 		}
 
@@ -1466,7 +1460,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
-      "log_level": "INFO",
+      "log_level": "Info",
       "log_file_path": "/host/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -1548,7 +1542,7 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1410,
       "nodename_file_optional": false,
-      "log_level": "INFO",
+      "log_level": "Info",
       "log_file_path": "/host/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",

@@ -387,7 +387,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "datastore_type": "kubernetes",
       "mtu": %d,
       "nodename_file_optional": %v,
-      "log_level": "%s",
+      "log_level": "Info",
       "log_file_path": "/host/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
@@ -409,7 +409,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, c.cr.Spec.CNI.LogLevel, assign_ipv4, assign_ipv6, ipForward, portmap)
+}`, mtu, nodenameFileOptional, assign_ipv4, assign_ipv6, ipForward, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},

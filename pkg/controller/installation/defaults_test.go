@@ -87,7 +87,10 @@ var _ = Describe("Defaulting logic tests", func() {
 						Name: "pullSecret2",
 					},
 				},
-				CNI: &operator.CNISpec{Type: operator.PluginCalico},
+				CNI: &operator.CNISpec{
+					Type:     operator.PluginCalico,
+					LogLevel: "INFO",
+				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools: []operator.IPPool{
 						{

@@ -325,6 +325,9 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.CNI.Type = operator.PluginCalico
 		}
 	}
+	if instance.Spec.CNI.LogLevel == "" {
+		instance.Spec.CNI.LogLevel = "INFO"
+	}
 
 	// Default the CalicoNetworkSpec based on the CNI plugin.
 	if instance.Spec.CalicoNetwork == nil {

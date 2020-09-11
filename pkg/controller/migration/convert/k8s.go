@@ -55,6 +55,25 @@ func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, con
 	return v, nil
 }
 
+// assertEnv gets the value of an environment variable and marks that it has been checked.
+func (r *CheckedDaemonSet) assertEnv(ctx context.Context, client client.Client, container, key, expectedValue string) error {
+	value, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
+	if err != nil {
+		return ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
+	}
+	r.ignoreEnv(container, key)
+
+	if value != nil && *value != expectedValue {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("%s=%s is not supported", key, *value),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("remove the %s env var or set it to '%s'", key, expectedValue),
+		}
+	}
+
+	return nil
+}
+
 // getEnvVar returns a kubernetes envVar and marks that it has been checked.
 func (r *CheckedDaemonSet) getEnvVar(container string, key string) (*corev1.EnvVar, error) {
 	c := getContainer(r.Spec.Template.Spec, container)

@@ -57,7 +57,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 			return err
 		}
 		if enabledControllers != nil && *enabledControllers != "node" {
-			return ErrIncompatibleCluster{"only ENABLED_CONTROLLERS=node supported"}
+			return ErrInvalidEnvVar(ComponentKubecontrollers, "ENABLED_CONTROLLERS", *enabledControllers, "node")
 		}
 
 		autoHeps, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "AUTO_HOST_ENDPOINTS")
@@ -65,7 +65,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 			return err
 		}
 		if autoHeps != nil && strings.ToLower(*autoHeps) != "disabled" {
-			return ErrIncompatibleCluster{"only AUTO_HOST_ENDPOINTS=disabled supported"}
+			return ErrInvalidEnvVar(ComponentKubecontrollers, "AUTO_HOST_ENDPOINTS", *autoHeps, "disabled")
 		}
 	}
 
@@ -78,17 +78,29 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		// prefer user-defined flexvolpath over detected value
 		if install.Spec.FlexVolumePath == "" {
 			if vol.HostPath == nil {
-				return ErrIncompatibleCluster{"volume 'flexvol-driver-host' must be a HostPath"}
+				return ErrIncompatibleCluster{
+					err:       "volume 'flexvol-driver-host' must be a HostPath",
+					component: ComponentCalicoNode,
+					fix:       "remove the 'flexvol-driver-host' volume or convert it to type hostPath",
+				}
 			}
 			if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv == nil {
-				return ErrIncompatibleCluster{"detected 'flexvol-driver-host' volume but no 'flexvol-driver' init container"}
+				return ErrIncompatibleCluster{
+					err:       "detected 'flexvol-driver-host' volume but no 'flexvol-driver' init container",
+					component: ComponentCalicoNode,
+					fix:       "remove the 'flexvol-driver-host' volume or restore the 'flexvol-driver' init container",
+				}
 			}
 			install.Spec.FlexVolumePath = vol.HostPath.Path
 		}
 	} else {
 		// verify that no flexvol container is set
 		if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv != nil {
-			return ErrIncompatibleCluster{"detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume"}
+			return ErrIncompatibleCluster{
+				err:       "detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume",
+				component: ComponentCalicoNode,
+				fix:       "restore the 'flexvol-driver-host' volume or remove the 'flexvol-driver' init container",
+			}
 		}
 		install.Spec.FlexVolumePath = "None"
 	}
@@ -123,7 +135,11 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		return err
 	}
 	if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
-		return ErrIncompatibleCluster{"NODENAME on 'calico-node' container must be unset or be a FieldRef to 'spec.nodeName'"}
+		return ErrIncompatibleCluster{
+			err:       "NODENAME on 'calico-node' container must be unset or be a FieldRef to 'spec.nodeName'",
+			component: ComponentCalicoNode,
+			fix:       "remove the NODENAME env var or convert it to a fieldRef with value 'spec.nodeName'",
+		}
 	}
 
 	if cni := getContainer(c.node.Spec.Template.Spec, "install-cni"); cni != nil {
@@ -132,15 +148,15 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 			return err
 		}
 		if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
-			return ErrIncompatibleCluster{"KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'"}
+			return ErrIncompatibleCluster{
+				err:       "KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'",
+				component: ComponentCalicoNode,
+				fix:       "remove the KUBERNETES_NODE_NAME env var or convert it to a fieldRef with value 'spec.nodeName'",
+			}
 		}
 
-		n, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME")
-		if err != nil {
+		if err := c.node.assertEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME", "10-calico.conflist"); err != nil {
 			return err
-		}
-		if n != nil && *n != "10-calico.conflist" {
-			return ErrIncompatibleCluster{"CNI_CONF_NAME on 'install-cni' container must be '10-calico.conflist'"}
 		}
 	}
 
@@ -263,29 +279,49 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
+		return ErrIncompatibleCluster{
+			err:       "node affinity not supported for calico-node daemonset",
+			component: ComponentCalicoNode,
+			fix:       "remove the affinity",
+		}
 	}
 	if nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
 		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
 		if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; !ok || len(nodeSel) != 1 {
-			return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel),
+				component: ComponentCalicoNode,
+				fix:       "remove the nodeSelector",
+			}
 		}
 	}
 
 	// check typha nodeSelectors
 	if c.typha != nil {
 		if c.typha.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{"node affinity not supported for typha deployment"}
+			return ErrIncompatibleCluster{
+				err:       "node affinity not supported for typha deployment",
+				component: ComponentTypha,
+				fix:       "remove the affinity",
+			}
 		}
 		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel)}
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel),
+				component: ComponentTypha,
+				fix:       "remove the nodeSelector",
+			}
 		}
 	}
 
 	// check kube-controllers nodeSelectors
 	if c.kubeControllers != nil {
 		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{"node affinity not supported for kube-controller deployment"}
+			return ErrIncompatibleCluster{
+				err:       "node affinity not supported for kube-controller deployment",
+				component: ComponentKubecontrollers,
+				fix:       "remove the affinity",
+			}
 		}
 
 		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
@@ -327,8 +363,11 @@ func handleFelixNodeMetrics(c *components, install *operatorv1.Installation) err
 		if port != nil {
 			p, err := strconv.ParseInt(*port, 10, 32)
 			if err != nil || p <= 0 || p > 65535 {
-				return ErrIncompatibleCluster{fmt.Sprintf(
-					"invalid port defined in FELIX_PROMETHEUSMETRICSPORT(%s), it should be 1-65535 ", *port)}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("invalid port defined in FELIX_PROMETHEUSMETRICSPORT=%s", *port),
+					component: ComponentCalicoNode,
+					fix:       "adjust it to be within the range of 1-65535 or remove the env var",
+				}
 			}
 			i := int32(p)
 			install.Spec.NodeMetricsPort = &i
@@ -336,27 +375,6 @@ func handleFelixNodeMetrics(c *components, install *operatorv1.Installation) err
 	} else {
 		// Ignore the metrics port if metrics is disabled.
 		c.node.ignoreEnv(containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
-	}
-
-	return nil
-}
-
-func checkTolerations(existing []corev1.Toleration, expected ...corev1.Toleration) error {
-	if len(existing) != len(expected) {
-		return ErrIncompatibleCluster{fmt.Sprintf("missing expected tolerations. have: %+v. expecting: %+v", existing, expected)}
-	}
-
-	for _, t := range expected {
-		var found bool
-		for _, k := range existing {
-			if k == t {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return ErrIncompatibleCluster{fmt.Sprintf("missing expected toleration: %+v", t)}
-		}
 	}
 
 	return nil

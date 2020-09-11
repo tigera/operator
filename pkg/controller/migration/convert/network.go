@@ -31,7 +31,9 @@ func handleNetwork(c *components, install *operatorv1.Installation) error {
 	}
 	if defaultWepAction != nil && strings.ToLower(*defaultWepAction) != "accept" {
 		return ErrIncompatibleCluster{
-			fmt.Sprintf("unexpected FELIX_DEFAULTENDPOINTTOHOSTACTION: '%s'. Only 'accept' is supported.", *defaultWepAction),
+			err:       fmt.Sprintf("unexpected FELIX_DEFAULTENDPOINTTOHOSTACTION: '%s'. Only 'accept' is supported.", *defaultWepAction),
+			component: ComponentCalicoNode,
+			fix:       "unset FELIX_DEFAULTENDPOINTTOHOSTACTION or set it to 'accept'",
 		}
 	}
 
@@ -50,7 +52,11 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	errCtx := fmt.Sprintf("detected %s CNI plugin", plugin)
 
 	if c.cni.CalicoConfig == nil {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, required Calico cni config was not found ", errCtx)}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("%s, required Calico CNI config was not found ", errCtx),
+			component: ComponentCNIConfig,
+			fix:       "TODO",
+		}
 	}
 
 	if install.Spec.CNI == nil {
@@ -94,14 +100,8 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	// IP
-	ipMethod, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP", "autodetect"); err != nil {
 		return err
-	}
-	if ipMethod != nil && strings.ToLower(*ipMethod) != "autodetect" {
-		return ErrIncompatibleCluster{
-			fmt.Sprintf("%s, unexpected IP value: '%s'. Only 'autodetect' is supported.", errCtx, *ipMethod),
-		}
 	}
 
 	// IP_AUTODETECTION_METHOD
@@ -145,20 +145,12 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 }
 
 func handleIpv6(c *components, _ *operatorv1.Installation) error {
-	felixIpv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
 		return err
-	}
-	if felixIpv6 != nil && strings.ToLower(*felixIpv6) != "false" {
-		return ErrIncompatibleCluster{"calico-node/FELIX_IPV6SUPPORT not supported"}
 	}
 
-	ipv6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP6", "none"); err != nil {
 		return err
-	}
-	if ipv6 != nil && *ipv6 != "none" {
-		return ErrIncompatibleCluster{"migration of IP6 clusters not supported at this time"}
 	}
 
 	c.node.ignoreEnv(containerCalicoNode, "IP6_AUTODETECTION_METHOD")
@@ -316,12 +308,8 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	// CALICO_NETWORKING_BACKEND
-	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND", "none"); err != nil {
 		return err
-	}
-	if netBackend == nil || *netBackend != "none" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, CALICO_NETWORKING_BACKEND=none is expected", errCtx)}
 	}
 
 	if install.Spec.CNI == nil {
@@ -334,14 +322,8 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		// Verify FELIX_IPTABLESMANGLEALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginAmazonVPC. The value is also expected to be necessary for Calico policy
 		// to correctly function with the AmazonVPC plugin.
-		mangleAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
-		if err != nil {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION", "Return"); err != nil {
 			return err
-		}
-		if mangleAllow == nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'.", errCtx)}
-		} else if *mangleAllow != "Return" {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was %s, expected it to be 'Return'.", errCtx, *mangleAllow)}
 		}
 	case operatorv1.PluginAzureVNET:
 		install.Spec.CNI.Type = plugin
@@ -350,27 +332,15 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		// Verify FELIX_IPTABLESMANGLEALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginGKE. The value is also expected to be necessary for Calico policy
 		// to correctly function with the GKE plugin.
-		mangleAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
-		if err != nil {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION", "Return"); err != nil {
 			return err
-		}
-		if mangleAllow == nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'.", errCtx)}
-		} else if *mangleAllow != "Return" {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was %s, expected it to be 'Return'.", errCtx, *mangleAllow)}
 		}
 
 		// Verify FELIX_IPTABLESFILTERALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginGKE. The value is also expected to be necessary for Calico policy
 		// to correctly function with the GKE plugin.
-		filterAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESFILTERALLOWACTION")
-		if err != nil {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESFILTERALLOWACTION", "Return"); err != nil {
 			return err
-		}
-		if filterAllow == nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESFILTERALLOWACTION was unset, expected it to be 'Return'.", errCtx)}
-		} else if *filterAllow != "Return" {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESFILTERALLOWACTION was set to %s, expected it to be 'Return'.", errCtx, *filterAllow)}
 		}
 	default:
 		return ErrIncompatibleCluster{
@@ -380,21 +350,12 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 
 	// TODO: Handle configuration with IPs and Pools specified.
 	// We need to relax the restriction on CalicoNetwork and non-Calico CNI to do this.
-
-	ip, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP", ""); err != nil {
 		return err
 	}
-	if ip != nil && *ip != "" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, IP was set to %s, it is only supported as empty or unset with non-Calico CNI.", errCtx, *ip)}
-	}
 
-	dp, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "NO_DEFAULT_POOLS")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "NO_DEFAULT_POOLS", "true"); err != nil {
 		return err
-	}
-	if dp != nil && *dp != "true" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, expected NO_DEFAULT_POOLS to be set 'true' with non-Calico CNI.", errCtx)}
 	}
 
 	return nil
@@ -515,20 +476,36 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 	if c.cni.CalicoConfig != nil && c.cni.CalicoConfig.IPAM.Type == "calico-ipam" {
 		if c.cni.CalicoConfig.IPAM.AssignIpv4 == nil || strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv4) == "true" {
 			if v4pool == nil {
-				return ErrIncompatibleCluster{"CNI config indicates assign_ipv4 true but there were no valid V4 pools found"}
+				return ErrIncompatibleCluster{
+					err:       "CNI config indicates assign_ipv4=true but there were no valid IPv4 pools found",
+					component: ComponentCNIConfig,
+					fix:       "create an IPv4 pool or set assign_ipv4=false",
+				}
 			}
 		} else {
 			if v4pool != nil {
-				return ErrIncompatibleCluster{"CNI config indicates assig_ipv4 false but a V4 pool was found"}
+				return ErrIncompatibleCluster{
+					err:       "CNI config indicates assign_ipv4=false but an IPv4 pool was found",
+					component: ComponentCNIConfig,
+					fix:       "delete the IPv4 pool or set assign_ipv4=false",
+				}
 			}
 		}
 		if c.cni.CalicoConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv6) == "true" {
 			if v6pool == nil {
-				return ErrIncompatibleCluster{"CNI config indicates assign_ipv6 true but there were no valid V6 pools found"}
+				return ErrIncompatibleCluster{
+					err:       "CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found",
+					component: ComponentCNIConfig,
+					fix:       "create an IPv6 pool or set assign_ipv6=false",
+				}
 			}
 		} else {
 			if v6pool != nil {
-				return ErrIncompatibleCluster{"CNI config indicates assig_ipv6 false but a V6 pool was found"}
+				return ErrIncompatibleCluster{
+					err:       "CNI config indicates assign_ipv6=false but an IPv6 pool was found",
+					component: ComponentCNIConfig,
+					fix:       "delete the IPv6 pool or set assign_ipv6=true",
+				}
 			}
 		}
 	}

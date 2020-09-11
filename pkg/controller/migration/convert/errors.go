@@ -21,6 +21,7 @@ const (
 	ComponentCalicoNode      = "daemonset/calico-node"
 	ComponentKubecontrollers = "deployment/calico-kube-controllers"
 	ComponentTypha           = "deployment/calico-typha"
+	ComponentCNIConfig       = "cni-config"
 )
 
 var FixFileFeatureRequest = "file a feature request with support.tigera.io"
@@ -38,5 +39,13 @@ func ErrIncompatibleAnnotation(annotations map[string]string, component string) 
 		err:       fmt.Sprintf("unexpected annotation '%v'", annotations),
 		component: component,
 		fix:       "remove the annotation from the component",
+	}
+}
+
+func ErrInvalidEnvVar(component, envVar, value, expectedValue string) ErrIncompatibleCluster {
+	return ErrIncompatibleCluster{
+		err:       fmt.Sprintf("%s=%s is not supported", envVar, value),
+		component: component,
+		fix:       fmt.Sprintf("remove the %s env var or set it to '%s'", envVar, expectedValue),
 	}
 }

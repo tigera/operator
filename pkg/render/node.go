@@ -388,7 +388,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "mtu": %d,
       "nodename_file_optional": %v,
       "log_level": "%s",
-      "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_path": "/host/var/log/calico/cni/cni.log",
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%s",

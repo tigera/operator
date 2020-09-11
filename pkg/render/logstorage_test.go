@@ -16,6 +16,11 @@ package render_test
 
 import (
 	"fmt"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1beta "k8s.io/api/batch/v1beta1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -24,12 +29,7 @@ import (
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -758,7 +758,250 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				})
 			})
 		})
+		Context("Node Resource", func() {
+			When("the ResourceRequirements is set", func() {
+				defaultLimitCpu := "1"
+				defaultLimitMemory := "4Gi"
+				defaultRequestsCpu := "250m"
+				defaultRequestsMemory := "4Gi"
+				It("sets memory and cpu requirements in pod template", func() {
+					res := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"cpu":    resource.MustParse("5"),
+							"memory": resource.MustParse("2Gi"),
+						},
+						Requests: corev1.ResourceList{
+							"cpu":    resource.MustParse("500m"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					}
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:                1,
+						ResourceRequirements: &res,
+					}
 
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+					createResources, _ := component.Objects()
+					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
+					Expect(podResource).Should(Equal(res))
+				})
+				It("sets default memory and cpu requirements in pod template", func() {
+					res := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"memory": resource.MustParse("10Gi"),
+						},
+						Requests: corev1.ResourceList{
+							"cpu": resource.MustParse("250m"),
+						},
+					}
+					expectedRes := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"cpu":    resource.MustParse(defaultLimitCpu),
+							"memory": resource.MustParse("10Gi"),
+						},
+						Requests: corev1.ResourceList{
+							"cpu":    resource.MustParse("250m"),
+							"memory": resource.MustParse(defaultRequestsMemory),
+						},
+					}
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:                1,
+						ResourceRequirements: &res,
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+					createResources, _ := component.Objects()
+					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
+					Expect(podResource).Should(Equal(expectedRes))
+				})
+				It("sets value of Limits to user's Requests when user's Limits is not set and default Limits is lesser than Requests", func() {
+					res := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"cpu":    resource.MustParse("3"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					}
+					expectedRes := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"cpu":    resource.MustParse("3"),
+							"memory": resource.MustParse(defaultLimitMemory),
+						},
+						Requests: corev1.ResourceList{
+							"cpu":    resource.MustParse("3"),
+							"memory": resource.MustParse("2Gi"),
+						},
+					}
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:                1,
+						ResourceRequirements: &res,
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+					createResources, _ := component.Objects()
+					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
+					Expect(podResource).Should(Equal(expectedRes))
+				})
+				It("sets value of Requests to user's Limits when user's Requests is not set and default Requests is greater than Limits", func() {
+					res := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"memory": resource.MustParse("2Gi"),
+						},
+					}
+					expectedRes := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"cpu":    resource.MustParse(defaultLimitCpu),
+							"memory": resource.MustParse("2Gi"),
+						},
+						Requests: corev1.ResourceList{
+							"cpu":    resource.MustParse(defaultRequestsCpu),
+							"memory": resource.MustParse("2Gi"),
+						},
+					}
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:                1,
+						ResourceRequirements: &res,
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+					createResources, _ := component.Objects()
+					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
+					Expect(podResource).Should(Equal(expectedRes))
+				})
+				It("sets storage requirements in pvc template", func() {
+					res := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"storage": resource.MustParse("16Gi"),
+						},
+						Requests: corev1.ResourceList{
+							"storage": resource.MustParse("8Gi"),
+						},
+					}
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:                1,
+						ResourceRequirements: &res,
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+					createResources, _ := component.Objects()
+					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
+					Expect(pvcResource).Should(Equal(res))
+				})
+				It("sets storage value of Requests to user's Limits when user's Requests is not set and default Requests is greater than Limits in pvc template", func() {
+					res := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"storage": resource.MustParse("8Gi"),
+						},
+					}
+					expected := corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"storage": resource.MustParse("8Gi"),
+						},
+						Requests: corev1.ResourceList{
+							"storage": resource.MustParse("8Gi"),
+						},
+					}
+					logStorage.Spec.Nodes = &operator.Nodes{
+						Count:                1,
+						ResourceRequirements: &res,
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						}, true,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+					createResources, _ := component.Objects()
+					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
+					Expect(pvcResource).Should(Equal(expected))
+				})
+			})
+		})
 		Context("Node selection", func() {
 			When("NodeSets is set but empty", func() {
 				It("returns the defualt NodeSet", func() {

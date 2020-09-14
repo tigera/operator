@@ -19,15 +19,19 @@ func (e ErrIncompatibleCluster) Error() string {
 
 const (
 	ComponentCalicoNode      = "daemonset/calico-node"
-	ComponentKubecontrollers = "deployment/calico-kube-controllers"
+	ComponentKubeControllers = "deployment/calico-kube-controllers"
 	ComponentTypha           = "deployment/calico-typha"
 	ComponentCNIConfig       = "cni-config"
 	ComponentIPPools         = "ippools"
 )
 
 var (
-	FixFileFeatureRequest = "file a feature request with support.tigera.io to support clusters with your configuration"
-	FixFileBugReport      = "file a bug report with support.tigera.io"
+	// FixFileFeatureRequest is returned when configuration could be migrated in the future
+	FixFileFeatureRequest = "file a feature request to support clusters with your configuration"
+	// FixImpossible is returned when a cluster is incompatible and will not be supported in the future
+	FixImpossible = "this cluster cannot be converted by the Operator"
+	// FixFileBugReport is returned when conversion logic detects partial config which might contradict other detected config
+	FixFileBugReport = "file a bug report"
 )
 
 func ErrMissingHostPathVolume(component, volume, hostPath string) ErrIncompatibleCluster {

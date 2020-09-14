@@ -197,9 +197,9 @@ func subhandleCalicoIPAM(netBackend string, cnicfg cni.CalicoConf, install *oper
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
 	default:
 		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend),
-			component: ComponentCNIConfig,
-			fix:       "TODO",
+			err:       fmt.Sprintf("detected networking backend '%s' is unknown or incompatible with Calico IPAM", netBackend),
+			component: ComponentCalicoNode,
+			fix:       FixImpossible,
 		}
 	}
 
@@ -222,7 +222,7 @@ func subhandleCalicoIPAM(netBackend string, cnicfg cni.CalicoConf, install *oper
 		return ErrIncompatibleCluster{
 			err:       "configuration could not be migrated: " + strings.Join(invalidFields, ","),
 			component: ComponentCNIConfig,
-			fix:       "Todo",
+			fix:       "remove the unsupported fields from the IPAM config",
 		}
 	}
 	return nil
@@ -279,7 +279,7 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 		return ErrIncompatibleCluster{
 			err:       "configuration could not be migrated: " + strings.Join(invalidFields, ","),
 			component: ComponentCNIConfig,
-			fix:       "todo",
+			fix:       "adjust CNI config accordingly",
 		}
 	}
 
@@ -316,14 +316,11 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return nil
 	}
 
-	errCtx := fmt.Sprintf("detected %s CNI plugin", plugin)
-
-	icc := getContainer(c.node.Spec.Template.Spec, containerInstallCNI)
-	if icc != nil {
+	if icc := getContainer(c.node.Spec.Template.Spec, containerInstallCNI); icc != nil {
 		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("%s, %s container is not supported in the node daemonset", errCtx, containerInstallCNI),
+			err:       fmt.Sprintf("found unexpected '%s' container for '%s' CNI", containerInstallCNI, plugin),
 			component: ComponentCNIConfig,
-			fix:       "TODO",
+			fix:       FixFileFeatureRequest,
 		}
 	}
 
@@ -366,7 +363,7 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unable to migrate plugin '%s': unsupported.", plugin),
 			component: ComponentCNIConfig,
-			fix:       "TODO",
+			fix:       FixImpossible,
 		}
 	}
 
@@ -450,7 +447,7 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 		return "", ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke, cali' are supported.", *prefix),
 			component: ComponentCalicoNode,
-			fix:       "todo",
+			fix:       FixImpossible,
 		}
 	}
 }
@@ -469,20 +466,12 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 
 	v4pool, err := selectInitialPool(pools.Items, isIpv4)
 	if err != nil {
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("failed to select initial IPPool: %v", err),
-			component: ComponentIPPools,
-			fix:       "TODO",
-		}
+		return err
 	}
 
 	v6pool, err := selectInitialPool(pools.Items, isIpv6)
 	if err != nil {
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("failed to select initial IPPool: %v", err),
-			component: ComponentIPPools,
-			fix:       "TODO",
-		}
+		return err
 	}
 	// Only if there is at least one v4 or v6 pool will we initialize CalicoNetwork
 	if v4pool != nil || v6pool != nil {
@@ -499,9 +488,9 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 			pool, err := convertPool(*v4pool)
 			if err != nil {
 				return ErrIncompatibleCluster{
-					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error()),
+					err:       fmt.Sprintf("failed to convert IPPool %s, %v", v4pool.Name, err),
 					component: ComponentIPPools,
-					fix:       "todo",
+					fix:       FixFileBugReport,
 				}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
@@ -511,9 +500,9 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 			pool, err := convertPool(*v6pool)
 			if err != nil {
 				return ErrIncompatibleCluster{
-					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error()),
+					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err),
 					component: ComponentIPPools,
-					fix:       "todo",
+					fix:       FixFileBugReport,
 				}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
@@ -618,7 +607,7 @@ func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1
 	pool, err := getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
 		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
 		if err != nil {
-			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %s", p.Name, err.Error())
+			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %v", p.Name, err)
 		}
 		if isver(ip) {
 			if strings.HasPrefix(p.Name, "default-ipv") {
@@ -638,7 +627,7 @@ func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1
 	pool, err = getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
 		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
 		if err != nil {
-			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %s", p.Name, err.Error())
+			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %v", p.Name, err)
 		}
 		return isver(ip), nil
 	})

@@ -772,7 +772,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	} else if c.cr.Spec.CNI.Type == operator.PluginCalico {
-		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
+		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir"}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
 

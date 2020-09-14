@@ -785,6 +785,7 @@ var (
 				"globalnetworksets",
 				"networksets",
 				"managedclusters",
+				"packetcaptures",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},

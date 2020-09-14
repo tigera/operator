@@ -999,6 +999,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalnetworksets",
 				"networksets",
 				"managedclusters",
+				"packetcaptures",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},

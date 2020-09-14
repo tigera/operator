@@ -1,7 +1,6 @@
 package convert
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -25,16 +24,8 @@ const (
 func handleNetwork(c *components, install *operatorv1.Installation) error {
 
 	// Verify FELIX_DEFAULTENDPOINTTOHOSTACTION is set to Accept because that is what the operator sets it to.
-	defaultWepAction, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION")
-	if err != nil {
+	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION", "accept"); err != nil {
 		return err
-	}
-	if defaultWepAction != nil && strings.ToLower(*defaultWepAction) != "accept" {
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("unexpected FELIX_DEFAULTENDPOINTTOHOSTACTION: '%s'. Only 'accept' is supported.", *defaultWepAction),
-			component: ComponentCalicoNode,
-			fix:       "unset FELIX_DEFAULTENDPOINTTOHOSTACTION or set it to 'accept'",
-		}
 	}
 
 	return nil
@@ -49,13 +40,11 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return nil
 	}
 
-	errCtx := fmt.Sprintf("detected %s CNI plugin", plugin)
-
 	if c.cni.CalicoConfig == nil {
 		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("%s, required Calico CNI config was not found ", errCtx),
+			err:       "detected Calico CNI but couldn't find any CNI plugin with type=calico",
 			component: ComponentCNIConfig,
-			fix:       "TODO",
+			fix:       "ensure CNI config contains a plugin with type=calico, or if not using Calico CNI, ensure FELIX_INTERFACEPREFIX is set correctly on calico-node",
 		}
 	}
 
@@ -82,21 +71,28 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
 
 		if err := subhandleCalicoIPAM(netBackend, *c.cni.CalicoConfig, install); err != nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM calico-ipam, %s", errCtx, err.Error())}
+			return err
 		}
 	case "host-local":
 		install.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
 
 		if c.cni.HostLocalIPAMConfig == nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM host-local, but no IPAM configuration available", errCtx)}
+			return ErrIncompatibleCluster{
+				err:       "detected Calico CNI with host-local IPAM, but failed to load host-local config",
+				component: ComponentCNIConfig,
+				fix:       FixFileBugReport,
+			}
 		}
 
 		if err := subhandleHostLocalIPAM(netBackend, *c.cni.HostLocalIPAMConfig, install); err != nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s and IPAM plugin %s, %s",
-				errCtx, c.cni.CalicoConfig.IPAM.Type, err.Error())}
+			return err
 		}
 	default:
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, unrecognized IPAM plugin %s, expected calico-ipam or host-local", errCtx, c.cni.CalicoConfig.IPAM.Type)}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("unrecognized IPAM plugin '%s'", c.cni.CalicoConfig.IPAM.Type),
+			component: ComponentCNIConfig,
+			fix:       "update cluster to supported type 'calico-ipam' or 'host-local'",
+		}
 	}
 
 	// IP
@@ -105,16 +101,8 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	// IP_AUTODETECTION_METHOD
-	am, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
-	if err != nil {
+	if err := handleAutoDetectionMethod(c, install); err != nil {
 		return err
-	}
-	if am != nil {
-		tam, err := getAutoDetection(*am)
-		if err != nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("%s, error parsing IP_AUTODETECTION_METHOD: %s", errCtx, err.Error())}
-		}
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &tam
 	}
 
 	// CNI portmap plugin
@@ -127,18 +115,34 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	if c.cni.ConfigName != "k8s-pod-network" {
-		return ErrIncompatibleCluster{fmt.Sprintf("%s, only 'k8s-pod-network' is supported as CNI name, found %s", errCtx, c.cni.ConfigName)}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("only 'k8s-pod-network' is supported as CNI name, found %s", c.cni.ConfigName),
+			component: ComponentCNIConfig,
+			fix:       "set CNI config name to 'k8s-pod-network'",
+		}
 	}
 
 	// Other CNI features
 	if c.cni.CalicoConfig.FeatureControl.FloatingIPs {
-		return ErrIncompatibleCluster{errCtx + ", floating IPs not supported"}
+		return ErrIncompatibleCluster{
+			err:       "floating IPs not supported",
+			component: ComponentCNIConfig,
+			fix:       "disable 'floating_ips' in the CNI configuration",
+		}
 	}
 	if c.cni.CalicoConfig.FeatureControl.IPAddrsNoIpam {
-		return ErrIncompatibleCluster{errCtx + ", IpAddrsNoIpam not supported"}
+		return ErrIncompatibleCluster{
+			err:       "IpAddrsNoIpam not supported",
+			component: ComponentCNIConfig,
+			fix:       "disable 'IpAddrsNoIpam' in the CNI configuration",
+		}
 	}
 	if c.cni.CalicoConfig.ContainerSettings.AllowIPForwarding {
-		return ErrIncompatibleCluster{errCtx + ", AllowIPForwarding not supported"}
+		return ErrIncompatibleCluster{
+			err:       "AllowIPForwarding not supported",
+			component: ComponentCNIConfig,
+			fix:       "disable 'AllowIPForwarding' in the CNI configuration",
+		}
 	}
 
 	return nil
@@ -192,7 +196,11 @@ func subhandleCalicoIPAM(netBackend string, cnicfg cni.CalicoConf, install *oper
 	case "vxlan":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
 	default:
-		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend)}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend),
+			component: ComponentCNIConfig,
+			fix:       "TODO",
+		}
 	}
 
 	// ignored fields:
@@ -211,7 +219,11 @@ func subhandleCalicoIPAM(netBackend string, cnicfg cni.CalicoConf, install *oper
 	}
 
 	if len(invalidFields) > 0 {
-		return ErrIncompatibleCluster{"configuration could not be migrated: " + strings.Join(invalidFields, ",")}
+		return ErrIncompatibleCluster{
+			err:       "configuration could not be migrated: " + strings.Join(invalidFields, ","),
+			component: ComponentCNIConfig,
+			fix:       "Todo",
+		}
 	}
 	return nil
 }
@@ -228,7 +240,9 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 	case "none":
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
 	default:
-		return ErrIncompatibleCluster{fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend)}
+		return ErrIncompatibleCluster{
+			err: fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend),
+		}
 	}
 
 	// ignored fields:
@@ -262,7 +276,11 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 	}
 
 	if len(invalidFields) > 0 {
-		return ErrIncompatibleCluster{"configuration could not be migrated: " + strings.Join(invalidFields, ",")}
+		return ErrIncompatibleCluster{
+			err:       "configuration could not be migrated: " + strings.Join(invalidFields, ","),
+			component: ComponentCNIConfig,
+			fix:       "todo",
+		}
 	}
 
 	return nil
@@ -303,7 +321,9 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	icc := getContainer(c.node.Spec.Template.Spec, containerInstallCNI)
 	if icc != nil {
 		return ErrIncompatibleCluster{
-			fmt.Sprintf("%s, %s container is not supported in the node daemonset", errCtx, containerInstallCNI),
+			err:       fmt.Sprintf("%s, %s container is not supported in the node daemonset", errCtx, containerInstallCNI),
+			component: ComponentCNIConfig,
+			fix:       "TODO",
 		}
 	}
 
@@ -344,7 +364,9 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	default:
 		return ErrIncompatibleCluster{
-			fmt.Sprintf("unable to migrate plugin '%s': unsupported.", plugin),
+			err:       fmt.Sprintf("unable to migrate plugin '%s': unsupported.", plugin),
+			component: ComponentCNIConfig,
+			fix:       "TODO",
 		}
 	}
 
@@ -363,39 +385,47 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 
 // getAutoDetection auto-detects the IP and Network using the requested
 // detection method.
-func getAutoDetection(method string) (operatorv1.NodeAddressAutodetection, error) {
+func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) error {
+	method, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
+	if err != nil {
+		return err
+	}
+	if method == nil {
+		return nil
+	}
+
 	const (
-		AUTODETECTION_METHOD_FIRST          = "first-found"
-		AUTODETECTION_METHOD_CAN_REACH      = "can-reach="
-		AUTODETECTION_METHOD_INTERFACE      = "interface="
-		AUTODETECTION_METHOD_SKIP_INTERFACE = "skip-interface="
+		AutodetectionMethodFirst         = "first-found"
+		AutodetectionMethodCanReach      = "can-reach="
+		AutodetectionMethodInterface     = "interface="
+		AutodetectionMethodSkipInterface = "skip-interface="
 	)
 
 	// first-found
-	if method == "" || method == AUTODETECTION_METHOD_FIRST {
+	if *method == "" || *method == AutodetectionMethodFirst {
 		var t = true
-		return operatorv1.NodeAddressAutodetection{FirstFound: &t}, nil
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &t}
 	}
 
 	// interface
-	if strings.HasPrefix(method, AUTODETECTION_METHOD_INTERFACE) {
-		ifStr := strings.TrimPrefix(method, AUTODETECTION_METHOD_INTERFACE)
-		return operatorv1.NodeAddressAutodetection{Interface: ifStr}, nil
+	if strings.HasPrefix(*method, AutodetectionMethodInterface) {
+		ifStr := strings.TrimPrefix(*method, AutodetectionMethodInterface)
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{Interface: ifStr}
 	}
 
 	// can-reach
-	if strings.HasPrefix(method, AUTODETECTION_METHOD_CAN_REACH) {
-		dest := strings.TrimPrefix(method, AUTODETECTION_METHOD_CAN_REACH)
-		return operatorv1.NodeAddressAutodetection{CanReach: dest}, nil
+	if strings.HasPrefix(*method, AutodetectionMethodCanReach) {
+		dest := strings.TrimPrefix(*method, AutodetectionMethodCanReach)
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CanReach: dest}
 	}
 
 	// skip-interface
-	if strings.HasPrefix(method, AUTODETECTION_METHOD_SKIP_INTERFACE) {
-		ifStr := strings.TrimPrefix(method, AUTODETECTION_METHOD_SKIP_INTERFACE)
-		return operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}, nil
+	if strings.HasPrefix(*method, AutodetectionMethodSkipInterface) {
+		ifStr := strings.TrimPrefix(*method, AutodetectionMethodSkipInterface)
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}
 	}
 
-	return operatorv1.NodeAddressAutodetection{}, errors.New("unrecognized method: " + method)
+	return ErrInvalidEnvVar(ComponentCalicoNode, "IP_AUTODETECTION_METHOD", *method, "first-found=*, can-reach=*, interface=*, skip-interface=*")
 }
 
 func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
@@ -418,7 +448,9 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 		return operatorv1.PluginCalico, nil
 	default:
 		return "", ErrIncompatibleCluster{
-			fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke, cali' are supported.", *prefix),
+			err:       fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke, cali' are supported.", *prefix),
+			component: ComponentCalicoNode,
+			fix:       "todo",
 		}
 	}
 }
@@ -437,12 +469,20 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 
 	v4pool, err := selectInitialPool(pools.Items, isIpv4)
 	if err != nil {
-		return ErrIncompatibleCluster{err.Error()}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("failed to select initial IPPool: %v", err),
+			component: ComponentIPPools,
+			fix:       "TODO",
+		}
 	}
 
 	v6pool, err := selectInitialPool(pools.Items, isIpv6)
 	if err != nil {
-		return ErrIncompatibleCluster{err.Error()}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("failed to select initial IPPool: %v", err),
+			component: ComponentIPPools,
+			fix:       "TODO",
+		}
 	}
 	// Only if there is at least one v4 or v6 pool will we initialize CalicoNetwork
 	if v4pool != nil || v6pool != nil {
@@ -458,7 +498,11 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 		if render.GetIPv4Pool(install.Spec.CalicoNetwork.IPPools) == nil && v4pool != nil {
 			pool, err := convertPool(*v4pool)
 			if err != nil {
-				return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error())}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v4pool.Name, err.Error()),
+					component: ComponentIPPools,
+					fix:       "todo",
+				}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 		}
@@ -466,7 +510,11 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
 			pool, err := convertPool(*v6pool)
 			if err != nil {
-				return ErrIncompatibleCluster{fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error())}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err.Error()),
+					component: ComponentIPPools,
+					fix:       "todo",
+				}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
 		}

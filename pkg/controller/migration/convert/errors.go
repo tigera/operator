@@ -14,7 +14,7 @@ type ErrIncompatibleCluster struct {
 }
 
 func (e ErrIncompatibleCluster) Error() string {
-	return fmt.Sprintf("%s. To fix it, please %s on %s", e.err, e.fix, e.component)
+	return fmt.Sprintf("%s. To fix it, %s on %s", e.err, e.fix, e.component)
 }
 
 const (
@@ -22,9 +22,13 @@ const (
 	ComponentKubecontrollers = "deployment/calico-kube-controllers"
 	ComponentTypha           = "deployment/calico-typha"
 	ComponentCNIConfig       = "cni-config"
+	ComponentIPPools         = "ippools"
 )
 
-var FixFileFeatureRequest = "file a feature request with support.tigera.io"
+var (
+	FixFileFeatureRequest = "file a feature request with support.tigera.io to support clusters with your configuration"
+	FixFileBugReport      = "file a bug report with support.tigera.io"
+)
 
 func ErrMissingHostPathVolume(component, volume, hostPath string) ErrIncompatibleCluster {
 	return ErrIncompatibleCluster{

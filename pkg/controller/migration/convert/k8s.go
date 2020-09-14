@@ -48,7 +48,11 @@ func (r *CheckedDaemonSet) uncheckedVars() []string {
 func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, container string, key string) (*string, error) {
 	v, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
 	if err != nil {
-		return nil, ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
+		return nil, ErrIncompatibleCluster{
+			err:       fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("adjust %s to be an explicit value or configMapRef, or %s", key, FixFileFeatureRequest),
+		}
 	}
 	r.ignoreEnv(container, key)
 
@@ -59,7 +63,11 @@ func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, con
 func (r *CheckedDaemonSet) assertEnv(ctx context.Context, client client.Client, container, key, expectedValue string) error {
 	value, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
 	if err != nil {
-		return ErrIncompatibleCluster{fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key)}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key),
+			component: ComponentCalicoNode,
+			fix:       "todo",
+		}
 	}
 	r.ignoreEnv(container, key)
 
@@ -78,7 +86,11 @@ func (r *CheckedDaemonSet) assertEnv(ctx context.Context, client client.Client, 
 func (r *CheckedDaemonSet) getEnvVar(container string, key string) (*corev1.EnvVar, error) {
 	c := getContainer(r.Spec.Template.Spec, container)
 	if c == nil {
-		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+		return nil, ErrIncompatibleCluster{
+			err:       fmt.Sprintf("couldn't find %s container in existing daemonset", container),
+			component: ComponentCalicoNode,
+			fix:       "todo",
+		}
 	}
 	r.ignoreEnv(container, key)
 
@@ -105,7 +117,11 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, container, key string) (*string, error) {
 	c := getContainer(pts, container)
 	if c == nil {
-		return nil, ErrIncompatibleCluster{fmt.Sprintf("couldn't find %s container in existing daemonset", container)}
+		return nil, ErrIncompatibleCluster{
+			err:       fmt.Sprintf("couldn't find %s container in existing daemonset", container),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it, or %s", container, FixFileFeatureRequest),
+		}
 	}
 
 	for _, e := range c.Env {

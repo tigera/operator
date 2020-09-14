@@ -17,9 +17,9 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 	if dsType != nil && *dsType != "kubernetes" {
 		return ErrIncompatibleCluster{
-			err:       "only DATASTORE_TYPE=kubernetes is supported at this time",
+			err:       "only DATASTORE_TYPE=kubernetes is supported",
 			component: ComponentCalicoNode,
-			fix:       FixFileFeatureRequest,
+			fix:       FixImpossible,
 		}
 	}
 
@@ -52,20 +52,12 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 
 	if c.kubeControllers != nil {
-		enabledControllers, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "ENABLED_CONTROLLERS")
-		if err != nil {
+		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node"); err != nil {
 			return err
-		}
-		if enabledControllers != nil && *enabledControllers != "node" {
-			return ErrInvalidEnvVar(ComponentKubecontrollers, "ENABLED_CONTROLLERS", *enabledControllers, "node")
 		}
 
-		autoHeps, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "AUTO_HOST_ENDPOINTS")
-		if err != nil {
+		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "AUTO_HOST_ENDPOINTS", "disabled"); err != nil {
 			return err
-		}
-		if autoHeps != nil && strings.ToLower(*autoHeps) != "disabled" {
-			return ErrInvalidEnvVar(ComponentKubecontrollers, "AUTO_HOST_ENDPOINTS", *autoHeps, "disabled")
 		}
 	}
 
@@ -219,9 +211,9 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 	}
 
 	return ErrIncompatibleCluster{
-		err:       fmt.Sprintf("ResourcesRequirements for component %s did not match between Installation and migration source", compName),
+		err:       "ResourcesRequirements for component did not match between Installation and migration source",
 		component: string(compName),
-		fix:       fmt.Sprintf("remove the resource requirements / limits from your Installation resource, or remove them from the currently installed %s component", compName),
+		fix:       "remove the resource requirements / limits from your Installation resource, or remove them from the currently installed component",
 	}
 }
 
@@ -235,10 +227,10 @@ func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 
 	if c.kubeControllers != nil {
 		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentKubecontrollers)
+			return ErrIncompatibleAnnotation(a, ComponentKubeControllers)
 		}
 		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentKubecontrollers+" podTemplateSpec")
+			return ErrIncompatibleAnnotation(a, ComponentKubeControllers+" podTemplateSpec")
 		}
 	}
 
@@ -319,7 +311,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
 			return ErrIncompatibleCluster{
 				err:       "node affinity not supported for kube-controller deployment",
-				component: ComponentKubecontrollers,
+				component: ComponentKubeControllers,
 				fix:       "remove the affinity",
 			}
 		}

@@ -46,13 +46,9 @@ func (r *CheckedDaemonSet) uncheckedVars() []string {
 
 // getEnv gets the value of an environment variable and marks that it has been checked.
 func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, container string, key string) (*string, error) {
-	v, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
+	v, err := getEnv(ctx, client, r.Spec.Template.Spec, ComponentCalicoNode, container, key)
 	if err != nil {
-		return nil, ErrIncompatibleCluster{
-			err:       fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key),
-			component: ComponentCalicoNode,
-			fix:       fmt.Sprintf("adjust %s to be an explicit value or configMapRef, or %s", key, FixFileFeatureRequest),
-		}
+		return nil, err
 	}
 	r.ignoreEnv(container, key)
 
@@ -61,20 +57,24 @@ func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, con
 
 // assertEnv gets the value of an environment variable and marks that it has been checked.
 func (r *CheckedDaemonSet) assertEnv(ctx context.Context, client client.Client, container, key, expectedValue string) error {
-	value, err := getEnv(ctx, client, r.Spec.Template.Spec, container, key)
-	if err != nil {
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key),
-			component: ComponentCalicoNode,
-			fix:       "todo",
-		}
+	if err := assertEnv(ctx, client, r.Spec.Template.Spec, ComponentCalicoNode, container, key, expectedValue); err != nil {
+		return err
 	}
 	r.ignoreEnv(container, key)
+	return nil
+}
+
+// assertEnv gets the value of an environment variable and marks that it has been checked.
+func assertEnv(ctx context.Context, client client.Client, spec corev1.PodSpec, component, container, key, expectedValue string) error {
+	value, err := getEnv(ctx, client, spec, component, container, key)
+	if err != nil {
+		return err
+	}
 
 	if value != nil && *value != expectedValue {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("%s=%s is not supported", key, *value),
-			component: ComponentCalicoNode,
+			component: component,
 			fix:       fmt.Sprintf("remove the %s env var or set it to '%s'", key, expectedValue),
 		}
 	}
@@ -87,9 +87,9 @@ func (r *CheckedDaemonSet) getEnvVar(container string, key string) (*corev1.EnvV
 	c := getContainer(r.Spec.Template.Spec, container)
 	if c == nil {
 		return nil, ErrIncompatibleCluster{
-			err:       fmt.Sprintf("couldn't find %s container in existing daemonset", container),
+			err:       fmt.Sprintf("couldn't find %s container in daemonset", container),
 			component: ComponentCalicoNode,
-			fix:       "todo",
+			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it, or %s", container, FixFileFeatureRequest),
 		}
 	}
 	r.ignoreEnv(container, key)
@@ -114,12 +114,12 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 }
 
 // getEnv gets the value of an environment variable.
-func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, container, key string) (*string, error) {
+func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component, container, key string) (*string, error) {
 	c := getContainer(pts, container)
 	if c == nil {
 		return nil, ErrIncompatibleCluster{
-			err:       fmt.Sprintf("couldn't find %s container in existing daemonset", container),
-			component: ComponentCalicoNode,
+			err:       fmt.Sprintf("couldn't find container '%s' container in %s", container),
+			component: component,
 			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it, or %s", container, FixFileFeatureRequest),
 		}
 	}
@@ -142,7 +142,11 @@ func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, container
 				return &v, nil
 			}
 
-			return nil, fmt.Errorf("failed to read %s: only configMapRef & explicit values supported for env vars at this time", key)
+			return nil, ErrIncompatibleCluster{
+				err:       fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key),
+				component: "",
+				fix:       fmt.Sprintf("adjust %s to be an explicit value or configMapRef, or %s", key, FixFileFeatureRequest),
+			}
 		}
 	}
 	return nil, nil

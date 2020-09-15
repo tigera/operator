@@ -3,6 +3,7 @@ package convert
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,7 +72,7 @@ func assertEnv(ctx context.Context, client client.Client, spec corev1.PodSpec, c
 		return err
 	}
 
-	if value != nil && *value != expectedValue {
+	if value != nil && strings.ToLower(*value) != strings.ToLower(expectedValue) {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("%s=%s is not supported", key, *value),
 			component: component,

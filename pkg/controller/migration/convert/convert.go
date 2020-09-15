@@ -150,7 +150,11 @@ func Convert(ctx context.Context, client client.Client, install *operatorv1.Inst
 
 	// check for unchecked env vars
 	if uncheckedVars := comps.node.uncheckedVars(); len(uncheckedVars) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("unexpected env var: %s", uncheckedVars)}
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("unexpected env vars: %s", uncheckedVars),
+			component: ComponentCalicoNode,
+			fix:       "remove these environment variables from the calico-node daemonest",
+		}
 	}
 
 	return nil

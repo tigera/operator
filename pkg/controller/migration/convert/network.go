@@ -365,7 +365,7 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unable to migrate plugin '%s': unsupported.", plugin),
 			component: ComponentCNIConfig,
-			fix:       FixImpossible,
+			fix:       FixFileFeatureRequest,
 		}
 	}
 
@@ -453,7 +453,7 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 		return "", ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke, cali' are supported.", *prefix),
 			component: ComponentCalicoNode,
-			fix:       FixImpossible,
+			fix:       FixFileFeatureRequest,
 		}
 	}
 }

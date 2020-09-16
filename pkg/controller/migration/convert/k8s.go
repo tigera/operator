@@ -56,7 +56,8 @@ func (r *CheckedDaemonSet) getEnv(ctx context.Context, client client.Client, con
 	return v, nil
 }
 
-// assertEnv gets the value of an environment variable and marks that it has been checked.
+// assertEnv gets the value of an environment variable, marks that it has been checked, and, if it is set, compares it to an expectedValue
+// returning an error if it does not match.
 func (r *CheckedDaemonSet) assertEnv(ctx context.Context, client client.Client, container, key, expectedValue string) error {
 	if err := assertEnv(ctx, client, r.Spec.Template.Spec, ComponentCalicoNode, container, key, expectedValue); err != nil {
 		return err
@@ -65,14 +66,44 @@ func (r *CheckedDaemonSet) assertEnv(ctx context.Context, client client.Client, 
 	return nil
 }
 
-// assertEnv gets the value of an environment variable and marks that it has been checked.
+// assertEnv gets the value of an environment variable, marks that it has been checked, and, if it is set, compares it to an expectedValue
+// returning an error if it does not match.
 func assertEnv(ctx context.Context, client client.Client, spec corev1.PodSpec, component, container, key, expectedValue string) error {
 	value, err := getEnv(ctx, client, spec, component, container, key)
 	if err != nil {
 		return err
 	}
 
-	if value != nil && strings.ToLower(*value) != strings.ToLower(expectedValue) {
+	if value != nil && strings.ToLower(*value) != expectedValue {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("%s=%s is not supported", key, *value),
+			component: component,
+			fix:       fmt.Sprintf("remove the %s env var or set it to '%s'", key, expectedValue),
+		}
+	}
+
+	return nil
+}
+
+// assertEnvIsSet gets the value of an environment variable, marks that it has been checked, and compares it to an expectedValue,
+// returning an error if it does not match.
+func (r *CheckedDaemonSet) assertEnvIsSet(ctx context.Context, client client.Client, container, key, expectedValue string) error {
+	if err := assertEnvIsSet(ctx, client, r.Spec.Template.Spec, ComponentCalicoNode, container, key, expectedValue); err != nil {
+		return err
+	}
+	r.ignoreEnv(container, key)
+	return nil
+}
+
+// assertEnv gets the value of an environment variable, marks that it has been checked, and compares it to an expectedValue,
+// returning an error if it does not match.
+func assertEnvIsSet(ctx context.Context, client client.Client, spec corev1.PodSpec, component, container, key, expectedValue string) error {
+	value, err := getEnv(ctx, client, spec, component, container, key)
+	if err != nil {
+		return err
+	}
+
+	if value == nil || strings.ToLower(*value) != expectedValue {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("%s=%s is not supported", key, *value),
 			component: component,

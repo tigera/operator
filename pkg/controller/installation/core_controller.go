@@ -98,6 +98,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
+		aWSSGsConfigured:     false,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.run()
@@ -231,6 +232,7 @@ type ReconcileInstallation struct {
 	namespaceMigration   *migration.CoreNamespaceMigration
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
+	aWSSGsConfigured     bool
 }
 
 // GetInstallation returns the default installation instance with defaults populated.
@@ -658,13 +660,26 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	openShiftOnAws := false
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
+		openShiftOnAws, err := isOpenshiftOnAws(instance, ctx, r.client)
 		if err != nil {
 			log.Error(err, "Error checking if OpenShift is on AWS")
 			r.SetDegraded("Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+		if openShiftOnAws && !r.aWSSGsConfigured {
+			if run, delay := allowSetupOfAWSSecurityGroups(); !run {
+				log.Info("Delaying Security group configuration", "delay", delay)
+				return reconcile.Result{RequeueAfter: delay}, nil
+			}
+			err = setupAWSSecurityGroups(ctx, r.client)
+			if err != nil {
+				log.Error(err, "Error configuring Security groups")
+				r.SetDegraded("Error configuring Security groups", err, reqLogger)
+				_, delay := allowSetupOfAWSSecurityGroups()
+				return reconcile.Result{RequeueAfter: delay}, nil
+			}
+			r.aWSSGsConfigured = true
 		}
 	}
 
@@ -717,22 +732,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	components := []render.Component{}
-	// If we're on OpenShift on AWS render a Job (and needed resources) to
-	// setup the security groups we need for IPIP, BGP, and Typha communication.
-	if openShiftOnAws {
-		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance)
-		if err != nil {
-			// If there is a problem rendering this do not degrade or stop rendering
-			// anything else.
-			log.Info(err.Error())
-		} else {
-			components = append(components, awsSetup)
-		}
-	}
-	components = append(components, calico.Render()...)
-
-	for _, component := range components {
+	for _, component := range calico.Render() {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

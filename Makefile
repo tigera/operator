@@ -119,7 +119,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		$(CALICO_BUILD)
 
 BUILD_IMAGE?=tigera/operator
-BUILD_INIT_IMAGE?=tigera/operator-init
 
 BINDIR?=build/_output/bin
 
@@ -146,7 +145,6 @@ push: imagetag $(addprefix sub-single-push-,$(call escapefs,$(PUSH_IMAGE_PREFIXE
 
 sub-single-push-%:
 	docker push $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG)-$(ARCH))
-	docker push $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG)-$(ARCH))
 
 ## push all arches
 push-all: imagetag $(addprefix sub-push-,$(ARCHES))
@@ -158,14 +156,12 @@ sub-manifest-%:
 	# Docker login to hub.docker.com required before running this target as we are using $(DOCKER_CONFIG) holds the docker login credentials
 	# path to credentials based on manifest-tool's requirements here https://github.com/estesp/manifest-tool#sample-usage
 	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))"
-	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))"
 
 ## push default amd64 arch where multi-arch manifest is not supported
 push-non-manifests: imagetag $(addprefix sub-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))
 sub-non-manifest-%:
 ifeq ($(ARCH),amd64)
 	docker push $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
-	docker push $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))
 else
 	$(NOECHO) $(NOOP)
 endif
@@ -174,13 +170,11 @@ endif
 tag-images: imagetag $(addprefix sub-single-tag-images-arch-,$(call escapefs,$(PUSH_IMAGE_PREFIXES))) $(addprefix sub-single-tag-images-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))
 sub-single-tag-images-arch-%:
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG)-$(ARCH))
-	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG)-$(ARCH))
 
 # because some still do not support multi-arch manifest
 sub-single-tag-images-non-manifest-%:
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
-	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(call unescapefs,$*$(BUILD_INIT_IMAGE):$(IMAGETAG))
 else
 	$(NOECHO) $(NOOP)
 endif
@@ -226,17 +220,8 @@ build/init/bin/kubectl:
 	mkdir -p build/init/bin
 	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
 
-.PHONY: image-init
-image-init: build/init/bin/kubectl $(BUILD_INIT_IMAGE)
-$(BUILD_INIT_IMAGE): $(BUILD_INIT_IMAGE)-$(ARCH)
-$(BUILD_INIT_IMAGE)-$(ARCH):
-	docker build --pull -t $(BUILD_INIT_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/init/Dockerfile.$(ARCH) .
-ifeq ($(ARCH),amd64)
-	docker tag $(BUILD_INIT_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
-endif
-
 .PHONY: images
-images: image image-init
+images: image
 
 # Build the images for the target architecture
 .PHONY: images-all

@@ -241,7 +241,9 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 		install.Spec.CalicoNetwork.BGP = operatorv1.BGPOptionPtr(operatorv1.BGPDisabled)
 	default:
 		return ErrIncompatibleCluster{
-			err: fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend),
+			err:       fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend),
+			component: ComponentCalicoNode,
+			fix:       FixImpossible,
 		}
 	}
 
@@ -325,8 +327,12 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	// CALICO_NETWORKING_BACKEND
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND", "none"); err != nil {
+	netBackend, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_NETWORKING_BACKEND")
+	if err != nil {
 		return err
+	}
+	if netBackend == nil || *netBackend != "none" {
+		return ErrIncompatibleCluster{fmt.Sprintf("%s, CALICO_NETWORKING_BACKEND=none is expected", errCtx)}
 	}
 
 	if install.Spec.CNI == nil {
@@ -339,9 +345,16 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		// Verify FELIX_IPTABLESMANGLEALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginAmazonVPC. The value is also expected to be necessary for Calico policy
 		// to correctly function with the AmazonVPC plugin.
-		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION", "Return"); err != nil {
+		mangleAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
+		if err != nil {
 			return err
 		}
+		if mangleAllow == nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'.", errCtx)}
+		} else if *mangleAllow != "Return" {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was %s, expected it to be 'Return'.", errCtx, *mangleAllow)}
+		}
+
 	case operatorv1.PluginAzureVNET:
 		install.Spec.CNI.Type = plugin
 	case operatorv1.PluginGKE:
@@ -349,21 +362,32 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		// Verify FELIX_IPTABLESMANGLEALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginGKE. The value is also expected to be necessary for Calico policy
 		// to correctly function with the GKE plugin.
-		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION", "Return"); err != nil {
+		mangleAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESMANGLEALLOWACTION")
+		if err != nil {
 			return err
 		}
-
+		if mangleAllow == nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was unset, expected it to be 'Return'.", errCtx)}
+		} else if *mangleAllow != "Return" {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESMANGLEALLOWACTION was %s, expected it to be 'Return'.", errCtx, *mangleAllow)}
+		}
 		// Verify FELIX_IPTABLESFILTERALLOWACTION is set to Return because the operator will set it to Return
 		// when configured with PluginGKE. The value is also expected to be necessary for Calico policy
 		// to correctly function with the GKE plugin.
-		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESFILTERALLOWACTION", "Return"); err != nil {
+		filterAllow, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_IPTABLESFILTERALLOWACTION")
+		if err != nil {
 			return err
+		}
+		if filterAllow == nil {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESFILTERALLOWACTION was unset, expected it to be 'Return'.", errCtx)}
+		} else if *filterAllow != "Return" {
+			return ErrIncompatibleCluster{fmt.Sprintf("%s, FELIX_IPTABLESFILTERALLOWACTION was set to %s, expected it to be 'Return'.", errCtx, *filterAllow)}
 		}
 	default:
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unable to migrate plugin '%s': unsupported.", plugin),
 			component: ComponentCNIConfig,
-			fix:       FixImpossible,
+			fix:       FixFileFeatureRequest,
 		}
 	}
 
@@ -422,7 +446,11 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}
 	}
 
-	return ErrInvalidEnvVar(ComponentCalicoNode, "IP_AUTODETECTION_METHOD", *method, "first-found=*, can-reach=*, interface=*, skip-interface=*")
+	return ErrIncompatibleCluster{
+		err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", value),
+		component: ComponentCalicoNode,
+		fix:       fmt.Sprintf("remove the %s env var or set it to 'first-found=*', 'can-reach=*, interface=*', or 'skip-interface=*'"),
+	}
 }
 
 func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
@@ -447,7 +475,7 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 		return "", ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke, cali' are supported.", *prefix),
 			component: ComponentCalicoNode,
-			fix:       FixImpossible,
+			fix:       FixFileFeatureRequest,
 		}
 	}
 }

@@ -49,11 +49,3 @@ func ErrIncompatibleAnnotation(annotations map[string]string, component string) 
 		fix:       "remove the annotation from the component",
 	}
 }
-
-func ErrInvalidEnvVar(component, envVar, value, expectedValue string) ErrIncompatibleCluster {
-	return ErrIncompatibleCluster{
-		err:       fmt.Sprintf("%s=%s is not supported", envVar, value),
-		component: component,
-		fix:       fmt.Sprintf("remove the %s env var or set it to '%s'", envVar, expectedValue),
-	}
-}

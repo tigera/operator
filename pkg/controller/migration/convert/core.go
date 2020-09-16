@@ -98,23 +98,23 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 
 	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
-	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "lib-modules", "/lib/modules"); err != nil {
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "lib-modules", "/lib/modules"); err != nil {
 		return err
 	}
-	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico"); err != nil {
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico"); err != nil {
 		return err
 	}
-	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico"); err != nil {
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico"); err != nil {
 		return err
 	}
-	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "xtables-lock", "/run/xtables.lock"); err != nil {
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "xtables-lock", "/run/xtables.lock"); err != nil {
 		return err
 	}
 	if c.cni.CalicoConfig != nil {
-		if err := checkHostPathVolume(c.node.Spec.Template.Spec, "cni-bin-dir", "/opt/cni/bin"); err != nil {
+		if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "cni-bin-dir", "/opt/cni/bin"); err != nil {
 			return err
 		}
-		if err := checkHostPathVolume(c.node.Spec.Template.Spec, "cni-net-dir", "/etc/cni/net.d"); err != nil {
+		if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "cni-net-dir", "/etc/cni/net.d"); err != nil {
 			return err
 		}
 	}
@@ -170,8 +170,8 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	return nil
 }
 
-// checkHostPathVolume returns an error if a hostpath with the passed in name and path does not exist in a given podspec.
-func checkHostPathVolume(spec corev1.PodSpec, name, path string) error {
+// checkNodeHostPathVolume returns an error if a hostpath with the passed in name and path does not exist in a given podspec.
+func checkNodeHostPathVolume(spec corev1.PodSpec, name, path string) error {
 	v := getVolume(spec, name)
 	if v == nil || v.HostPath == nil || v.HostPath.Path != path {
 		return ErrIncompatibleCluster{

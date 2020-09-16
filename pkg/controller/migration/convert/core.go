@@ -99,23 +99,23 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 
 	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
 	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "lib-modules", "/lib/modules"); err != nil {
-		return err
+		return WithComponent(err, ComponentCalicoNode)
 	}
 	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico"); err != nil {
-		return err
+		return WithComponent(err, ComponentCalicoNode)
 	}
 	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico"); err != nil {
-		return err
+		return WithComponent(err, ComponentCalicoNode)
 	}
 	if err := checkHostPathVolume(c.node.Spec.Template.Spec, "xtables-lock", "/run/xtables.lock"); err != nil {
-		return err
+		return WithComponent(err, ComponentCalicoNode)
 	}
 	if c.cni.CalicoConfig != nil {
 		if err := checkHostPathVolume(c.node.Spec.Template.Spec, "cni-bin-dir", "/opt/cni/bin"); err != nil {
-			return err
+			return WithComponent(err, ComponentCalicoNode)
 		}
 		if err := checkHostPathVolume(c.node.Spec.Template.Spec, "cni-net-dir", "/etc/cni/net.d"); err != nil {
-			return err
+			return WithComponent(err, ComponentCalicoNode)
 		}
 	}
 
@@ -175,9 +175,8 @@ func checkHostPathVolume(spec corev1.PodSpec, name, path string) error {
 	v := getVolume(spec, name)
 	if v == nil || v.HostPath == nil || v.HostPath.Path != path {
 		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("missing expected volume '%s' with hostPath '%s'", name, path),
-			component: ComponentCalicoNode,
-			fix:       fmt.Sprintf("add the expected volume to %s", ComponentCalicoNode),
+			err: fmt.Sprintf("missing expected volume '%s' with hostPath '%s'", name, path),
+			fix: "restore the expected volume",
 		}
 	}
 	return nil

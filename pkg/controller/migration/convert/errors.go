@@ -1,6 +1,9 @@
 package convert
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrIncompatibleCluster indicates that a config option was detected in the existing install
 // which Operator does not support.
@@ -24,6 +27,15 @@ const (
 	ComponentCNIConfig       = "cni-config"
 	ComponentIPPools         = "ippools"
 )
+
+func WithComponent(err error, component string) error {
+	var eic ErrIncompatibleCluster
+	if errors.As(err, &eic) {
+		eic.component = component
+		return eic
+	}
+	return err
+}
 
 var (
 	// FixFileFeatureRequest is returned when configuration could be migrated in the future

@@ -78,7 +78,7 @@ var _ = Describe("Parser", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should detect an MTU", func() {
+	It("should detect an MTU via substitution", func() {
 		ds := emptyNodeSpec()
 		ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{
 			{
@@ -110,72 +110,6 @@ var _ = Describe("Parser", func() {
 		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		err := Convert(ctx, c, &operatorv1.Installation{})
 		Expect(err).To(HaveOccurred())
-	})
-
-	// It("should parse cni", func() {
-	// 	ds := emptyNodeSpec()
-	// 	c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-
-	// 	cfg, err := Convert(ctx, c, &operatorv1.Installation{})
-	// 	Expect(err).ToNot(HaveOccurred())
-	// 	Expect(cfg).ToNot(BeNil())
-	// })
-	Describe("handle Node metrics port migration", func() {
-		It("defaults prometheus off when no prometheus environment variables set", func() {
-			ds := emptyNodeSpec()
-
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, cfg)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg).ToNot(BeNil())
-			Expect(cfg.Spec.NodeMetricsPort).To(BeNil())
-		})
-		It("with metrics enabled the default port is used", func() {
-			ds := emptyNodeSpec()
-			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
-				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
-				Value: "true",
-			}}
-
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, cfg)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg).ToNot(BeNil())
-			Expect(*cfg.Spec.NodeMetricsPort).To(Equal(int32(9091)))
-		})
-		It("with metrics port env var only, metrics are still disabled", func() {
-			ds := emptyNodeSpec()
-			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
-				Name:  "FELIX_PROMETHEUSMETRICSPORT",
-				Value: "5555",
-			}}
-
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, cfg)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg).ToNot(BeNil())
-			Expect(cfg.Spec.NodeMetricsPort).To(BeNil())
-		})
-		It("with metrics port and enabled is reflected in installation", func() {
-			ds := emptyNodeSpec()
-			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
-				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
-				Value: "true",
-			}, {
-				Name:  "FELIX_PROMETHEUSMETRICSPORT",
-				Value: "7777",
-			}}
-
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-			cfg := &operatorv1.Installation{}
-			err := Convert(ctx, c, cfg)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg).ToNot(BeNil())
-			Expect(*cfg.Spec.NodeMetricsPort).To(Equal(int32(7777)))
-		})
 	})
 
 	Context("CNI", func() {

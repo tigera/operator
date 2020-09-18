@@ -41,15 +41,9 @@ var _ = Describe("Parser", func() {
 	})
 
 	It("should detect an installation if one exists", func() {
-		c := fake.NewFakeClientWithScheme(scheme, &appsv1.DaemonSet{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      "calico-node",
-				Namespace: "kube-system",
-			},
-		}, emptyKubeControllerSpec(), pool, emptyFelixConfig())
+		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
 		err := Convert(ctx, c, &operatorv1.Installation{})
-		// though it will detect an install, it will be in the form of an incompatible-cluster error
-		Expect(err).To(BeAssignableToTypeOf(ErrIncompatibleCluster{}))
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should detect a valid installation", func() {

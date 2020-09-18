@@ -34,6 +34,7 @@ require (
 
 // Pinned to kubernetes-1.14.1
 replace (
+	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20110329153437-5a5984e10006
 	git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
 	// This is cloud-on-k8s 1.0.1 tag
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200204083752-bcb7468838a8

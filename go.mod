@@ -8,7 +8,6 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/hashicorp/go-version v1.2.0
-	github.com/juju/errors v0.0.0-20200330140219-3fe23663418f
 	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.7.0
 	github.com/openshift/api v3.9.1-0.20190927182313-d4a64ec2cbd8+incompatible
@@ -34,6 +33,7 @@ require (
 
 // Pinned to kubernetes-1.14.1
 replace (
+	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20110329153437-5a5984e10006
 	// This is cloud-on-k8s 1.0.1 tag
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96

@@ -80,13 +80,13 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.23
+GO_BUILD_VER?=v0.45
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
 
 EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
-GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/";
 
 ifdef SSH_AUTH_SOCK
   EXTRA_DOCKER_ARGS += -v $(SSH_AUTH_SOCK):/ssh-agent --env SSH_AUTH_SOCK=/ssh-agent
@@ -203,7 +203,7 @@ build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) && \
+	sh -c '$(GIT_CONFIG_SSH) \
 	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go'
 
 .PHONY: image
@@ -437,7 +437,7 @@ endif
 $(BINDIR)/gen-versions:
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) \
-	sh -c '$(GIT_CONFIG_SSH) && \
+	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
 .PHONY: help

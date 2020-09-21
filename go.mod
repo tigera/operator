@@ -33,7 +33,10 @@ require (
 
 // Pinned to kubernetes-1.14.1
 replace (
-	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20110329153437-5a5984e10006
+	// autoneg is a dependency of early versions of operator-sdk (i.e. pre v1.0).
+	// it is no longer hosted on bitbucket.org, so the files are checked in locally and replaced here.
+	bitbucket.org/ww/goautoneg => ./vendor/bitbucket.org/ww/autoneg
+
 	// This is cloud-on-k8s 1.0.1 tag
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96

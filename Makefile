@@ -260,7 +260,7 @@ ut: cluster-create run-uts cluster-destroy
 run-uts:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage ./external -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
+	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
 ## Create a local docker-in-docker cluster.
 cluster-create: k3d

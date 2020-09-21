@@ -259,8 +259,8 @@ GINKGO_FOCUS?=.*
 ut: cluster-create run-uts cluster-destroy
 run-uts:
 	-mkdir -p .go-pkg-cache report
-	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) && \
-	ginkgo -r --skipPackage -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
+	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
+	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml

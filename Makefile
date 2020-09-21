@@ -80,7 +80,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.23
+GO_BUILD_VER?=v0.45
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./cmd -name '*.go')
@@ -263,7 +263,7 @@ ut: cluster-create run-uts cluster-destroy
 run-uts:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
+	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) $(WHAT)'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml

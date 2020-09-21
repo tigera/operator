@@ -39,7 +39,7 @@ require (
 replace (
 	// autoneg is a dependency of early versions of operator-sdk (i.e. pre v1.0).
 	// it is no longer hosted on bitbucket.org, so the files are checked in locally and replaced here.
-	bitbucket.org/ww/goautoneg => ./external/autoneg
+	bitbucket.org/ww/goautoneg => ./vendor/bitbucket.org/ww/autoneg
 
 	// This is cloud-on-k8s 1.0.1 tag
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186

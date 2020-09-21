@@ -1,8 +1,8 @@
 package convert
 
 import (
-	"github.com/projectcalico/cni-plugin/pkg/types"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	"github.com/tigera/operator/pkg/controller/migration/cni"
 	v1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -13,16 +13,12 @@ import (
 var _ = Describe("mtu handler", func() {
 	var (
 		comps = emptyComponents()
-		i     = &Installation{}
+		i     = &operatorv1.Installation{}
 	)
 
 	BeforeEach(func() {
 		comps = emptyComponents()
-		i = &Installation{
-			Installation: &operatorv1.Installation{},
-			CNIConfig:    "",
-			FelixEnvVars: []v1.EnvVar{},
-		}
+		i = &operatorv1.Installation{}
 	})
 	It("should not set mtu if none defined", func() {
 		err := handleMTU(&comps, i)
@@ -31,7 +27,7 @@ var _ = Describe("mtu handler", func() {
 	})
 
 	It("should read mtu from cni config", func() {
-		comps.calicoCNIConfig = &types.NetConf{
+		comps.cni.CalicoConfig = &cni.CalicoConf{
 			MTU: 1234,
 		}
 		err := handleMTU(&comps, i)
@@ -75,7 +71,7 @@ var _ = Describe("mtu handler", func() {
 			Name:  "FELIX_IPINIPMTU",
 			Value: "1324",
 		}}
-		comps.calicoCNIConfig = &types.NetConf{
+		comps.cni.CalicoConfig = &cni.CalicoConf{
 			MTU: 1234,
 		}
 		err := handleMTU(&comps, i)

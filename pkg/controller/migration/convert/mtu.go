@@ -7,7 +7,7 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
-func handleMTU(c *components, install *Installation) error {
+func handleMTU(c *components, install *operatorv1.Installation) error {
 	var (
 		curMTU    *int32
 		curMTUSrc string
@@ -16,7 +16,11 @@ func handleMTU(c *components, install *Installation) error {
 	for _, src := range []string{"FELIX_IPINIPMTU", "FELIX_VXLANMTU", "FELIX_WIREGUARDMTU"} {
 		mtu, err := getMTU(c, containerCalicoNode, src)
 		if err != nil {
-			return ErrIncompatibleCluster{fmt.Sprintf("failed to parse mtu from %s: %v", src, err)}
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("failed to parse mtu from %s: %v", src, err),
+				component: ComponentCalicoNode,
+				fix:       fmt.Sprintf("adjust %s to a valid integer or unset the env var", src),
+			}
 		}
 
 		// if this mtu source is not set, ignore
@@ -26,20 +30,28 @@ func handleMTU(c *components, install *Installation) error {
 
 		// compare against current mtu.
 		if curMTU != nil && *curMTU != *mtu {
-			return ErrIncompatibleCluster{fmt.Sprintf("mtu %s=%d does not match mtu %s=%d", src, *mtu, curMTUSrc, *curMTU)}
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("mtu %s=%d does not match mtu %s=%d", src, *mtu, curMTUSrc, *curMTU),
+				component: ComponentCalicoNode,
+				fix:       fmt.Sprintf("adjust %s and %s to match or unset one of them", src, curMTUSrc),
+			}
 		}
 
 		curMTU, curMTUSrc = mtu, src
 	}
 
-	if c.calicoCNIConfig != nil {
-		if c.calicoCNIConfig.MTU == -1 {
+	if c.cni.CalicoConfig != nil {
+		if c.cni.CalicoConfig.MTU == -1 {
 			// if MTU is -1, we assume it was us who replaced it when doing initial CNI
 			// config loading. We need to pull it from the correct source
 			var src = "CNI_MTU"
 			mtu, err := getMTU(c, containerInstallCNI, src)
 			if err != nil {
-				return ErrIncompatibleCluster{fmt.Sprintf("failed to parse mtu from %s: %v", src, err)}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("failed to parse mtu from %s: %v", src, err),
+					component: ComponentCalicoNode,
+					fix:       fmt.Sprintf("adjust %s to a valid integer", src),
+				}
 			}
 
 			if mtu == nil {
@@ -50,16 +62,23 @@ func handleMTU(c *components, install *Installation) error {
 
 			// compare against current mtu.
 			if curMTU != nil && *curMTU != *mtu {
-				return ErrIncompatibleCluster{fmt.Sprintf("mtu %s=%d does not match mtu %s=%d", src, *mtu, curMTUSrc, *curMTU)}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("mtu %s=%d does not match mtu %s=%d", src, *mtu, curMTUSrc, *curMTU),
+					component: ComponentCalicoNode,
+					fix:       fmt.Sprintf("adjust %s and %s to match or unset one of them", src, curMTUSrc)}
 			}
 			curMTU, curMTUSrc = mtu, "CNI_MTU"
 
 		} else {
 			// user must have hardcoded their CNI instead of using the cni templating engine.
 			// use the hardcoded value.
-			mtu := int32(c.calicoCNIConfig.MTU)
+			mtu := int32(c.cni.CalicoConfig.MTU)
 			if curMTU != nil && *curMTU != mtu {
-				return ErrIncompatibleCluster{fmt.Sprintf("mtu '%d' specified in CNI config does not match mtu %s=%d", mtu, curMTUSrc, *curMTU)}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("mtu '%d' specified in CNI config does not match mtu %s=%d", mtu, curMTUSrc, *curMTU),
+					component: ComponentCalicoNode,
+					fix:       fmt.Sprintf("adjust the mtu value set in CNI config to match %s or unset one of them", curMTUSrc),
+				}
 			}
 			curMTU = &mtu
 		}

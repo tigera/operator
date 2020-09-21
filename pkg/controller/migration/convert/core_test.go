@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -15,16 +16,12 @@ import (
 var _ = Describe("core handler", func() {
 	var (
 		comps = emptyComponents()
-		i     = &Installation{}
+		i     = &operatorv1.Installation{}
 	)
 
 	BeforeEach(func() {
 		comps = emptyComponents()
-		i = &Installation{
-			Installation: &operatorv1.Installation{},
-			CNIConfig:    "",
-			FelixEnvVars: []v1.EnvVar{},
-		}
+		i = &operatorv1.Installation{}
 	})
 	Context("resource migration", func() {
 		It("should not migrate resource requirements if none are set", func() {
@@ -450,6 +447,51 @@ var _ = Describe("core handler", func() {
 				}}
 				Expect(handleCore(&comps, i)).To(HaveOccurred())
 			})
+		})
+	})
+	Context("felix prometheus metrics", func() {
+		It("with metrics enabled the default port is used", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
+				Value: "true",
+			}}
+			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(*i.Spec.NodeMetricsPort).To(Equal(int32(9091)))
+		})
+		It("defaults prometheus off when no prometheus environment variables set", func() {
+
+			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.NodeMetricsPort).To(BeNil())
+		})
+		It("with metrics enabled the default port is used", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
+				Value: "true",
+			}}
+
+			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(*i.Spec.NodeMetricsPort).To(Equal(int32(9091)))
+		})
+		It("with metrics port env var only, metrics are still disabled", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "FELIX_PROMETHEUSMETRICSPORT",
+				Value: "5555",
+			}}
+
+			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.NodeMetricsPort).To(BeNil())
+		})
+		It("with metrics port and enabled is reflected in installation", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
+				Value: "true",
+			}, {
+				Name:  "FELIX_PROMETHEUSMETRICSPORT",
+				Value: "7777",
+			}}
+
+			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(*i.Spec.NodeMetricsPort).To(Equal(int32(7777)))
 		})
 	})
 })

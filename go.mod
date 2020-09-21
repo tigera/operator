@@ -5,19 +5,16 @@ go 1.12
 require (
 	github.com/cloudflare/cfssl v1.4.1
 	github.com/containernetworking/cni v0.8.0
-	github.com/containernetworking/plugins v0.8.6
 	github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/hashicorp/go-version v1.2.0
-	github.com/juju/errors v0.0.0-20200330140219-3fe23663418f
 	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.7.0
 	github.com/openshift/api v3.9.1-0.20190927182313-d4a64ec2cbd8+incompatible
 	github.com/openshift/library-go v0.0.0-20190924092619-a8c1174d4ee7
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/pkg/errors v0.8.1
-	github.com/projectcalico/cni-plugin v3.8.9+incompatible
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	github.com/tigera/api v0.0.0-20200311151854-a6d8502444cd
@@ -37,6 +34,10 @@ require (
 
 // Pinned to kubernetes-1.14.1
 replace (
+	// autoneg is a dependency of early versions of operator-sdk (i.e. pre v1.0).
+	// it is no longer hosted on bitbucket.org, so the files are checked in locally and replaced here.
+	bitbucket.org/ww/goautoneg => ./vendor/bitbucket.org/ww/autoneg
+
 	// This is cloud-on-k8s 1.0.1 tag
 	github.com/elastic/cloud-on-k8s => github.com/elastic/cloud-on-k8s v0.0.0-20200526192013-f13b6d26a186
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.1-0.20190910171846-947a464dbe96

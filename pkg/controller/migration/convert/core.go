@@ -10,20 +10,24 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func handleCore(c *components, install *Installation) error {
+func handleCore(c *components, install *operatorv1.Installation) error {
 	dsType, err := c.node.getEnv(ctx, c.client, "calico-node", "DATASTORE_TYPE")
 	if err != nil {
 		return err
 	}
 	if dsType != nil && *dsType != "kubernetes" {
-		return ErrIncompatibleCluster{"only DATASTORE_TYPE=kubernetes is supported at this time"}
+		return ErrIncompatibleCluster{
+			err:       "only DATASTORE_TYPE=kubernetes is supported",
+			component: ComponentCalicoNode,
+			fix:       FixImpossible,
+		}
 	}
 
 	// node resource limits
 	node := getContainer(c.node.Spec.Template.Spec, "calico-node")
 	if len(node.Resources.Limits) > 0 || len(node.Resources.Requests) > 0 {
 		if err = addResources(install, operatorv1.ComponentNameNode, &node.Resources); err != nil {
-			return ErrIncompatibleCluster{err.Error()}
+			return err
 		}
 	}
 
@@ -32,7 +36,7 @@ func handleCore(c *components, install *Installation) error {
 		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
 		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
 			if err = addResources(install, operatorv1.ComponentNameKubeControllers, &kubeControllers.Resources); err != nil {
-				return ErrIncompatibleCluster{err.Error()}
+				return err
 			}
 		}
 	}
@@ -42,26 +46,18 @@ func handleCore(c *components, install *Installation) error {
 		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
 		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
 			if err = addResources(install, operatorv1.ComponentNameTypha, &typha.Resources); err != nil {
-				return ErrIncompatibleCluster{err.Error()}
+				return err
 			}
 		}
 	}
 
 	if c.kubeControllers != nil {
-		enabledControllers, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "ENABLED_CONTROLLERS")
-		if err != nil {
+		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node"); err != nil {
 			return err
-		}
-		if enabledControllers != nil && *enabledControllers != "node" {
-			return ErrIncompatibleCluster{"only ENABLED_CONTROLLERS=node supported"}
 		}
 
-		autoHeps, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, containerKubeControllers, "AUTO_HOST_ENDPOINTS")
-		if err != nil {
+		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "AUTO_HOST_ENDPOINTS", "disabled"); err != nil {
 			return err
-		}
-		if autoHeps != nil && strings.ToLower(*autoHeps) != "disabled" {
-			return ErrIncompatibleCluster{"only AUTO_HOST_ENDPOINTS=disabled supported"}
 		}
 	}
 
@@ -74,46 +70,52 @@ func handleCore(c *components, install *Installation) error {
 		// prefer user-defined flexvolpath over detected value
 		if install.Spec.FlexVolumePath == "" {
 			if vol.HostPath == nil {
-				return ErrIncompatibleCluster{"volume 'flexvol-driver-host' must be a HostPath"}
+				return ErrIncompatibleCluster{
+					err:       "volume 'flexvol-driver-host' must be a HostPath",
+					component: ComponentCalicoNode,
+					fix:       "remove the 'flexvol-driver-host' volume or convert it to type hostPath",
+				}
 			}
 			if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv == nil {
-				return ErrIncompatibleCluster{"detected 'flexvol-driver-host' volume but no 'flexvol-driver' init container"}
+				return ErrIncompatibleCluster{
+					err:       "detected 'flexvol-driver-host' volume but no 'flexvol-driver' init container",
+					component: ComponentCalicoNode,
+					fix:       "remove the 'flexvol-driver-host' volume or restore the 'flexvol-driver' init container",
+				}
 			}
 			install.Spec.FlexVolumePath = vol.HostPath.Path
 		}
 	} else {
 		// verify that no flexvol container is set
 		if fv := getContainer(c.node.Spec.Template.Spec, "flexvol-driver"); fv != nil {
-			return ErrIncompatibleCluster{"detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume"}
+			return ErrIncompatibleCluster{
+				err:       "detected 'flexvol-driver' init container but no 'flexvol-driver-host' volume",
+				component: ComponentCalicoNode,
+				fix:       "restore the 'flexvol-driver-host' volume or remove the 'flexvol-driver' init container",
+			}
 		}
 		install.Spec.FlexVolumePath = "None"
 	}
 
 	// Volumes for lib-modules, xtables-lock, var-run-calico, var-lib-calico, or policysync have been changed
-	v := getVolume(c.node.Spec.Template.Spec, "lib-modules")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/lib/modules" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'lib-modules' with hostPath '/lib/modules'"}
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "lib-modules", "/lib/modules"); err != nil {
+		return err
 	}
-	v = getVolume(c.node.Spec.Template.Spec, "var-run-calico")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/run/calico" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-run-calico' with hostPath '/var/run/calico'"}
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico"); err != nil {
+		return err
 	}
-	v = getVolume(c.node.Spec.Template.Spec, "var-lib-calico")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/var/lib/calico" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'var-lib-calico' with hostPath '/var/lib/calico'"}
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico"); err != nil {
+		return err
 	}
-	v = getVolume(c.node.Spec.Template.Spec, "xtables-lock")
-	if v == nil || v.HostPath == nil || v.HostPath.Path != "/run/xtables.lock" {
-		return ErrIncompatibleCluster{"expected calico-node to have volume 'xtables-lock' with hostPath '/run/xtables.lock"}
+	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "xtables-lock", "/run/xtables.lock"); err != nil {
+		return err
 	}
-	if c.calicoCNIConfig != nil {
-		v = getVolume(c.node.Spec.Template.Spec, "cni-bin-dir")
-		if v == nil || v.HostPath == nil || v.HostPath.Path != "/opt/cni/bin" {
-			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-bin-dir' with hostPath '/opt/cni/bin'"}
+	if c.cni.CalicoConfig != nil {
+		if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "cni-bin-dir", "/opt/cni/bin"); err != nil {
+			return err
 		}
-		v = getVolume(c.node.Spec.Template.Spec, "cni-net-dir")
-		if v == nil || v.HostPath == nil || v.HostPath.Path != "/etc/cni/net.d" {
-			return ErrIncompatibleCluster{"expected calico-node to have volume 'cni-net-dir' with hostPath '/opt/cni/bin'"}
+		if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "cni-net-dir", "/etc/cni/net.d"); err != nil {
+			return err
 		}
 	}
 
@@ -125,7 +127,11 @@ func handleCore(c *components, install *Installation) error {
 		return err
 	}
 	if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
-		return ErrIncompatibleCluster{"NODENAME on 'calico-node' container must be unset or be a FieldRef to 'spec.nodeName'"}
+		return ErrIncompatibleCluster{
+			err:       "NODENAME on 'calico-node' container must be unset or be a FieldRef to 'spec.nodeName'",
+			component: ComponentCalicoNode,
+			fix:       "remove the NODENAME env var or convert it to a fieldRef with value 'spec.nodeName'",
+		}
 	}
 
 	if cni := getContainer(c.node.Spec.Template.Spec, "install-cni"); cni != nil {
@@ -134,15 +140,15 @@ func handleCore(c *components, install *Installation) error {
 			return err
 		}
 		if e != nil && (e.ValueFrom == nil || e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "spec.nodeName") {
-			return ErrIncompatibleCluster{"KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'"}
+			return ErrIncompatibleCluster{
+				err:       "KUBERNETES_NODE_NAME on 'install-cni' container must be unset or be a FieldRef to 'spec.nodeName'",
+				component: ComponentCalicoNode,
+				fix:       "remove the KUBERNETES_NODE_NAME env var or convert it to a fieldRef with value 'spec.nodeName'",
+			}
 		}
 
-		n, err := c.node.getEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME")
-		if err != nil {
+		if err := c.node.assertEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME", "10-calico.conflist"); err != nil {
 			return err
-		}
-		if n != nil && *n != "10-calico.conflist" {
-			return ErrIncompatibleCluster{"CNI_CONF_NAME on 'install-cni' container must be '10-calico.conflist'"}
 		}
 	}
 
@@ -164,10 +170,23 @@ func handleCore(c *components, install *Installation) error {
 	return nil
 }
 
+// checkNodeHostPathVolume returns an error if a hostpath with the passed in name and path does not exist in a given podspec.
+func checkNodeHostPathVolume(spec corev1.PodSpec, name, path string) error {
+	v := getVolume(spec, name)
+	if v == nil || v.HostPath == nil || v.HostPath.Path != path {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("missing expected volume '%s' with hostPath '%s'", name, path),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("add the expected volume to %s", ComponentCalicoNode),
+		}
+	}
+	return nil
+}
+
 // addResources adds the rescReq resource for the specified component if none was previously set. If installation
 // already had a resource for compName then they are compared and if they are different then an error is returned.
 // If the Resource is added to installation or the existing one matches then nil is returned.
-func addResources(install *Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
+func addResources(install *operatorv1.Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
 	if install.Spec.ComponentResources == nil {
 		install.Spec.ComponentResources = []*operatorv1.ComponentResource{}
 	}
@@ -191,34 +210,38 @@ func addResources(install *Installation, compName operatorv1.ComponentName, resc
 		return nil
 	}
 
-	return ErrIncompatibleCluster{fmt.Sprintf("ResourcesRequirements for component %s did not match between Installation and migration source", compName)}
+	return ErrIncompatibleCluster{
+		err:       "ResourcesRequirements for component did not match between Installation and migration source",
+		component: string(compName),
+		fix:       "remove the resource requirements / limits from your Installation resource, or remove them from the currently installed component",
+	}
 }
 
-func handleAnnotations(c *components, _ *Installation) error {
+func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("calico-node daemonset has unexpected annotation: %v", a)}
+		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
 	}
 	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
-		return ErrIncompatibleCluster{fmt.Sprintf("calico-node podTemplateSpec has unexpected annotation: %v", a)}
+		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
 	}
 
 	if c.kubeControllers != nil {
 		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers deployment has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentKubeControllers)
 		}
 		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("kube-controllers podTemplateSpec has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentKubeControllers+" podTemplateSpec")
 		}
 	}
 
 	if c.typha != nil {
 		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("typha deployment has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentTypha)
 		}
 		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
 			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
 		}); len(a) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("typha podTemplateSpec has unexpected annotation: %v", a)}
+			return ErrIncompatibleAnnotation(a, ComponentTypha+" podTemplateSpec")
 		}
 	}
 	return nil
@@ -245,32 +268,55 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 	return a
 }
 
-func handleNodeSelectors(c *components, install *Installation) error {
+func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		return ErrIncompatibleCluster{"node affinity not supported for calico-node daemonset"}
-	}
-	if nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
-		if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; !ok || len(nodeSel) != 1 {
-			return ErrIncompatibleCluster{fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel)}
+		return ErrIncompatibleCluster{
+			err:       "node affinity not supported for calico-node daemonset",
+			component: ComponentCalicoNode,
+			fix:       "remove the affinity",
 		}
+	}
+	nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector)
+	if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; ok {
+		delete(nodeSel, "projectcalico.org/operator-node-migration")
+	}
+	if len(nodeSel) > 0 {
+		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel),
+			component: ComponentCalicoNode,
+			fix:       "remove the nodeSelector",
+		}
+
 	}
 
 	// check typha nodeSelectors
 	if c.typha != nil {
 		if c.typha.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{"node affinity not supported for typha deployment"}
+			return ErrIncompatibleCluster{
+				err:       "node affinity not supported for typha deployment",
+				component: ComponentTypha,
+				fix:       "remove the affinity",
+			}
 		}
 		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-			return ErrIncompatibleCluster{fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel)}
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel),
+				component: ComponentTypha,
+				fix:       "remove the nodeSelector",
+			}
 		}
 	}
 
 	// check kube-controllers nodeSelectors
 	if c.kubeControllers != nil {
 		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{"node affinity not supported for kube-controller deployment"}
+			return ErrIncompatibleCluster{
+				err:       "node affinity not supported for kube-controller deployment",
+				component: ComponentKubeControllers,
+				fix:       "remove the affinity",
+			}
 		}
 
 		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
@@ -297,7 +343,7 @@ func removeOSNodeSelectors(existing map[string]string) map[string]string {
 	return nodeSel
 }
 
-func handleFelixNodeMetrics(c *components, install *Installation) error {
+func handleFelixNodeMetrics(c *components, install *operatorv1.Installation) error {
 	metricsEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
 	if err != nil {
 		return err
@@ -312,8 +358,11 @@ func handleFelixNodeMetrics(c *components, install *Installation) error {
 		if port != nil {
 			p, err := strconv.ParseInt(*port, 10, 32)
 			if err != nil || p <= 0 || p > 65535 {
-				return ErrIncompatibleCluster{fmt.Sprintf(
-					"invalid port defined in FELIX_PROMETHEUSMETRICSPORT(%s), it should be 1-65535 ", *port)}
+				return ErrIncompatibleCluster{
+					err:       fmt.Sprintf("invalid port defined in FELIX_PROMETHEUSMETRICSPORT=%s", *port),
+					component: ComponentCalicoNode,
+					fix:       "adjust it to be within the range of 1-65535 or remove the env var",
+				}
 			}
 			i := int32(p)
 			install.Spec.NodeMetricsPort = &i
@@ -321,27 +370,6 @@ func handleFelixNodeMetrics(c *components, install *Installation) error {
 	} else {
 		// Ignore the metrics port if metrics is disabled.
 		c.node.ignoreEnv(containerCalicoNode, "FELIX_PROMETHEUSMETRICSPORT")
-	}
-
-	return nil
-}
-
-func checkTolerations(existing []corev1.Toleration, expected ...corev1.Toleration) error {
-	if len(existing) != len(expected) {
-		return ErrIncompatibleCluster{fmt.Sprintf("missing expected tolerations. have: %+v. expecting: %+v", existing, expected)}
-	}
-
-	for _, t := range expected {
-		var found bool
-		for _, k := range existing {
-			if k == t {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return ErrIncompatibleCluster{fmt.Sprintf("missing expected toleration: %+v", t)}
-		}
 	}
 
 	return nil

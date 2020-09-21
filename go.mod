@@ -52,3 +52,5 @@ replace (
 )
 
 replace github.com/operator-framework/operator-lifecycle-manager => github.com/operator-framework/operator-lifecycle-manager v0.0.0-20190605231540-b8a4faf68e36
+
+replace bitbucket.org/ww/goautoneg => ./external/autoneg

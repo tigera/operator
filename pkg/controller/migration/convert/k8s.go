@@ -21,6 +21,10 @@ type CheckedDaemonSet struct {
 	checkedVars map[string]checkedFields
 }
 
+type checkedFields struct {
+	envVars map[string]bool
+}
+
 // uncheckedVars returns a list of all environment variables which
 // were not checked by handlers.
 func (r *CheckedDaemonSet) uncheckedVars() []string {

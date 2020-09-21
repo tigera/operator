@@ -28,7 +28,6 @@ require (
 
 // Pinned to kubernetes-1.14.1
 replace (
-	git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
 	// autoneg is a dependency of early versions of operator-sdk (i.e. pre v1.0).
 	// it is no longer hosted on bitbucket.org, so the files are checked in locally and replaced here.
 	bitbucket.org/ww/goautoneg => ./vendor/bitbucket.org/ww/autoneg

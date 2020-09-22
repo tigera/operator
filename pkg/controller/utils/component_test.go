@@ -68,22 +68,25 @@ var _ = Describe("Component handler tests", func() {
 		}
 		handler = utils.NewComponentHandler(log, c, scheme, instance)
 	})
-	It("merges metadata according to AllowedMetadataKeys", func() {
-		// We are creating the namespace. AllowedMetadataKeys parameter can be anything.
-		err := handler.CreateOrUpdate(ctx, fc, sm, utils.NoUserAddedMetadata)
+	It("merges annotations and reconciles only operator added annotations", func() {
+		err := handler.CreateOrUpdate(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
-		By("checking that the namespace is created")
+		By("checking that the namespace is created and desired annotations is present")
+		expectedAnnotations := map[string]string{
+			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+		}
 		nsKey := client.ObjectKey{
 			Name: "test-namespace",
 		}
 		ns := &v1.Namespace{}
 		c.Get(ctx, nsKey, ns)
-		Expect(ns.GetAnnotations()).To(BeNil())
+		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
-		By("updating the namespace with SCC annotations")
-		annotations := make(map[string]string)
-		annotations[ocsv1.UIDRangeAnnotation] = "1-65535"
+		By("ovewriting the namespace with SCC annotations")
+		annotations := map[string]string{
+			ocsv1.UIDRangeAnnotation: "1-65535",
+		}
 		updatedNs := &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "test-namespace",
@@ -92,13 +95,10 @@ var _ = Describe("Component handler tests", func() {
 		}
 		c.Update(ctx, updatedNs)
 
-		// Define an explicit expected annotation here just in case the original one
-		// were to get modified.
-		expectedAnnotations := map[string]string{
+		By("checking that the namespace is updated with SCC annotation")
+		expectedAnnotations = map[string]string{
 			ocsv1.UIDRangeAnnotation: "1-65535",
 		}
-
-		By("checking that the namespace is updated")
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
@@ -106,26 +106,66 @@ var _ = Describe("Component handler tests", func() {
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
-		By("initiating a merge with allowed Openshift SCC annotations")
-		err = handler.CreateOrUpdate(ctx, fc, sm, utils.AllowOpenshiftSCCAnnotations)
+		By("initiating a merge with Openshift SCC annotations")
+		err = handler.CreateOrUpdate(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
-		By("retrieving the namespace and checking that the annotations are still present")
+		By("retrieving the namespace and checking that both current and desired annotations are still present")
+		expectedAnnotations = map[string]string{
+			ocsv1.UIDRangeAnnotation:   "1-65535",
+			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+		}
 		ns = &v1.Namespace{}
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
-		By("initiating a merge with no user allowed metadata")
-		err = handler.CreateOrUpdate(ctx, fc, sm, utils.NoUserAddedMetadata)
-		Expect(err).To(BeNil())
+		By("changing a desired annotation")
+		annotations = map[string]string{
+			ocsv1.UIDRangeAnnotation:   "1-65535",
+			"cattle-not-pets":          "indeed",
+			fakeComponentAnnotationKey: "not-present",
+		}
+		updatedNs = &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "test-namespace",
+				Annotations: annotations,
+			},
+		}
+		c.Update(ctx, updatedNs)
 
-		By("retrieving the namespace and checking that the annotations are not present")
+		By("checking that the namespace is updated with new modified annotation")
+		expectedAnnotations = map[string]string{
+			"cattle-not-pets":          "indeed",
+			ocsv1.UIDRangeAnnotation:   "1-65535",
+			fakeComponentAnnotationKey: "not-present",
+		}
+		nsKey = client.ObjectKey{
+			Name: "test-namespace",
+		}
 		ns = &v1.Namespace{}
 		c.Get(ctx, nsKey, ns)
-		Expect(ns.GetAnnotations()).To(BeNil())
+		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
+		By("initiating a merge with namespace containing modified desired annotation")
+		err = handler.CreateOrUpdate(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("retrieving the namespace and checking that desired annotation is reconciled, everything else is left as-is")
+		expectedAnnotations = map[string]string{
+			"cattle-not-pets":          "indeed",
+			ocsv1.UIDRangeAnnotation:   "1-65535",
+			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+		}
+		ns = &v1.Namespace{}
+		c.Get(ctx, nsKey, ns)
+		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 	})
 })
+
+const (
+	fakeComponentAnnotationKey   = "tigera.io/annotation-should-be"
+	fakeComponentAnnotationValue = "present"
+)
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.
 type fakeComponent struct {
@@ -140,6 +180,9 @@ func (c *fakeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		&v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-namespace",
+				Annotations: map[string]string{
+					fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+				},
 			},
 		},
 	}

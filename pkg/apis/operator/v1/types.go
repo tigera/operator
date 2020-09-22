@@ -98,7 +98,7 @@ type InstallationSpec struct {
 
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
-	ComponentResources []*ComponentResource `json:"componentResources,omitempty"`
+	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 }
 
 // ComponentName CRD enum
@@ -166,14 +166,6 @@ var HostPortsTypesString []string = []string{
 	HostPortsDisabled.String(),
 }
 
-func HostPortsTypePtr(h HostPortsType) *HostPortsType {
-	return &h
-}
-
-func (nt HostPortsType) String() string {
-	return string(nt)
-}
-
 type MultiInterfaceMode string
 
 func (m MultiInterfaceMode) Value() string {
@@ -184,6 +176,14 @@ const (
 	MultiInterfaceModeNone   MultiInterfaceMode = "None"
 	MultiInterfaceModeMultus MultiInterfaceMode = "Multus"
 )
+
+func HostPortsTypePtr(h HostPortsType) *HostPortsType {
+	return &h
+}
+
+func (nt HostPortsType) String() string {
+	return string(nt)
+}
 
 type BGPOption string
 
@@ -265,6 +265,10 @@ type NodeAddressAutodetection struct {
 	// specified IP or domain.
 	// +optional
 	CanReach string `json:"canReach,omitempty"`
+
+	// CIDRS enables IP auto-detection based on which addresses on the nodes are within
+	// one of the provided CIDRs.
+	CIDRS []string `json:"cidrs,omitempty"`
 }
 
 // EncapsulationType is the type of encapsulation to use on an IP pool. Valid

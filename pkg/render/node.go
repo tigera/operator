@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
@@ -54,6 +55,7 @@ var (
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
+	k8sServiceEp K8sServiceEndpoint,
 	cr *operator.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
@@ -61,6 +63,7 @@ func Node(
 	migrate bool,
 ) Component {
 	return &nodeComponent{
+		k8sServiceEp:    k8sServiceEp,
 		cr:              cr,
 		birdTemplates:   bt,
 		typhaNodeTLS:    tnTLS,
@@ -70,6 +73,7 @@ func Node(
 }
 
 type nodeComponent struct {
+	k8sServiceEp    K8sServiceEndpoint
 	cr              *operator.Installation
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
@@ -298,6 +302,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"tiers",
+					"packetcaptures",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -373,7 +378,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "datastore_type": "kubernetes",
       "mtu": %d,
       "nodename_file_optional": %v,
-	  "ipam": %s,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": %s,
       "container_settings": {
           "allow_ip_forwarding": %v
       },
@@ -558,8 +565,8 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.
-func (c *nodeComponent) cniDirectories() (string, string) {
-	var cniBinDir, cniNetDir string
+func (c *nodeComponent) cniDirectories() (string, string, string) {
+	var cniBinDir, cniNetDir, cniLogDir string
 	switch c.cr.Spec.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		cniNetDir = "/var/run/multus/cni/net.d"
@@ -573,7 +580,8 @@ func (c *nodeComponent) cniDirectories() (string, string) {
 		cniBinDir = "/opt/cni/bin"
 		cniNetDir = "/etc/cni/net.d"
 	}
-	return cniNetDir, cniBinDir
+	cniLogDir = "/var/log/calico/cni"
+	return cniNetDir, cniBinDir, cniLogDir
 }
 
 // nodeVolumes creates the node's volumes.
@@ -610,9 +618,10 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cr.Spec.CNI.Type == operator.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
-		cniNetDir, cniBinDir := c.cniDirectories()
+		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
 		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
 		volumes = append(volumes, v1.Volume{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}})
+		volumes = append(volumes, v1.Volume{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniLogDir}}})
 	}
 
 	// Override with Tigera-specific config.
@@ -652,7 +661,6 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 // cniContainer creates the node's init container that installs CNI.
 func (c *nodeComponent) cniContainer() v1.Container {
-	t := true
 	// Determine environment to pass to the CNI init container.
 	cniEnv := c.cniEnvvars()
 	cniVolumeMounts := []v1.VolumeMount{
@@ -660,24 +668,19 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	command := "/install-cni.sh"
-
 	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-		// Enterprise release-v3.2 has cni changes that converted shell script to golang binary. The same change
-		// is not in the corresponding os version.
-		command = "/opt/cni/bin/install"
 	}
 
 	return v1.Container{
 		Name:         "install-cni",
 		Image:        image,
-		Command:      []string{command},
+		Command:      []string{"/opt/cni/bin/install"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: &t,
+			Privileged: Bool(true),
 		},
 	}
 }
@@ -685,7 +688,6 @@ func (c *nodeComponent) cniContainer() v1.Container {
 // flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
 func (c *nodeComponent) flexVolumeContainer() v1.Container {
-	t := true
 	flexVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
@@ -695,7 +697,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: &t,
+			Privileged: Bool(true),
 		},
 	}
 }
@@ -707,7 +709,7 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 	}
 
 	// Determine directories to use for CNI artifacts based on the provider.
-	cniNetDir, _ := c.cniDirectories()
+	cniNetDir, _, _ := c.cniDirectories()
 
 	envVars := []v1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
@@ -726,6 +728,8 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
+	envVars = append(envVars, c.k8sServiceEp.EnvVars()...)
+
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -738,7 +742,6 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
-	isPrivileged := true
 
 	// Select which image to use.
 	image := components.GetReference(components.ComponentCalicoNode, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
@@ -749,7 +752,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 		Name:            "calico-node",
 		Image:           image,
 		Resources:       c.nodeResources(),
-		SecurityContext: &v1.SecurityContext{Privileged: &isPrivileged},
+		SecurityContext: &v1.SecurityContext{Privileged: Bool(true)},
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -778,6 +781,9 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
+	} else if c.cr.Spec.CNI.Type == operator.PluginCalico {
+		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
+		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
 
 	if c.birdTemplates != nil {
@@ -1042,6 +1048,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 
+	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
+	}
+
 	if c.amazonCloudInt != nil {
 		nodeEnv = append(nodeEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
 		nodeEnv = append(nodeEnv, v1.EnvVar{
@@ -1053,6 +1063,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
 	}
+
+	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars()...)
+
 	return nodeEnv
 }
 
@@ -1133,12 +1146,10 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 }
 
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	trueBool := true
-	ptrBoolTrue := &trueBool
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.AllowPrivilegeEscalation = Bool(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
@@ -1160,6 +1171,9 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 		}
 		if ad.FirstFound != nil && *ad.FirstFound {
 			return "first-found"
+		}
+		if len(ad.CIDRS) != 0 {
+			return fmt.Sprintf("cidr=%s", strings.Join(ad.CIDRS, ","))
 		}
 	}
 	return ""

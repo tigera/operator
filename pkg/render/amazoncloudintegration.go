@@ -280,17 +280,14 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "ALLOW_POD_METADATA_ACCESS", Value: "true"})
 	}
 
-	nonRoot := true
-	privEscalation := false
-
 	return corev1.Container{
 		Name:  AmazonCloudIntegrationComponentName,
 		Image: components.GetReference(components.ComponentCloudControllers, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             &nonRoot,
-			AllowPrivilegeEscalation: &privEscalation,
+			RunAsNonRoot:             Bool(true),
+			AllowPrivilegeEscalation: Bool(false),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{

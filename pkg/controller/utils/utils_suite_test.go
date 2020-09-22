@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package utils_test
 
 import (
 	"testing"
@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/controller_utils_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/utils_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/utils Suite", []Reporter{junitReporter})
 }

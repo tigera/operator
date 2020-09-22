@@ -129,15 +129,13 @@ var _ = Describe("Convert network tests", func() {
 						MaxUnavailable: &_1intstr,
 					},
 				},
-				ComponentResources: []*operatorv1.ComponentResource{
-					&operatorv1.ComponentResource{
-						ComponentName: operatorv1.ComponentNameNode,
-						ResourceRequirements: &corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("250m"),
-							},
+				ComponentResources: []operatorv1.ComponentResource{{
+					ComponentName: operatorv1.ComponentNameNode,
+					ResourceRequirements: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("250m"),
 						},
-					},
+					}},
 				},
 			}}))
 		})

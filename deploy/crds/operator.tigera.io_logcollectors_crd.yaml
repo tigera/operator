@@ -92,7 +92,7 @@ spec:
                     properties:
                       endpoint:
                         description: Location for splunk's http event collector end
-                          point. example https://1.2.3.4:8088
+                          point. example `https://1.2.3.4:8088`
                         type: string
                     required:
                     - endpoint

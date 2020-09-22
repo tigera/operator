@@ -44,7 +44,7 @@ var _ = Describe("core handler", func() {
 		It("should migrate resources from calico-node if they are set", func() {
 			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(&operatorv1.ComponentResource{
+			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameNode,
 				ResourceRequirements: &rqs,
 			}))
@@ -53,7 +53,7 @@ var _ = Describe("core handler", func() {
 		It("should migrate resources from kube-controllers if they are set", func() {
 			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(&operatorv1.ComponentResource{
+			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameKubeControllers,
 				ResourceRequirements: &rqs,
 			}))
@@ -62,7 +62,7 @@ var _ = Describe("core handler", func() {
 		It("should migrate resources from typha if they are set", func() {
 			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(&operatorv1.ComponentResource{
+			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameTypha,
 				ResourceRequirements: &rqs,
 			}))
@@ -73,19 +73,19 @@ var _ = Describe("core handler", func() {
 					v1.ResourceCPU: resource.MustParse("500m"),
 				},
 			}
-			expectedCompRsrc := []*operatorv1.ComponentResource{&operatorv1.ComponentResource{
+			expectedCompRsrc := []operatorv1.ComponentResource{operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameNode,
 				ResourceRequirements: rqs.DeepCopy(),
 			}}
 			comps.node.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
 			rqs.Limits[v1.ResourceCPU] = resource.MustParse("400m")
-			expectedCompRsrc = append(expectedCompRsrc, &operatorv1.ComponentResource{
+			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameKubeControllers,
 				ResourceRequirements: rqs.DeepCopy(),
 			})
 			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
 			rqs.Limits[v1.ResourceCPU] = resource.MustParse("300m")
-			expectedCompRsrc = append(expectedCompRsrc, &operatorv1.ComponentResource{
+			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameTypha,
 				ResourceRequirements: rqs.DeepCopy(),
 			})
@@ -96,7 +96,7 @@ var _ = Describe("core handler", func() {
 
 		It("should not add a duplicate resources when already set", func() {
 			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
-			i.Spec.ComponentResources = append(i.Spec.ComponentResources, &operatorv1.ComponentResource{
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameNode,
 				ResourceRequirements: &rqs,
 			})

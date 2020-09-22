@@ -306,6 +306,15 @@ func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error
 	if ad.FirstFound != nil && *ad.FirstFound {
 		numEnabled++
 	}
+	if len(ad.CIDRS) != 0 {
+		numEnabled++
+		for _, c := range ad.CIDRS {
+			_, _, err := net.ParseCIDR(c)
+			if err != nil {
+				return fmt.Errorf("invalid CIDR provided for node address autodetection: %s", c)
+			}
+		}
+	}
 
 	if numEnabled > 1 {
 		return fmt.Errorf("no more than one node address autodetection method can be specified per-family")

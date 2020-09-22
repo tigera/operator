@@ -36,7 +36,19 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	// For example, make sure the plugin is supported on the specified k8s provider.
 	switch instance.Spec.CNI.Type {
 	case operatorv1.PluginCalico:
-		// No specific requirements for CNI type Calico.
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginCalico:
+		case operatorv1.IPAMPluginHostLocal:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type,
+				strings.Join([]string{
+					operatorv1.IPAMPluginCalico.String(),
+					operatorv1.IPAMPluginHostLocal.String()}, ",",
+				),
+			)
+		}
 	case operatorv1.PluginGKE:
 		// The GKE CNI plugin is only supported on GKE or BYO.
 		switch instance.Spec.KubernetesProvider {
@@ -44,6 +56,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		default:
 			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginHostLocal:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginHostLocal)
 		}
 	case operatorv1.PluginAmazonVPC:
 		// The AmazonVPC CNI plugin is only supported on EKS or BYO.
@@ -53,6 +73,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 		}
+
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginAmazonVPC:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type  %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAmazonVPC)
+		}
 	case operatorv1.PluginAzureVNET:
 		// The AzureVNET CNI plugin is only supported on AKS or BYO.
 		switch instance.Spec.KubernetesProvider {
@@ -60,6 +88,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		default:
 			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
 				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+		}
+
+		switch instance.Spec.CNI.IPAM.Type {
+		case operatorv1.IPAMPluginAzureVNET:
+		default:
+			return fmt.Errorf(
+				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAzureVNET)
 		}
 	default:
 		// The specified CNI plugin is not supported by this version of the operator.
@@ -69,21 +105,22 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
-		// Currently, calicoNetwork is valid only when using the Calico CNI plugin.
-		if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-			return fmt.Errorf("spec.CalicoNetwork requires spec.cni.type 'Calico'")
-		}
 
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
-			return fmt.Errorf("Only one IPPool per version is allowed.")
+			return fmt.Errorf("Only one IPPool per version is allowed, pools: %+v.", instance.Spec.CalicoNetwork.IPPools)
 		}
 
 		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
-		if nPools == 2 && (v4pool == nil || v6pool == nil) {
-			return fmt.Errorf("Only one IPPool per version is allowed.")
+		if nPools == 2 {
+			if v4pool == nil {
+				return fmt.Errorf("Only one IPPool per version is allowed, multiple V6: %+v.", instance.Spec.CalicoNetwork.IPPools)
+			}
+			if v6pool == nil {
+				return fmt.Errorf("Only one IPPool per version is allowed, multiple V4: %+v", instance.Spec.CalicoNetwork.IPPools)
+			}
 		}
 
 		if v4pool != nil {
@@ -92,22 +129,42 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
 			}
 
-			// Verify the specified encapsulation type is valid.
-			switch v4pool.Encapsulation {
-			case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
-				// IPIP currently requires BGP to be running in order to program routes.
-				if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-					return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+			if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+				// Verify the specified encapsulation type is valid.
+				switch v4pool.Encapsulation {
+				case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
+					// IPIP currently requires BGP to be running in order to program routes.
+					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+						return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+					}
+				case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
+				case operatorv1.EncapsulationNone:
+					// Unencapsulated currently requires BGP to be running in order to program routes.
+					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+						return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+					}
+				default:
+					return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+						v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 				}
-			case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
-			case operatorv1.EncapsulationNone:
-				// Unencapsulated currently requires BGP to be running in order to program routes.
-				if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-					return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+			} else {
+				// Verify the specified encapsulation type is valid.
+				switch v4pool.Encapsulation {
+				case operatorv1.EncapsulationNone:
+				default:
+					return fmt.Errorf("%s is invalid for ipPool.encapsulation when using non-Calico CNI, should be None",
+						v4pool.Encapsulation)
 				}
-			default:
-				return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
-					v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
+				if instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+					return fmt.Errorf("BGP is not supported when using non-Calico CNI")
+				}
+				if v4pool.NodeSelector != "all()" {
+					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()'", v4pool.NodeSelector)
+				}
+			}
+
+			if v4pool.NodeSelector == "" {
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
 			}
 
 			// Verify NAT outgoing values.
@@ -116,10 +173,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			default:
 				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
 					v4pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
-			}
-
-			if v4pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector should not be empty")
 			}
 
 			if v4pool.BlockSize != nil {
@@ -155,6 +208,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					v6pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
 			}
 
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				if v6pool.NodeSelector != "all()" {
+					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()' when using non-Calico CNI plugin", v6pool.NodeSelector)
+				}
+			}
 			if v6pool.NodeSelector == "" {
 				return fmt.Errorf("ipPool.nodeSelector should not be empty")
 			}
@@ -201,6 +259,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("spec.calicoNetwork.multiInterfaceMode is supported only for Calico CNI")
 			}
 		}
+
+		if instance.Spec.CalicoNetwork.ContainerIPForwarding != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.containerIPForwarding is supported only for Calico CNI")
+			}
+		}
 	}
 
 	// Verify that the flexvolume path is valid - either "None" (to disable) or a valid absolute path.
@@ -213,6 +277,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.NodeUpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
 		return fmt.Errorf("Installation spec.NodeUpdateStrategy.type '%s' is not supported",
 			instance.Spec.NodeUpdateStrategy.RollingUpdate)
+	}
+
+	if instance.Spec.ControlPlaneNodeSelector != nil {
+		if v, ok := instance.Spec.ControlPlaneNodeSelector["beta.kubernetes.io/os"]; ok && v != "linux" {
+			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'beta.kubernetes.io/os=%s' is not supported", v)
+		}
+		if v, ok := instance.Spec.ControlPlaneNodeSelector["kubernetes.io/os"]; ok && v != "linux" {
+			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'kubernetes.io/os=%s' is not supported", v)
+		}
 	}
 
 	return nil

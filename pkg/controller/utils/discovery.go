@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -70,12 +71,7 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
-func AutoDiscoverProvider(cfg *rest.Config) (operatorv1.Provider, error) {
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to get client for auto provider discovery: %v", err)
-	}
-
+func AutoDiscoverProvider(clientset kubernetes.Interface) (operatorv1.Provider, error) {
 	// First, try to determine the platform based on the present API groups.
 	if platform, err := autodetectFromGroup(clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to check provider based on API groups: %s", err)
@@ -91,12 +87,19 @@ func AutoDiscoverProvider(cfg *rest.Config) (operatorv1.Provider, error) {
 		return operatorv1.ProviderDockerEE, nil
 	}
 
+	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
+	if eks, err := isEKS(clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if EKS is the provider: %s", err)
+	} else if eks {
+		return operatorv1.ProviderEKS, nil
+	}
+
 	// Couldn't detect any specific platform.
 	return operatorv1.ProviderNone, nil
 }
 
 // autodetectFromGroup auto detects the platform based on the API groups that are present.
-func autodetectFromGroup(c *kubernetes.Clientset) (operatorv1.Provider, error) {
+func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
 	groups, err := c.Discovery().ServerGroups()
 	if err != nil {
 		return operatorv1.ProviderNone, err
@@ -118,7 +121,7 @@ func autodetectFromGroup(c *kubernetes.Clientset) (operatorv1.Provider, error) {
 // isDockerEE returns true if running on a Docker Enterprise cluster, and false otherwise.
 // Docker EE doesn't have any provider-specific API groups, so we need to use a different approach than
 // we use for other platforms in autodetectFromGroup.
-func isDockerEE(c *kubernetes.Clientset) (bool, error) {
+func isDockerEE(c kubernetes.Interface) (bool, error) {
 	masterNodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/master"})
 	if err != nil {
 		return false, err
@@ -131,4 +134,19 @@ func isDockerEE(c *kubernetes.Clientset) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// isEKS returns true if running on an EKS cluster, and false otherwise.
+// EKS doesn't have any provider-specific API groups, so we need to use a different approach than
+// we use for other platforms in autodetectFromGroup.
+func isEKS(c kubernetes.Interface) (bool, error) {
+	cm, err := c.CoreV1().ConfigMaps("kube-system").Get("eks-certificates-controller", metav1.GetOptions{})
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return (cm != nil), nil
 }

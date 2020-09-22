@@ -365,8 +365,6 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// TODO: Handle configuration with IPs and Pools specified.
-	// We need to relax the restriction on CalicoNetwork and non-Calico CNI to do this.
 	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP", ""); err != nil {
 		return err
 	}

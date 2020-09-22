@@ -22,7 +22,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/tigera/operator/pkg/awsSGSetup"
+	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/daemon"
 	"github.com/tigera/operator/version"

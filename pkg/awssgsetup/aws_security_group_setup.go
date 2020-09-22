@@ -17,17 +17,12 @@ package awssgsetup
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"path"
-	"regexp"
-	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	v1 "k8s.io/api/core/v1"
@@ -48,12 +43,28 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client) error {
 	//		get aws_access_key_id and aws_secret_access_key
 	awsKeyId, awsSecret, err := getAWSCreds(ctx, client)
 	if err != nil {
-		return fmt.Errorf("failed to update AWS SecurityGroups: %s", err.Error())
+		return fmt.Errorf("failed to get AWS credentials: %v", err)
 	}
 
-	region, err := getAWSRegion()
+	metaSess, err := session.NewSession()
 	if err != nil {
-		return fmt.Errorf("failed to update AWS SecurityGroups: %s", err.Error())
+		return fmt.Errorf("failed to get metadata session: %v", err)
+	}
+
+	meta := ec2metadata.New(metaSess)
+	if !meta.Available() {
+		return fmt.Errorf("Instance metadata is not available, unable to configure Security Groups")
+	}
+
+	doc, err := meta.GetInstanceIdentityDocument()
+	if err != nil {
+		return fmt.Errorf("failed to get metadata document: %v", err)
+	}
+
+	region := doc.Region
+	vpcId, err := getVPCid(meta)
+	if err != nil {
+		return fmt.Errorf("failed to update AWS SecurityGroups: %v", err)
 	}
 
 	sess, err := session.NewSession(&aws.Config{
@@ -61,26 +72,21 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client) error {
 		Credentials: credentials.NewStaticCredentials(awsKeyId, awsSecret, ""),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update AWS SecurityGroups: %s", err.Error())
+		return fmt.Errorf("failed to update AWS SecurityGroups: %v", err)
 	}
 
 	ec2Cli := ec2.New(sess)
-
-	vpcId, err := getVPCid()
-	if err != nil {
-		return fmt.Errorf("failed to update AWS SecurityGroups: %s", err.Error())
-	}
 
 	// Get SG ids in VPC
 	// Get one with filter tag:Name with *-master-sg
 	// Get one with filter tag:Name with *-worker-sg
 	masterSg, err := getSGGroup(ec2Cli, vpcId, "*-master-sg")
 	if err != nil {
-		return fmt.Errorf("failed to get AWS SecurityGroups: %s", err.Error())
+		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
 	}
 	workerSg, err := getSGGroup(ec2Cli, vpcId, "*-worker-sg")
 	if err != nil {
-		return fmt.Errorf("failed to get AWS SecurityGroups: %s", err.Error())
+		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
 	}
 
 	// # Add rules to master and worker SG that allow incoming from master and worker for BGP, IPIP, Typha comms
@@ -116,7 +122,7 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client) error {
 	}
 	err = allowIngressToSG(ec2Cli, masterSg, src)
 	if err != nil {
-		return fmt.Errorf("failed to update master AWS SecurityGroup: %s", err.Error())
+		return fmt.Errorf("failed to update master AWS SecurityGroup: %v", err)
 	}
 
 	err = allowIngressToSG(ec2Cli, workerSg, src)
@@ -151,70 +157,22 @@ func getAWSCreds(ctx context.Context, client client.Client) (id, secret string, 
 	return string(idByte), string(secretByte), nil
 }
 
-//readMeta queries the metadata at the specified subpath on the instance.
-func readMeta(subpath string) (string, error) {
-	u, err := url.Parse("http://169.254.169.254/latest/meta-data")
-	if err != nil {
-		return "", fmt.Errorf("failed to parse metadata base url %v", err)
-	}
-	u.Path = path.Join(u.Path, subpath)
-	resp, err := http.Get(u.String())
-	if err != nil {
-		return "", fmt.Errorf("failed to retrieve %s from metadata: %v", subpath, err)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return "", fmt.Errorf("failed to read response from metadata query: %v", err)
-	}
-	return string(body), nil
-}
-
-// getAvailabilityZone retrieves the availability zone from instance metadata.
-// Get Availability zone from curl --silent http://169.254.169.254/latest/meta-data/placement/availability-zone
-func getAvailabilityZone() (string, error) {
-	az, err := readMeta("placement/availability-zone")
-	if err != nil {
-		return "", fmt.Errorf("failed to read availability zone: %v", err)
-	}
-	log.V(TRACE).Info("Retrieved availability zone", "availability-zone", az)
-	return az, nil
-}
-
-// getAWSRegion gets the region by querying the instance metadata.
-// Get AWS_DEFAULT_REGION from curl --silent http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/^\(.*[0-9]\)[a-z]*/\1/')
-func getAWSRegion() (string, error) {
-	az, err := getAvailabilityZone()
-	if err != nil {
-		return "", err
-	}
-	re := regexp.MustCompile(`^(.*[0-9])[a-z]*`)
-	m := re.FindStringSubmatch(az)
-	// Match should have elements <matched-string> and <submatch-string>
-	if m == nil || len(m) != 2 {
-		return "", fmt.Errorf("failed to parse availability zone for region")
-	}
-	log.V(DEBUG).Info("Parsed region", "region", m[1])
-	return m[1], nil
-}
-
 // getVPCid gets the VPC id by querying the instance metadata.
 // curl http://169.254.169.254/latest/meta-data/network/interfaces/macs/ | head -n 1
 // curl http://169.254.169.254/latest/meta-data/network/interfaces/macs/$mac/vpc-id
-func getVPCid() (string, error) {
-	macs, err := readMeta("network/interfaces/macs")
+func getVPCid(meta *ec2metadata.EC2Metadata) (string, error) {
+	mac, err := meta.GetMetadata("mac")
 	if err != nil {
-		return "", fmt.Errorf("failed to read MAC for VPC Id: %s", err)
+		return "", fmt.Errorf("failed to read MAC for VPC Id: %v", err)
 	}
-	log.V(TRACE).Info("MACs read from metadata", "MACs", macs)
-	if len(macs) < 1 {
-		return "", fmt.Errorf("no MACs read for VPC Id: %s", err)
+	log.V(TRACE).Info("MAC read from metadata", "MAC", mac)
+	if len(mac) < 1 {
+		return "", fmt.Errorf("no MAC read for VPC Id: %v", err)
 	}
-	mac := strings.Fields(macs)[0]
 	// curl http://169.254.169.254/latest/meta-data/network/interfaces/macs/$mac/vpc-id
-	vpcId, err := readMeta(fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac))
+	vpcId, err := meta.GetMetadata(fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac))
 	if err != nil {
-		return "", fmt.Errorf("failed to read VPC Id: %s", err)
+		return "", fmt.Errorf("failed to read VPC Id: %v", err)
 	}
 
 	log.V(TRACE).Info("VPC id read from metadata", "VPCid", vpcId)
@@ -266,6 +224,26 @@ func (is *ingressSrc) String() string {
 	return fmt.Sprintf("SourceSGId: %s, Protocol: %s, Port: %d", is.srcSGId, is.protocol, *is.port)
 }
 
+// ingressSrcMatchesIpPermission checks if the s (source) is already in the
+// IpPermission and returns true if so, otherwise file is returned.
+func ingressSrcMatchesIpPermission(s ingressSrc, ipp *ec2.IpPermission) bool {
+	if aws.StringValue(ipp.IpProtocol) != s.protocol {
+		return false
+	}
+	// Some protocols do not use port so skip checking that if we don't have one
+	// specified in s
+	p := aws.Int64Value(s.port)
+	if s.port != nil && (aws.Int64Value(ipp.FromPort) != p || aws.Int64Value(ipp.ToPort) != p) {
+		return false
+	}
+	for _, y := range ipp.UserIdGroupPairs {
+		if *y.GroupId == s.srcSGId {
+			return true
+		}
+	}
+	return false
+}
+
 // allowIngressToSG adds rules to the toSG Security Group for each element of sources.
 // Before attempting to add a rule the function checks the toSG to see if the rule already exists.
 // If there is an error adding the rules then an error is returned.
@@ -276,27 +254,16 @@ func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSr
 	for _, s := range sources {
 		log.V(DEBUG).Info("Ingress src being added", "toSG.GroupId", sgId, "ingressSrc", s.String())
 		skip := false
+		// Check the allowed IpPermissions to see if the s (source) is already allowed
 		for _, x := range toSG.IpPermissions {
-			if aws.StringValue(x.IpProtocol) != s.protocol {
-				continue
-			}
-			p := aws.Int64Value(s.port)
-			if s.port != nil && (aws.Int64Value(x.FromPort) != p || aws.Int64Value(x.ToPort) != p) {
-				continue
-			}
-			for _, y := range x.UserIdGroupPairs {
-				if *y.GroupId == s.srcSGId {
-					// The Security Group already allows the traffic so skip adding this
-					// ingress rule.
-					log.V(DEBUG).Info("Ingress rule already exists", "toSG.GroupId", sgId, "ingressSrc", s.String())
-					skip = true
-					break
-				}
-			}
-			if skip {
+			if ingressSrcMatchesIpPermission(s, x) {
+				log.V(DEBUG).Info("Ingress rule already exists", "toSG.GroupId", sgId, "ingressSrc", s.String())
+				skip = true
 				break
 			}
 		}
+		// If the s (source) is already allowed then nothing more to do so continue
+		// to the next loop iteration.
 		if skip {
 			continue
 		}
@@ -310,8 +277,7 @@ func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSr
 		}})
 		_, err := cli.AuthorizeSecurityGroupIngress(in)
 		if err != nil {
-			log.Error(err, "Failed to add Ingress rule", "toSG", toSG, "ingressSrc", s.String())
-			return err
+			return fmt.Errorf("Failed to add to SG '%s' the ingress rule '%s': %v: %v", sgId, s.String(), toSG)
 		}
 		log.V(DEBUG).Info("Added Ingress rule", "toSG.GroupId", sgId, "ingressSrc", s.String())
 	}

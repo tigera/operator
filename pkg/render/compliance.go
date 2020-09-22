@@ -176,6 +176,12 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 			c.complianceSnapshotterPodSecurityPolicy())
 	}
 
+	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
+	// host path volumes requires cluster admin permissions.
+	if c.installation.Spec.KubernetesProvider == operatorv1.ProviderDockerEE {
+		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
+	}
+
 	complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
 	return complianceObjs, objsToDelete
@@ -290,6 +296,26 @@ func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.C
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     "tigera-compliance-controller",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-compliance-controller",
+				Namespace: ComplianceNamespace,
+			},
+		},
+	}
+}
+
+// This clusterRoleBinding is only needed in DockerEE since a pod starting pods with host path volumes requires cluster admin permissions.
+func (c *complianceComponent) complianceControllerClusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller-cluster-admin"},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1222,6 +1248,7 @@ func (c *complianceComponent) complianceGlobalReportNetworkAccess() *v3.GlobalRe
 				},
 			},
 			IncludeEndpointData: true,
+			IncludeEndpointFlowLogData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name: "ui-summary.json",
 				Template: `
@@ -1312,7 +1339,7 @@ func (c *complianceComponent) complianceGlobalReportCISBenchmark() *v3.GlobalRep
 			IncludeCISBenchmarkData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name:     "ui-summary.json",
-				Template: `{{ $n := len .CISBenchmark }}{"heading": "Kubernetes CIS Benchmark","type":"row","widgets": [{"heading": "Node Failure Summary","type":"cis-benchmark-nodes","summary": {"label": "Total","total":{{ $n }}},"data": [{"label": "HIGH","value":{{ .CISBenchmarkSummary.HighCount }},"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}% or more tests passing"}, {"label": "MED","value": {{ .CISBenchmarkSummary.MedCount }},"desc": "Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing"}, {"label": "LOW","value": {{ .CISBenchmarkSummary.LowCount }},"desc": "Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing"}]}{{ if .CISBenchmark }}, {"heading": "Top Failed Tests","type": "cis-benchmark-tests","topFailedTests": {"tests": [{{ $tests := cisTopFailedTests . }}{{ $nTests := len $tests }}{{ range $i, $test := $tests }}{"index": "{{ $test.TestNumber }}","description": "{{ $test.TestDesc }}","failedCount": "{{ $test.Count }}"} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}{{ end }}]} }{{ end }}]}`,
+				Template: "{{ $n := len .CISBenchmark }}{\"heading\": \"Kubernetes CIS Benchmark\",\"type\": \"row\",\"widgets\": [{\"heading\": \"Node Failure Summary\",\"type\": \"cis-benchmark-nodes\",\"summary\": {\"label\": \"Total\",\"total\": {{ $n }}},\"data\": [{\"label\": \"HIGH\",\"value\": {{ .CISBenchmarkSummary.HighCount }},\"desc\": \"Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold }}{{ if eq (int .ReportSpec.CIS.HighThreshold) 100 }}100%{{ else }}{{ .ReportSpec.CIS.HighThreshold }}% or more{{ end }}{{ else }}100%{{ end }}{{ else }}100%{{ end }} tests passing\"}, {\"label\": \"MED\",\"value\": {{ .CISBenchmarkSummary.MedCount }},\"desc\": \"Nodes with {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% or more tests passing\"}, {\"label\": \"LOW\",\"value\": {{ .CISBenchmarkSummary.LowCount }},\"desc\": \"Nodes with less than {{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}% tests passing\"}]}{{ if .CISBenchmark }}, {\"heading\": \"Top Failed Tests\",\"type\": \"cis-benchmark-tests\",\"topFailedTests\": {\"tests\": [{{ $tests := cisTopFailedTests . }}{{ $nTests := len $tests }}{{ range $i, $test := $tests }}{\"index\": \"{{ $test.TestNumber }}\",\"description\": \"{{ $test.TestDesc }}\",\"failedCount\": \"{{ $test.Count }}\"} {{ $i1 := add1 $i }}{{ if ne $i1 $nTests }}, {{ end }}{{ end }}]} }{{ end }}]}",
 			},
 		},
 	}
@@ -1357,8 +1384,8 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 {{- $c := $c.AddColumn "startTime"          "{{ dateRfc3339 .StartTime }}" }}
 {{- $c := $c.AddColumn "endTime"            "{{ dateRfc3339 .EndTime }}" }}
 {{- $c := $c.AddColumn "type"               "{{ .CISBenchmarkSummary.Type }}" }}
-{{- $c := $c.AddColumn "hiPercentThreshold" "{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold  }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ end }}" }}
-{{- $c := $c.AddColumn "medPercentThreshold" "{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold  }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ end }}" }}
+{{- $c := $c.AddColumn "hiPercentThreshold" "{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.HighThreshold  }}{{ .ReportSpec.CIS.HighThreshold }}{{ else }}100{{ end }}{{ else }}100{{ end }}" }}
+{{- $c := $c.AddColumn "medPercentThreshold" "{{ if .ReportSpec.CIS }}{{ if .ReportSpec.CIS.MedThreshold  }}{{ .ReportSpec.CIS.MedThreshold }}{{ else }}50{{ end }}{{ else }}50{{ end }}" }}
 {{- $c := $c.AddColumn "hiNodeCount"         "{{ .CISBenchmarkSummary.HighCount }}" }}
 {{- $c := $c.AddColumn "medNodeCount"        "{{ .CISBenchmarkSummary.MedCount }}" }}
 {{- $c := $c.AddColumn "lowNodeCount"        "{{ .CISBenchmarkSummary.LowCount }}" }}

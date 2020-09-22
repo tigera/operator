@@ -188,7 +188,7 @@ func checkNodeHostPathVolume(spec corev1.PodSpec, name, path string) error {
 // If the Resource is added to installation or the existing one matches then nil is returned.
 func addResources(install *operatorv1.Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
 	if install.Spec.ComponentResources == nil {
-		install.Spec.ComponentResources = []*operatorv1.ComponentResource{}
+		install.Spec.ComponentResources = []operatorv1.ComponentResource{}
 	}
 
 	var existingRR *corev1.ResourceRequirements
@@ -200,7 +200,7 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 		}
 	}
 	if existingRR == nil {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, &operatorv1.ComponentResource{
+		install.Spec.ComponentResources = append(install.Spec.ComponentResources, operatorv1.ComponentResource{
 			ComponentName:        compName,
 			ResourceRequirements: rescReq.DeepCopy(),
 		})

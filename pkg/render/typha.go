@@ -45,12 +45,14 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(
+	k8sServiceEp K8sServiceEndpoint,
 	installation *operator.Installation,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
 ) Component {
 	return &typhaComponent{
+		k8sServiceEp:       k8sServiceEp,
 		installation:       installation,
 		typhaNodeTLS:       tnTLS,
 		amazonCloudInt:     aci,
@@ -59,6 +61,7 @@ func Typha(
 }
 
 type typhaComponent struct {
+	k8sServiceEp       K8sServiceEndpoint
 	installation       *operator.Installation
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
@@ -267,6 +270,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"tiers",
+					"packetcaptures",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -440,7 +444,6 @@ func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
 
 // typhaEnvVars creates the typha's envvars.
 func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
-	optional := true
 	typhaEnv := []v1.EnvVar{
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
@@ -460,7 +463,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 					Name: NodeTLSSecretName,
 				},
 				Key:      CommonName,
-				Optional: &optional,
+				Optional: Bool(true),
 			},
 		}},
 		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &v1.EnvVarSource{
@@ -469,7 +472,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 					Name: NodeTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: &optional,
+				Optional: Bool(true),
 			},
 		}},
 	}
@@ -492,6 +495,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 
 	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
+	typhaEnv = append(typhaEnv, c.k8sServiceEp.EnvVars()...)
 
 	return typhaEnv
 }

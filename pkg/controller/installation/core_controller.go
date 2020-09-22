@@ -59,6 +59,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+var k8sEndpoint render.K8sServiceEndpoint
+
+func init() {
+	// We read whatever is in the variable. We would read "" if they were not set.
+	// We decide at the point of usage what to do with the values.
+	k8sEndpoint = render.K8sServiceEndpoint{
+		Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
+		Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
+	}
+}
+
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
 
@@ -169,16 +180,23 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
-	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-	}
+	if r.enterpriseCRDsExist {
+		// Watch for changes to primary resource ManagementCluster
+		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
 
-	// Watch for changes to primary resource ManagementClusterConnection
-	err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		// Watch for changes to primary resource ManagementClusterConnection
+		err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
+
+		err = c.Watch(&source.Kind{Type: &operator.Authentication{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	return nil
@@ -627,27 +645,47 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		render.ManagerInternalSecretKeyName,
 	)
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
-	if managementCluster != nil {
+	var managementCluster *operator.ManagementCluster
+	var managementClusterConnection *operator.ManagementClusterConnection
+	var logStorageExists bool
+	var authentication interface{}
+	if r.enterpriseCRDsExist {
+		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
-			log.Error(err, "Invalid internal manager TLS Cert")
-			r.status.SetDegraded("Error validating internal manager TLS certificate", err.Error())
+			log.Error(err, "Error checking if LogStorage exists")
+			r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	}
 
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading ManagementClusterConnection")
-		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
-		return reconcile.Result{}, err
-	}
+		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
+		if managementCluster != nil {
+			if err != nil {
+				log.Error(err, "Error reading ManagementCluster")
+				r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
 
-	if managementClusterConnection != nil && managementCluster != nil {
-		err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
-		log.Error(err, "")
-		r.status.SetDegraded(err.Error(), "")
-		return reconcile.Result{}, err
+		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
+		if err != nil {
+			log.Error(err, "Error reading ManagementClusterConnection")
+			r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if managementClusterConnection != nil && managementCluster != nil {
+			err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
+			log.Error(err, "")
+			r.status.SetDegraded(err.Error(), "")
+			return reconcile.Result{}, err
+		}
+
+		authentication, err = utils.GetAuthentication(ctx, r.client)
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
@@ -703,9 +741,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
+		k8sEndpoint,
 		instance,
+		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
+		authentication,
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,
@@ -736,7 +777,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	components = append(components, calico.Render()...)
 
 	for _, component := range components {
-		if err := handler.CreateOrUpdate(ctx, component, nil, utils.NoUserAddedMetadata); err != nil {
+		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

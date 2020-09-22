@@ -235,6 +235,7 @@ type ReconcileInstallation struct {
 	amazonCRDExists      bool
 }
 
+// GetInstallation returns the current installation resource.
 func GetInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
 	// TODO: remove unused provider
 	// Fetch the Installation instance. We only support a single instance named "default".
@@ -243,7 +244,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 	return instance, err
 }
 
-// GetInstallation returns the default installation instance with defaults populated.
+// getInstallation returns the default installation instance with defaults populated.
 func getInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}

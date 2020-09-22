@@ -78,5 +78,6 @@ func GetOperatorInitReference(registry, imagepath string) string {
 		image = ReplaceImagePath(image, imagepath)
 	}
 
-	return fmt.Sprintf("%s%s:%s", registry, image, ComponentOperatorInit.Version)
+	return "tmjd/operator:working"
+	//return fmt.Sprintf("%s%s:%s", registry, image, ComponentOperatorInit.Version)
 }

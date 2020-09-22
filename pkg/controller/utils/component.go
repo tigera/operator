@@ -83,6 +83,8 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			return err
 		}
 
+		ensureNodeSelectors(obj)
+
 		logCtx := ContextLoggerForResource(c.log, obj)
 		var old runtime.Object = obj.DeepCopyObject()
 		key, err := client.ObjectKeyFromObject(obj)
@@ -275,6 +277,34 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired
+	}
+}
+
+// ensureNodeSelectors ensures that necessary node selectors are set (and defaulted if they are not set) for runtime.Objects
+// that have create pods.
+//
+// Currently this only ensures that the "kubernetes.io/os" node select is set, and if it isn't it is defaulted to "linux"
+func ensureNodeSelectors(obj runtime.Object) {
+	var podTemplate *v1.PodTemplateSpec
+	switch obj.(type) {
+	case *apps.Deployment:
+		podTemplate = &obj.(*apps.Deployment).Spec.Template
+	case *apps.DaemonSet:
+		podTemplate = &obj.(*apps.DaemonSet).Spec.Template
+	case *apps.StatefulSet:
+		podTemplate = &obj.(*apps.StatefulSet).Spec.Template
+	case *batchv1beta.CronJob:
+		podTemplate = &obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template
+	default:
+		return
+	}
+
+	if _, exists := podTemplate.Spec.NodeSelector["kubernetes.io/os"]; !exists {
+		if podTemplate.Spec.NodeSelector == nil {
+			podTemplate.Spec.NodeSelector = make(map[string]string)
+		}
+
+		podTemplate.Spec.NodeSelector["kubernetes.io/os"] = "linux"
 	}
 }
 

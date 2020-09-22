@@ -15,12 +15,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"runtime"
 
+	"github.com/tigera/operator/pkg/awsSGSetup"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/daemon"
 	"github.com/tigera/operator/version"
@@ -32,6 +34,8 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -42,12 +46,15 @@ var log = logf.Log.WithName("cmd")
 // kubeconfig but should use the in-cluster service account
 var urlOnlyKubeconfig string
 var showVersion bool
+var sgSetup bool
 
 func init() {
 	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",
 		"Path to a kubeconfig, but only for the apiserver url.")
 	flag.BoolVar(&showVersion, "version", false,
 		"Show version information")
+	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
+		"Setup Security Groups in AWS (should only be used on OpenShift).")
 }
 
 func printVersion() {
@@ -98,13 +105,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	if urlOnlyKubeconfig != "" {
-		if err := setKubernetesServiceEnv(urlOnlyKubeconfig); err != nil {
-			log.Error(err, "Terminating")
-			os.Exit(1)
-		}
-	}
-
 	// Use a zap logr.Logger implementation. If none of the zap
 	// flags are configured (or if the zap flag set is not being
 	// used), this defaults to a production zap logger.
@@ -115,7 +115,38 @@ func main() {
 	// uniform and structured logs.
 	logf.SetLogger(zap.LoggerTo(os.Stdout))
 
+	if urlOnlyKubeconfig != "" {
+		if err := setKubernetesServiceEnv(urlOnlyKubeconfig); err != nil {
+			log.Error(err, "Terminating")
+			os.Exit(1)
+		}
+	}
+
 	printVersion()
+
+	if sgSetup {
+		log.Info("Setting up AWS Security Groups")
+		cfg, err := config.GetConfig()
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+
+		ctx := context.Background()
+
+		client, err := client.New(cfg, client.Options{})
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+
+		err = awssgsetup.SetupAWSSecurityGroups(ctx, client)
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	// Run the Daemon
 	daemon.Main()

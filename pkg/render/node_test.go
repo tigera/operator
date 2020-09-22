@@ -748,6 +748,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 

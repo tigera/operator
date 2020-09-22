@@ -331,6 +331,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 				"blockaffinities",
 				"remoteclusterconfigurations",
 				"managedclusters",
+				"packetcaptures",
 			},
 			Verbs: []string{"*"},
 		},
@@ -397,6 +398,22 @@ func (c *apiServerComponent) authClusterRole() *rbacv1.ClusterRole {
 				},
 				ResourceNames: []string{
 					"extension-apiserver-authentication",
+				},
+			},
+			{
+				APIGroups: []string{
+					"rbac.authorization.k8s.io",
+				},
+				Resources: []string{
+					"clusterroles",
+					"clusterrolebindings",
+					"roles",
+					"rolebindings",
+				},
+				Verbs: []string{
+					"get",
+					"list",
+					"watch",
 				},
 			},
 		},
@@ -542,12 +559,16 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	hostNetwork := false
+	dnsPolicy := corev1.DNSClusterFirst
 	if c.installation.Spec.KubernetesProvider == operator.ProviderEKS &&
 		c.installation.Spec.CNI.Type == operator.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
 		// Calico.
 		hostNetwork = true
+
+		// Adjust DNS policy so we can access in-cluster services.
+		dnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
 
 	d := &appsv1.Deployment{
@@ -577,6 +598,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					Annotations: c.tlsAnnotations,
 				},
 				Spec: corev1.PodSpec{
+					DNSPolicy: dnsPolicy,
 					NodeSelector: map[string]string{
 						"kubernetes.io/os": "linux",
 					},
@@ -918,22 +940,24 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		// A POST to AuthenticationReviews can be compared with a POST to the TokenReviews endpoint.
 		// This api is added to circumvent a bug in the k8s-apiserver that is present in k8s
 		// versions up to v1.18 (kubernetes/pull/87612) when oidc audiences are enabled.
+		//
+		// Also include AuthorizationReviews that the UI uses to determine what features it can enable.
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			Resources: []string{"authenticationreviews", "authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
 	}
 
-	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
-	// cluster
+	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.managementClusterConnection == nil {
-		// Access to flow logs, audit logs, and statistics
+		// Access to flow logs, audit logs, and statistics.
+		// Access to log into Kibana for oidc users.
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "events", "dns",
+				"flows", "audit*", "events", "dns", "kibana_login",
 			},
 			Verbs: []string{"get"},
 		})
@@ -975,6 +999,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalnetworksets",
 				"networksets",
 				"managedclusters",
+				"packetcaptures",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
@@ -1037,22 +1062,24 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		// A POST to AuthenticationReviews can be compared with a POST to the TokenReviews endpoint.
 		// This api is added to circumvent a bug in the k8s-apiserver that is present in k8s
 		// versions up to v1.18 (kubernetes/pull/87612) when oidc audiences are enabled.
+		//
+		// Also include AuthorizationReviews that the UI uses to determine what features it can enable.
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			Resources: []string{"authenticationreviews", "authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
 	}
 
-	// If this is a managed cluster the rule to access the clusters indices in Elasticsearch need to be added to the management
-	// cluster
+	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.managementClusterConnection == nil {
-		// Access to flow logs, audit logs, and statistics
+		// Access to flow logs, audit logs, and statistics.
+		// Elasticsearch superuser access once logged into Kibana.
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "events", "dns",
+				"flows", "audit*", "events", "dns", "elasticsearch_superuser",
 			},
 			Verbs: []string{"get"},
 		})
@@ -1068,12 +1095,10 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 }
 
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	trueBool := true
-	ptrBoolTrue := &trueBool
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
 	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.AllowPrivilegeEscalation = Bool(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp

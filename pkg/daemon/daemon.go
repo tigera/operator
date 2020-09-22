@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	"github.com/tigera/operator/pkg/apis"
@@ -74,8 +76,14 @@ func Main() {
 		os.Exit(1)
 	}
 
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Error(err, "Failed to get client for auto provider discovery")
+		os.Exit(1)
+	}
+
 	// Attempt to auto discover the provider
-	provider, err := utils.AutoDiscoverProvider(mgr.GetConfig())
+	provider, err := utils.AutoDiscoverProvider(clientset)
 	if err != nil {
 		log.Error(err, "Auto discovery of Provider failed")
 		os.Exit(1)

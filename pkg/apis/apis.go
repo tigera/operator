@@ -16,6 +16,18 @@ package apis
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	configv1 "github.com/openshift/api/config/v1"
+	ocsv1 "github.com/openshift/api/security/v1"
+	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme
@@ -24,4 +36,19 @@ var AddToSchemes runtime.SchemeBuilder
 // AddToScheme adds all Resources to the Scheme
 func AddToScheme(s *runtime.Scheme) error {
 	return AddToSchemes.AddToScheme(s)
+}
+
+func init() {
+	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
+	AddToSchemes = append(AddToSchemes, v1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, operator.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, configv1.Install)
+	AddToSchemes = append(AddToSchemes, aggregator.AddToScheme)
+	AddToSchemes = append(AddToSchemes, apiextensions.AddToScheme)
+	AddToSchemes = append(AddToSchemes, tigera.AddToScheme)
+	AddToSchemes = append(AddToSchemes, ocsv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, esv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, kbv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, policyv1beta1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, crdv1.SchemeBuilder.AddToScheme)
 }

@@ -51,18 +51,18 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "aws-security-group-setup-0",
+			Name:      "aws-security-group-setup-1",
 			Namespace: OperatorNamespace(),
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"job-name": "aws-security-group-setup-0",
+					"job-name": "aws-security-group-setup-1",
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"job-name": "aws-security-group-setup-0"},
+					Labels: map[string]string{"job-name": "aws-security-group-setup-1"},
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyOnFailure,
@@ -77,6 +77,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
 						Image: components.GetOperatorInitReference(c.installcr.Spec.Registry, c.installcr.Spec.ImagePath),
+						Args:  []string{"--aws-sg-setup"},
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",
@@ -112,16 +113,17 @@ func (c *awsSGSetupComponent) serviceAccount() *corev1.ServiceAccount {
 }
 
 // roleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
-func (c *awsSGSetupComponent) roleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *awsSGSetupComponent) roleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   TigeraAWSSGSetupName,
-			Labels: map[string]string{},
+			Name:      TigeraAWSSGSetupName,
+			Namespace: metav1.NamespaceSystem,
+			Labels:    map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
+			Kind:     "Role",
 			Name:     TigeraAWSSGSetupName,
 		},
 		Subjects: []rbacv1.Subject{
@@ -135,19 +137,21 @@ func (c *awsSGSetupComponent) roleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 // nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
-func (c *awsSGSetupComponent) role() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *awsSGSetupComponent) role() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   TigeraAWSSGSetupName,
-			Labels: map[string]string{},
+			Name:      TigeraAWSSGSetupName,
+			Namespace: metav1.NamespaceSystem,
+			Labels:    map[string]string{},
 		},
 
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get"},
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{"aws-creds"},
+				Verbs:         []string{"get"},
 			},
 		},
 	}

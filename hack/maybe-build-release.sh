@@ -33,16 +33,3 @@ if ! docker pull $redhatImage 2>/dev/null; then
 else
 	echo "operator image exists on scan.connect.redhat.com, skipping tagging/pushing"
 fi
-
-docker login -u unused scan.connect.redhat.com --password-stdin <<< ${OPERATOR_INIT_RH_REGISTRY_KEY}
-redhatImage=scan.connect.redhat.com/$OPERATOR_INIT_RH_PROJECTID/operator-init:${tag}
-
-if ! docker pull $redhatImage 2>/dev/null; then
-	echo "tagging and pushing operator-init image..."
-	quayImage=quay.io/tigera/operator-init:${tag}
-	docker pull $quayImage
-	docker tag $quayImage $redhatImage
-	docker push $redhatImage
-else
-	echo "operator-init image exists on scan.connect.redhat.com, skipping tagging/pushing"
-fi

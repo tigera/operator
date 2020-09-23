@@ -102,6 +102,10 @@ type apiServerComponent struct {
 	isManagement                bool
 }
 
+func (c *apiServerComponent) SupportedOSType() OSType {
+	return OSTypeLinux
+}
+
 func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		createNamespace(APIServerNamespace, c.openshift),
@@ -598,10 +602,8 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					Annotations: c.tlsAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					DNSPolicy: dnsPolicy,
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
+					DNSPolicy:          dnsPolicy,
+					NodeSelector:       c.installation.Spec.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
@@ -614,11 +616,6 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 				},
 			},
 		},
-	}
-
-	// Add the ControlPlaneNodeSelector to our Deployment if one was specified.
-	for k, v := range c.installation.Spec.ControlPlaneNodeSelector {
-		d.Spec.Template.Spec.NodeSelector[k] = v
 	}
 
 	return d

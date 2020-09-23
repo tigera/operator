@@ -46,6 +46,11 @@ type Component interface {
 
 	// Ready returns true if the component is ready to be created.
 	Ready() bool
+
+	// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
+	// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on runtime.Objects
+	// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
+	SupportedOSType() OSType
 }
 
 // A Renderer is capable of generating components to be installed on the cluster.

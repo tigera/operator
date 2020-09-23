@@ -54,6 +54,10 @@ type amazonCloudIntegrationComponent struct {
 	openshift              bool
 }
 
+func (c *amazonCloudIntegrationComponent) SupportedOSType() OSType {
+	return OSTypeLinux
+}
+
 type AmazonCredential struct {
 	KeyId     []byte
 	KeySecret []byte

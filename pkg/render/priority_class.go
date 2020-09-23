@@ -31,6 +31,10 @@ func PriorityClassDefinitions() Component {
 type priorityClassComponent struct {
 }
 
+func (c *priorityClassComponent) SupportedOSType() OSType {
+	return OSTypeAny
+}
+
 func (c *priorityClassComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{c.calicoPriority()}, nil
 }

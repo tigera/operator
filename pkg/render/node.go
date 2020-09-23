@@ -81,6 +81,10 @@ type nodeComponent struct {
 	migrationNeeded bool
 }
 
+func (c *nodeComponent) SupportedOSTypes() []OSType {
+	return []OSType{OSTypeLinux}
+}
+
 func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objsToCreate := []runtime.Object{
 		c.nodeServiceAccount(),
@@ -517,9 +521,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
 					Tolerations:                   c.nodeTolerations(),
 					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",

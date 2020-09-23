@@ -76,6 +76,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+	osTypes := component.SupportedOSTypes()
 
 	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
@@ -89,6 +90,10 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		if err != nil {
 			return err
 		}
+
+		// Ensure that if the object is something the creates a pod that it is scheduled on nodes running operating systems
+		// as specified by the osTypes.
+		ensureOSSchedulingRestrictions(obj, osTypes)
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
@@ -275,6 +280,66 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired
+	}
+}
+
+// ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osTypes is not empty that a node
+// selector or node affinity is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
+// on a node running an operating system as specified by osTypes.
+func ensureOSSchedulingRestrictions(obj runtime.Object, osTypes []render.OSType) {
+	// Empty array means all operating systems are supported
+	if len(osTypes) == 0 {
+		return
+	}
+
+	var podSpec *v1.PodSpec
+	switch obj.(type) {
+	case *apps.Deployment:
+		podSpec = &obj.(*apps.Deployment).Spec.Template.Spec
+	case *apps.DaemonSet:
+		podSpec = &obj.(*apps.DaemonSet).Spec.Template.Spec
+	case *apps.StatefulSet:
+		podSpec = &obj.(*apps.StatefulSet).Spec.Template.Spec
+	case *batchv1beta.CronJob:
+		podSpec = &obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec
+	default:
+		return
+	}
+
+	// Use node selectors if there's only one supported OS type for backwards compatibility
+	if len(osTypes) == 1 {
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
+
+		podSpec.NodeSelector["kubernetes.io/os"] = string(osTypes[0])
+	} else {
+		var values []string
+		for _, typ := range osTypes {
+			values = append(values, string(typ))
+		}
+
+		term := v1.NodeSelectorTerm{
+			MatchExpressions: []v1.NodeSelectorRequirement{{
+				Key:      "kubernetes.io/os",
+				Operator: v1.NodeSelectorOpIn,
+				Values:   values,
+			}},
+		}
+
+		//
+		if podSpec.Affinity == nil {
+			podSpec.Affinity = &v1.Affinity{}
+		}
+		if podSpec.Affinity.NodeAffinity == nil {
+			podSpec.Affinity.NodeAffinity = &v1.NodeAffinity{}
+		}
+		if podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+			podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{}
+		}
+
+		rd := podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		rd.NodeSelectorTerms = append(rd.NodeSelectorTerms, term)
 	}
 }
 

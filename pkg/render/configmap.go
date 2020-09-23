@@ -27,6 +27,10 @@ type configMapComponent struct {
 	configMaps []*corev1.ConfigMap
 }
 
+func (c *configMapComponent) SupportedOSTypes() []OSType {
+	return []OSType{}
+}
+
 func (c *configMapComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{}
 	for _, cm := range c.configMaps {

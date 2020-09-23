@@ -76,6 +76,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+	osType := component.SupportedOSType()
 
 	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
@@ -89,6 +90,10 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		if err != nil {
 			return err
 		}
+
+		// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
+		// system as specified by the osType.
+		ensureOSSchedulingRestrictions(obj, osType)
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
@@ -276,6 +281,35 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 		// Default to just using the desired state, with an updated RV.
 		return desired
 	}
+}
+
+// ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osType is not OSTypeAny that a
+// node selector is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
+// on a node running an operating system as specified by osType.
+func ensureOSSchedulingRestrictions(obj runtime.Object, osType render.OSType) {
+	if osType == render.OSTypeAny {
+		return
+	}
+
+	var podSpec *v1.PodSpec
+	switch obj.(type) {
+	case *apps.Deployment:
+		podSpec = &obj.(*apps.Deployment).Spec.Template.Spec
+	case *apps.DaemonSet:
+		podSpec = &obj.(*apps.DaemonSet).Spec.Template.Spec
+	case *apps.StatefulSet:
+		podSpec = &obj.(*apps.StatefulSet).Spec.Template.Spec
+	case *batchv1beta.CronJob:
+		podSpec = &obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec
+	default:
+		return
+	}
+
+	if podSpec.NodeSelector == nil {
+		podSpec.NodeSelector = make(map[string]string)
+	}
+
+	podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 }
 
 // mergeAnnotations merges current and desired annotations. If both current and desired annotations contain the same key, the

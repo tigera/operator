@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 // handleMTU is a migration handler which ensures MTU configuration is carried forward.

@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 )
 
 var _ = Describe("Installation validation tests", func() {

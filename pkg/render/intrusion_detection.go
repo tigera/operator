@@ -18,7 +18,7 @@ import (
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"

@@ -1,7 +1,7 @@
 package migration
 
 import (
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 // Converter converts an unmanaged Calico install into an Installation resource which represents

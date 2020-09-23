@@ -200,6 +200,10 @@ type elasticsearchComponent struct {
 	authentication              interface{}
 }
 
+func (es *elasticsearchComponent) SupportedOSTypes() []OSType {
+	return []OSType{}
+}
+
 func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	var toCreate, toDelete []runtime.Object
 

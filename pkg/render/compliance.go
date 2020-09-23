@@ -106,6 +106,10 @@ type complianceComponent struct {
 	managementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
+func (c *complianceComponent) SupportedOSType() OSType {
+	return OSTypeLinux
+}
+
 func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	complianceObjs := append(
 		[]runtime.Object{createNamespace(ComplianceNamespace, c.openshift)},
@@ -344,9 +348,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-			NodeSelector: map[string]string{
-				"kubernetes.io/os": "linux",
-			},
 			ServiceAccountName: "tigera-compliance-controller",
 			Tolerations: []corev1.Toleration{
 				{
@@ -473,7 +474,6 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				},
 			},
 			Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-				NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 				ServiceAccountName: "tigera-compliance-reporter",
 				Tolerations: []corev1.Toleration{
 					{
@@ -643,7 +643,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Annotations: complianceAnnotations(c),
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-			NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 			ServiceAccountName: "tigera-compliance-server",
 			Tolerations: []corev1.Toleration{
 				{
@@ -865,7 +864,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-			NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 			ServiceAccountName: "tigera-compliance-snapshotter",
 			Tolerations: []corev1.Toleration{
 				{
@@ -1014,7 +1012,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-			NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
 			Tolerations: []corev1.Toleration{
@@ -1247,7 +1244,7 @@ func (c *complianceComponent) complianceGlobalReportNetworkAccess() *v3.GlobalRe
 `,
 				},
 			},
-			IncludeEndpointData: true,
+			IncludeEndpointData:        true,
 			IncludeEndpointFlowLogData: true,
 			UISummaryTemplate: v3.ReportTemplate{
 				Name: "ui-summary.json",

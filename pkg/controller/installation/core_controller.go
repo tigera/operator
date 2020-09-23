@@ -87,20 +87,24 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
 	}
+
+	statusManager := status.New(mgr.GetClient(), "calico")
+
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
-		status:               status.New(mgr.GetClient(), "calico"),
-		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient()),
+		status:               statusManager,
+		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient(), statusManager),
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 	}
 	r.status.Run()
-	r.typhaAutoscaler.run()
+	r.typhaAutoscaler.start()
+
 	return r, nil
 }
 
@@ -548,6 +552,15 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			r.SetDegraded("Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+	}
+
+	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
+	// the run the reset the degraded status and requeue the request.
+	if r.typhaAutoscaler.isDegraded() {
+		if err := r.typhaAutoscaler.triggerRun(); err != nil {
+			r.SetDegraded("Failed to scale typha", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 	}
 

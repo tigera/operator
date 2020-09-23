@@ -18,6 +18,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/status"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/test"
@@ -31,36 +33,42 @@ import (
 
 var _ = Describe("Test typha autoscaler ", func() {
 	var c client.Client
-	ctx := context.Background()
+	var statusManager *status.MockStatus
 
-	calicoSystemNs := &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-system",
-		},
-	}
+	var ctx context.Context
+
 	BeforeEach(func() {
 		c = fake.NewFakeClientWithScheme(scheme.Scheme)
-		err := c.Create(ctx, calicoSystemNs)
+		err := c.Create(ctx, &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "calico-system",
+			},
+		})
 		Expect(err).NotTo(HaveOccurred())
+		statusManager = new(status.MockStatus)
+
+		ctx = context.Background()
 	})
 
 	It("should get the correct number of nodes", func() {
-		n1 := createNode(c, "node1")
-		_ = createNode(c, "node2")
+		n1 := createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
+		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
-		ta := newTyphaAutoscaler(c)
-		n, err := ta.getNumberOfNodes()
+		ta := newTyphaAutoscaler(c, statusManager)
+		schedulableNodes, linuxNodes, err := ta.getNodeCounts()
 		Expect(err).To(BeNil())
-		Expect(n).To(Equal(2))
+		Expect(schedulableNodes).To(Equal(2))
+		Expect(linuxNodes).To(Equal(2))
 
 		n1.Spec.Unschedulable = true
 		err = c.Update(ctx, n1)
 		Expect(err).To(BeNil())
 
-		n, err = ta.getNumberOfNodes()
+		schedulableNodes, linuxNodes, err = ta.getNodeCounts()
 		Expect(err).To(BeNil())
-		Expect(n).To(Equal(1))
+		Expect(schedulableNodes).To(Equal(1))
+		Expect(linuxNodes).To(Equal(1))
 	})
 
 	It("should scale the Typha up and down in response to the number of schedulable nodes", func() {
@@ -77,16 +85,16 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		// Create a few nodes
-		_ = createNode(c, "node1")
-		_ = createNode(c, "node2")
+		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
+		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, typhaAutoscalerPeriod(10*time.Millisecond))
-		ta.run()
+		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta.start()
 
 		verifyTyphaReplicas(c, 2)
 
-		n3 := createNode(c, "node3")
+		n3 := createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"})
 		verifyTyphaReplicas(c, 3)
 
 		// Verify that making a node unschedulable updates replicas.
@@ -95,12 +103,49 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 		verifyTyphaReplicas(c, 2)
 	})
+	It("should be degraded if there's not enough linux nodes", func() {
+		typhaMeta := metav1.ObjectMeta{
+			Name:      "calico-typha",
+			Namespace: "calico-system",
+		}
+		// Create a typha deployment
+		typha := &appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: typhaMeta,
+		}
+		err := c.Create(ctx, typha)
+		Expect(err).To(BeNil())
+
+		statusManager.On("SetDegraded", "Failed to autoscale typha", "not enough linux nodes to schedule typha pods on, require 4 and have 2")
+
+		// Create a few nodes
+		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
+		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
+		_ = createNode(c, "node3", map[string]string{"kubernetes.io/os": "window"})
+		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "window"})
+
+		// Create the autoscaler and run it
+		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta.start()
+
+		waitForFirstAutoscaleRun(ta)
+
+		statusManager.AssertExpectations(GinkgoT())
+	})
 })
 
-func createNode(c client.Client, name string) *corev1.Node {
+func waitForFirstAutoscaleRun(autoscalar *typhaAutoscaler) {
+	time.Sleep(100 * time.Millisecond)
+	autoscalar.isDegraded()
+}
+
+func createNode(c client.Client, name string, labels map[string]string) *corev1.Node {
 	node := &corev1.Node{
-		TypeMeta:   metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: labels,
+		},
 	}
 	err := c.Create(context.Background(), node)
 	Expect(err).To(BeNil())

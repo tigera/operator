@@ -46,6 +46,8 @@ type Component interface {
 
 	// Ready returns true if the component is ready to be created.
 	Ready() bool
+
+	SupportedOSTypes() []OSType
 }
 
 // A Renderer is capable of generating components to be installed on the cluster.

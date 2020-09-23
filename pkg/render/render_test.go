@@ -29,7 +29,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/render"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	zap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -63,7 +63,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		logWriter = bufio.NewWriter(&logBuffer)
-		render.SetTestLogger(logf.ZapLoggerTo(logWriter, true))
+		render.SetTestLogger(zap.LoggerTo(logWriter, true))
 		typhaNodeTLS = &render.TyphaNodeTLS{}
 	})
 	AfterEach(func() {

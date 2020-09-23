@@ -41,7 +41,7 @@ func (in *APIServer) DeepCopyObject() runtime.Object {
 func (in *APIServerList) DeepCopyInto(out *APIServerList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]APIServer, len(*in))
@@ -186,7 +186,7 @@ func (in *AmazonCloudIntegration) DeepCopyObject() runtime.Object {
 func (in *AmazonCloudIntegrationList) DeepCopyInto(out *AmazonCloudIntegrationList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]AmazonCloudIntegration, len(*in))
@@ -305,7 +305,7 @@ func (in *Authentication) DeepCopyObject() runtime.Object {
 func (in *AuthenticationList) DeepCopyInto(out *AuthenticationList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Authentication, len(*in))
@@ -498,7 +498,7 @@ func (in *Compliance) DeepCopyObject() runtime.Object {
 func (in *ComplianceList) DeepCopyInto(out *ComplianceList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Compliance, len(*in))
@@ -670,7 +670,7 @@ func (in *Installation) DeepCopyObject() runtime.Object {
 func (in *InstallationList) DeepCopyInto(out *InstallationList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Installation, len(*in))
@@ -798,7 +798,7 @@ func (in *IntrusionDetection) DeepCopyObject() runtime.Object {
 func (in *IntrusionDetectionList) DeepCopyInto(out *IntrusionDetectionList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]IntrusionDetection, len(*in))
@@ -891,7 +891,7 @@ func (in *LogCollector) DeepCopyObject() runtime.Object {
 func (in *LogCollectorList) DeepCopyInto(out *LogCollectorList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]LogCollector, len(*in))
@@ -994,7 +994,7 @@ func (in *LogStorage) DeepCopyObject() runtime.Object {
 func (in *LogStorageList) DeepCopyInto(out *LogStorageList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]LogStorage, len(*in))
@@ -1135,7 +1135,7 @@ func (in *ManagementClusterConnection) DeepCopyObject() runtime.Object {
 func (in *ManagementClusterConnectionList) DeepCopyInto(out *ManagementClusterConnectionList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]ManagementClusterConnection, len(*in))
@@ -1184,7 +1184,7 @@ func (in *ManagementClusterConnectionSpec) DeepCopy() *ManagementClusterConnecti
 func (in *ManagementClusterList) DeepCopyInto(out *ManagementClusterList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]ManagementCluster, len(*in))
@@ -1261,7 +1261,7 @@ func (in *Manager) DeepCopyObject() runtime.Object {
 func (in *ManagerList) DeepCopyInto(out *ManagerList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Manager, len(*in))
@@ -1561,7 +1561,7 @@ func (in *TigeraStatusCondition) DeepCopy() *TigeraStatusCondition {
 func (in *TigeraStatusList) DeepCopyInto(out *TigeraStatusList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]TigeraStatus, len(*in))

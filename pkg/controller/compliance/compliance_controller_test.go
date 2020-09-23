@@ -99,7 +99,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
-		Expect(c.Create(ctx, &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: "tigera-compliance"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 	})
 
 	It("should create resources for standalone clusters", func() {

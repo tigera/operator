@@ -147,6 +147,10 @@ type managerComponent struct {
 	managementCluster          *operator.ManagementCluster
 }
 
+func (c *managerComponent) SupportedOSTypes() []OSType {
+	return []OSType{OSTypeLinux}
+}
+
 func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		createNamespace(ManagerNamespace, c.openshift),
@@ -224,9 +228,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-			NodeSelector: map[string]string{
-				"kubernetes.io/os": "linux",
-			},
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),

@@ -68,6 +68,10 @@ type typhaComponent struct {
 	namespaceMigration bool
 }
 
+func (c *typhaComponent) SupportedOSTypes() []OSType {
+	return []OSType{OSTypeLinux}
+}
+
 func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		c.typhaServiceAccount(),
@@ -336,7 +340,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					NodeSelector:                  c.nodeSelector(),
 					Tolerations:                   c.tolerations(),
 					ImagePullSecrets:              c.installation.Spec.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
@@ -353,10 +356,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		migration.SetTyphaAntiAffinity(&d)
 	}
 	return &d
-}
-
-func (c *typhaComponent) nodeSelector() map[string]string {
-	return map[string]string{"kubernetes.io/os": "linux"}
 }
 
 // tolerations creates the typha's tolerations.

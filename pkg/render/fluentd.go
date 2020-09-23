@@ -121,6 +121,10 @@ type fluentdComponent struct {
 	installation    *operatorv1.Installation
 }
 
+func (c *fluentdComponent) SupportedOSType() OSType {
+	return OSTypeLinux
+}
+
 func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	var objs []runtime.Object
 	objs = append(objs,
@@ -677,9 +681,6 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{

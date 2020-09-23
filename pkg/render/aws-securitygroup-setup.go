@@ -34,6 +34,10 @@ type awsSGSetupComponent struct {
 	installcr   *operator.Installation
 }
 
+func (c *awsSGSetupComponent) SupportedOSType() OSType {
+	return OSTypeLinux
+}
+
 func (c *awsSGSetupComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	return []runtime.Object{
 		c.serviceAccount(),

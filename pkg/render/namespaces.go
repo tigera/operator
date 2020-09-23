@@ -34,6 +34,10 @@ type namespaceComponent struct {
 	pullSecrets []*corev1.Secret
 }
 
+func (c *namespaceComponent) SupportedOSType() OSType {
+	return OSTypeAny
+}
+
 func (c *namespaceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	ns := []runtime.Object{
 		createNamespace(common.CalicoNamespace, c.openshift),

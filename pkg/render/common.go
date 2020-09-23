@@ -39,7 +39,13 @@ import (
 const (
 	Optional                   = true
 	DefaultCertificateDuration = 100 * 365 * 24 * time.Hour
+
+	OSTypeAny   OSType = "any"
+	OSTypeLinux OSType = "linux"
 )
+
+// This type helps ensure that we only use defined os types
+type OSType string
 
 var log = logf.Log.WithName("render")
 

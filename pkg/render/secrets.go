@@ -27,6 +27,10 @@ type secretsComponent struct {
 	secrets []*corev1.Secret
 }
 
+func (c *secretsComponent) SupportedOSType() OSType {
+	return OSTypeAny
+}
+
 func (c *secretsComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{}
 	for _, s := range c.secrets {

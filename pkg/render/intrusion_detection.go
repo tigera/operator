@@ -15,6 +15,8 @@
 package render
 
 import (
+	"time"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -26,7 +28,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"time"
 )
 
 const (
@@ -63,6 +64,10 @@ type intrusionDetectionComponent struct {
 	esClusterConfig  *ElasticsearchClusterConfig
 	pullSecrets      []*corev1.Secret
 	openshift        bool
+}
+
+func (c *intrusionDetectionComponent) SupportedOSType() OSType {
+	return OSTypeLinux
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Object) {

@@ -76,6 +76,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+	osTypes := component.SupportedOSTypes()
 
 	for _, obj := range objsToCreate {
 		// Set CR instance as the owner and controller.
@@ -89,6 +90,8 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		if err != nil {
 			return err
 		}
+
+		ensureOSAffinity(obj, osTypes)
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
@@ -275,6 +278,51 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired
+	}
+}
+
+func ensureOSAffinity(obj runtime.Object, osTypes []render.OSType) {
+	if len(osTypes) == 0 {
+		return
+	}
+
+	var podTemplate *v1.PodTemplateSpec
+	switch obj.(type) {
+	case *apps.Deployment:
+		podTemplate = &obj.(*apps.Deployment).Spec.Template
+	case *apps.DaemonSet:
+		podTemplate = &obj.(*apps.DaemonSet).Spec.Template
+	case *apps.StatefulSet:
+		podTemplate = &obj.(*apps.StatefulSet).Spec.Template
+	case *batchv1beta.CronJob:
+		podTemplate = &obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template
+	default:
+		return
+	}
+
+	// Use node selectors if there's only one supported OS type for backwards compatibility
+	if len(osTypes) == 1 {
+		if podTemplate.Spec.NodeSelector == nil {
+			podTemplate.Spec.NodeSelector = make(map[string]string)
+		}
+
+		podTemplate.Spec.NodeSelector["kubernetes.io/os"] = string(osTypes[0])
+	} else {
+		var values []string
+		for _, typ := range osTypes {
+			values = append(values, string(typ))
+		}
+
+		term := v1.NodeSelectorTerm{
+			MatchExpressions: []v1.NodeSelectorRequirement{{
+				Key:      "kubernetes.io/os",
+				Operator: v1.NodeSelectorOpIn,
+				Values:   values,
+			}},
+		}
+
+		rd := podTemplate.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		rd.NodeSelectorTerms = append(rd.NodeSelectorTerms, term)
 	}
 }
 

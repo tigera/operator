@@ -65,6 +65,10 @@ type GuardianComponent struct {
 	tunnelSecret *corev1.Secret
 }
 
+func (c *GuardianComponent) SupportedOSTypes() []OSType {
+	return []OSType{OSTypeLinux}
+}
+
 func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
 		createNamespace(GuardianNamespace, c.openshift),
@@ -201,9 +205,6 @@ func (c *GuardianComponent) deployment() runtime.Object {
 					},
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
 					ServiceAccountName: GuardianServiceAccountName,
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),

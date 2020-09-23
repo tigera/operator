@@ -58,6 +58,10 @@ type kubeControllersComponent struct {
 	authentication              interface{}
 }
 
+func (c *kubeControllersComponent) SupportedOSTypes() []OSType {
+	return []OSType{OSTypeLinux}
+}
+
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	kubeControllerObjects := []runtime.Object{
 		c.controllersServiceAccount(),
@@ -318,9 +322,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 				Spec: v1.PodSpec{
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
 					Tolerations:        tolerations,
 					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
@@ -349,6 +350,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
+
+	if d.Spec.Template.Spec.NodeSelector == nil {
+		d.Spec.Template.Spec.NodeSelector = make(map[string]string)
+	}
 
 	// Add the ControlPlaneNodeSelector to our Deployment if one was specified.
 	for k, v := range c.cr.Spec.ControlPlaneNodeSelector {

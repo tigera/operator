@@ -22,7 +22,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 
 	"github.com/onsi/ginkgo/reporters"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestStatus(t *testing.T) {

@@ -1269,7 +1269,7 @@ func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ECKWebhookConfiguration,
 		},
-		Webhooks: []admissionv1beta1.Webhook{
+		Webhooks: []admissionv1beta1.ValidatingWebhook{
 			{
 				ClientConfig: admissionv1beta1.WebhookClientConfig{
 					CABundle: []byte("Cg=="), // base64 empty string

@@ -143,8 +143,6 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
-		Expect(len(d.Spec.Template.Spec.NodeSelector)).To(Equal(1))
-		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("kubernetes.io/os", "linux"))
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
 		expectedTolerations := []corev1.Toleration{

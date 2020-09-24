@@ -48,6 +48,9 @@ var _ = Describe("Rendering tests", func() {
 			Spec: operator.InstallationSpec{
 				CNI: &operator.CNISpec{
 					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{
+						Type: operator.IPAMPluginCalico,
+					},
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},

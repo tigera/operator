@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -28,6 +29,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -237,12 +239,26 @@ type ReconcileInstallation struct {
 	amazonCRDExists      bool
 }
 
-// GetInstallation returns the default installation instance with defaults populated.
+// GetInstallation returns the current installation resource.
 func GetInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
+	// TODO: remove unused provider
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operator.Installation{}
+	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
+	return instance, err
+}
+
+// getInstallation returns the default installation instance with defaults populated.
+func getInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
 	if err != nil {
+		return nil, err
+	}
+
+	// grab existing install
+	if err := convert.Convert(ctx, client, instance); err != nil {
 		return nil, err
 	}
 
@@ -338,6 +354,23 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if instance.Spec.CNI.IPAM == nil {
+		instance.Spec.CNI.IPAM = &operator.IPAMSpec{}
+	}
+
+	if instance.Spec.CNI.IPAM.Type == "" {
+		switch instance.Spec.CNI.Type {
+		case operator.PluginAzureVNET:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAzureVNET
+		case operator.PluginAmazonVPC:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		case operator.PluginGKE:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		default:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginCalico
+		}
+	}
+
 	// Default any unspecified fields within the CalicoNetworkSpec.
 	var v4pool, v6pool *operator.IPPool
 	if instance.Spec.CalicoNetwork != nil {
@@ -386,7 +419,11 @@ func fillDefaults(instance *operator.Installation) error {
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
-				v4pool.Encapsulation = operator.EncapsulationIPIP
+				if instance.Spec.CNI.Type == operator.PluginCalico {
+					v4pool.Encapsulation = operator.EncapsulationIPIP
+				} else {
+					v4pool.Encapsulation = operator.EncapsulationNone
+				}
 			}
 			if v4pool.NATOutgoing == "" {
 				v4pool.NATOutgoing = operator.NATOutgoingEnabled
@@ -514,8 +551,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	status := instance.Status
 
+	// mark CR found so we can report converter problems via tigerastatus
+	r.status.OnCRFound()
+
 	// Query for the installation object.
-	instance, err := GetInstallation(ctx, r.client, r.autoDetectedProvider)
+	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -525,10 +565,15 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
+		if errors.As(err, &convert.ErrIncompatibleCluster{}) {
+			r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+			// We should always requeue a convert problem. Don't return error
+			// to make sure we never back off retrying.
+			return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+		}
 		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.

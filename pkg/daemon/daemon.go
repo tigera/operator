@@ -81,7 +81,7 @@ func Main() {
 	}
 
 	// Attempt to auto discover the provider
-	provider, err := utils.AutoDiscoverProvider(mgr.GetConfig())
+	provider, err := utils.AutoDiscoverProvider(ctx, mgr.GetConfig())
 	if err != nil {
 		log.Error(err, "Auto discovery of Provider failed")
 		os.Exit(1)

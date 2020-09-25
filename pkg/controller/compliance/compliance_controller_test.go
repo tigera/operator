@@ -151,18 +151,6 @@ var _ = Describe("Compliance controller tests", func() {
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceServerName))
 
-		By("changing the cluster type to Managed")
-		Expect(c.Update(
-			ctx,
-			&operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					Registry: "my-reg",
-					// The test is provider agnostic.
-					KubernetesProvider: operatorv1.ProviderNone,
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			})).NotTo(HaveOccurred())
-
 		Expect(c.Create(
 			ctx,
 			&operatorv1.ManagementClusterConnection{

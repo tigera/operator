@@ -44,8 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
 var _ = Describe("Mainline component function tests", func() {
@@ -67,16 +65,8 @@ var _ = Describe("Mainline component function tests", func() {
 	AfterEach(func() {
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
-			patchF := func(n *corev1.Node) {
-				for k, _ := range n.ObjectMeta.Annotations {
-					if strings.Contains(k, "projectcalico") {
-						delete(n.ObjectMeta.Annotations, k)
-					}
-				}
-			}
-
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
-			nodes, err := cs.CoreV1().Nodes().List(metav1.ListOptions{})
+			nodes, err := cs.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 			if err != nil {
 				return err
 			}
@@ -89,7 +79,7 @@ var _ = Describe("Mainline component function tests", func() {
 						delete(n.ObjectMeta.Annotations, k)
 					}
 				}
-				err = apiclient.PatchNode(cs, n.Name, patchF)
+				_, err = cs.CoreV1().Nodes().Update(context.Background(), &n, metav1.UpdateOptions{})
 				if err != nil {
 					return err
 				}

@@ -1,0 +1,54 @@
+# This kustomization.yaml is not intended to be run by itself,
+# since it depends on service name and namespace that are out of this kustomize package.
+# It should be run by config/default
+resources:
+- bases/operator.tigera.io_installations.yaml
+- bases/operator.tigera.io_tigerastatuses.yaml
+- bases/operator.tigera.io_amazoncloudintegrations.yaml
+- bases/operator.tigera.io_apiservers.yaml
+- bases/operator.tigera.io_authentications.yaml
+- bases/operator.tigera.io_compliances.yaml
+- bases/operator.tigera.io_intrusiondetections.yaml
+- bases/operator.tigera.io_logcollectors.yaml
+- bases/operator.tigera.io_logstorages.yaml
+- bases/operator.tigera.io_managementclusters.yaml
+- bases/operator.tigera.io_managementclusterconnections.yaml
+- bases/operator.tigera.io_managers.yaml
+# +kubebuilder:scaffold:crdkustomizeresource
+
+patchesStrategicMerge:
+# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
+# patches here are for enabling the conversion webhook for each CRD
+#- patches/webhook_in_installations.yaml
+#- patches/webhook_in_tigerastatuses.yaml
+#- patches/webhook_in_amazoncloudintegrations.yaml
+#- patches/webhook_in_apiservers.yaml
+#- patches/webhook_in_authentications.yaml
+#- patches/webhook_in_compliances.yaml
+#- patches/webhook_in_intrusiondetections.yaml
+#- patches/webhook_in_logcollectors.yaml
+#- patches/webhook_in_logstorages.yaml
+#- patches/webhook_in_managementclusters.yaml
+#- patches/webhook_in_managementclusterconnections.yaml
+#- patches/webhook_in_managers.yaml
+# +kubebuilder:scaffold:crdkustomizewebhookpatch
+
+# [CERTMANAGER] To enable webhook, uncomment all the sections with [CERTMANAGER] prefix.
+# patches here are for enabling the CA injection for each CRD
+#- patches/cainjection_in_installations.yaml
+#- patches/cainjection_in_tigerastatuses.yaml
+#- patches/cainjection_in_amazoncloudintegrations.yaml
+#- patches/cainjection_in_apiservers.yaml
+#- patches/cainjection_in_authentications.yaml
+#- patches/cainjection_in_compliances.yaml
+#- patches/cainjection_in_intrusiondetections.yaml
+#- patches/cainjection_in_logcollectors.yaml
+#- patches/cainjection_in_logstorages.yaml
+#- patches/cainjection_in_managementclusters.yaml
+#- patches/cainjection_in_managementclusterconnections.yaml
+#- patches/cainjection_in_managers.yaml
+# +kubebuilder:scaffold:crdkustomizecainjectionpatch
+
+# the following config is for teaching kustomize how to do kustomization for CRDs.
+configurations:
+- kustomizeconfig.yaml

@@ -1,0 +1,20 @@
+# permissions for end users to view amazoncloudintegrations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: amazoncloudintegration-viewer-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - amazoncloudintegrations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - amazoncloudintegrations/status
+  verbs:
+  - get

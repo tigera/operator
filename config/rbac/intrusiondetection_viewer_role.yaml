@@ -1,0 +1,20 @@
+# permissions for end users to view intrusiondetections.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: intrusiondetection-viewer-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - intrusiondetections
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - intrusiondetections/status
+  verbs:
+  - get

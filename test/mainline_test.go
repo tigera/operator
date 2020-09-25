@@ -30,8 +30,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	//"github.com/operator-framework/operator-sdk/pkg/restmapper"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	apps "k8s.io/api/apps/v1"

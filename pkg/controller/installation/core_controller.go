@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -104,7 +104,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
-
 	return r, nil
 }
 

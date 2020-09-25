@@ -65,7 +65,7 @@ func (m *MockStatus) IsAvailable() bool {
 	return m.Called().Bool(0)
 }
 
-func (m MockStatus) IsProgressing() bool {
+func (m *MockStatus) IsProgressing() bool {
 	return m.Called().Bool(0)
 }
 

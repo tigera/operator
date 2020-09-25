@@ -791,7 +791,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
-		if err := r.namespaceMigration.Run(reqLogger); err != nil {
+		if err := r.namespaceMigration.Run(ctx, reqLogger); err != nil {
 			r.SetDegraded("error migrating resources to calico-system", err, reqLogger)
 			// We should always requeue a migration problem. Don't return error
 			// to make sure we never start backing off retrying.
@@ -800,7 +800,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// Requeue so we can update our resources (without the migration changes)
 		return reconcile.Result{Requeue: true}, nil
 	} else if r.namespaceMigration.NeedCleanup() {
-		if err := r.namespaceMigration.CleanupMigration(); err != nil {
+		if err := r.namespaceMigration.CleanupMigration(ctx); err != nil {
 			r.SetDegraded("error migrating resources to calico-system", err, reqLogger)
 			return reconcile.Result{}, err
 		}

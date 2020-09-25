@@ -110,13 +110,8 @@ var _ = Describe("Component handler tests", func() {
 		annotations := map[string]string{
 			ocsv1.UIDRangeAnnotation: "1-65535",
 		}
-		updatedNs := &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "test-namespace",
-				Annotations: annotations,
-			},
-		}
-		c.Update(ctx, updatedNs)
+		ns.Annotations = annotations
+		Expect(c.Update(ctx, ns)).NotTo(HaveOccurred())
 
 		By("checking that the namespace is updated with SCC annotation")
 		expectedAnnotations = map[string]string{
@@ -148,13 +143,8 @@ var _ = Describe("Component handler tests", func() {
 			"cattle-not-pets":          "indeed",
 			fakeComponentAnnotationKey: "not-present",
 		}
-		updatedNs = &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "test-namespace",
-				Annotations: annotations,
-			},
-		}
-		c.Update(ctx, updatedNs)
+		ns.Annotations = annotations
+		c.Update(ctx, ns)
 
 		By("checking that the namespace is updated with new modified annotation")
 		expectedAnnotations = map[string]string{

@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -82,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
+func NewReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
@@ -105,6 +105,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	r.status.Run()
 	r.typhaAutoscaler.start()
 
+	if err = add(mgr, opts); err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 
@@ -218,6 +221,7 @@ func secondaryResources() []runtime.Object {
 	}
 }
 
+// blank assignment to verify that ReconcileAPIServer implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileInstallation{}
 
 // ReconcileInstallation reconciles a Installation object

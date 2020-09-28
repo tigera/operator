@@ -1,0 +1,20 @@
+# permissions for end users to view authentications.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: authentication-viewer-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - authentications
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - authentications/status
+  verbs:
+  - get

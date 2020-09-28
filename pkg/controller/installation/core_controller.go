@@ -74,7 +74,7 @@ var openshiftNetworkConfig = "cluster"
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	ri, err := newReconciler(mgr, opts)
+	ri, err := NewReconciler(mgr, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create Core Reconciler: %v", err)
 	}
@@ -105,7 +105,7 @@ func NewReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	r.status.Run()
 	r.typhaAutoscaler.start()
 
-	if err = add(mgr, opts); err != nil {
+	if err = add(mgr, r); err != nil {
 		return nil, err
 	}
 	return r, nil

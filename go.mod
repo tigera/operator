@@ -26,9 +26,8 @@ require (
 require (
 	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5 // indirect
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
+	github.com/operator-framework/operator-sdk v0.0.0-00010101000000-000000000000 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
-	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae // indirect
-	google.golang.org/protobuf v1.25.0 // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.3 // indirect
 )
 

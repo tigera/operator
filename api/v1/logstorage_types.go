@@ -166,6 +166,10 @@ type LogStorageList struct {
 	Items           []LogStorage `json:"items"`
 }
 
+func (ls LogStorage) Replicas() int {
+	return int(*ls.Spec.Indices.Replicas)
+}
+
 func init() {
 	SchemeBuilder.Register(&LogStorage{}, &LogStorageList{})
 }

@@ -34,7 +34,7 @@ type InstallationReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
-	ri     installation.ReconcileInstallation
+	ri     *installation.ReconcileInstallation
 }
 
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete

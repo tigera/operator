@@ -26,7 +26,7 @@ import (
 )
 
 func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.WriteTo(GinkgoWriter))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter)))
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../../../report/clusterconnection_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/Management Cluster Connection Suite", []Reporter{junitReporter})

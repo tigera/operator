@@ -383,7 +383,7 @@ func (m *statusManager) syncState() bool {
 		var numFailed = 0
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
-			if err := m.client.Get(context.TODO(), types.NamespacedName{jref.Namespace, jref.Name}, j); err != nil {
+			if err := m.client.Get(context.TODO(), types.NamespacedName{Namespace: jref.Namespace, Name: jref.Name}, j); err != nil {
 				log.WithValues("error", err).Info("couldn't query cronjob job")
 				continue
 			}

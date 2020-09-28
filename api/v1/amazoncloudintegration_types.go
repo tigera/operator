@@ -1,5 +1,5 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
 /*
-
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,28 +20,60 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	AmazonCloudIntegrationStatusReady = "Ready"
+)
+
+// MetadataAccessAllowedType
+type MetadataAccessAllowedType string
+
+const (
+	MetadataAccessAllowed MetadataAccessAllowedType = "Allowed"
+	MetadataAccessDenied  MetadataAccessAllowedType = "Denied"
+)
 
 // AmazonCloudIntegrationSpec defines the desired state of AmazonCloudIntegration
 type AmazonCloudIntegrationSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// DefaultPodMetadataAccess defines what the default behavior will be for accessing
+	// the AWS metadata service from a pod.
+	// Default: Denied
+	// +optional
+	// +kubebuilder:validation:Enum=Allowed;Denied
+	DefaultPodMetadataAccess MetadataAccessAllowedType `json:"defaultPodMetadataAccess,omitempty"`
 
-	// Foo is an example field of AmazonCloudIntegration. Edit AmazonCloudIntegration_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// NodeSecurityGroupIDs is a list of Security Group IDs that all nodes and masters
+	// will be in.
+	NodeSecurityGroupIDs []string `json:"nodeSecurityGroupIDs,omitempty"`
+	// PodSecurityGroupID is the ID of the Security Group which all pods should be placed
+	// in by default.
+	PodSecurityGroupID string `json:"podSecurityGroupID,omitempty"`
+	// VPCS is a list of VPC IDs to monitor for ENIs and Security Groups, only one is supported.
+	VPCS []string `json:"vpcs,omitempty"`
+	// SQSURL is the SQS URL needed to access the Simple Queue Service.
+	SQSURL string `json:"sqsURL,omitempty"`
+	// AWSRegion is the region in which your cluster is located.
+	AWSRegion string `json:"awsRegion,omitempty"`
+	// EnforcedSecurityGroupID is the ID of the Security Group which will be applied to all
+	// ENIs that are on a host that is also part of the Kubernetes cluster.
+	EnforcedSecurityGroupID string `json:"enforcedSecurityGroupID,omitempty"`
+	// TrustEnforcedSecurityGroupID is the ID of the Security Group which will be applied
+	// to all ENIs in the VPC.
+	TrustEnforcedSecurityGroupID string `json:"trustEnforcedSecurityGroupID,omitemtpy"`
 }
 
 // AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration
 type AmazonCloudIntegrationStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// State provides user-readable status.
+	State string `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
 // AmazonCloudIntegration is the Schema for the amazoncloudintegrations API
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:storageversion
 type AmazonCloudIntegration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

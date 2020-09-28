@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
 /*
 
 
@@ -20,33 +21,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	APIServerStatusReady = "Ready"
+)
 
 // APIServerSpec defines the desired state of APIServer
 type APIServerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of APIServer. Edit APIServer_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
 }
 
 // APIServerStatus defines the observed state of APIServer
 type APIServerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// State provides user-readable status.
+	State string `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// APIServer is the Schema for the apiservers API
+// APIServer installs the Tigera API server and related resources. At most one instance
+// of this resource is supported. It must be named "tigera-secure".
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 type APIServer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   APIServerSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for the Tigera API server.
+	Spec APIServerSpec `json:"spec,omitempty"`
+
+	// Most recently observed status for the Tigera API server.
 	Status APIServerStatus `json:"status,omitempty"`
 }
 

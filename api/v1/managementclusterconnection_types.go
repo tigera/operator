@@ -1,5 +1,5 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
 /*
-
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,28 +20,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // ManagementClusterConnectionSpec defines the desired state of ManagementClusterConnection
 type ManagementClusterConnectionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of ManagementClusterConnection. Edit ManagementClusterConnection_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Specify where the managed cluster can reach the management cluster. Ex.: "10.128.0.10:30449". A managed cluster
+	// should be able to access this address. This field is used by managed clusters only.
+	// +optional
+	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 }
 
 // ManagementClusterConnectionStatus defines the observed state of ManagementClusterConnection
 type ManagementClusterConnectionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// ManagementClusterConnection is the Schema for the managementclusterconnections API
+// ManagementClusterConnection represents a link between a managed cluster and a management cluster. At most one
+// instance of this resource is supported. It must be named "tigera-secure".
 type ManagementClusterConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -52,7 +47,7 @@ type ManagementClusterConnection struct {
 
 // +kubebuilder:object:root=true
 
-// ManagementClusterConnectionList contains a list of ManagementClusterConnection
+// ManagementClusterConnectionList contains a list of ManagementClusterConnection.
 type ManagementClusterConnectionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

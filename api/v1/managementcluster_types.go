@@ -1,5 +1,5 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
 /*
-
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,16 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// ManagementClusterSpec defines the desired state of ManagementCluster
+// ManagementClusterSpec defines the desired state of a ManagementCluster
 type ManagementClusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of ManagementCluster. Edit ManagementCluster_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// This field specifies the externally reachable address to which your managed cluster will connect. When a managed
+	// cluster is added, this field is used to populate an easy-to-apply manifest that will connect both clusters.
+	// Valid examples are: "0.0.0.0:31000", "example.com:32000", "[::1]:32500"
+	// +optional
+	Address string `json:"address,omitempty"`
 }
 
 // ManagementClusterStatus defines the observed state of ManagementCluster
@@ -40,8 +37,10 @@ type ManagementClusterStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
-// ManagementCluster is the Schema for the managementclusters API
+// The presence of ManagementCluster in your cluster, will configure it to be the management plane to which managed
+// clusters can connect. At most one instance of this resource is supported. It must be named "tigera-secure".
 type ManagementCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

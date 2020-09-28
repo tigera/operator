@@ -1,5 +1,5 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
 /*
-
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,33 +20,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	ComplianceStatusReady = "Ready"
+)
 
 // ComplianceSpec defines the desired state of Compliance
 type ComplianceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Compliance. Edit Compliance_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
 }
 
 // ComplianceStatus defines the observed state of Compliance
 type ComplianceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// State provides user-readable status.
+	State string `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
-// Compliance is the Schema for the compliances API
+// Compliance installs the components required for Tigera compliance reporting. At most one instance
+// of this resource is supported. It must be named "tigera-secure".
 type Compliance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ComplianceSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for Tigera compliance reporting.
+	Spec ComplianceSpec `json:"spec,omitempty"`
+	// Most recently observed state for Tigera compliance reporting.
 	Status ComplianceStatus `json:"status,omitempty"`
 }
 

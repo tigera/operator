@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cfssl/log"
-	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -34,6 +32,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
 	"github.com/tigera/operator/pkg/common"
 )
@@ -58,6 +57,8 @@ const (
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
 )
+
+var log = logf.Log.WithName("controller_migration")
 
 var (
 	preOperatorNodeLabel = map[string]string{nodeSelectorKey: nodeSelectorValuePre}
@@ -201,7 +202,7 @@ func SetTyphaAntiAffinity(d *appsv1.Deployment) {
 // The expectation is that this function will do the majority of the migration before
 // returning (the exception being label clean up on the nodes), if there is an error
 // it will be returned and the
-func (m *CoreNamespaceMigration) Run(log logr.Logger) error {
+func (m *CoreNamespaceMigration) Run() error {
 	if err := m.deleteKubeSystemKubeControllers(); err != nil {
 		return fmt.Errorf("failed deleting kube-system calico-kube-controllers: %s", err.Error())
 	}
@@ -218,7 +219,7 @@ func (m *CoreNamespaceMigration) Run(log logr.Logger) error {
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
-	if err := m.migrateEachNode(log); err != nil {
+	if err := m.migrateEachNode(); err != nil {
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
 	log.V(1).Info("Nodes migrated")
@@ -419,7 +420,7 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet
 // the label on one node at a time, ensuring pod becomes ready before starting
 // the cycle again. Once the nodes are updated we will get the list of nodes
 // that need to be migrated in case there were more added.
-func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
+func (m *CoreNamespaceMigration) migrateEachNode() error {
 	nodes := m.getNodesToMigrate()
 	for len(nodes) > 0 {
 		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")

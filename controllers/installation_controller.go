@@ -17,8 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,9 +39,6 @@ type InstallationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
 
 func (r *InstallationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("installation", req.NamespacedName)
-
 	return r.ri.Reconcile(req)
 }
 

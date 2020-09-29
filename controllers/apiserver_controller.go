@@ -17,14 +17,14 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	apiserver "github.com/tigera/operator/pkg/controller/apiserver"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
 // APIServerReconciler reconciles a APIServer object
@@ -32,21 +32,26 @@ type APIServerReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	ras    *apiserver.ReconcileAPIServer
 }
 
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=apiservers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=apiservers/status,verbs=get;update;patch
 
 func (r *APIServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("apiserver", req.NamespacedName)
-
-	// your logic here
-
-	return ctrl.Result{}, nil
+	return r.ras.Reconcile(req)
 }
 
-func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
+		// No need to start this controller.
+		return nil
+	}
+	var err error
+	r.ras, err = apiserver.NewReconciler(mgr, opts)
+	if err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1.APIServer{}).
 		Complete(r)

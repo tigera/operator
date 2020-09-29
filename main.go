@@ -30,6 +30,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -52,6 +53,7 @@ func init() {
 
 	utilruntime.Must(operatorv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+	utilruntime.Must(v1beta1.AddToScheme(scheme))
 }
 
 func printVersion() {
@@ -158,15 +160,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	options := options.AddOptions{
+		DetectedProvider:    provider,
+		EnterpriseCRDExists: enterpriseCRDExists,
+		AmazonCRDExists:     amazonCRDExists,
+	}
+
 	if err = (&controllers.InstallationReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Installation"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options.AddOptions{
-		DetectedProvider:    provider,
-		EnterpriseCRDExists: enterpriseCRDExists,
-		AmazonCRDExists:     amazonCRDExists,
-	}); err != nil {
+	}).SetupWithManager(mgr, options); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Installation")
 		os.Exit(1)
 	}
@@ -174,7 +178,7 @@ func main() {
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("APIServer"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, options); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "APIServer")
 		os.Exit(1)
 	}

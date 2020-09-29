@@ -512,7 +512,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
 	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil && apierrors.IsNotFound(err) {
-		reqLogger.Info("Installation config not found")
+		reqLogger.WithValues("err", err).Info("Installation config not found")
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
@@ -525,7 +525,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.Info("Installation config not found")
+			reqLogger.WithValues("err", err).Info("Installation config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}

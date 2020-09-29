@@ -14,7 +14,7 @@ spec:
     listKind: ManagementClusterConnectionList
     plural: managementclusterconnections
     singular: managementclusterconnection
-  scope: Namespaced
+  scope: Cluster
   subresources:
     status: {}
   validation:

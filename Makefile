@@ -278,20 +278,9 @@ cluster-create: kubectl
 
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
+		./kubectl apply -f config/crd/bases/ && \
 		./kubectl apply -f deploy/crds/calico/ && \
 		./kubectl apply -f deploy/crds/enterprise/ && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_managers_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_logcollectors_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_intrusiondetections_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_compliances_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_apiservers_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_installations_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_tigerastatuses_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_logstorages_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusters_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusterconnections_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_amazoncloudintegrations_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_authentications_crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 
@@ -420,7 +409,7 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v0.18.2
+OPERATOR_SDK_VERSION=v1.0.1
 OPERATOR_SDK_BARE=hack/bin/operator-sdk
 OPERATOR_SDK=$(OPERATOR_SDK_BARE)-$(OPERATOR_SDK_VERSION)
 $(OPERATOR_SDK):
@@ -434,9 +423,7 @@ $(OPERATOR_SDK_BARE): $(OPERATOR_SDK)
 	ln -f -s operator-sdk-$(OPERATOR_SDK_VERSION) $(OPERATOR_SDK_BARE)
 
 ## Generating code after API changes.
-gen-files: $(OPERATOR_SDK)
-	$(CONTAINERIZED) $(OPERATOR_SDK) generate crds
-	$(CONTAINERIZED) $(OPERATOR_SDK) generate k8s
+gen-files: manifests generate
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
@@ -577,6 +564,7 @@ GO_GET_CONTAINER=docker run --rm \
 
 # download controller-gen if necessary
 CONTROLLER_GEN=$(BINDIR)/controller-gen
+controller-gen: $(BINDIR)/controller-gen
 $(BINDIR)/controller-gen:
 	mkdir -p $(BINDIR)
 	$(GO_GET_CONTAINER) \

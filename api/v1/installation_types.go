@@ -111,6 +111,7 @@ type InstallationStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // Installation is the Schema for the installations API
 type Installation struct {

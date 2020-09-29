@@ -34,6 +34,7 @@ type ManagementClusterConnectionStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // ManagementClusterConnection represents a link between a managed cluster and a management cluster. At most one
 // instance of this resource is supported. It must be named "tigera-secure".

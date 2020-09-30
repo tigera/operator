@@ -1,7 +1,4 @@
 apiVersion: operator.tigera.io/v1
 kind: Compliance
 metadata:
-  name: compliance-sample
-spec:
-  # Add fields here
-  foo: bar
+  name: tigera-secure

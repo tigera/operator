@@ -1,7 +1,5 @@
 apiVersion: operator.tigera.io/v1
 kind: Authentication
 metadata:
-  name: authentication-sample
-spec:
-  # Add fields here
-  foo: bar
+  name: tigera-secure
+spec: {}

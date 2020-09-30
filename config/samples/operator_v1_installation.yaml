@@ -1,7 +1,4 @@
 apiVersion: operator.tigera.io/v1
 kind: Installation
 metadata:
-  name: installation-sample
-spec:
-  # Add fields here
-  foo: bar
+  name: default

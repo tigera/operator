@@ -1,7 +1,4 @@
 apiVersion: operator.tigera.io/v1
 kind: LogCollector
 metadata:
-  name: logcollector-sample
-spec:
-  # Add fields here
-  foo: bar
+  name: example-logcollector

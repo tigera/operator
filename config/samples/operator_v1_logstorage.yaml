@@ -1,7 +1,8 @@
 apiVersion: operator.tigera.io/v1
 kind: LogStorage
 metadata:
-  name: logstorage-sample
+  name: tigera-secure
 spec:
-  # Add fields here
-  foo: bar
+  nodes:
+    count: 1
+

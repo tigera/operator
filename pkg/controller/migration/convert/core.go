@@ -119,8 +119,6 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// ignore tolerations from source components
-
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")
 	if err != nil {

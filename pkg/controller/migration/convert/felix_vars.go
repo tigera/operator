@@ -33,6 +33,8 @@ func (s *patches) Data(obj runtime.Object) ([]byte, error) {
 	return json.Marshal(s)
 }
 
+// handleFelixVars handles unexpected felix env vars (i.e. vars that start with FELIX_*) on the calico-node container
+// by patching them into the default FelixConfiguration resource.
 func handleFelixVars(c *components) error {
 	cn := getContainer(c.node.Spec.Template.Spec, containerCalicoNode)
 	if cn == nil {

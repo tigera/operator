@@ -552,35 +552,35 @@ var _ = Describe("Convert network tests", func() {
 			i = &operatorv1.Installation{}
 		})
 		It("should not error if ipv6 settings are untouched", func() {
-			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())
+			Expect(handleIPv6(&c, i)).ToNot(HaveOccurred())
 		})
 		It("should not error if IP6 is none", func() {
 			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "IP6",
 				Value: "none",
 			}}
-			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())
+			Expect(handleIPv6(&c, i)).ToNot(HaveOccurred())
 		})
 		It("should error if IP6 is not none", func() {
 			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "IP6",
 				Value: "autodetect",
 			}}
-			Expect(handleIpv6(&c, i)).To(HaveOccurred())
+			Expect(handleIPv6(&c, i)).To(HaveOccurred())
 		})
 		It("should not error if FELIX_IPV6SUPPORT is false", func() {
 			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_IPV6SUPPORT",
 				Value: "false",
 			}}
-			Expect(handleIpv6(&c, i)).ToNot(HaveOccurred())
+			Expect(handleIPv6(&c, i)).ToNot(HaveOccurred())
 		})
 		It("should error if FELIX_IPV6SUPPORT is not false", func() {
 			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_IPV6SUPPORT",
 				Value: "true",
 			}}
-			Expect(handleIpv6(&c, i)).To(HaveOccurred())
+			Expect(handleIPv6(&c, i)).To(HaveOccurred())
 		})
 	})
 })

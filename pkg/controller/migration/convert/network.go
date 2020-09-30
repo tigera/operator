@@ -17,8 +17,9 @@ const (
 	containerKubeControllers = "calico-kube-controllers"
 )
 
+// handleNetwork is a migration handler that validates any network settings that are common across
+// all calico installations regardless of their networking configuration.
 func handleNetwork(c *components, install *operatorv1.Installation) error {
-
 	// Verify FELIX_DEFAULTENDPOINTTOHOSTACTION is set to Accept because that is what the operator sets it to.
 	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_DEFAULTENDPOINTTOHOSTACTION", "accept"); err != nil {
 		return err
@@ -27,6 +28,8 @@ func handleNetwork(c *components, install *operatorv1.Installation) error {
 	return nil
 }
 
+// handleCalicoCNI is a migration handler that validates and converts Calico CNI configuration if Calico CNI is in use. This
+// includes verifying that compatible networking backend and IPAM plugin are in use.
 func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	plugin, err := getCNIPlugin(c)
 	if err != nil {
@@ -144,7 +147,9 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	return nil
 }
 
-func handleIpv6(c *components, _ *operatorv1.Installation) error {
+// handleIPv6 is a migration handler which ensures that IPv6 is configured as expected.
+// since the operator itself does not support IPv6, we verify that IPv6 is disabled.
+func handleIPv6(c *components, _ *operatorv1.Installation) error {
 	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
 		return err
 	}
@@ -305,6 +310,8 @@ func checkRange(prefix string, r cni.Range) []string {
 	return bf
 }
 
+// handleCalicoCNI is a migration handler that handles all CNI plugins excluding calico-cni.
+// This includes verifying that compatible networking backend and IPAM plugin are in use.
 func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	plugin, err := getCNIPlugin(c)
 	if err != nil {

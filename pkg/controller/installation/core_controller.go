@@ -253,7 +253,7 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 		return nil, err
 	}
 
-	// grab existing install
+	// update Installation resource with existing install if it exists.
 	if err := convert.Convert(ctx, client, instance); err != nil {
 		return nil, err
 	}

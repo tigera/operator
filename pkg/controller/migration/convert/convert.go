@@ -17,7 +17,7 @@ var log = logf.Log.WithName("migration_convert")
 
 var ctx = context.Background()
 
-// GetExistingInstallation creates an Installation resource from an existing Calico install (i.e.
+// Convert updates an Installation resource based on an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
 func Convert(ctx context.Context, client client.Client, install *operatorv1.Installation) error {

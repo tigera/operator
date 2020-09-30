@@ -119,8 +119,6 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// ignore tolerations from source components
-
 	// check that nodename is a ref
 	e, err := c.node.getEnvVar("calico-node", "NODENAME")
 	if err != nil {
@@ -152,7 +150,6 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// TODO: handle these vars appropriately
 	c.node.ignoreEnv("calico-node", "WAIT_FOR_DATASTORE")
 	c.node.ignoreEnv("calico-node", "CLUSTER_TYPE")
 	c.node.ignoreEnv("calico-node", "CALICO_DISABLE_FILE_LOGGING")
@@ -217,6 +214,9 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 	}
 }
 
+// handleAnnotations is a migration handler that ensures the components only have expected annotations.
+// since Operator does not support setting custom annotations on components, these annotations
+// would otherwise be dropped.
 func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
@@ -268,6 +268,10 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 	return a
 }
 
+// handleNodeSelectors is a migration handler which ensures that nodeSelectors are set as expected.
+// In general, setting custom nodeSelectors and nodeAffinity for components is not supported.
+// The exception to this is the calico-node nodeSelector, which is migrated into the
+// ControlPlaneNodeSelector field.
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
@@ -343,6 +347,8 @@ func removeOSNodeSelectors(existing map[string]string) map[string]string {
 	return nodeSel
 }
 
+// handleFelixNodeMetrics is a migration handler which detects custom prometheus settings for felix and
+// caries those options forward via the NodeMetricsPort field.
 func handleFelixNodeMetrics(c *components, install *operatorv1.Installation) error {
 	metricsEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_PROMETHEUSMETRICSENABLED")
 	if err != nil {

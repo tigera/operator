@@ -7,6 +7,7 @@ import (
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 )
 
+// handleMTU is a migration handler which ensures MTU configuration is carried forward.
 func handleMTU(c *components, install *operatorv1.Installation) error {
 	var (
 		curMTU    *int32

@@ -17,7 +17,7 @@
 package logstorage
 
 import (
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"

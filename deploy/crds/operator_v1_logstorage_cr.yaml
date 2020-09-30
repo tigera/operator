@@ -1,8 +1,0 @@
-apiVersion: operator.tigera.io/v1
-kind: LogStorage
-metadata:
-  name: tigera-secure
-spec:
-  nodes:
-    count: 1
-

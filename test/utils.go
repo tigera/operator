@@ -16,6 +16,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -47,7 +48,7 @@ func ExpectResourceDestroyed(c client.Client, obj runtime.Object) {
 	}, 10*time.Second).ShouldNot(BeNil())
 
 	serr, ok := err.(*errors.StatusError)
-	Expect(ok).To(BeTrue())
+	Expect(ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
 	Expect(serr.ErrStatus.Code).To(Equal(int32(404)))
 }
 
@@ -70,5 +71,7 @@ func RunOperator(mgr manager.Manager) chan struct{} {
 		err := mgr.Start(stopChan)
 		Expect(err).NotTo(HaveOccurred())
 	}()
+	synced := mgr.GetCache().WaitForCacheSync(stopChan)
+	Expect(synced).To(BeTrue(), "manager cache failed to sync")
 	return stopChan
 }

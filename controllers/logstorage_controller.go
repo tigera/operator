@@ -17,14 +17,13 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/logstorage"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
 // LogStorageReconciler reconciles a LogStorage object
@@ -37,17 +36,18 @@ type LogStorageReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages/status,verbs=get;update;patch
 
-func (r *LogStorageReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("logstorage", req.NamespacedName)
+//func (r *LogStorageReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	_ = context.Background()
+//	_ = r.Log.WithValues("logstorage", req.NamespacedName)
+//
+//	// your logic here
+//
+//	return ctrl.Result{}, nil
+//}
 
-	// your logic here
-
-	return ctrl.Result{}, nil
-}
-
-func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.LogStorage{}).
-		Complete(r)
+func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return logstorage.Add(mgr, opts)
+	//return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.LogStorage{}).
+	//	Complete(r)
 }

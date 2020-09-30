@@ -22,7 +22,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	installation "github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 )
@@ -32,24 +31,24 @@ type InstallationReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
-	ri     *installation.ReconcileInstallation
 }
 
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
 
-func (r *InstallationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	return r.ri.Reconcile(req)
-}
+//func (r *InstallationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	_ = context.Background()
+//	_ = r.Log.WithValues("logstorage", req.NamespacedName)
+//	return r.ri.Reconcile(req)
+//}
 
 func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	var err error
-	r.ri, err = installation.NewReconciler(mgr, opts)
-	if err != nil {
-		return err
-	}
+	return installation.Add(mgr, opts)
+	//if err != nil {
+	//	return err
+	//}
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.Installation{}).
-		Complete(r)
+	//return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.Installation{}).
+	//	Complete(r)
 }

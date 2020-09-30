@@ -17,14 +17,13 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/manager"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
 // ManagerReconciler reconciles a Manager object
@@ -37,17 +36,18 @@ type ManagerReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managers/status,verbs=get;update;patch
 
-func (r *ManagerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("manager", req.NamespacedName)
+//func (r *ManagerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	_ = context.Background()
+//	_ = r.Log.WithValues("manager", req.NamespacedName)
+//
+//	// your logic here
+//
+//	return ctrl.Result{}, nil
+//}
 
-	// your logic here
-
-	return ctrl.Result{}, nil
-}
-
-func (r *ManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.Manager{}).
-		Complete(r)
+func (r *ManagerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return manager.Add(mgr, opts)
+	//return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.Manager{}).
+	//	Complete(r)
 }

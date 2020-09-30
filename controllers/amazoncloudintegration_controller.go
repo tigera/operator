@@ -17,14 +17,13 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/amazoncloudintegration"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
 // AmazonCloudIntegrationReconciler reconciles a AmazonCloudIntegration object
@@ -37,17 +36,18 @@ type AmazonCloudIntegrationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=amazoncloudintegrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=amazoncloudintegrations/status,verbs=get;update;patch
 
-func (r *AmazonCloudIntegrationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("amazoncloudintegration", req.NamespacedName)
+//func (r *AmazonCloudIntegrationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	_ = context.Background()
+//	_ = r.Log.WithValues("amazoncloudintegration", req.NamespacedName)
+//
+//	// your logic here
+//
+//	return ctrl.Result{}, nil
+//}
 
-	// your logic here
-
-	return ctrl.Result{}, nil
-}
-
-func (r *AmazonCloudIntegrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.AmazonCloudIntegration{}).
-		Complete(r)
+func (r *AmazonCloudIntegrationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return amazoncloudintegration.Add(mgr, opts)
+	//return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.AmazonCloudIntegration{}).
+	//	Complete(r)
 }

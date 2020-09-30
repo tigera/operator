@@ -17,14 +17,13 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/intrusiondetection"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
 // ManagementClusterConnectionReconciler reconciles a ManagementClusterConnection object
@@ -37,17 +36,18 @@ type ManagementClusterConnectionReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections/status,verbs=get;update;patch
 
-func (r *ManagementClusterConnectionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("managementclusterconnection", req.NamespacedName)
+//func (r *ManagementClusterConnectionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	_ = context.Background()
+//	_ = r.Log.WithValues("managementclusterconnection", req.NamespacedName)
+//
+//	// your logic here
+//
+//	return ctrl.Result{}, nil
+//}
 
-	// your logic here
-
-	return ctrl.Result{}, nil
-}
-
-func (r *ManagementClusterConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.ManagementClusterConnection{}).
-		Complete(r)
+func (r *ManagementClusterConnectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return intrusiondetection.Add(mgr, opts)
+	//return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.ManagementClusterConnection{}).
+	//	Complete(r)
 }

@@ -74,7 +74,7 @@ var openshiftNetworkConfig = "cluster"
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	ri, err := NewReconciler(mgr, opts)
+	ri, err := newReconciler(mgr, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create Core Reconciler: %v", err)
 	}
@@ -82,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func NewReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
@@ -104,10 +104,6 @@ func NewReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
-
-	if err = add(mgr, r); err != nil {
-		return nil, err
-	}
 	return r, nil
 }
 
@@ -221,7 +217,6 @@ func secondaryResources() []runtime.Object {
 	}
 }
 
-// blank assignment to verify that ReconcileAPIServer implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileInstallation{}
 
 // ReconcileInstallation reconciles a Installation object
@@ -512,7 +507,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
 	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil && apierrors.IsNotFound(err) {
-		reqLogger.WithValues("err", err).Info("Installation config not found")
+		reqLogger.Info("Installation config not found")
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
@@ -525,7 +520,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.WithValues("err", err).Info("Installation config not found")
+			reqLogger.Info("Installation config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}

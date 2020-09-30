@@ -40,20 +40,27 @@ import (
 
 var log = logf.Log.WithName("controller_apiserver")
 
+// Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
+// and Start it when the Manager is Started.
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
+		// No need to start this controller.
+		return nil
+	}
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists))
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func NewReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileAPIServer, error) {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		amazonCRDExists: opts.AmazonCRDExists,
+		provider:        provider,
+		amazonCRDExists: amazonCRDExists,
 		status:          status.New(mgr.GetClient(), "apiserver"),
 	}
 	r.status.Run()
-	if err := add(mgr, r); err != nil {
-		return nil, err
-	}
-	return r, nil
+	return r
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler

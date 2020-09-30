@@ -26,7 +26,7 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"gopkg.in/inf.v0"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -1269,7 +1269,7 @@ func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ECKWebhookConfiguration,
 		},
-		Webhooks: []admissionv1beta1.Webhook{
+		Webhooks: []admissionv1beta1.ValidatingWebhook{
 			{
 				ClientConfig: admissionv1beta1.WebhookClientConfig{
 					CABundle: []byte("Cg=="), // base64 empty string

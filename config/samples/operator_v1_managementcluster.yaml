@@ -1,0 +1,7 @@
+apiVersion: operator.tigera.io/v1
+kind: ManagementCluster
+metadata:
+  name: managementcluster-sample
+spec:
+  # Add fields here
+  foo: bar

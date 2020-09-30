@@ -1,0 +1,24 @@
+# permissions for end users to edit authentications.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: authentication-editor-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - authentications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - authentications/status
+  verbs:
+  - get

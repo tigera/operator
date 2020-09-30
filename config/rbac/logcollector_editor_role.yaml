@@ -1,0 +1,24 @@
+# permissions for end users to edit logcollectors.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: logcollector-editor-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - logcollectors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - logcollectors/status
+  verbs:
+  - get

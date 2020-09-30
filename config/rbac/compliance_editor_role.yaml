@@ -1,0 +1,24 @@
+# permissions for end users to edit compliances.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: compliance-editor-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - compliances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - compliances/status
+  verbs:
+  - get

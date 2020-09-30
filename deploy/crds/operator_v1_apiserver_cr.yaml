@@ -1,5 +1,0 @@
-apiVersion: operator.tigera.io/v1
-kind: APIServer
-metadata:
-  name: tigera-secure
-spec: {}

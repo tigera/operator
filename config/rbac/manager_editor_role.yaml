@@ -1,0 +1,24 @@
+# permissions for end users to edit managers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-editor-role
+rules:
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - managers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - managers/status
+  verbs:
+  - get

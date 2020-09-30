@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	osconfigv1 "github.com/openshift/api/config/v1"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"

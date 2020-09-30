@@ -17,7 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	v1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"

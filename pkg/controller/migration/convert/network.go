@@ -319,10 +319,10 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	if icc := getContainer(c.node.Spec.Template.Spec, containerInstallCNI); icc != nil {
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("found unexpected '%s' container for '%s' CNI", containerInstallCNI, plugin),
-			component: ComponentCNIConfig,
-		}
+		// the install-cni container is unnecessary when not using calico cni.
+		// however, it can still be present when calico-cni is not in use if another cni configuration is present with
+		// an alphanumerically higher filename. as such, just log a warning.
+		log.V(1).Info("found unexpected install-cni container. ignoring", "container", containerInstallCNI, "plugin", plugin)
 	}
 
 	// CALICO_NETWORKING_BACKEND

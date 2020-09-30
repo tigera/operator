@@ -21,15 +21,17 @@ import (
 	"strings"
 	"time"
 
+	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/operator-framework/operator-sdk/pkg/restmapper"
+	//"github.com/operator-framework/operator-sdk/pkg/restmapper"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	apps "k8s.io/api/apps/v1"
@@ -39,10 +41,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
 var _ = Describe("Mainline component function tests", func() {
@@ -64,16 +65,8 @@ var _ = Describe("Mainline component function tests", func() {
 	AfterEach(func() {
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
-			patchF := func(n *corev1.Node) {
-				for k, _ := range n.ObjectMeta.Annotations {
-					if strings.Contains(k, "projectcalico") {
-						delete(n.ObjectMeta.Annotations, k)
-					}
-				}
-			}
-
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
-			nodes, err := cs.CoreV1().Nodes().List(metav1.ListOptions{})
+			nodes, err := cs.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 			if err != nil {
 				return err
 			}
@@ -86,7 +79,7 @@ var _ = Describe("Mainline component function tests", func() {
 						delete(n.ObjectMeta.Annotations, k)
 					}
 				}
-				err = apiclient.PatchNode(cs, n.Name, patchF)
+				_, err = cs.CoreV1().Nodes().Update(context.Background(), &n, metav1.UpdateOptions{})
 				if err != nil {
 					return err
 				}
@@ -258,8 +251,11 @@ func setupManager() (client.Client, manager.Manager) {
 	Expect(err).NotTo(HaveOccurred())
 	// Create a manager to use in the tests.
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:      "",
-		MapperProvider: restmapper.NewDynamicRESTMapper,
+		Namespace: "",
+		// Upgrade notes fro v0.14.0 (https://sdk.operatorframework.io/docs/upgrading-sdk-version/version-upgrade-guide/#v014x)
+		// say to replace restmapper but the NewDynamicRestMapper did not satisfy the
+		// MapperProvider interface
+		MapperProvider: func(c *rest.Config) (kmeta.RESTMapper, error) { return apiutil.NewDynamicRESTMapper(c) },
 	})
 	Expect(err).NotTo(HaveOccurred())
 	// Setup Scheme for all resources

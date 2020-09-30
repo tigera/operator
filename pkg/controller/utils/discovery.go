@@ -15,15 +15,16 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 var log = logf.Log.WithName("discovery")
@@ -70,7 +71,7 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
-func AutoDiscoverProvider(cfg *rest.Config) (operatorv1.Provider, error) {
+func AutoDiscoverProvider(ctx context.Context, cfg *rest.Config) (operatorv1.Provider, error) {
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to get client for auto provider discovery: %v", err)
@@ -85,7 +86,7 @@ func AutoDiscoverProvider(cfg *rest.Config) (operatorv1.Provider, error) {
 	}
 
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
-	if dockeree, err := isDockerEE(clientset); err != nil {
+	if dockeree, err := isDockerEE(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if Docker EE is the provider: %s", err)
 	} else if dockeree {
 		return operatorv1.ProviderDockerEE, nil
@@ -118,8 +119,8 @@ func autodetectFromGroup(c *kubernetes.Clientset) (operatorv1.Provider, error) {
 // isDockerEE returns true if running on a Docker Enterprise cluster, and false otherwise.
 // Docker EE doesn't have any provider-specific API groups, so we need to use a different approach than
 // we use for other platforms in autodetectFromGroup.
-func isDockerEE(c *kubernetes.Clientset) (bool, error) {
-	masterNodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/master"})
+func isDockerEE(ctx context.Context, c *kubernetes.Clientset) (bool, error) {
+	masterNodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/master"})
 	if err != nil {
 		return false, err
 	}

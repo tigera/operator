@@ -102,39 +102,6 @@ type InstallationSpec struct {
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 }
 
-// InstallationStatus defines the observed state of Installation
-type InstallationStatus struct {
-	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
-	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
-	Variant ProductVariant `json:"variant,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
-
-// Installation is the Schema for the installations API
-type Installation struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   InstallationSpec   `json:"spec,omitempty"`
-	Status InstallationStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-// InstallationList contains a list of Installation
-type InstallationList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Installation `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Installation{}, &InstallationList{})
-}
-
 // ComponentName CRD enum
 type ComponentName string
 
@@ -418,4 +385,37 @@ type CNISpec struct {
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
 	Type CNIPluginType `json:"type"`
+}
+
+// InstallationStatus defines the observed state of Installation
+type InstallationStatus struct {
+	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
+	Variant ProductVariant `json:"variant,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+
+// Installation is the Schema for the installations API
+type Installation struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   InstallationSpec   `json:"spec,omitempty"`
+	Status InstallationStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// InstallationList contains a list of Installation
+type InstallationList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Installation `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&Installation{}, &InstallationList{})
 }

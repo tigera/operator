@@ -45,10 +45,6 @@ spec:
                 to access this address. This field is used by managed clusters only.'
               type: string
           type: object
-        status:
-          description: ManagementClusterConnectionStatus defines the observed state
-            of ManagementClusterConnection
-          type: object
       type: object
   version: v1
   versions:

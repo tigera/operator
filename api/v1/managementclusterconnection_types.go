@@ -28,10 +28,6 @@ type ManagementClusterConnectionSpec struct {
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 }
 
-// ManagementClusterConnectionStatus defines the observed state of ManagementClusterConnection
-type ManagementClusterConnectionStatus struct {
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
@@ -42,8 +38,7 @@ type ManagementClusterConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ManagementClusterConnectionSpec   `json:"spec,omitempty"`
-	Status ManagementClusterConnectionStatus `json:"status,omitempty"`
+	Spec ManagementClusterConnectionSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

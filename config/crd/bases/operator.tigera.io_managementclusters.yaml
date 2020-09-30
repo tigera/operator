@@ -46,9 +46,6 @@ spec:
                 "example.com:32000", "[::1]:32500"'
               type: string
           type: object
-        status:
-          description: ManagementClusterStatus defines the observed state of ManagementCluster
-          type: object
       type: object
   version: v1
   versions:

@@ -153,7 +153,9 @@ type LogStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LogStorageSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for Tigera log storage.
+	Spec LogStorageSpec `json:"spec,omitempty"`
+	// Most recently observed state for Tigera log storage.
 	Status LogStorageStatus `json:"status,omitempty"`
 }
 

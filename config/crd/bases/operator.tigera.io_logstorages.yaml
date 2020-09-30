@@ -37,8 +37,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: LogStorageStatus defines the observed state of Tigera flow
-            and DNS log storage.
+          description: Specification of the desired state for Tigera log storage.
           properties:
             dataNodeSelector:
               additionalProperties:
@@ -182,8 +181,7 @@ spec:
               type: string
           type: object
         status:
-          description: LogStorageSpec defines the desired state of Tigera flow and
-            DNS log storage.
+          description: Most recently observed state for Tigera log storage.
           properties:
             elasticsearchHash:
               description: ElasticsearchHash represents the current revision and configuration

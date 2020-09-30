@@ -38,8 +38,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: LogCollectorSpec defines the desired state of Tigera flow,
-            audit, and DNS log collection.
+          description: Specification of the desired state for Tigera log collection.
           properties:
             additionalSources:
               description: Configuration for importing audit logs from managed kubernetes
@@ -122,8 +121,7 @@ spec:
               type: object
           type: object
         status:
-          description: LogCollectorStatus defines the observed state of Tigera flow
-            and DNS log collection
+          description: Most recently observed state for Tigera log collection.
           properties:
             state:
               description: State provides user-readable status.

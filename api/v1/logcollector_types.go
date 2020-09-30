@@ -122,7 +122,9 @@ type LogCollector struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LogCollectorSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for Tigera log collection.
+	Spec LogCollectorSpec `json:"spec,omitempty"`
+	// Most recently observed state for Tigera log collection.
 	Status LogCollectorStatus `json:"status,omitempty"`
 }
 

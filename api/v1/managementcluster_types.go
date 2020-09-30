@@ -29,12 +29,6 @@ type ManagementClusterSpec struct {
 	Address string `json:"address,omitempty"`
 }
 
-// ManagementClusterStatus defines the observed state of ManagementCluster
-type ManagementClusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
@@ -45,8 +39,7 @@ type ManagementCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ManagementClusterSpec   `json:"spec,omitempty"`
-	Status ManagementClusterStatus `json:"status,omitempty"`
+	Spec ManagementClusterSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

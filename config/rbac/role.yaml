@@ -49,6 +49,26 @@ rules:
 - apiGroups:
   - operator.tigera.io
   resources:
+  - compliances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.tigera.io
+  resources:
+  - compliances/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - operator.tigera.io
+  resources:
   - installations
   verbs:
   - create

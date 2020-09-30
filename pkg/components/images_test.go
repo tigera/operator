@@ -45,7 +45,7 @@ var _ = Describe("registry override", func() {
 		Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "")).To(Equal("quay.io/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
 	})
 	It("should render an operator init image correctly", func() {
-		Expect(GetOperatorInitReference("gcr.io/", "")).To(Equal("gcr.io/tigera/operator:" + ComponentOperatorInit.Version))
+		Expect(GetOperatorInitReference("gcr.io/", "")).To(Equal("gcr.io/tigera/operator-init:" + ComponentOperatorInit.Version))
 	})
 })
 var _ = Describe("imagepath override", func() {

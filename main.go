@@ -68,14 +68,12 @@ func printVersion() {
 }
 
 func main() {
-	var metricsAddr string
 	var enableLeaderElection bool
 	// urlOnlyKubeconfig is a slight hack; we need to get the apiserver from the
 	// kubeconfig but should use the in-cluster service account
 	var urlOnlyKubeconfig string
 	var showVersion bool
 	var sgSetup bool
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -156,7 +154,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
+		MetricsBindAddress: metricsAddr(),
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "operator-lock",
@@ -299,4 +297,27 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 	os.Setenv("KUBERNETES_SERVICE_HOST", url.Hostname())
 	os.Setenv("KUBERNETES_SERVICE_PORT", url.Port())
 	return nil
+}
+
+// metricsAddr processes user-specified metrics host and port and sets
+// default values accordingly.
+func metricsAddr() string {
+	metricsHost := os.Getenv("METRICS_HOST")
+	metricsPort := os.Getenv("METRICS_PORT")
+
+	// if neither are specified, disable metrics.
+	if metricsHost == "" && metricsPort == "" {
+		// the controller-runtime accepts '0' to denote that metrics should be disabled.
+		return "0"
+	}
+	// if just a host is specified, listen on port 8484 of that host.
+	if metricsHost != "" && metricsPort == "" {
+		// the controller-runtime will choose a random port if none is specified.
+		// so use the defaultMetricsPort in that case.
+		return fmt.Sprintf("%s:%d", metricsHost, defaultMetricsPort)
+	}
+
+	// finally, handle cases where just a port is specified or both are specified in the same case
+	// since controller-runtime correctly uses all interfaces if no host is specified.
+	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
 }

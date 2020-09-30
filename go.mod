@@ -29,7 +29,6 @@ require (
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/operator-framework/operator-sdk v0.0.0-00010101000000-000000000000 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
-	github.com/spf13/pflag v1.0.5
 	gopkg.in/yaml.v2 v2.3.0
 	sigs.k8s.io/kube-storage-version-migrator v0.0.3 // indirect
 )

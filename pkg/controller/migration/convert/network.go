@@ -438,7 +438,7 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 	switch *prefix {
 	case "eni":
 		return operatorv1.PluginAmazonVPC, nil
-	case "avz":
+	case "azv":
 		return operatorv1.PluginAzureVNET, nil
 	case "gke":
 		return operatorv1.PluginGKE, nil

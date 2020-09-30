@@ -29,11 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
-<<<<<<< HEAD
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-=======
 	operator "github.com/tigera/operator/api/v1"
->>>>>>> 19e8f549... Copy over a bunch of pre-v1.x stuff
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
@@ -147,11 +143,6 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
-<<<<<<< HEAD
-=======
-		Expect(len(d.Spec.Template.Spec.NodeSelector)).To(Equal(1))
-		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("kubernetes.io/os", "linux"))
->>>>>>> 19e8f549... Copy over a bunch of pre-v1.x stuff
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
 		expectedTolerations := []corev1.Toleration{

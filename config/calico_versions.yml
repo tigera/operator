@@ -1,0 +1,11 @@
+components:
+  typha:
+    version: master
+  calico/node:
+    version: master
+  calico/cni:
+    version: master
+  calico/kube-controllers:
+    version: master
+  flexvol:
+    version: master

@@ -31,11 +31,14 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -71,6 +74,7 @@ func main() {
 	// kubeconfig but should use the in-cluster service account
 	var urlOnlyKubeconfig string
 	var showVersion bool
+	var sgSetup bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
@@ -79,6 +83,8 @@ func main() {
 		"Path to a kubeconfig, but only for the apiserver url.")
 	flag.BoolVar(&showVersion, "version", false,
 		"Show version information")
+	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
+		"Setup Security Groups in AWS (should only be used on OpenShift).")
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -125,6 +131,28 @@ func main() {
 	printVersion()
 
 	ctx := context.Background()
+
+	if sgSetup {
+		log.Info("Setting up AWS Security Groups")
+		cfg, err := config.GetConfig()
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+
+		client, err := client.New(cfg, client.Options{})
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+
+		err = awssgsetup.SetupAWSSecurityGroups(ctx, client)
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,

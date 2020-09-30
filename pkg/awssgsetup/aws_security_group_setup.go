@@ -274,7 +274,7 @@ func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSr
 		}})
 		_, err := cli.AuthorizeSecurityGroupIngress(in)
 		if err != nil {
-			return fmt.Errorf("Failed to add to SG '%s' the ingress rule '%s': %v: %v", sgId, s.String(), toSG)
+			return fmt.Errorf("Failed to add to SG '%s' the ingress rule '%s': %v: %v", sgId, s.String(), toSG, err)
 		}
 		log.V(DEBUG).Info("Added Ingress rule", "toSG.GroupId", sgId, "ingressSrc", s.String())
 	}

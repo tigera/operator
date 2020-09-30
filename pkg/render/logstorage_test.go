@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -26,8 +27,7 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,22 +44,22 @@ type resourceTestObj struct {
 
 var _ = Describe("Elasticsearch rendering tests", func() {
 	Context("Standalone cluster type", func() {
-		var logStorage *operator.LogStorage
+		var logStorage *operatorv1.LogStorage
 		var installation *operatorv1.Installation
 		replicas := int32(1)
 		retention := int32(1)
 		var esConfig *render.ElasticsearchClusterConfig
 		BeforeEach(func() {
-			logStorage = &operator.LogStorage{
+			logStorage = &operatorv1.LogStorage{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "tigera-secure",
 				},
-				Spec: operator.LogStorageSpec{
-					Nodes: &operator.Nodes{
+				Spec: operatorv1.LogStorageSpec{
+					Nodes: &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: nil,
 					},
-					Indices: &operator.Indices{
+					Indices: &operatorv1.Indices{
 						Replicas: &replicas,
 					},
 					Retention: &operatorv1.Retention{
@@ -69,7 +69,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						ComplianceReports: &retention,
 					},
 				},
-				Status: operator.LogStorageStatus{
+				Status: operatorv1.LogStorageStatus{
 					State: "",
 				},
 			}
@@ -136,7 +136,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -230,7 +230,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil,
+					}, operatorv1.ProviderNone, nil,
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace},
 						Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeExternalName},
@@ -311,7 +311,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone,
+					}, operatorv1.ProviderNone,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
@@ -329,12 +329,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		Context("Updating LogStorage resource", func() {
 			It("should create new NodeSet", func() {
-				ls := &operator.LogStorage{
+				ls := &operatorv1.LogStorage{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "tigera-secure",
 					},
-					Spec: operator.LogStorageSpec{
-						Nodes: &operator.Nodes{
+					Spec: operatorv1.LogStorageSpec{
+						Nodes: &operatorv1.Nodes{
 							Count: 1,
 							ResourceRequirements: &corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
@@ -367,7 +367,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 				createResources, _ := component.Objects()
 
@@ -400,7 +400,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, true,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 				updatedResources, _ := updatedComponent.Objects()
 
@@ -432,7 +432,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 			// Verify that the node selectors are passed into the Elasticsearch pod spec.
 			createResources, _ := component.Objects()
 			nodeSelectors := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
@@ -446,7 +446,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				"k2": "v2",
 			}
 			installation.Spec.KubernetesProvider = "EKS"
-			installation.Spec.CNI = &operator.CNISpec{Type: "Calico"}
+			installation.Spec.CNI = &operatorv1.CNISpec{Type: "Calico"}
 			component := render.LogStorage(
 				logStorage,
 				installation, nil, nil, nil, nil,
@@ -461,9 +461,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
-			// Host networking settings should be correct on the ECK operator.
+			// Host networking settings should be correct on the ECK operatorv1.
 			resources, _ := component.Objects()
 			eckObj := GetResource(resources, "elastic-operator", "tigera-eck-operator", "apps", "v1", "StatefulSet")
 			Expect(eckObj).NotTo(BeNil())
@@ -487,7 +487,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, render.OIDCAuthentication{
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, render.OIDCAuthentication{
 					ClientID:              "id",
 					Secret:                "secret",
 					IssuerURL:             "issuer",
@@ -571,7 +571,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					nil, installation, nil, managementClusterConnection, nil, nil, nil, nil, nil, false,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operator.ProviderNone,
+					}, operatorv1.ProviderNone,
 					nil, nil, nil, "cluster.local", true, nil)
 
 				createResources, deleteResources := component.Objects()
@@ -584,19 +584,19 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 
 	Context("NodeSet configuration", func() {
-		var logStorage *operator.LogStorage
+		var logStorage *operatorv1.LogStorage
 		var installation *operatorv1.Installation
 		var esConfig *render.ElasticsearchClusterConfig
 
 		replicas, retention := int32(1), int32(1)
 
 		BeforeEach(func() {
-			logStorage = &operator.LogStorage{
+			logStorage = &operatorv1.LogStorage{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "tigera-secure",
 				},
-				Spec: operator.LogStorageSpec{
-					Indices: &operator.Indices{
+				Spec: operatorv1.LogStorageSpec{
+					Indices: &operatorv1.Indices{
 						Replicas: &replicas,
 					},
 					Retention: &operatorv1.Retention{
@@ -606,7 +606,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						ComplianceReports: &retention,
 					},
 				},
-				Status: operator.LogStorageStatus{
+				Status: operatorv1.LogStorageStatus{
 					State: "",
 				},
 			}
@@ -622,9 +622,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		Context("Node distribution", func() {
 			When("the number of Nodes and NodeSets is 3", func() {
 				It("creates 3 1 Node NodeSet", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count: 3,
-						NodeSets: []operator.NodeSet{
+						NodeSets: []operatorv1.NodeSet{
 							{}, {}, {},
 						},
 					}
@@ -643,7 +643,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -656,9 +656,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 			When("the number of Nodes is 2 and the number of NodeSets is 3", func() {
 				It("creates 2 1 Node NodeSets", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count: 2,
-						NodeSets: []operator.NodeSet{
+						NodeSets: []operatorv1.NodeSet{
 							{}, {}, {},
 						},
 					}
@@ -677,7 +677,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -690,9 +690,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 			When("the number of Nodes is 6 and the number of NodeSets is 3", func() {
 				It("creates 3 2 Node NodeSets", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count: 6,
-						NodeSets: []operator.NodeSet{
+						NodeSets: []operatorv1.NodeSet{
 							{}, {}, {},
 						},
 					}
@@ -711,7 +711,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -724,9 +724,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 			When("the number of Nodes is 5 and the number of NodeSets is 6", func() {
 				It("creates 2 2 Node NodeSets and 1 1 Node NodeSet", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count: 5,
-						NodeSets: []operator.NodeSet{
+						NodeSets: []operatorv1.NodeSet{
 							{}, {}, {},
 						},
 					}
@@ -745,7 +745,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -775,7 +775,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 							"memory": resource.MustParse("2Gi"),
 						},
 					}
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: &res,
 					}
@@ -794,7 +794,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -819,7 +819,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 							"memory": resource.MustParse(defaultRequestsMemory),
 						},
 					}
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: &res,
 					}
@@ -838,7 +838,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -861,7 +861,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 							"memory": resource.MustParse("2Gi"),
 						},
 					}
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: &res,
 					}
@@ -880,7 +880,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -902,7 +902,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 							"memory": resource.MustParse("2Gi"),
 						},
 					}
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: &res,
 					}
@@ -921,7 +921,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -936,7 +936,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 							"storage": resource.MustParse("8Gi"),
 						},
 					}
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: &res,
 					}
@@ -955,7 +955,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
@@ -975,7 +975,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 							"storage": resource.MustParse("8Gi"),
 						},
 					}
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: &res,
 					}
@@ -994,7 +994,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
@@ -1005,9 +1005,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		Context("Node selection", func() {
 			When("NodeSets is set but empty", func() {
 				It("returns the defualt NodeSet", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:    2,
-						NodeSets: []operator.NodeSet{},
+						NodeSets: []operatorv1.NodeSet{},
 					}
 
 					component := render.LogStorage(
@@ -1024,7 +1024,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -1034,18 +1034,18 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 			When("there is a single selection attribute for a NodeSet", func() {
 				It("sets the Node Affinity Elasticsearch cluster awareness attributes with the single selection attribute", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count: 2,
-						NodeSets: []operator.NodeSet{
+						NodeSets: []operatorv1.NodeSet{
 							{
-								SelectionAttributes: []operator.NodeSetSelectionAttribute{{
+								SelectionAttributes: []operatorv1.NodeSetSelectionAttribute{{
 									Name:      "zone",
 									NodeLabel: "failure-domain.beta.kubernetes.io/zone",
 									Value:     "us-west-2a",
 								}},
 							},
 							{
-								SelectionAttributes: []operator.NodeSetSelectionAttribute{{
+								SelectionAttributes: []operatorv1.NodeSetSelectionAttribute{{
 									Name:      "zone",
 									NodeLabel: "failure-domain.beta.kubernetes.io/zone",
 									Value:     "us-west-2b",
@@ -1068,7 +1068,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -1117,11 +1117,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 			When("there are multiple selection attributes for a NodeSet", func() {
 				It("combines to attributes for the Node Affinity and Elasticsearch cluster awareness attributes", func() {
-					logStorage.Spec.Nodes = &operator.Nodes{
+					logStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count: 2,
-						NodeSets: []operator.NodeSet{
+						NodeSets: []operatorv1.NodeSet{
 							{
-								SelectionAttributes: []operator.NodeSetSelectionAttribute{
+								SelectionAttributes: []operatorv1.NodeSetSelectionAttribute{
 									{
 										Name:      "zone",
 										NodeLabel: "failure-domain.beta.kubernetes.io/zone",
@@ -1135,7 +1135,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 								},
 							},
 							{
-								SelectionAttributes: []operator.NodeSetSelectionAttribute{
+								SelectionAttributes: []operatorv1.NodeSetSelectionAttribute{
 									{
 										Name:      "zone",
 										NodeLabel: "failure-domain.beta.kubernetes.io/zone",
@@ -1165,7 +1165,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}, true,
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operator.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -1232,9 +1232,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 })
 
-var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection) func() {
+var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster, managementClusterConnection *operatorv1.ManagementClusterConnection) func() {
 	return func() {
-		var logStorage *operator.LogStorage
+		var logStorage *operatorv1.LogStorage
 		var installation *operatorv1.Installation
 		replicas := int32(1)
 		retention := int32(1)
@@ -1242,17 +1242,17 @@ var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, 
 		BeforeEach(func() {
 			t := metav1.Now()
 
-			logStorage = &operator.LogStorage{
+			logStorage = &operatorv1.LogStorage{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "tigera-secure",
 					DeletionTimestamp: &t,
 				},
-				Spec: operator.LogStorageSpec{
-					Nodes: &operator.Nodes{
+				Spec: operatorv1.LogStorageSpec{
+					Nodes: &operatorv1.Nodes{
 						Count:                1,
 						ResourceRequirements: nil,
 					},
-					Indices: &operator.Indices{
+					Indices: &operatorv1.Indices{
 						Replicas: &replicas,
 					},
 					Retention: &operatorv1.Retention{
@@ -1262,7 +1262,7 @@ var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, 
 						ComplianceReports: &retention,
 					},
 				},
-				Status: operator.LogStorageStatus{
+				Status: operatorv1.LogStorageStatus{
 					State: "",
 				},
 			}
@@ -1308,7 +1308,7 @@ var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, 
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone,
+				}, operatorv1.ProviderNone,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
@@ -1349,7 +1349,7 @@ var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, 
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone,
+				}, operatorv1.ProviderNone,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
@@ -1388,7 +1388,7 @@ var deleteLogStorageTests = func(managementCluster *operator.ManagementCluster, 
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operator.ProviderNone,
+				}, operatorv1.ProviderNone,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},

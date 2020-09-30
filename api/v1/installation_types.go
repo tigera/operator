@@ -398,12 +398,16 @@ type InstallationStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 
-// Installation is the Schema for the installations API
+// Installation configures an installation of Calico or Calico Enterprise. At most one instance
+// of this resource is supported. It must be named "default". The Installation API installs core networking
+// and network policy components, and provides general install-time configuration.
 type Installation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   InstallationSpec   `json:"spec,omitempty"`
+	// Specification of the desired state for the Calico or Calico Enterprise installation.
+	Spec InstallationSpec `json:"spec,omitempty"`
+	// Most recently observed state for the Calico or Calico Enterprise installation.
 	Status InstallationStatus `json:"status,omitempty"`
 }
 

@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
@@ -20,16 +19,7 @@ var ctx = context.Background()
 // Convert updates an Installation resource based on an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
-func Convert(ctx context.Context, client client.Client, install *operatorv1.Installation) error {
-	comps, err := getComponents(ctx, client)
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			log.Error(err, "no existing install found: %v", err)
-			return nil
-		}
-		return err
-	}
-
+func Convert(ctx context.Context, client client.Client, comps *components, install *operatorv1.Installation) error {
 	for _, hdlr := range handlers {
 		if err := hdlr(comps, install); err != nil {
 			return err

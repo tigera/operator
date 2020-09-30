@@ -21,7 +21,6 @@ import (
 	ocsv1 "github.com/openshift/api/security/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
@@ -29,7 +28,6 @@ import (
 
 func init() {
 	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
-	AddToSchemes = append(AddToSchemes, v1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, operator.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, configv1.Install)
 	AddToSchemes = append(AddToSchemes, aggregator.AddToScheme)

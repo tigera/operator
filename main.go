@@ -33,6 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/components"
@@ -50,6 +51,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
+	utilruntime.Must(operatorv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(apis.AddToScheme(scheme))
 }
@@ -202,6 +204,14 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr, options); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LogCollector")
+		os.Exit(1)
+	}
+	if err = (&controllers.ComplianceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Compliance"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Compliance")
 		os.Exit(1)
 	}
 	if err = (&controllers.ManagerReconciler{

@@ -14,7 +14,7 @@ default: build
 all: build
 
 ## Run the tests for the current platform/architecture
-test: ut
+test: fmt vet ut
 
 # Both native and cross architecture builds are supported.
 # The target architecture is select by setting the ARCH variable.
@@ -197,12 +197,12 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always)
 endif
 
-build: $(BINDIR)/operator-$(ARCH)
+build: fmt vet $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/manager/main.go'
+	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./main.go'
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
@@ -221,8 +221,6 @@ build/init/bin/kubectl:
 	mkdir -p build/init/bin
 	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
 
-# Continue tagging an init image from the main operator image to keep some automated
-# build process stuff happy instead of needing to add in some version conditionals.
 .PHONY: image-init
 image-init: image
 ifeq ($(ARCH),amd64)
@@ -272,20 +270,9 @@ cluster-create: kubectl
 
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
+		./kubectl apply -f config/crd/bases/ && \
 		./kubectl apply -f deploy/crds/calico/ && \
 		./kubectl apply -f deploy/crds/enterprise/ && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_managers_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_logcollectors_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_intrusiondetections_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_compliances_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_apiservers_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_installations_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_tigerastatuses_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_logstorages_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusters_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_managementclusterconnections_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_amazoncloudintegrations_crd.yaml && \
-		./kubectl apply -f deploy/crds/operator.tigera.io_authentications_crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
 
@@ -414,7 +401,7 @@ endif
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v0.18.2
+OPERATOR_SDK_VERSION=v1.0.1
 OPERATOR_SDK_BARE=hack/bin/operator-sdk
 OPERATOR_SDK=$(OPERATOR_SDK_BARE)-$(OPERATOR_SDK_VERSION)
 $(OPERATOR_SDK):
@@ -428,9 +415,7 @@ $(OPERATOR_SDK_BARE): $(OPERATOR_SDK)
 	ln -f -s operator-sdk-$(OPERATOR_SDK_VERSION) $(OPERATOR_SDK_BARE)
 
 ## Generating code after API changes.
-gen-files: $(OPERATOR_SDK)
-	$(CONTAINERIZED) $(OPERATOR_SDK) generate crds
-	$(CONTAINERIZED) $(OPERATOR_SDK) generate k8s
+gen-files: manifests generate
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
@@ -504,3 +489,106 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 	{ helpMsg = $$0 }'                                                  \
 	width=20                                                            \
 	$(MAKEFILE_LIST)
+#####################################
+#####################################
+# Current Operator version
+VERSION ?= 0.0.1
+# Default bundle image tag
+BUNDLE_IMG ?= controller-bundle:$(VERSION)
+# Options for 'bundle-build'
+ifneq ($(origin CHANNELS), undefined)
+BUNDLE_CHANNELS := --channels=$(CHANNELS)
+endif
+ifneq ($(origin DEFAULT_CHANNEL), undefined)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+endif
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
+# Image URL to use all building/pushing image targets
+IMG ?= controller:latest
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:crdVersions=v1,trivialVersions=true"
+
+# Run against the configured Kubernetes cluster in ~/.kube/config
+run: generate fmt vet manifests
+	go run ./main.go
+
+# Install CRDs into a cluster
+install: manifests kustomize
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+# Uninstall CRDs from a cluster
+uninstall: manifests kustomize
+	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
+deploy: manifests kustomize
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default | kubectl apply -f -
+
+# Generate manifests e.g. CRD
+# Can also generate RBAC and webhooks but that is not enabled currently
+manifests: controller-gen
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./..." output:crd:artifacts:config=config/crd/bases
+
+# Run go fmt against code
+fmt:
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	go fmt ./...'
+
+# Run go vet against code
+vet:
+	$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	go vet ./...'
+
+# Generate code
+generate: $(BINDIR)/controller-gen
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+GO_GET_CONTAINER=docker run --rm \
+		-v $(CURDIR)/$(BINDIR):/go/bin:rw \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-e GOPATH=/go \
+		--net=host \
+		$(EXTRA_DOCKER_ARGS) \
+		$(CALICO_BUILD)
+
+# download controller-gen if necessary
+CONTROLLER_GEN=$(BINDIR)/controller-gen
+controller-gen: $(BINDIR)/controller-gen
+$(BINDIR)/controller-gen:
+	mkdir -p $(BINDIR)
+	$(GO_GET_CONTAINER) \
+		sh -c '$(GIT_CONFIG_SSH) \
+		set -e ;\
+		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+		cd $$CONTROLLER_GEN_TMP_DIR ;\
+		go mod init tmp ;\
+		go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0'
+
+KUSTOMIZE=$(BINDIR)/kustomize
+# download kustomize if necessary
+$(BINDIR)/kustomize:
+	mkdir -p $(BINDIR)
+	$(GO_GET_CONTAINER) \
+		sh -c '$(GIT_CONFIG_SSH) \
+		set -e ;\
+		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+		cd $$CONTROLLER_GEN_TMP_DIR ;\
+		go mod init tmp ;\
+		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
+
+## Generate bundle manifests and metadata, then validate generated files.
+#.PHONY: bundle
+#bundle: manifests
+#	operator-sdk generate kustomize manifests -q
+#	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+#	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+#	operator-sdk bundle validate ./bundle
+#
+## Build the bundle image.
+#.PHONY: bundle-build
+#bundle-build:
+#	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .

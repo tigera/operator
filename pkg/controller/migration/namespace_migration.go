@@ -170,6 +170,12 @@ func AddBindingForKubeSystemNode(crb *rbacv1.ClusterRoleBinding) {
 		Kind:      "ServiceAccount",
 		Name:      "calico-node",
 		Namespace: kubeSystem,
+	}, rbacv1.Subject{
+		// Include system:nodes binding for RKE clusters with managed Calico CNI (Calico installed by RKE)
+		// If we add detection of RKE as a provider then we should make this dependent on that.
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "Group",
+		Name:     "system:nodes",
 	})
 }
 

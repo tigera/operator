@@ -254,8 +254,14 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 	}
 
 	// update Installation resource with existing install if it exists.
-	if err := convert.Convert(ctx, client, instance); err != nil {
+	comps, err := convert.GetComponents(ctx, client)
+	if err != nil {
 		return nil, err
+	}
+	if comps != nil {
+		if err := convert.Convert(ctx, client, comps, instance); err != nil {
+			return nil, err
+		}
 	}
 
 	// Determine the provider in use by combining any auto-detected value with any value

@@ -24,8 +24,8 @@ type components struct {
 	cni cni.NetworkComponents
 }
 
-// getComponents loads the main calico components into structs for later parsing.
-func getComponents(ctx context.Context, client client.Client) (*components, error) {
+// GetComponents loads the main calico components into structs for later parsing.
+func GetComponents(ctx context.Context, client client.Client) (*components, error) {
 	var ds = appsv1.DaemonSet{}
 
 	// verify canal isn't present, or block

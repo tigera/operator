@@ -31,8 +31,8 @@ import (
 
 	//"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -262,7 +262,7 @@ func setupManager() (client.Client, manager.Manager) {
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 	// Setup all Controllers
-	err = controller.AddToManager(mgr, options.AddOptions{
+	err = controllers.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: true,
 		AmazonCRDExists:     true,

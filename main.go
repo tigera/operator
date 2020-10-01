@@ -1,6 +1,5 @@
 /*
 
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -193,79 +192,11 @@ func main() {
 		AmazonCRDExists:     amazonCRDExists,
 	}
 
-	if err = (&controllers.InstallationReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Installation"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Installation")
+	err = controllers.AddToManager(mgr, options)
+	if err != nil {
+		setupLog.Error(err, "unable to create controllers")
 		os.Exit(1)
 	}
-	if err = (&controllers.APIServerReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("APIServer"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "APIServer")
-		os.Exit(1)
-	}
-	if err = (&controllers.LogStorageReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("LogStorage"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LogStorage")
-		os.Exit(1)
-	}
-	if err = (&controllers.IntrusionDetectionReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("IntrusionDetection"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "IntrusionDetection")
-		os.Exit(1)
-	}
-	if err = (&controllers.LogCollectorReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("LogCollector"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LogCollector")
-		os.Exit(1)
-	}
-	if err = (&controllers.ComplianceReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Compliance"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Compliance")
-		os.Exit(1)
-	}
-	if err = (&controllers.ManagerReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Manager"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Manager")
-		os.Exit(1)
-	}
-	if err = (&controllers.ManagementClusterConnectionReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ManagementClusterConnection"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ManagementClusterConnection")
-		os.Exit(1)
-	}
-	if err = (&controllers.AmazonCloudIntegrationReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AmazonCloudIntegration"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AmazonCloudIntegration")
-		os.Exit(1)
-	}
-	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

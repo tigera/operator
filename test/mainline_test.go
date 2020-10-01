@@ -101,6 +101,7 @@ var _ = Describe("Mainline component function tests", func() {
 			err := c.Get(context.Background(), k, u)
 			return err
 		}, 240*time.Second).ShouldNot(BeNil())
+		mgr = nil
 	})
 
 	Describe("Installing CRD", func() {
@@ -118,7 +119,9 @@ var _ = Describe("Mainline component function tests", func() {
 		})
 
 		It("Should install resources for a CRD", func() {
-			stopChan := installResourceCRD(c, mgr)
+			stopChan := make(chan struct{})
+			defer close(stopChan)
+			installResourceCRD(c, mgr, stopChan)
 
 			instance := &operator.Installation{
 				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
@@ -151,7 +154,6 @@ var _ = Describe("Mainline component function tests", func() {
 				return nil
 			}, 30*time.Second, 50*time.Millisecond).Should(BeNil())
 
-			defer close(stopChan)
 		})
 	})
 
@@ -163,8 +165,9 @@ var _ = Describe("Mainline component function tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			}
 
-			stopChan := installResourceCRD(c, mgr)
+			stopChan := make(chan struct{})
 			defer close(stopChan)
+			installResourceCRD(c, mgr, stopChan)
 
 			By("Deleting CR after its tigera status becomes available")
 			err := c.Delete(context.Background(), instance)
@@ -206,8 +209,9 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Running the operator")
-		stopChan := RunOperator(mgr)
+		stopChan := make(chan struct{})
 		defer close(stopChan)
+		RunOperator(mgr, stopChan)
 
 		By("Verifying resources were not created")
 		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
@@ -271,7 +275,7 @@ func setupManager() (client.Client, manager.Manager) {
 	return mgr.GetClient(), mgr
 }
 
-func installResourceCRD(c client.Client, mgr manager.Manager) chan struct{} {
+func installResourceCRD(c client.Client, mgr manager.Manager, stopChan chan struct{}) {
 	By("Creating a CRD")
 	instance := &operator.Installation{
 		TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
@@ -281,7 +285,7 @@ func installResourceCRD(c client.Client, mgr manager.Manager) chan struct{} {
 	Expect(err).NotTo(HaveOccurred())
 
 	By("Running the operator")
-	stopChan := RunOperator(mgr)
+	RunOperator(mgr, stopChan)
 
 	By("Verifying the resources were created")
 	ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
@@ -323,6 +327,4 @@ func installResourceCRD(c client.Client, mgr manager.Manager) chan struct{} {
 		}
 		return assertAvailable(ts)
 	}, 60*time.Second).Should(BeNil())
-
-	return stopChan
 }

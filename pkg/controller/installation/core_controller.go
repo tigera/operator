@@ -233,6 +233,7 @@ type ReconcileInstallation struct {
 	namespaceMigration   *migration.CoreNamespaceMigration
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
+	migrationChecked     bool
 }
 
 // GetInstallation returns the current installation resource.
@@ -538,22 +539,24 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
-	// update Installation resource with existing install if it exists.
-	nc, err := convert.NeedsConversion(ctx, r.client)
-	if err != nil {
-		r.SetDegraded("Error checking for existing installation", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if nc {
-		if err := convert.Convert(ctx, r.client, instance); err != nil {
-			if errors.As(err, &convert.ErrIncompatibleCluster{}) {
-				r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
-				// We should always requeue a convert problem. Don't return error
-				// to make sure we never back off retrying.
-				return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
-			}
-			r.SetDegraded("Error querying installation", err, reqLogger)
+	if !r.migrationChecked {
+		// update Installation resource with existing install if it exists.
+		nc, err := convert.NeedsConversion(ctx, r.client)
+		if err != nil {
+			r.SetDegraded("Error checking for existing installation", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+		if nc {
+			if err := convert.Convert(ctx, r.client, instance); err != nil {
+				if errors.As(err, &convert.ErrIncompatibleCluster{}) {
+					r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+					// We should always requeue a convert problem. Don't return error
+					// to make sure we never back off retrying.
+					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+				}
+				r.SetDegraded("Error querying installation", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -566,24 +569,28 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.
-	if err = validateCustomResource(instance); err != nil {
+	if err := validateCustomResource(instance); err != nil {
 		r.SetDegraded("Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	if err = r.client.Update(ctx, instance); err != nil {
+	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// now that migrated config is stored in the installation resource, we no longer need
+	// to check if a migration is needed for the lifetime of the operator.
+	r.migrationChecked = true
 
 	// A status is needed at this point for operator scorecard tests.
 	// status.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
 		instance.Status = operator.InstallationStatus{}
-		if err = r.client.Status().Update(ctx, instance); err != nil {
+		if err := r.client.Status().Update(ctx, instance); err != nil {
 			r.SetDegraded("Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err
 		}

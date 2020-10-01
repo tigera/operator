@@ -430,6 +430,11 @@ $(OPERATOR_SDK_BARE): $(OPERATOR_SDK)
 ## Generating code after API changes.
 gen-files: $(OPERATOR_SDK)
 	$(CONTAINERIZED) $(OPERATOR_SDK) generate crds
+	# we don't need this CRD but there don't seem to be any flags to have generate
+	# skip the ippools api so just remove this file until there is something better
+	rm deploy/crds/crd.projectcalico.org_ippools_crd.yaml
+	rm deploy/crds/crd.projectcalico.org_felixconfigurations_crd.yaml
+
 	$(CONTAINERIZED) $(OPERATOR_SDK) generate k8s
 
 OS_VERSIONS?=config/calico_versions.yml

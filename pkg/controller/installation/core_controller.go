@@ -244,25 +244,13 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 	return instance, err
 }
 
-// getInstallation returns the default installation instance with defaults populated.
-func getInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
-	// Fetch the Installation instance. We only support a single instance named "default".
-	instance := &operator.Installation{}
-	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	// update Installation resource with existing install if it exists.
-	if err := convert.Convert(ctx, client, instance); err != nil {
-		return nil, err
-	}
-
+// updateInstallationWithDefaults returns the default installation instance with defaults populated.
+func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
 	// specified in the Installation CR. mergeProvider updates the CR with the correct value.
-	err = mergeProvider(instance, provider)
+	err := mergeProvider(instance, provider)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var openshiftConfig *configv1.Network
@@ -272,7 +260,7 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		err = client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
+			return fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
 		}
 	} else {
 		// Check if we're running on kubeadm by getting the config map.
@@ -281,7 +269,7 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 		err = client.Get(ctx, key, kubeadmConfig)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return nil, fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
+				return fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
 			}
 			kubeadmConfig = nil
 		}
@@ -289,9 +277,9 @@ func getInstallation(ctx context.Context, client client.Client, provider operato
 
 	err = mergeAndFillDefaults(instance, openshiftConfig, kubeadmConfig)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return instance, nil
+	return nil
 }
 
 // mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
@@ -303,7 +291,7 @@ func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadm
 			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
 		}
 	} else if kubeadmConfig != nil {
-		// Merge in kubeadm configuraiton.
+		// Merge in kubeadm configuration.
 		if err := updateInstallationForKubeadm(i, kubeadmConfig); err != nil {
 			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
 		}
@@ -550,26 +538,31 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
-	// Query for the installation object.
-	instance, err := getInstallation(ctx, r.client, r.autoDetectedProvider)
+	// update Installation resource with existing install if it exists.
+	nc, err := convert.NeedsConversion(ctx, r.client)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Info("Installation config not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
+		r.SetDegraded("Error checking for existing installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if nc {
+		if err := convert.Convert(ctx, r.client, instance); err != nil {
+			if errors.As(err, &convert.ErrIncompatibleCluster{}) {
+				r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+				// We should always requeue a convert problem. Don't return error
+				// to make sure we never back off retrying.
+				return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+			}
+			r.SetDegraded("Error querying installation", err, reqLogger)
+			return reconcile.Result{}, err
 		}
-		if errors.As(err, &convert.ErrIncompatibleCluster{}) {
-			r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
-			// We should always requeue a convert problem. Don't return error
-			// to make sure we never back off retrying.
-			return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
-		}
+	}
+
+	// update Installation with defaults
+	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider); err != nil {
 		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.

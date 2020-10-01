@@ -17,6 +17,20 @@ var log = logf.Log.WithName("migration_convert")
 
 var ctx = context.Background()
 
+// NeedsConversion checks if an existing installation of Calico exists which
+// is not managed by the Operator.
+func NeedsConversion(ctx context.Context, client client.Client) (bool, error) {
+	comps, err := getComponents(ctx, client)
+	if err != nil {
+		return false, err
+	}
+	if comps == nil {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // Convert updates an Installation resource based on an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.

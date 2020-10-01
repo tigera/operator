@@ -42,7 +42,9 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 		Name:      "calico-node",
 		Namespace: metav1.NamespaceSystem,
 	}, &ds); err != nil {
-		return nil, err
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
 	}
 
 	var kc = new(appsv1.Deployment)
@@ -83,6 +85,9 @@ func getComponents(ctx context.Context, client client.Client) (*components, erro
 	// do some upfront processing of CNI by loading it into comps
 	var err error
 	comps.cni, err = loadCNI(comps)
+	if err != nil {
+		return nil, err
+	}
 
 	return comps, err
 }

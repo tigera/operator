@@ -37,7 +37,7 @@ var _ = Describe("Parser", func() {
 
 	It("should not detect an installation if none exists", func() {
 		c := fake.NewFakeClientWithScheme(scheme)
-		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
+		Expect(NeedsConversion(ctx, c)).To(BeFalse())
 	})
 
 	It("should detect an installation if one exists", func() {

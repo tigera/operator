@@ -19,7 +19,6 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		return ErrIncompatibleCluster{
 			err:       "only DATASTORE_TYPE=kubernetes is supported",
 			component: ComponentCalicoNode,
-			fix:       FixImpossible,
 		}
 	}
 

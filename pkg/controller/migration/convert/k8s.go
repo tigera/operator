@@ -125,7 +125,7 @@ func (r *CheckedDaemonSet) getEnvVar(container string, key string) (*corev1.EnvV
 		return nil, ErrIncompatibleCluster{
 			err:       fmt.Sprintf("couldn't find %s container in daemonset", container),
 			component: ComponentCalicoNode,
-			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it, or %s", container, FixFileFeatureRequest),
+			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it", container),
 		}
 	}
 	r.ignoreEnv(container, key)
@@ -156,7 +156,7 @@ func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component
 		return nil, ErrIncompatibleCluster{
 			err:       fmt.Sprintf("couldn't find container '%s' in %s", container, component),
 			component: component,
-			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it, or %s", container, FixFileFeatureRequest),
+			fix:       fmt.Sprintf("restore the %s container if you've renamed or removed it", container),
 		}
 	}
 
@@ -181,7 +181,7 @@ func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component
 			return nil, ErrIncompatibleCluster{
 				err:       fmt.Sprintf("failed to read %s/%s: only configMapRef & explicit values supported for env vars at this time", container, key),
 				component: "",
-				fix:       fmt.Sprintf("adjust %s to be an explicit value or configMapRef, or %s", key, FixFileFeatureRequest),
+				fix:       fmt.Sprintf("adjust %s to be an explicit value or configMapRef", key),
 			}
 		}
 	}

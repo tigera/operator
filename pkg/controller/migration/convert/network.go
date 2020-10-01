@@ -79,7 +79,6 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			return ErrIncompatibleCluster{
 				err:       "detected Calico CNI with host-local IPAM, but failed to load host-local config",
 				component: ComponentCNIConfig,
-				fix:       FixFileBugReport,
 			}
 		}
 
@@ -200,7 +199,6 @@ func subhandleCalicoIPAM(netBackend string, cnicfg cni.CalicoConf, install *oper
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("detected networking backend '%s' is unknown or incompatible with Calico IPAM", netBackend),
 			component: ComponentCalicoNode,
-			fix:       FixImpossible,
 		}
 	}
 
@@ -244,7 +242,6 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("CALICO_NETWORKING_BACKEND %s is not valid", netBackend),
 			component: ComponentCalicoNode,
-			fix:       FixImpossible,
 		}
 	}
 
@@ -325,7 +322,6 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("found unexpected '%s' container for '%s' CNI", containerInstallCNI, plugin),
 			component: ComponentCNIConfig,
-			fix:       FixFileFeatureRequest,
 		}
 	}
 
@@ -368,7 +364,6 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unable to migrate plugin '%s': unsupported.", plugin),
 			component: ComponentCNIConfig,
-			fix:       FixFileFeatureRequest,
 		}
 	}
 
@@ -454,7 +449,6 @@ func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {
 		return "", ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unexpected FELIX_INTERFACEPREFIX value: '%s'. Only 'eni, avz, gke, cali' are supported.", *prefix),
 			component: ComponentCalicoNode,
-			fix:       FixFileFeatureRequest,
 		}
 	}
 }

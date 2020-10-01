@@ -14,7 +14,10 @@ type ErrIncompatibleCluster struct {
 }
 
 func (e ErrIncompatibleCluster) Error() string {
-	return fmt.Sprintf("%s. To fix it, %s on %s", e.err, e.fix, e.component)
+	if e.fix != "" {
+		return fmt.Sprintf("%s. To fix it, %s on %s", e.err, e.fix, e.component)
+	}
+	return fmt.Sprintf("%s on %s", e.err, e.component)
 }
 
 const (
@@ -23,15 +26,6 @@ const (
 	ComponentTypha           = "deployment/calico-typha"
 	ComponentCNIConfig       = "cni-config"
 	ComponentIPPools         = "ippools"
-)
-
-var (
-	// FixFileFeatureRequest is returned when configuration could be migrated in the future
-	FixFileFeatureRequest = "file a feature request to support clusters with your configuration"
-	// FixImpossible is returned when a cluster is incompatible and will not be supported in the future
-	FixImpossible = "this cluster cannot be converted by the Operator"
-	// FixFileBugReport is returned when conversion logic detects partial config which might contradict other detected config
-	FixFileBugReport = "file a bug report"
 )
 
 func ErrMissingHostPathVolume(component, volume, hostPath string) ErrIncompatibleCluster {

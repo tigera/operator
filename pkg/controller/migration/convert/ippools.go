@@ -49,7 +49,6 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 				return ErrIncompatibleCluster{
 					err:       fmt.Sprintf("failed to convert IPPool %s, %v", v4pool.Name, err),
 					component: ComponentIPPools,
-					fix:       FixFileBugReport,
 				}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
@@ -61,7 +60,6 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 				return ErrIncompatibleCluster{
 					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err),
 					component: ComponentIPPools,
-					fix:       FixFileBugReport,
 				}
 			}
 			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)

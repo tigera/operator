@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -28,6 +29,7 @@ import (
 
 	operator "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -235,22 +237,25 @@ type ReconcileInstallation struct {
 	namespaceMigration   *migration.CoreNamespaceMigration
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
+	migrationChecked     bool
 }
 
-// GetInstallation returns the default installation instance with defaults populated.
+// GetInstallation returns the current installation resource.
 func GetInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
+	// TODO: remove unused provider
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
+	return instance, err
+}
 
+// updateInstallationWithDefaults returns the default installation instance with defaults populated.
+func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
 	// specified in the Installation CR. mergeProvider updates the CR with the correct value.
-	err = mergeProvider(instance, provider)
+	err := mergeProvider(instance, provider)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var openshiftConfig *configv1.Network
@@ -260,7 +265,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 		// If configured to run in openshift, then also fetch the openshift configuration API.
 		err = client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
+			return fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
 		}
 	} else {
 		// Check if we're running on kubeadm by getting the config map.
@@ -269,7 +274,7 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 		err = client.Get(ctx, key, kubeadmConfig)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return nil, fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
+				return fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
 			}
 			kubeadmConfig = nil
 		}
@@ -277,9 +282,9 @@ func GetInstallation(ctx context.Context, client client.Client, provider operato
 
 	err = mergeAndFillDefaults(instance, openshiftConfig, kubeadmConfig)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return instance, nil
+	return nil
 }
 
 // mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
@@ -291,7 +296,7 @@ func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadm
 			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
 		}
 	} else if kubeadmConfig != nil {
-		// Merge in kubeadm configuraiton.
+		// Merge in kubeadm configuration.
 		if err := updateInstallationForKubeadm(i, kubeadmConfig); err != nil {
 			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
 		}
@@ -335,6 +340,23 @@ func fillDefaults(instance *operator.Installation) error {
 		switch instance.Spec.CNI.Type {
 		case operator.PluginCalico:
 			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		}
+	}
+
+	if instance.Spec.CNI.IPAM == nil {
+		instance.Spec.CNI.IPAM = &operator.IPAMSpec{}
+	}
+
+	if instance.Spec.CNI.IPAM.Type == "" {
+		switch instance.Spec.CNI.Type {
+		case operator.PluginAzureVNET:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAzureVNET
+		case operator.PluginAmazonVPC:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		case operator.PluginGKE:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		default:
+			instance.Spec.CNI.IPAM.Type = operator.IPAMPluginCalico
 		}
 	}
 
@@ -386,7 +408,11 @@ func fillDefaults(instance *operator.Installation) error {
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
-				v4pool.Encapsulation = operator.EncapsulationIPIP
+				if instance.Spec.CNI.Type == operator.PluginCalico {
+					v4pool.Encapsulation = operator.EncapsulationIPIP
+				} else {
+					v4pool.Encapsulation = operator.EncapsulationNone
+				}
 			}
 			if v4pool.NATOutgoing == "" {
 				v4pool.NATOutgoing = operator.NATOutgoingEnabled
@@ -514,42 +540,61 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	status := instance.Status
 
-	// Query for the installation object.
-	instance, err := GetInstallation(ctx, r.client, r.autoDetectedProvider)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Info("Installation config not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
+	// mark CR found so we can report converter problems via tigerastatus
+	r.status.OnCRFound()
+
+	if !r.migrationChecked {
+		// update Installation resource with existing install if it exists.
+		nc, err := convert.NeedsConversion(ctx, r.client)
+		if err != nil {
+			r.SetDegraded("Error checking for existing installation", err, reqLogger)
+			return reconcile.Result{}, err
 		}
+		if nc {
+			if err := convert.Convert(ctx, r.client, instance); err != nil {
+				if errors.As(err, &convert.ErrIncompatibleCluster{}) {
+					r.SetDegraded("Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+					// We should always requeue a convert problem. Don't return error
+					// to make sure we never back off retrying.
+					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+				}
+				r.SetDegraded("Error querying installation", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// update Installation with defaults
+	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider); err != nil {
 		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	r.status.OnCRFound()
+
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.
-	if err = validateCustomResource(instance); err != nil {
+	if err := validateCustomResource(instance); err != nil {
 		r.SetDegraded("Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	if err = r.client.Update(ctx, instance); err != nil {
+	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// now that migrated config is stored in the installation resource, we no longer need
+	// to check if a migration is needed for the lifetime of the operator.
+	r.migrationChecked = true
 
 	// A status is needed at this point for operator scorecard tests.
 	// status.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
 		instance.Status = operator.InstallationStatus{}
-		if err = r.client.Status().Update(ctx, instance); err != nil {
+		if err := r.client.Status().Update(ctx, instance); err != nil {
 			r.SetDegraded("Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err
 		}

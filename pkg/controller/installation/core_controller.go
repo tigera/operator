@@ -729,7 +729,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// we do then we'll render the Calico components with additional node selectors to
 	// prevent scheduling, later we will run a migration that migrates nodes one by one
 	// to mimic a 'normal' rolling update.
-	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration()
+	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration(ctx)
 	if err != nil {
 		log.Error(err, "Error checking if namespace migration is needed")
 		r.status.SetDegraded("Error checking if namespace migration is needed", err.Error())

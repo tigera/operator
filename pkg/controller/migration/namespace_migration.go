@@ -78,12 +78,10 @@ type CoreNamespaceMigration struct {
 // the kube-system namespace.
 // It checks the following in the kube-system namespace:
 // calico-kube-controllers deployment, typha deployment, or calico-node deployment
-func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration() (bool, error) {
+func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context) (bool, error) {
 	if m.migrationComplete == true {
 		return false, nil
 	}
-
-	ctx := context.Background()
 
 	_, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
 	if err == nil {

@@ -86,7 +86,6 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration() (bool, error) {
 	ctx := context.Background()
 
 	_, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
-	//Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.DaemonSet, error)
 	if err == nil {
 		return true, nil
 	}

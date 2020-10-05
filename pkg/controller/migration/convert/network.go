@@ -6,8 +6,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
-	v1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration/cni"
 )
 

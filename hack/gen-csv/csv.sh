@@ -82,7 +82,7 @@ hack/bin/operator-sdk generate csv \
   --csv-version ${VERSION} \
   --crd-dir ${CSV_DIR} \
   --deploy-dir ${DEPLOY_DIR} \
-  --apis-dir pkg/apis/operator/v1/ \
+  --apis-dir api/v1/ \
   --make-manifests=false \
   --verbose \
   --interactive=false \

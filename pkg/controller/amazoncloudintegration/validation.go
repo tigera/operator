@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This

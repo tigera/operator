@@ -15,6 +15,7 @@
 package migration
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -82,7 +83,10 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration() (bool, error) {
 		return false, nil
 	}
 
-	_, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(nodeDaemonSetName, metav1.GetOptions{})
+	ctx := context.Background()
+
+	_, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
+	//Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.DaemonSet, error)
 	if err == nil {
 		return true, nil
 	}
@@ -90,7 +94,7 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration() (bool, error) {
 		return false, fmt.Errorf("failed to get daemonset %s in kube-system: %s", nodeDaemonSetName, err)
 	}
 
-	_, err = m.client.AppsV1().Deployments(kubeSystem).Get(kubeControllerDeploymentName, metav1.GetOptions{})
+	_, err = m.client.AppsV1().Deployments(kubeSystem).Get(ctx, kubeControllerDeploymentName, metav1.GetOptions{})
 	if err == nil {
 		return true, nil
 	}
@@ -98,7 +102,7 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration() (bool, error) {
 		return false, fmt.Errorf("failed to get deployment %s in kube-system: %s", kubeControllerDeploymentName, err)
 	}
 
-	_, err = m.client.AppsV1().Deployments(kubeSystem).Get(typhaDeploymentName, metav1.GetOptions{})
+	_, err = m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
 	if err == nil {
 		return true, nil
 	}
@@ -207,32 +211,32 @@ func SetTyphaAntiAffinity(d *appsv1.Deployment) {
 // The expectation is that this function will do the majority of the migration before
 // returning (the exception being label clean up on the nodes), if there is an error
 // it will be returned and the
-func (m *CoreNamespaceMigration) Run(log logr.Logger) error {
-	if err := m.deleteKubeSystemKubeControllers(); err != nil {
+func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error {
+	if err := m.deleteKubeSystemKubeControllers(ctx); err != nil {
 		return fmt.Errorf("failed deleting kube-system calico-kube-controllers: %s", err.Error())
 	}
 	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
-	if err := m.waitForOperatorTyphaDeploymentReady(); err != nil {
+	if err := m.waitForOperatorTyphaDeploymentReady(ctx); err != nil {
 		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
 	}
 	log.V(1).Info("Operator Typha Deployment is ready")
-	if err := m.labelUnmigratedNodes(); err != nil {
+	if err := m.labelUnmigratedNodes(ctx); err != nil {
 		return fmt.Errorf("failed to label unmigrated nodes: %s", err.Error())
 	}
 	log.V(1).Info("All unmigrated nodes labeled")
-	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(); err != nil {
+	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx); err != nil {
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
-	if err := m.migrateEachNode(log); err != nil {
+	if err := m.migrateEachNode(ctx, log); err != nil {
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
 	log.V(1).Info("Nodes migrated")
-	if err := m.deleteKubeSystemCalicoNode(); err != nil {
+	if err := m.deleteKubeSystemCalicoNode(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system node DaemonSet: %s", err.Error())
 	}
 	log.V(1).Info("kube-system node DaemonSet deleted")
-	if err := m.deleteKubeSystemTypha(); err != nil {
+	if err := m.deleteKubeSystemTypha(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
 
@@ -250,11 +254,11 @@ func (m *CoreNamespaceMigration) NeedCleanup() bool {
 
 // CleanupMigration ensures all labels used during the migration are removed
 // and any migration resources are stopped.
-func (m *CoreNamespaceMigration) CleanupMigration() error {
+func (m *CoreNamespaceMigration) CleanupMigration(ctx context.Context) error {
 	if m.migrationComplete {
 		return nil
 	}
-	if err := m.removeNodeMigrationLabelFromNodes(); err != nil {
+	if err := m.removeNodeMigrationLabelFromNodes(ctx); err != nil {
 		return fmt.Errorf("error cleaning up node labels: %s", err)
 	}
 
@@ -266,8 +270,8 @@ func (m *CoreNamespaceMigration) CleanupMigration() error {
 
 // deleteKubeSystemKubeControllers deletes the calico-kube-controllers deployment
 // in the kube-system namespace
-func (m *CoreNamespaceMigration) deleteKubeSystemKubeControllers() error {
-	err := m.client.AppsV1().Deployments(kubeSystem).Delete(kubeControllerDeploymentName, &metav1.DeleteOptions{})
+func (m *CoreNamespaceMigration) deleteKubeSystemKubeControllers(ctx context.Context) error {
+	err := m.client.AppsV1().Deployments(kubeSystem).Delete(ctx, kubeControllerDeploymentName, metav1.DeleteOptions{})
 	if err != nil && !apierrs.IsNotFound(err) {
 		return err
 	}
@@ -276,8 +280,8 @@ func (m *CoreNamespaceMigration) deleteKubeSystemKubeControllers() error {
 
 // deleteKubeSystemTypha deletes the typha deployment
 // in the kube-system namespace
-func (m *CoreNamespaceMigration) deleteKubeSystemTypha() error {
-	err := m.client.AppsV1().Deployments(kubeSystem).Delete(typhaDeploymentName, &metav1.DeleteOptions{})
+func (m *CoreNamespaceMigration) deleteKubeSystemTypha(ctx context.Context) error {
+	err := m.client.AppsV1().Deployments(kubeSystem).Delete(ctx, typhaDeploymentName, metav1.DeleteOptions{})
 	if err != nil && !apierrs.IsNotFound(err) {
 		return err
 	}
@@ -286,8 +290,8 @@ func (m *CoreNamespaceMigration) deleteKubeSystemTypha() error {
 
 // deleteKubeSystemCalicoNode deletes the calico-node daemonset
 // in the kube-system namespace
-func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode() error {
-	err := m.client.AppsV1().DaemonSets(kubeSystem).Delete(nodeDaemonSetName, &metav1.DeleteOptions{})
+func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode(ctx context.Context) error {
+	err := m.client.AppsV1().DaemonSets(kubeSystem).Delete(ctx, nodeDaemonSetName, metav1.DeleteOptions{})
 	if err != nil && !apierrs.IsNotFound(err) {
 		return err
 	}
@@ -297,9 +301,9 @@ func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode() error {
 // waitForOperatorTyphaDeploymentReady waits until the 'new' typha deployment in
 // the calico-system namespace is ready before continuing, it will wait up to
 // 1 minute before returning with an error.
-func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady() error {
+func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady(ctx context.Context) error {
 	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
-		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(common.TyphaDeploymentName, metav1.GetOptions{})
+		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(ctx, common.TyphaDeploymentName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -316,14 +320,14 @@ func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady() error {
 
 // labelUnmigratedNodes ensures all nodes are labeled. If they do
 // not already have the migrated value then the pre-migrated value is set.
-func (m *CoreNamespaceMigration) labelUnmigratedNodes() error {
+func (m *CoreNamespaceMigration) labelUnmigratedNodes(ctx context.Context) error {
 	for _, obj := range m.indexer.List() {
 		node, ok := obj.(*v1.Node)
 		if !ok {
 			return fmt.Errorf("never expected index to have anything other than a Node object: %v", obj)
 		}
 		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != nodeSelectorValuePost {
-			if err := m.addNodeLabel(node.Name, nodeSelectorKey, nodeSelectorValuePre); err != nil {
+			if err := m.addNodeLabel(ctx, node.Name, nodeSelectorKey, nodeSelectorValuePre); err != nil {
 				return err
 			}
 		}
@@ -334,13 +338,13 @@ func (m *CoreNamespaceMigration) labelUnmigratedNodes() error {
 
 // removeNodeMigrationLabelFromNodes removes the label previously added to
 // control the migration.
-func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes() error {
+func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes(ctx context.Context) error {
 	for _, obj := range m.indexer.List() {
 		node, ok := obj.(*v1.Node)
 		if !ok {
 			return fmt.Errorf("never expected index to have anything other than a Node object: %v", obj)
 		}
-		if err := m.removeNodeLabel(node.Name, nodeSelectorKey); err != nil {
+		if err := m.removeNodeLabel(ctx, node.Name, nodeSelectorKey); err != nil {
 			return err
 		}
 	}
@@ -351,9 +355,9 @@ func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes() error {
 // ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady updates the calico-node DaemonSet in the
 // kube-system namespace with a node selector that will prevent it from being
 // deployed to nodes that have been migrated and waits for the daemonset to update.
-func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady() error {
+func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx context.Context) error {
 	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
-		ds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(nodeDaemonSetName, metav1.GetOptions{})
+		ds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -362,7 +366,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 			ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 		}
 
-		err = m.addNodeSelectorToDaemonSet(ds, kubeSystem, nodeSelectorKey, nodeSelectorValuePre)
+		err = m.addNodeSelectorToDaemonSet(ctx, ds, kubeSystem, nodeSelectorKey, nodeSelectorValuePre)
 		if err != nil {
 			if apierrs.IsConflict(err) {
 				// Retry on update conflicts.
@@ -372,7 +376,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		}
 
 		// Get latest kube-system node ds.
-		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Get(nodeDaemonSetName, metav1.GetOptions{})
+		ds, err = m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -385,7 +389,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 	})
 }
 
-func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet, namespace, key, value string) error {
+func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context, ds *appsv1.DaemonSet, namespace, key, value string) error {
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
 
@@ -413,7 +417,7 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet
 		}
 		log.Info("Patch NodeSelector with: ", string(patchBytes))
 
-		_, err := m.client.AppsV1().DaemonSets(kubeSystem).Patch(ds.Name, types.JSONPatchType, patchBytes)
+		_, err := m.client.AppsV1().DaemonSets(kubeSystem).Patch(ctx, ds.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
 		if err != nil {
 			return err
 		}
@@ -425,7 +429,7 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ds *appsv1.DaemonSet
 // the label on one node at a time, ensuring pod becomes ready before starting
 // the cycle again. Once the nodes are updated we will get the list of nodes
 // that need to be migrated in case there were more added.
-func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
+func (m *CoreNamespaceMigration) migrateEachNode(ctx context.Context, log logr.Logger) error {
 	nodes := m.getNodesToMigrate()
 	for len(nodes) > 0 {
 		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")
@@ -435,10 +439,10 @@ func (m *CoreNamespaceMigration) migrateEachNode(log logr.Logger) error {
 			// to come up. Also if the operator crashed we don't want to continue
 			// updating if the pods are not healthy.
 			log.V(1).Info("Waiting for new calico pods to be healthy")
-			err := m.waitUntilNodeCanBeMigrated()
+			err := m.waitUntilNodeCanBeMigrated(ctx)
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
-				err = m.addNodeLabel(node.Name, nodeSelectorKey, nodeSelectorValuePost)
+				err = m.addNodeLabel(ctx, node.Name, nodeSelectorKey, nodeSelectorValuePost)
 				if err != nil {
 					return fmt.Errorf("setting label on node %s failed; %s", node.Name, err)
 				}
@@ -469,13 +473,13 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 
 // waitUntilNodeCanBeMigrated checks the number of desired and ready pods in the kube-system and calico-system
 // daemonsets to make sure we don't simultaneously migrate more pods than allowed.
-func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated() error {
+func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		ksD, ksR, _, err := m.getNumPodsDesiredAndReady(kubeSystem, nodeDaemonSetName)
+		ksD, ksR, _, err := m.getNumPodsDesiredAndReady(ctx, kubeSystem, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
-		csD, csR, csMaxUnavailable, err := m.getNumPodsDesiredAndReady(common.CalicoNamespace, nodeDaemonSetName)
+		csD, csR, csMaxUnavailable, err := m.getNumPodsDesiredAndReady(ctx, common.CalicoNamespace, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
@@ -501,8 +505,8 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated() error {
 	})
 }
 
-func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset string) (int32, int32, *intstr.IntOrString, error) {
-	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(daemonset, metav1.GetOptions{})
+func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(ctx context.Context, namespace, daemonset string) (int32, int32, *intstr.IntOrString, error) {
+	ds, err := m.client.AppsV1().DaemonSets(namespace).Get(ctx, daemonset, metav1.GetOptions{})
 	if err != nil {
 		return 0, 0, nil, err
 	}
@@ -516,9 +520,9 @@ func (m *CoreNamespaceMigration) getNumPodsDesiredAndReady(namespace, daemonset 
 // addNodeLabels adds the specified labels to the named node. Perform
 // Get/Check/Update so that it always working on latest version.
 // If node labels has been set already, do nothing.
-func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error {
+func (m *CoreNamespaceMigration) addNodeLabel(ctx context.Context, nodeName, key, value string) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		node, err := m.client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -542,7 +546,7 @@ func (m *CoreNamespaceMigration) addNodeLabel(nodeName, key, value string) error
 		}
 
 		if needUpdate {
-			_, err := m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
+			_, err := m.client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
 			if err == nil {
 				return true, nil
 			}
@@ -568,9 +572,9 @@ type StringPatch struct {
 // Remove node labels from node. Perform Get/Check/Update so that it always working on the
 // most recent version of the resource.
 // If node labels do not exist, do nothing.
-func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
+func (m *CoreNamespaceMigration) removeNodeLabel(ctx context.Context, nodeName, key string) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		node, err := m.client.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		node, err := m.client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -597,7 +601,7 @@ func (m *CoreNamespaceMigration) removeNodeLabel(nodeName, key string) error {
 		}
 
 		if needUpdate {
-			_, err = m.client.CoreV1().Nodes().Patch(node.Name, types.JSONPatchType, patchBytes)
+			_, err = m.client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
 			if err == nil {
 				return true, nil
 			}

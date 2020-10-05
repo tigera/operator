@@ -2,7 +2,6 @@
 
 This directory contains:
 
-- CRDs used in tests
 - Scripts to provision test clusters
 - And the latest set of package manifests in `olm-catalog`
 

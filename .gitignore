@@ -90,3 +90,16 @@ tags
 report/*
 cscope.*
 .idea/
+# Test tools
+k3d
+kubectl
+kubeconfig.yaml
+# Vendor
+vendor/
+.vendor-new/
+# Temporary Build Files
+build/_output
+build/_test
+hack/bin
+operator-sdk*
+*-release-notes.md

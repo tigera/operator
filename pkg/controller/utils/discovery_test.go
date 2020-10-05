@@ -15,6 +15,8 @@
 package utils
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -22,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 var _ = Describe("provider discovery", func() {
@@ -31,7 +33,7 @@ var _ = Describe("provider discovery", func() {
 
 	It("should not detect a provider if with no info", func() {
 		c := fake.NewSimpleClientset()
-		p, e := AutoDiscoverProvider(c)
+		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
@@ -46,7 +48,7 @@ var _ = Describe("provider discovery", func() {
 				},
 			},
 		})
-		p, e := AutoDiscoverProvider(c)
+		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderDockerEE))
 	})
@@ -56,7 +58,7 @@ var _ = Describe("provider discovery", func() {
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "config.openshift.io/v1",
 		}}
-		p, e := AutoDiscoverProvider(c)
+		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderOpenShift))
 	})
@@ -66,7 +68,7 @@ var _ = Describe("provider discovery", func() {
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "networking.gke.io/v1",
 		}}
-		p, e := AutoDiscoverProvider(c)
+		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderGKE))
 	})
@@ -78,7 +80,7 @@ var _ = Describe("provider discovery", func() {
 				Namespace: "kube-system",
 			},
 		})
-		p, e := AutoDiscoverProvider(c)
+		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})

@@ -182,7 +182,7 @@ func convert(t interface{}, str string) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &metav1.Duration{d}, nil
+		return &metav1.Duration{Duration: d}, nil
 
 	case *crdv1.RouteTableRange:
 		minMax := strings.Split(str, "-")

@@ -45,7 +45,7 @@ var _ = Describe("felix env parser", func() {
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/routeRefreshInterval",
-			Value: &metav1.Duration{4 * time.Second},
+			Value: &metav1.Duration{Duration: 4 * time.Second},
 		}))
 	})
 
@@ -148,7 +148,7 @@ var _ = Describe("felix env parser", func() {
 			f := crdv1.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.IptablesRefreshInterval).ToNot(BeNil())
-			Expect(f.Spec.IptablesRefreshInterval).To(Equal(&metav1.Duration{20 * time.Second}))
+			Expect(f.Spec.IptablesRefreshInterval).To(Equal(&metav1.Duration{Duration: 20 * time.Second}))
 		})
 
 		It("sets iptablesbackend", func() {

@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -52,10 +52,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -106,7 +106,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
-
 	return r, nil
 }
 
@@ -836,7 +835,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
-		if err := r.namespaceMigration.Run(reqLogger); err != nil {
+		if err := r.namespaceMigration.Run(ctx, reqLogger); err != nil {
 			r.SetDegraded("error migrating resources to calico-system", err, reqLogger)
 			// We should always requeue a migration problem. Don't return error
 			// to make sure we never start backing off retrying.
@@ -845,7 +844,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// Requeue so we can update our resources (without the migration changes)
 		return reconcile.Result{Requeue: true}, nil
 	} else if r.namespaceMigration.NeedCleanup() {
-		if err := r.namespaceMigration.CleanupMigration(); err != nil {
+		if err := r.namespaceMigration.CleanupMigration(ctx); err != nil {
 			r.SetDegraded("error migrating resources to calico-system", err, reqLogger)
 			return reconcile.Result{}, err
 		}

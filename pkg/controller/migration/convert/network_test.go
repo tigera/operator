@@ -65,7 +65,7 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg).ToNot(BeNil())
 			Expect(cfg.Spec.CNI.Type).To(Equal(plugin))
 		},
-			Entry("AzureVNET", []corev1.EnvVar{{Name: "FELIX_INTERFACEPREFIX", Value: "avz"}}, operatorv1.PluginAzureVNET),
+			Entry("AzureVNET", []corev1.EnvVar{{Name: "FELIX_INTERFACEPREFIX", Value: "azv"}}, operatorv1.PluginAzureVNET),
 			Entry("AmazonVPC", []corev1.EnvVar{
 				{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},

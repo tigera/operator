@@ -220,7 +220,14 @@ func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
 	}
-	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
+
+	// the following cluster-autoscaler annotation is used to indicate a particular CRD should be handled
+	// the same as a daemonset by the cluster-autoscaler. This is not necessary on calico-node since it is
+	// not a CRD, but a core daemonset, however some orchestrators explicitly denote it anyways. As such,
+	// we ignore it.
+	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{
+		"cluster-autoscaler.kubernetes.io/daemonset-pod": "true",
+	}); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
 	}
 

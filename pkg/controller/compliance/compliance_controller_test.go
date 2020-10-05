@@ -22,8 +22,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	operatorv1 "github.com/tigera/operator/pkg/apis/operator/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 
@@ -99,7 +99,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
-		Expect(c.Create(ctx, &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: "tigera-compliance"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 	})
 
 	It("should create resources for standalone clusters", func() {
@@ -150,18 +150,6 @@ var _ = Describe("Compliance controller tests", func() {
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceServerName))
-
-		By("changing the cluster type to Managed")
-		Expect(c.Update(
-			ctx,
-			&operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					Registry: "my-reg",
-					// The test is provider agnostic.
-					KubernetesProvider: operatorv1.ProviderNone,
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			})).NotTo(HaveOccurred())
 
 		Expect(c.Create(
 			ctx,

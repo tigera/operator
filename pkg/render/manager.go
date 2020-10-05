@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"time"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"k8s.io/apimachinery/pkg/util/intstr"

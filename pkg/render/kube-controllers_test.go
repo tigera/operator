@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/api/resource"

@@ -13,9 +13,10 @@ This operator is built using the [operator-sdk](https://github.com/operator-fram
 
 There are a few important areas to be aware of:
 
-- Operator API definitions exist in `pkg/apis/operator/v1`
+- Operator API definitions exist in `api/v1`
 - Rendering code for generating Kubernetes resources is in `pkg/render`
 - Control/reconcile loops for each component can be found in `pkg/controller/<component>`
+  There is a layer that was introduced with the upgrade to operator-sdk v1.x of controllers in `controller` that currently calls `pkg/controller/<component>`.
 - Status reporting is in `pkg/controller/status`
 
 Tests:
@@ -37,7 +38,7 @@ When developing in the operator, there are a few design principles to be aware o
 New APIs are added using the `operator-sdk` tool.
 
 ```
-operator-sdk add api --api-version=operator.tigera.io/v1 --kind=<Kind>
+operator-sdk create api --group=operator --version=v1 --kind=<Kind> --resource
 ```
 
 When modifying or adding CRDs, you will need to run `make gen-files` to update the auto-generated files. The tool
@@ -48,11 +49,11 @@ might change the scope of existing resources to "Namespaced", so make sure to se
 New controllers are also added using the `operator-sdk` tool.
 
 ```
-operator-sdk add controller --api-version=operator.tigera.io/v1 --kind=<Kind>
+operator-sdk create api --group=operator --version=v1 --kind=<Kind> --controller
 ```
 
-You will need to modify the auto-generated controller's `Add` function to accept additional arguments
-in order to match the AddToManagerFuncs defined in [pkg/controller/controller.go](./pkg/controller/controller.go).
+New controllers will be created in the newer format so it should be considered if it is desirable to keep the
+current format that calls to a controller in `pkg/controller` or add the controller only in `controllers`.
 
 ### Running it locally
 

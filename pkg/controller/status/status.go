@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	operator "github.com/tigera/operator/pkg/apis/operator/v1"
+	operator "github.com/tigera/operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"
@@ -32,7 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var log = logf.Log.WithName("status_manager")
@@ -383,7 +383,7 @@ func (m *statusManager) syncState() bool {
 		var numFailed = 0
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
-			if err := m.client.Get(context.TODO(), types.NamespacedName{jref.Namespace, jref.Name}, j); err != nil {
+			if err := m.client.Get(context.TODO(), types.NamespacedName{Namespace: jref.Namespace, Name: jref.Name}, j); err != nil {
 				log.WithValues("error", err).Info("couldn't query cronjob job")
 				continue
 			}

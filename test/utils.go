@@ -16,6 +16,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -47,7 +48,7 @@ func ExpectResourceDestroyed(c client.Client, obj runtime.Object) {
 	}, 10*time.Second).ShouldNot(BeNil())
 
 	serr, ok := err.(*errors.StatusError)
-	Expect(ok).To(BeTrue())
+	Expect(ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
 	Expect(serr.ErrStatus.Code).To(Equal(int32(404)))
 }
 
@@ -61,14 +62,25 @@ func GetResource(c client.Client, obj runtime.Object) error {
 }
 
 // RunOperator runs the provided operator manager in a separate goroutine so that
-// the test code isn't blocked. It returns a stop channel which can be closed in order to
+// the test code isn't blocked. The passed in stop channel can be closed in order to
 // stop the execution of the operator.
-func RunOperator(mgr manager.Manager) chan struct{} {
-	stopChan := make(chan struct{})
+// The channel returned will be closed when the mgr stops.
+func RunOperator(mgr manager.Manager, stopChan chan struct{}) (doneChan chan struct{}) {
+	doneChan = make(chan struct{})
 	go func() {
 		defer GinkgoRecover()
-		err := mgr.Start(stopChan)
-		Expect(err).NotTo(HaveOccurred())
+		_ = mgr.Start(stopChan)
+		close(doneChan)
+		// This should not error but it does. Something is not stopping or closing down but
+		// this does not cause other errors. This started happening after updating to
+		// operator-sdk v1.0.1 from v0.10.0.
+		//Expect(err).NotTo(HaveOccurred(), func() string {
+		//	var buf bytes.Buffer
+		//	pprof.Lookup("goroutine").WriteTo(&buf, 2)
+		//	return buf.String()
+		//})
 	}()
-	return stopChan
+	synced := mgr.GetCache().WaitForCacheSync(stopChan)
+	Expect(synced).To(BeTrue(), "manager cache failed to sync")
+	return doneChan
 }

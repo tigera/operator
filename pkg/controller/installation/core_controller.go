@@ -241,8 +241,7 @@ type ReconcileInstallation struct {
 }
 
 // GetInstallation returns the current installation resource.
-func GetInstallation(ctx context.Context, client client.Client, provider operator.Provider) (*operator.Installation, error) {
-	// TODO: remove unused provider
+func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)

@@ -431,7 +431,8 @@ type CNISpec struct {
 	// * For KubernetesProvider GKE, this field defaults to GKE.
 	// * For KubernetesProvider AKS, this field defaults to AzureVNET.
 	// * For KubernetesProvider EKS, this field defaults to AmazonVPC.
-	// * For all other KubernetesProviders this field defaults to Calico.
+	// * If aws-node daemonset exists in kube-system when the Installation resource is created, this field defaults to AmazonVPC.
+	// * For all other cases this field defaults to Calico.
 	//
 	// For the value Calico, the CNI plugin binaries and CNI config will be installed as part of deployment,
 	// for all other values the CNI plugin binaries and CNI config is a dependency that is expected

@@ -22,7 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/intrusiondetection"
+	"github.com/tigera/operator/pkg/controller/clusterconnection"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
@@ -46,7 +46,7 @@ type ManagementClusterConnectionReconciler struct {
 //}
 
 func (r *ManagementClusterConnectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return intrusiondetection.Add(mgr, opts)
+	return clusterconnection.Add(mgr, opts)
 	//return ctrl.NewControllerManagedBy(mgr).
 	//	For(&operatorv1.ManagementClusterConnection{}).
 	//	Complete(r)

@@ -2396,13 +2396,13 @@ func verifyProbes(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
 	case !isOpenshift && isEnterprise && bgp:
 		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	case isOpenshift && !isEnterprise && !bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready"}
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-felix-ready"}
 	case isOpenshift && !isEnterprise && bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready"}
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 	case isOpenshift && isEnterprise && !bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-bgp-metrics-ready"}
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-felix-ready"}
 	case isOpenshift && isEnterprise && bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-bgp-metrics-ready"}
+		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
 	Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))

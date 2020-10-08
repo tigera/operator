@@ -277,8 +277,17 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 			kubeadmConfig = nil
 		}
 	}
+	awsNode := &apps.DaemonSet{}
+	key := types.NamespacedName{Name: "aws-node", Namespace: metav1.NamespaceSystem}
+	err = client.Get(ctx, key, awsNode)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("Unable to read aws-node daemonset: %s", err.Error())
+		}
+		awsNode = nil
+	}
 
-	err = mergeAndFillDefaults(instance, openshiftConfig, kubeadmConfig)
+	err = mergeAndFillDefaults(instance, openshiftConfig, kubeadmConfig, awsNode)
 	if err != nil {
 		return err
 	}
@@ -287,7 +296,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 
 // mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *v1.ConfigMap) error {
+func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *v1.ConfigMap, awsNode *apps.DaemonSet) error {
 	if o != nil {
 		// Merge in OpenShift configuration.
 		if err := updateInstallationForOpenshiftNetwork(i, o); err != nil {
@@ -297,6 +306,11 @@ func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadm
 		// Merge in kubeadm configuration.
 		if err := updateInstallationForKubeadm(i, kubeadmConfig); err != nil {
 			return fmt.Errorf("Could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
+		}
+	}
+	if awsNode != nil {
+		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
+			return fmt.Errorf("Could not resolve AWS node configuration: %s", err.Error())
 		}
 	}
 
@@ -1036,6 +1050,21 @@ func updateInstallationForKubeadm(i *operator.Installation, c *v1.ConfigMap) err
 		return err
 	}
 	return mergePlatformPodCIDRs(i, platformCIDRs)
+}
+
+func updateInstallationForAWSNode(i *operator.Installation, ds *apps.DaemonSet) error {
+	if ds == nil {
+		return nil
+	}
+
+	if i.Spec.CNI == nil {
+		i.Spec.CNI = &operator.CNISpec{}
+	}
+
+	if i.Spec.CNI.Type == "" {
+		i.Spec.CNI.Type = operator.PluginAmazonVPC
+	}
+	return nil
 }
 
 func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) error {

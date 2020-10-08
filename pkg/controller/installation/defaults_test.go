@@ -197,8 +197,8 @@ var _ = Describe("Defaulting logic tests", func() {
 	})
 
 	table.DescribeTable("All pools should have all fields set from mergeAndFillDefaults function",
-		func(i *operator.Installation, on *osconfigv1.Network, kadmc *v1.ConfigMap) {
-			Expect(mergeAndFillDefaults(i, on, kadmc)).To(BeNil())
+		func(i *operator.Installation, on *osconfigv1.Network, kadmc *v1.ConfigMap, awsN *appsv1.DaemonSet) {
+			Expect(mergeAndFillDefaults(i, on, kadmc, nil)).To(BeNil())
 
 			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
 				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork.IPPools)
@@ -213,7 +213,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(validateCustomResource(i)).NotTo(HaveOccurred())
 		},
 
-		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
+		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil, nil),
 		table.Entry("Openshift only CIDR",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -226,7 +226,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 			},
-			nil,
+			nil, nil,
 		),
 		table.Entry("CIDR specified from OS config and Calico config",
 			&operator.Installation{
@@ -244,7 +244,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 			},
-			nil,
+			nil, nil,
 		),
 		table.Entry("kubeadm only CIDR",
 			&operator.Installation{
@@ -254,6 +254,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			},
 			nil,
 			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
+			nil,
 		),
 		table.Entry("CIDR specified from kubeadm config and Calico config",
 			&operator.Installation{
@@ -267,6 +268,18 @@ var _ = Describe("Defaulting logic tests", func() {
 			},
 			nil,
 			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
+			nil,
+		),
+		table.Entry("CNI Type set from AWS Node daemonset and Calico config",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					CNI: &operator.CNISpec{
+						Type: operator.PluginAmazonVPC,
+					},
+				},
+			},
+			nil, nil,
+			&appsv1.DaemonSet{},
 		),
 	)
 

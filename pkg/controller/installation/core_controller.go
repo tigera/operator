@@ -538,7 +538,8 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
+	reqLogger.Info("Reconciling Installation.operator.tigera.io")
+	defer reqLogger.Info("Finished reconciling network installation")
 
 	ctx := context.Background()
 
@@ -879,7 +880,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Created successfully - don't requeue
-	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
 }
 

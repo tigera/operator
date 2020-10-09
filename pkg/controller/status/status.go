@@ -78,7 +78,8 @@ type statusManager struct {
 	statefulsets map[string]types.NamespacedName
 	cronjobs     map[string]types.NamespacedName
 	lock         sync.Mutex
-	enabled      bool
+	crQueried    bool
+	crPresent    bool
 
 	// Track degraded state as set by external controllers.
 	degraded               bool
@@ -101,44 +102,54 @@ func New(client client.Client, component string) StatusManager {
 	}
 }
 
+func (m *statusManager) updateStatus() {
+	// If we haven't queried the CR then nothing to do
+	if !m.isCRQueried() {
+		return
+	}
+
+	if m.removeTigeraStatus() {
+		return
+	}
+
+	if !m.syncState() {
+		return
+	}
+
+	// We've collected knowledge about the current state of the objects we're monitoring.
+	// Now, use that to update the TigeraStatus object for this manager.
+	if m.IsAvailable() {
+		m.setAvailable("All objects available", "")
+	} else {
+		m.clearAvailable()
+	}
+
+	if m.IsProgressing() {
+		m.setProgressing("Not all pods are ready", m.progressingMessage())
+	} else {
+		m.clearProgressing()
+	}
+
+	if m.IsDegraded() {
+		m.setDegraded(m.degradedReason(), m.degradedMessage())
+	} else {
+		m.clearDegraded()
+	}
+}
+
 // Run starts the status manager state monitoring routine.
 func (m *statusManager) Run() {
 	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 		// Loop forever, periodically checking dependent objects for their state.
 		for {
-			if m.removeTigeraStatus() {
-				// Wait for CR to be available.
-				time.Sleep(5 * time.Second)
+			m.updateStatus()
+
+			select {
+			case <-ticker.C:
 				continue
 			}
-
-			if !m.syncState() {
-				// Waiting to be in sync.
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			// We've collected knowledge about the current state of the objects we're monitoring.
-			// Now, use that to update the TigeraStatus object for this manager.
-			if m.IsAvailable() {
-				m.setAvailable("All objects available", "")
-			} else {
-				m.clearAvailable()
-			}
-
-			if m.IsProgressing() {
-				m.setProgressing("Not all pods are ready", m.progressingMessage())
-			} else {
-				m.clearProgressing()
-			}
-
-			if m.IsDegraded() {
-				m.setDegraded(m.degradedReason(), m.degradedMessage())
-			} else {
-				m.clearDegraded()
-			}
-
-			time.Sleep(5 * time.Second)
 		}
 	}()
 }
@@ -149,7 +160,8 @@ func (m *statusManager) Run() {
 func (m *statusManager) OnCRFound() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.enabled = true
+	m.crQueried = true
+	m.crPresent = true
 }
 
 // OnCRNotFound indicates that the CR managed by the parent controller has not been found. The
@@ -160,7 +172,8 @@ func (m *statusManager) OnCRNotFound() {
 	m.clearProgressing()
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.enabled = false
+	m.crQueried = true
+	m.crPresent = false
 	m.progressing = []string{}
 	m.failing = []string{}
 	m.daemonsets = make(map[string]types.NamespacedName)
@@ -415,11 +428,18 @@ func (m *statusManager) syncState() bool {
 	return m.explicitDegradedReason != ""
 }
 
+// crQueried returns true if corresponding CR has been queried
+func (m *statusManager) isCRQueried() bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	return m.crQueried
+}
+
 // removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
 func (m *statusManager) removeTigeraStatus() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if !m.enabled {
+	if m.crQueried && !m.crPresent {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !apierrs.IsNotFound(err) {
@@ -475,8 +495,8 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 }
 
 func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
-	if !m.enabled {
-		// Never set any conditions unless the status manager is enabled.
+	if !m.crPresent {
+		// Never set any conditions unless the CR is present.
 		return
 	}
 

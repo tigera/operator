@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// InstallationSpec defines the desired state of Installation
+// InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
 type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
 	// Default: Calico
@@ -448,7 +448,7 @@ type CNISpec struct {
 	IPAM *IPAMSpec `json:"ipam"`
 }
 
-// InstallationStatus defines the observed state of Installation
+// InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {
 	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
 	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise

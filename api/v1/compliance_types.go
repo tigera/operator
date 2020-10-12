@@ -24,11 +24,11 @@ const (
 	ComplianceStatusReady = "Ready"
 )
 
-// ComplianceSpec defines the desired state of Compliance
+// ComplianceSpec defines the desired state of Tigera compliance reporting capabilities.
 type ComplianceSpec struct {
 }
 
-// ComplianceStatus defines the observed state of Compliance
+// ComplianceStatus defines the observed state of Tigera compliance reporting capabilities.
 type ComplianceStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`

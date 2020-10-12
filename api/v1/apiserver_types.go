@@ -25,11 +25,11 @@ const (
 	APIServerStatusReady = "Ready"
 )
 
-// APIServerSpec defines the desired state of APIServer
+// APIServerSpec defines the desired state of Tigera API server.
 type APIServerSpec struct {
 }
 
-// APIServerStatus defines the observed state of APIServer
+// APIServerStatus defines the observed state of Tigera API server.
 type APIServerStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`

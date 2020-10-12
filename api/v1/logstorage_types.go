@@ -26,7 +26,7 @@ const (
 	LogStorageStatusReady    = "Ready"
 )
 
-// LogStorageStatus defines the observed state of Tigera flow and DNS log storage.
+// LogStorageSpec defines the desired state of Tigera flow and DNS log storage.
 type LogStorageSpec struct {
 	// Nodes defines the configuration for a set of identical Elasticsearch cluster nodes, each of type master, data, and ingest.
 	Nodes *Nodes `json:"nodes,omitempty"`
@@ -54,7 +54,7 @@ type LogStorageSpec struct {
 	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 }
 
-// LogStorageSpec defines the desired state of Tigera flow and DNS log storage.
+// LogStorageStatus defines the observed state of Tigera flow and DNS log storage.
 type LogStorageStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`

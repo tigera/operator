@@ -17,9 +17,19 @@ package logstorage
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"github.com/olivere/elastic/v7"
+	"io/ioutil"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"net/http"
+	"net/url"
 	"os"
 	"regexp"
+	"strconv"
+	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -39,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
+	logrus "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +71,50 @@ const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
+	ElasticsearchOperatorUserSecret    = "tigera-ee-operator-elasticsearch-access"
+	ElasticsearchRetentionFactor       = 4
+
+	// NumOfIndexNotFlowsDNSBGP is the number of index created that are not flows, dns or bgp.
+	NumOfIndexNotFlowsDNSBGP = 6
+	// diskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
+	diskDistribution = 0.1 / NumOfIndexNotFlowsDNSBGP
+	TemplateFilePath = "/usr/local/bin/"
+	ElasticsearchConnectionRetries =10
+	DefaultMaxIndexSizeGi         = 30
+
+
 )
+
+type indexDiskAllocation struct {
+	totalDiskPercentage float64
+	indexNameSize       map[string]float64
+}
+
+// indexDiskMapping gives disk allocation for each log type.
+// Allocate 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
+// Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs
+// Equally distribute 10% ES disk space among all the other logs
+var indexDiskMapping = []indexDiskAllocation{
+	{
+		totalDiskPercentage: 0.7,
+		indexNameSize: map[string]float64{
+			"tigera_secure_ee_flows": 0.9,
+			"tigera_secure_ee_dns":   0.05,
+			"tigera_secure_ee_bgp":   0.05,
+		},
+	},
+	{
+		totalDiskPercentage: 0.1,
+		indexNameSize: map[string]float64{
+			"tigera_secure_ee_audit_ee":           diskDistribution,
+			"tigera_secure_ee_audit_kube":         diskDistribution,
+			"tigera_secure_ee_snapshots":          diskDistribution,
+			"tigera_secure_ee_benchmark_results":  diskDistribution,
+			"tigera_secure_ee_compliance_reports": diskDistribution,
+			"tigera_secure_ee_events":             diskDistribution,
+		},
+	},
+}
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -504,6 +558,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if managementClusterConnection == nil {
+
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
@@ -518,6 +573,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
+		}
+
+		if err = r.setupESIndex(ctx, ls); err != nil {
+			log.Info("waiting for ES ILM policies and templates to get created")
+			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -667,4 +728,277 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	}
 
 	return int(nodes) * shardPerNode
+}
+
+
+func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
+
+	esClient, err := r.newESClient(ctx)
+	if err != nil {
+		log.Error(err, "failed to create ES client")
+		return err
+	}
+
+	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
+	var totalEsStorage = defaultStorage.Value()
+	if ls.Spec.Nodes.ResourceRequirements != nil {
+		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
+			totalEsStorage = val.Value()
+		}
+	}
+
+	if err = putIlmPolicies(ctx, ls, esClient, totalEsStorage); err != nil {
+		log.Error(err, "failed to create/update ILM policies")
+		return err
+	}
+
+	if err = putIndexTemplates(ctx, esClient); err != nil {
+		log.Error(err, "failed to create/update ES Index templates")
+		return err
+	}
+
+	// TODO: bootstrap only if there are no write index else rollover and bootstrap
+	if err = bootstrapWriteIndex(ctx, esClient); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *ReconcileLogStorage) newESClient(ctx context.Context) (*elastic.Client, error) {
+	ca, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, err
+	}
+
+	h := &http.Client{}
+	parsedElasticURL, err := url.Parse(render.ElasticsearchHTTPSEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	localRun := false
+	if os.Getenv("LOCAL_RUN") != "" {
+		localRun, _ = strconv.ParseBool(os.Getenv("LOCAL_RUN"))
+	}
+	if localRun {
+		ElasticsearchDefaultCertPath := "/home/suraiya/bzprofiles/es-ilm-test/ca.pem"
+		parsedElasticURL, _ = url.Parse("https://localhost:9200")
+
+		if parsedElasticURL.Scheme == "https" {
+			if ElasticsearchDefaultCertPath != "" {
+				cert, err := ioutil.ReadFile(ElasticsearchDefaultCertPath)
+				if err != nil {
+					return nil, err
+				}
+				ok := ca.AppendCertsFromPEM(cert)
+				if !ok {
+					return nil, fmt.Errorf("invalid Elasticsearch CA in environment variable ELASTIC_CA")
+				}
+			}
+			h.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		}
+	} else if parsedElasticURL.Scheme == "https" {
+		if render.ElasticsearchDefaultCertPath != "" {
+			cert, err := ioutil.ReadFile(render.ElasticsearchDefaultCertPath)
+			if err != nil {
+				return nil, err
+			}
+			ok := ca.AppendCertsFromPEM(cert)
+			if !ok {
+				return nil, fmt.Errorf("invalid Elasticsearch CA")
+			}
+		}
+		h.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: ca}}
+	}
+
+	options := []elastic.ClientOptionFunc{
+		elastic.SetURL(parsedElasticURL.String()),
+		elastic.SetHttpClient(h),
+		elastic.SetErrorLog(logrus.StandardLogger()),
+		elastic.SetSniff(false),
+		elastic.SetTraceLog(logrus.StandardLogger()),
+	}
+
+	es := corev1.Secret{}
+	if err = r.client.Get(ctx, client.ObjectKey{Name: ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, &es); err != nil {
+		return nil, err
+	}
+
+	if es.Data["username"] != nil && es.Data["password"] != nil {
+		options = append(options, elastic.SetBasicAuth(string(es.Data["username"]), string(es.Data["password"])))
+	}
+
+	return esClient(options)
+}
+
+func esClient(options []elastic.ClientOptionFunc) (*elastic.Client, error) {
+	var esClient *elastic.Client
+	var err error
+	for i := 0; i < ElasticsearchConnectionRetries; i++ {
+		if esClient, err = elastic.NewClient(options...); err == nil {
+			return esClient, nil
+		}
+		log.Error(err, "Elastic connect failed, retrying")
+		time.Sleep(500 * time.Millisecond)
+	}
+	return nil, err
+}
+
+func putIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, esClient *elastic.Client, totalEsStorage int64) error {
+
+	for _, v := range indexDiskMapping {
+		for indexName, p := range v.indexNameSize {
+			var retention int
+			switch indexName {
+			case "tigera_secure_ee_flows":
+				retention = int(*ls.Spec.Retention.Flows)
+			case "tigera_secure_ee_audit_ee", "tigera_secure_ee_audit_kube":
+				retention = int(*ls.Spec.Retention.AuditReports)
+			case "tigera_secure_ee_snapshots":
+				retention = int(*ls.Spec.Retention.Snapshots)
+			case "tigera_secure_ee_compliance_reports":
+				retention = int(*ls.Spec.Retention.ComplianceReports)
+			// TODO: set these default values in operator.yaml like other values
+			case "tigera_secure_ee_benchmark_results", "tigera_secure_ee_events":
+				retention = 91
+			case "tigera_secure_ee_dns", "tigera_secure_ee_bgp":
+				retention = 8
+			}
+
+			rolloverAge := retention / ElasticsearchRetentionFactor
+			rolloverSize := (float64(totalEsStorage) * v.totalDiskPercentage * p) / ElasticsearchRetentionFactor
+			rollover := resource.MustParse(	fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
+			var maxRolloverSize = float64(rollover.Value())
+
+			if rolloverSize > maxRolloverSize {
+				rolloverSize = maxRolloverSize
+			}
+			if err := buildAndApplyIlmPolicy(ctx, esClient, rolloverAge, retention, int64(rolloverSize), indexName); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rolloverAge int, minDeleteAge int, rolloverSize int64, name string) error {
+	rollover := map[string]string{
+		"max_size": fmt.Sprintf("%db", rolloverSize),
+		"max_age":  fmt.Sprintf("%dd", rolloverAge),
+	}
+	hotPriority := map[string]int{
+		"priority": 100,
+	}
+	hotAction := make(map[string]interface{})
+	hotAction["rollover"] = rollover
+	hotAction["set_priority"] = hotPriority
+
+	warmPriority := map[string]int{
+		"priority": 50,
+	}
+	warmAction := make(map[string]interface{})
+	warmAction["readonly"] = make(map[string]string)
+	warmAction["set_priority"] = warmPriority
+
+	deleteAction := make(map[string]interface{})
+	deleteAction["delete"] = make(map[string]string)
+
+	flowPolicy := make(map[string]interface{})
+	flowPolicy["policy"] = map[string]interface{}{
+		"phases": map[string]interface{}{
+			"hot": map[string]interface{}{
+				"actions": hotAction,
+			},
+			"warm": map[string]interface{}{
+				"actions": warmAction,
+			},
+			"delete": map[string]interface{}{
+				"min_age": fmt.Sprintf("%dd", minDeleteAge),
+				"actions": deleteAction,
+			},
+		},
+	}
+
+	_, err := esClient.XPackIlmPutLifecycle().Policy(name + "_policy").BodyJson(flowPolicy).Do(ctx)
+	if err != nil {
+		log.Error(err, "Error applying Ilm policy")
+		return err
+	}
+	return nil
+}
+
+func putIndexTemplates(ctx context.Context, esClient *elastic.Client) error {
+	//TODO: create templates for all managed clusters
+	localRun := false
+	if os.Getenv("LOCAL_RUN") != "" {
+		localRun, _ = strconv.ParseBool(os.Getenv("LOCAL_RUN"))
+	}
+	templateFilePath := TemplateFilePath
+
+	if localRun {
+		templateFilePath = "./config/es/"
+	}
+
+	for _, v := range indexDiskMapping {
+		for name, _ := range v.indexNameSize {
+			var byteValue []byte
+			var err error
+			if byteValue, err = ioutil.ReadFile(templateFilePath + name + ".json"); err != nil {
+				return err
+			}
+			var result map[string]interface{}
+			json.Unmarshal(byteValue, &result)
+			// new index will be of form tigera_secure_ee_audit_ee.cluster.20201013-78634000
+			// so index_pattern tigera_secure_ee_audit_ee.cluster.*-*, this differentates index that uses ilm and curator
+			// TODO: cehck if we need to differentiate between them, is there a problem if managed uses old cluster and management uses ilm
+			result["index_patterns"] = name + ".cluster.*"
+			settings := result["settings"].(map[string]interface{})
+			settings["index.lifecycle.rollover_alias"] = name + ".cluster."
+
+			if _, err = esClient.IndexPutTemplate(name + "_cluster_template").BodyJson(result).Do(ctx); err != nil {
+				log.Error(err, "Error applying Index template")
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func bootstrapWriteIndex(ctx context.Context, esClient *elastic.Client) error {
+	//TODO: create templates for all managed clusters
+	var result map[string]interface{}
+	for _, v := range indexDiskMapping {
+		for name, _ := range v.indexNameSize {
+			res, err := esClient.Aliases().Index(name+".cluster.").Do(ctx)
+			if err != nil {
+					result = map[string]interface{}{
+						"aliases": map[string]interface{}{
+							name + ".cluster.": map[string]interface{}{
+								"is_write_index": true,
+							},
+						},
+					}
+					indexName := "<" + name + ".cluster." + "{now/s{yyyyMMdd-A}}-000000>"
+					if _, err := esClient.CreateIndex(indexName).BodyJson(result).Do(ctx); err != nil {
+						fmt.Printf("err bootstraping write index %#v", err)
+						return err
+					}
+					continue
+			}
+			fmt.Printf("res :%#v",res)
+
+			rolloverCondition := map[string]interface{}{
+				"conditions": map[string]interface{}{
+					"max_age": "0ms",
+				},
+			}
+			if _, err =esClient.RolloverIndex(name+".cluster.").BodyJson(rolloverCondition).Do(ctx); err!=nil{
+				return  err
+			}
+
+		}
+	}
+	return nil
 }

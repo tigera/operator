@@ -70,6 +70,7 @@ const (
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
+	DefaultElasticStorageGi         = 10
 
 	LogStorageFinalizer = "tigera.io/eck-cleanup"
 
@@ -408,7 +409,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					"storage": resource.MustParse("10Gi"),
+					"storage": resource.MustParse(fmt.Sprintf("%dGi", DefaultElasticStorageGi)),
 				},
 			},
 			StorageClassName: &es.logStorage.Spec.StorageClassName,

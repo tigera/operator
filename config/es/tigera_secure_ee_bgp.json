@@ -1,0 +1,28 @@
+{
+  "index_patterns": [
+    "tigera_secure_ee_bgp*"
+  ],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "index.lifecycle.name": "tigera_secure_ee_bgp_policy",
+    "index.lifecycle.rollover_alias": "tigera_secure_ee_bgp"
+  },
+  "mappings": {
+    "properties": {
+      "logtime": {
+        "type": "date",
+        "format": "yyyy-MM-dd'T'HH:mm:ss"
+      },
+      "message": {
+        "type": "text"
+      },
+      "ip_version": {
+        "type": "keyword"
+      },
+      "host": {
+        "type": "keyword"
+      }
+    }
+  }
+}

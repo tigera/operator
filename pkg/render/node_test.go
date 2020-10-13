@@ -2387,21 +2387,11 @@ func verifyProbes(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
 	Expect(found).To(BeTrue())
 
 	switch {
-	case !isOpenshift && !isEnterprise && !bgp:
+	case !bgp:
 		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-felix-ready"}
-	case !isOpenshift && !isEnterprise && bgp:
+	case bgp && !isEnterprise:
 		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
-	case !isOpenshift && isEnterprise && !bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-felix-ready"}
-	case !isOpenshift && isEnterprise && bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
-	case isOpenshift && !isEnterprise && !bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-felix-ready"}
-	case isOpenshift && !isEnterprise && bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
-	case isOpenshift && isEnterprise && !bgp:
-		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-felix-ready"}
-	case isOpenshift && isEnterprise && bgp:
+	case bgp && isEnterprise:
 		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 

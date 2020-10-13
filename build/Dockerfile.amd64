@@ -40,6 +40,7 @@ ENV OPERATOR=/usr/local/bin/operator \
 
 # install operator binary
 COPY build/_output/bin/operator-amd64 ${OPERATOR}
+COPY config/es /usr/local/bin
 
 # The exec form of ENTRYPOINT does not invoke a command shell.
 # This means that normal shell processing does not happen, so will not

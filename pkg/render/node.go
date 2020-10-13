@@ -1086,18 +1086,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 
+	// For Openshift, we need a different port since our default port is already in use.
 	if c.cr.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		// For Openshift, we need special configuration since our default port is already in use.
-		// Additionally, since the node readiness probe doesn't yet support
-		// custom ports, we need to disable felix readiness for now.
 		livenessPort = intstr.FromInt(9199)
-
-		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-			readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-bgp-metrics-ready"}
-		} else {
-			readinessCmd = []string{"/bin/calico-node", "-bird-ready"}
-		}
 	}
+
 	lp := &v1.Probe{
 		Handler: v1.Handler{
 			HTTPGet: &v1.HTTPGetAction{

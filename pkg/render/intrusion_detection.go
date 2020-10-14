@@ -335,6 +335,24 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
 
+	// If syslog forwarding is enabled then set the necessary hostpath volume to write
+	// logs for Fluentd to access.
+	volumes := []corev1.Volume{}
+	if c.syslogForwardingIsEnabled() {
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
+		volumes = []corev1.Volume{
+			{
+				Name: "var-log-calico",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico",
+						Type: &dirOrCreate,
+					},
+				},
+			},
+		}
+	}
+
 	return ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
@@ -351,6 +369,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 					ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret),
 					c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
 			},
+			Volumes: volumes,
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 }
@@ -363,22 +382,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 		},
 	}
 
-	// Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
-	// exists. If it does, then we need to turn on forwarding for IDS event logs.
-	if c.lc.Spec.AdditionalStores != nil {
-		syslog := c.lc.Spec.AdditionalStores.Syslog
-		if syslog != nil {
-			if syslog.LogTypes != nil {
-				for _, t := range syslog.LogTypes {
-					switch t {
-					case operatorv1.SyslogLogIDSEvents:
-						envs = append(envs,
-							corev1.EnvVar{Name: "IDS_EVENT_LOG_TO_SYSLOG", Value: "true"},
-						)
-					}
-				}
-			}
-		}
+	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
+	// write logs for Fluentd.
+	volumeMounts := []corev1.VolumeMount{}
+	if c.syslogForwardingIsEnabled() {
+		envs = append(envs,
+			corev1.EnvVar{Name: "IDS_EVENT_LOG_TO_SYSLOG", Value: "true"},
+		)
+		volumeMounts = append(volumeMounts, syslogEventsForwardingVolumeMount())
 	}
 
 	return corev1.Container{
@@ -397,6 +408,34 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			},
 			InitialDelaySeconds: 5,
 		},
+		VolumeMounts: volumeMounts,
+	}
+}
+
+// Determine whether this component's configuration has syslog forwarding enabled or not.
+// Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
+// exists. If it does, then we need to turn on forwarding for IDS event logs.
+func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
+	if c.lc.Spec.AdditionalStores != nil {
+		syslog := c.lc.Spec.AdditionalStores.Syslog
+		if syslog != nil {
+			if syslog.LogTypes != nil {
+				for _, t := range syslog.LogTypes {
+					switch t {
+					case operatorv1.SyslogLogIDSEvents:
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func syslogEventsForwardingVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      "var-log-calico",
+		MountPath: "/var/log/calico",
 	}
 }
 

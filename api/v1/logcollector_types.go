@@ -117,7 +117,8 @@ type SyslogStoreSpec struct {
 	// +optional
 	PacketSize *int32 `json:"packetSize,omitempty"`
 
-	// LogTypes contains a list of types of logs to export to syslog.
+	// LogTypes contains a list of types of logs to export to syslog. By default, if this field is
+	// omitted, it will be set to include all possible values.
 	// +optional
 	LogTypes []SyslogLogType `json:"logTypes,omitempty"`
 }

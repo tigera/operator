@@ -1119,7 +1119,7 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 				within = within || cidrWithinCidr(c, pool.CIDR)
 			}
 			if !within {
-				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s)", pool.CIDR)
+				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s) %v", pool.CIDR, platformCIDRs)
 			}
 		}
 	}

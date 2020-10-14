@@ -1,6 +1,7 @@
 package installation
 
 import (
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -25,6 +26,10 @@ func extractKubeadmCIDRs(kubeadmConfig *v1.ConfigMap) ([]string, error) {
 		if line = re.FindStringSubmatch(l); line != nil {
 			break
 		}
+	}
+
+	if len(line) == 0 {
+		return foundCIDRs, fmt.Errorf("kubeadm configuration is missing required podSubnet field")
 	}
 
 	if len(line) != 0 {

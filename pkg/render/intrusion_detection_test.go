@@ -87,7 +87,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			}
 		}
 
-		dp := GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*apps.Deployment)
+		dp := GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "", "v1", "Deployment").(*apps.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {

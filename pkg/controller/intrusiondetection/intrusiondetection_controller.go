@@ -90,9 +90,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to to primary resource LogCollector, to determine if syslog forwarding is
 	// turned on or off.
-	// Since this syslog forwarding is optional, we don't need to return an error if LogCollector
-	// is not found.
-	_ = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
+	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)

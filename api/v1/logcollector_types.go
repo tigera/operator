@@ -119,8 +119,8 @@ type SyslogStoreSpec struct {
 
 	// LogTypes contains a list of types of logs to export to syslog. By default, if this field is
 	// omitted, it will be set to include all possible values.
-	// +optional
-	LogTypes []SyslogLogType `json:"logTypes,omitempty"`
+	// +kubebuilder:default={AuditEE,AuditKube,DNS,Flows,IDSEvents}
+	LogTypes []SyslogLogType `json:"logTypes"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.

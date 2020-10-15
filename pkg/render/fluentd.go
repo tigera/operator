@@ -83,7 +83,6 @@ func Fluentd(
 	spC *SplunkCredential,
 	f *FluentdFilters,
 	eksConfig *EksCloudwatchLogConfig,
-
 	pullSecrets []*corev1.Secret,
 	installation *operatorv1.Installation,
 ) Component {
@@ -405,8 +404,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		if syslog != nil {
 			proto, host, port, _ := ParseEndpoint(syslog.Endpoint)
 			envs = append(envs,
-				corev1.EnvVar{Name: "SYSLOG_FLOW_LOG", Value: "true"},
-				corev1.EnvVar{Name: "SYSLOG_AUDIT_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SYSLOG_HOST", Value: host},
 				corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
 				corev1.EnvVar{Name: "SYSLOG_PROTOCOL", Value: proto},
@@ -426,6 +423,35 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 						Value: fmt.Sprintf("%d", *syslog.PacketSize),
 					},
 				)
+			}
+
+			// When LogTypes is not defined explicitly, the default is to enable
+			// all the log types.
+			if syslog.LogTypes != nil {
+				for _, t := range syslog.LogTypes {
+					switch t {
+					case operatorv1.SyslogLogAuditEE:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_AUDIT_EE_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogAuditKube:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_AUDIT_KUBE_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogDNS:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_DNS_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogFlows:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_FLOW_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogIDSEvents:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true"},
+						)
+					}
+				}
 			}
 		}
 		splunk := c.lc.Spec.AdditionalStores.Splunk

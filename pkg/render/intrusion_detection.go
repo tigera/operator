@@ -19,6 +19,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -40,6 +41,7 @@ const (
 )
 
 func IntrusionDetection(
+	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
 	installation *operator.Installation,
@@ -48,6 +50,7 @@ func IntrusionDetection(
 	openshift bool,
 ) Component {
 	return &intrusionDetectionComponent{
+		lc:               lc,
 		esSecrets:        esSecrets,
 		kibanaCertSecret: kibanaCertSecret,
 		installation:     installation,
@@ -58,6 +61,7 @@ func IntrusionDetection(
 }
 
 type intrusionDetectionComponent struct {
+	lc               *operatorv1.LogCollector
 	esSecrets        []*corev1.Secret
 	kibanaCertSecret *corev1.Secret
 	installation     *operator.Installation
@@ -331,6 +335,24 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
 
+	// If syslog forwarding is enabled then set the necessary hostpath volume to write
+	// logs for Fluentd to access.
+	volumes := []corev1.Volume{}
+	if c.syslogForwardingIsEnabled() {
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
+		volumes = []corev1.Volume{
+			{
+				Name: "var-log-calico",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico",
+						Type: &dirOrCreate,
+					},
+				},
+			},
+		}
+	}
+
 	return ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
@@ -347,20 +369,40 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 					ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret),
 					c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
 			},
+			Volumes: volumes,
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
+	envs := []corev1.EnvVar{
+		{
+			Name:  "CLUSTER_NAME",
+			Value: c.esClusterConfig.ClusterName(),
+		},
+	}
+
+	privileged := false
+
+	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
+	// write logs for Fluentd.
+	volumeMounts := []corev1.VolumeMount{}
+	if c.syslogForwardingIsEnabled() {
+		envs = append(envs,
+			corev1.EnvVar{Name: "IDS_EVENT_LOG_TO_SYSLOG", Value: "true"},
+		)
+		volumeMounts = append(volumeMounts, syslogEventsForwardingVolumeMount())
+		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
+		// then ID controller needs privileged access to write event logs to that volume
+		if c.openshift {
+			privileged = true
+		}
+	}
+
 	return corev1.Container{
 		Name:  "controller",
 		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-		Env: []corev1.EnvVar{
-			{
-				Name:  "CLUSTER_NAME",
-				Value: c.esClusterConfig.ClusterName(),
-			},
-		},
+		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -373,6 +415,37 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			},
 			InitialDelaySeconds: 5,
 		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
+		},
+		VolumeMounts: volumeMounts,
+	}
+}
+
+// Determine whether this component's configuration has syslog forwarding enabled or not.
+// Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
+// exists. If it does, then we need to turn on forwarding for IDS event logs.
+func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
+	if c.lc.Spec.AdditionalStores != nil {
+		syslog := c.lc.Spec.AdditionalStores.Syslog
+		if syslog != nil {
+			if syslog.LogTypes != nil {
+				for _, t := range syslog.LogTypes {
+					switch t {
+					case operatorv1.SyslogLogIDSEvents:
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func syslogEventsForwardingVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      "var-log-calico",
+		MountPath: "/var/log/calico",
 	}
 }
 

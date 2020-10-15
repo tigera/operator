@@ -170,7 +170,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 	})
-	It("should render with Syslog configuration with some log types", func() {
+	It("should render with Syslog configuration", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -225,85 +225,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SYSLOG_PROTOCOL", "tcp", "", ""},
 			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
 			{"SYSLOG_PACKET_SIZE", "180", "", ""},
-			{"SYSLOG_DNS_LOG", "true", "", ""},
-			{"SYSLOG_FLOW_LOG", "true", "", ""},
-			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
-		}
-		for _, expected := range expectedEnvs {
-			if expected.val != "" {
-				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
-			} else {
-				Expect(envs).To(ContainElement(corev1.EnvVar{
-					Name: expected.name,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
-							Key:                  expected.secretKey,
-						}},
-				}))
-			}
-		}
-		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "SYSLOG_HOSTNAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "spec.nodeName",
-				}},
-		}))
-	})
-
-	It("should render with Syslog configuration with all log types by default", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
-		}
-
-		var ps int32 = 180
-		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
-			Syslog: &operatorv1.SyslogStoreSpec{
-				Endpoint:   "tcp://1.2.3.4:80",
-				PacketSize: &ps,
-			},
-		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		// Should render the correct resources.
-		i := 0
-		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
-		}
-
-		ds := GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
-		envs := ds.Spec.Template.Spec.Containers[0].Env
-
-		expectedEnvs := []struct {
-			name       string
-			val        string
-			secretName string
-			secretKey  string
-		}{
-			{"SYSLOG_HOST", "1.2.3.4", "", ""},
-			{"SYSLOG_PORT", "80", "", ""},
-			{"SYSLOG_PROTOCOL", "tcp", "", ""},
-			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
-			{"SYSLOG_PACKET_SIZE", "180", "", ""},
-			{"SYSLOG_AUDIT_EE_LOG", "true", "", ""},
-			{"SYSLOG_AUDIT_KUBE_LOG", "true", "", ""},
 			{"SYSLOG_DNS_LOG", "true", "", ""},
 			{"SYSLOG_FLOW_LOG", "true", "", ""},
 			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},

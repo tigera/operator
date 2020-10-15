@@ -382,6 +382,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 		},
 	}
 
+	privileged := false
+
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
 	volumeMounts := []corev1.VolumeMount{}
@@ -390,6 +392,11 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 			corev1.EnvVar{Name: "IDS_EVENT_LOG_TO_SYSLOG", Value: "true"},
 		)
 		volumeMounts = append(volumeMounts, syslogEventsForwardingVolumeMount())
+		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
+		// then ID controller needs privileged access to write event logs to that volume
+		if c.openshift {
+			privileged = true
+		}
 	}
 
 	return corev1.Container{
@@ -407,6 +414,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 				},
 			},
 			InitialDelaySeconds: 5,
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
 		},
 		VolumeMounts: volumeMounts,
 	}

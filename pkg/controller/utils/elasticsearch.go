@@ -27,9 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 )
 
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
@@ -110,20 +108,8 @@ func NewESClient(user string, password string, root *x509.CertPool) (*elastic.Cl
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
 	}
 
-	ep := render.ElasticsearchHTTPSEndpoint
-	localRun := false
-	if os.Getenv("LOCAL_RUN") != "" {
-		localRun, _ = strconv.ParseBool(os.Getenv("LOCAL_RUN"))
-	}
-	if localRun {
-		h = &http.Client{
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		}
-		ep = "https://localhost:9200"
-	}
-
 	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(ep),
+		elastic.SetURL(render.ElasticsearchHTTPSEndpoint),
 		elastic.SetHttpClient(h),
 		elastic.SetErrorLog(logrus.StandardLogger()),
 		elastic.SetSniff(false),

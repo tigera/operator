@@ -146,7 +146,6 @@ spec:
                         type: integer
                     required:
                     - endpoint
-                    - logTypes
                     type: object
                 type: object
             type: object

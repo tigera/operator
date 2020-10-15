@@ -62,39 +62,38 @@ const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
-	ElasticsearchOperatorUserSecret    = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchRetentionFactor       = 4
-
-	// NumOfIndexNotFlowsDNSBGP is the number of index created that are not flows, dns or bgp.
-	NumOfIndexNotFlowsDNSBGP = 6
+	ElasticsearchOperatorUserSecret    = "tigera-ee-operator-elasticsearch-access"
+	// NumOfIndexNotFlowsDnsBgp is the number of index created that are not flows, dns or bgp.
+	NumOfIndexNotFlowsDnsBgp = 6
 	// diskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
-	diskDistribution               = 0.1 / NumOfIndexNotFlowsDNSBGP
+	diskDistribution               = 0.1 / NumOfIndexNotFlowsDnsBgp
 	TemplateFilePath               = "/usr/local/bin/"
 	ElasticsearchConnectionRetries = 10
 	DefaultMaxIndexSizeGi          = 30
 )
 
-type indexDiskAllocation struct {
-	totalDiskPercentage float64
-	indexNameSize       map[string]float64
+type IndexDiskAllocation struct {
+	TotalDiskPercentage float64
+	IndexNameSize       map[string]float64
 }
 
 // indexDiskMapping gives disk allocation for each log type.
 // Allocate 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
 // Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs
 // Equally distribute 10% ES disk space among all the other logs
-var indexDiskMapping = []indexDiskAllocation{
+var indexDiskMapping = []IndexDiskAllocation{
 	{
-		totalDiskPercentage: 0.7,
-		indexNameSize: map[string]float64{
+		TotalDiskPercentage: 0.7,
+		IndexNameSize: map[string]float64{
 			"tigera_secure_ee_flows": 0.9,
 			"tigera_secure_ee_dns":   0.05,
 			"tigera_secure_ee_bgp":   0.05,
 		},
 	},
 	{
-		totalDiskPercentage: 0.1,
-		indexNameSize: map[string]float64{
+		TotalDiskPercentage: 0.1,
+		IndexNameSize: map[string]float64{
 			"tigera_secure_ee_audit_ee":           diskDistribution,
 			"tigera_secure_ee_audit_kube":         diskDistribution,
 			"tigera_secure_ee_snapshots":          diskDistribution,
@@ -105,7 +104,7 @@ var indexDiskMapping = []indexDiskAllocation{
 	},
 }
 
-type policy struct {
+type Policy struct {
 	Phases struct {
 		Hot struct {
 			Actions struct {
@@ -582,7 +581,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		if err = r.setupESIndex(ctx, ls); err != nil {
-			log.Info("waiting for ES ILM policies and templates to get created")
+			log.Info("Waiting for ES ILM policies and templates to get created")
 			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -738,9 +737,7 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 
 func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
 
-	fmt.Printf("\n--in setupESIndex")
 	if r.esClient == nil {
-		fmt.Printf("\n--in setupESIndex nil")
 
 		user, password, roots, err := utils.GetClientCredentials(r.client, ctx)
 		if err != nil {
@@ -774,7 +771,7 @@ func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.L
 func putIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, esClient *elastic.Client, totalEsStorage int64) error {
 
 	for _, v := range indexDiskMapping {
-		for indexName, p := range v.indexNameSize {
+		for indexName, p := range v.IndexNameSize {
 			var retention int
 			switch indexName {
 			case "tigera_secure_ee_flows":
@@ -793,7 +790,7 @@ func putIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, esClient *el
 			}
 
 			rolloverAge := retention / ElasticsearchRetentionFactor
-			rolloverSize := (float64(totalEsStorage) * v.totalDiskPercentage * p) / ElasticsearchRetentionFactor
+			rolloverSize := (float64(totalEsStorage) * v.TotalDiskPercentage * p) / ElasticsearchRetentionFactor
 			rollover := resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
 			var maxRolloverSize = float64(rollover.Value())
 
@@ -809,12 +806,7 @@ func putIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, esClient *el
 	return nil
 }
 
-func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rolloverAge int, minDeleteAge int, rolloverSize int64, name string) error {
-	fmt.Printf("\n buildAndApplyIlmPolicy %#v", name)
-	rollover := map[string]interface{}{
-		"max_size": fmt.Sprintf("%db", rolloverSize),
-		"max_age":  fmt.Sprintf("%dd", rolloverAge),
-	}
+func buildPolicyMap(rollover map[string]interface{}, minRetentionAge string) map[string]interface{} {
 	hotPriority := map[string]interface{}{
 		"priority": 100,
 	}
@@ -832,9 +824,9 @@ func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rollo
 	deleteAction := make(map[string]interface{})
 	deleteAction["delete"] = make(map[string]interface{})
 
-	minRetentionAge := fmt.Sprintf("%dd", minDeleteAge)
+
 	newPolicy := make(map[string]interface{})
-	newPolicy["policy"] = map[string]interface{}{
+	newPolicy["Policy"] = map[string]interface{}{
 		"phases": map[string]interface{}{
 			"hot": map[string]interface{}{
 				"actions": hotAction,
@@ -848,18 +840,28 @@ func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rollo
 			},
 		},
 	}
+	return newPolicy
+}
 
+func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rolloverAge int, minDeleteAge int, rolloverSize int64, name string) error {
+	rollover := map[string]interface{}{
+		"max_size": fmt.Sprintf("%db", rolloverSize),
+		"max_age":  fmt.Sprintf("%dd", rolloverAge),
+	}
+	minRetentionAge := fmt.Sprintf("%dd", minDeleteAge)
+
+	newPolicy := buildPolicyMap(rollover, minRetentionAge)
 	res, err := esClient.XPackIlmGetLifecycle().Policy(name + "_policy").Do(ctx)
 	if err != nil {
 		return putPolicyTemplate(ctx, esClient, name, newPolicy)
 	}
 
-	opp := res[name+"_policy"].Policy
-	jsonbody, err := json.Marshal(opp)
+	p := res[name+"_policy"].Policy
+	jsonbody, err := json.Marshal(p)
 	if err != nil {
 		return err
 	}
-	existingPolicy := policy{}
+	existingPolicy := Policy{}
 	if err = json.Unmarshal(jsonbody, &existingPolicy); err != nil {
 		return err
 	}
@@ -872,17 +874,13 @@ func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rollo
 		return putPolicyTemplate(ctx, esClient, name, newPolicy)
 
 	}
-	fmt.Printf("\n skipping putPolicyTemplate %#v", name)
-
 	return nil
 }
 
 func putPolicyTemplate(ctx context.Context, esClient *elastic.Client, name string, policy map[string]interface{}) error {
-	fmt.Printf("\n putPolicyTemplate %#v", name)
-
 	_, err := esClient.XPackIlmPutLifecycle().Policy(name + "_policy").BodyJson(policy).Do(ctx)
 	if err != nil {
-		log.Error(err, "Error applying Ilm policy")
+		log.Error(err, "Error applying Ilm Policy")
 		return err
 	}
 
@@ -935,10 +933,9 @@ func bootstrapWriteIndex(ctx context.Context, esClient *elastic.Client, name str
 		}
 		indexName := "<" + name + ".cluster." + "{now/s{yyyyMMdd-A}}-000000>"
 		if _, err := esClient.CreateIndex(indexName).BodyJson(result).Do(ctx); err != nil {
-			fmt.Printf("err bootstraping write index %#v", err)
+			log.Error(err, "err bootstraping write index %#v")
 			return err
 		}
-		fmt.Printf("\nBootstrapped index %#v", name)
 		return nil
 	}
 	rolloverCondition := map[string]interface{}{
@@ -949,7 +946,5 @@ func bootstrapWriteIndex(ctx context.Context, esClient *elastic.Client, name str
 	if _, err = esClient.RolloverIndex(name + ".cluster.").BodyJson(rolloverCondition).Do(ctx); err != nil {
 		return err
 	}
-	fmt.Printf("\nRolloverIndex index %#v", name)
-
 	return nil
 }

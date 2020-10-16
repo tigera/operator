@@ -1,0 +1,85 @@
+{
+  "index_patterns": [
+    "tigera_secure_ee_events*"
+  ],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "index.lifecycle.name": "tigera_secure_ee_events_policy",
+    "index.lifecycle.rollover_alias": "tigera_secure_ee_events"
+  },
+  "mappings": {
+    "properties": {
+      "time": {
+        "type": "date"
+      },
+      "type": {
+        "type": "keyword"
+      },
+      "description": {
+        "type": "keyword"
+      },
+      "severity": {
+        "type": "long"
+      },
+      "flow_log_index": {
+        "type": "keyword"
+      },
+      "flow_log_id": {
+        "type": "keyword"
+      },
+      "protocol": {
+        "type": "keyword"
+      },
+      "source_ip": {
+        "type": "ip",
+        "null_value": "0.0.0.0"
+      },
+      "source_port": {
+        "type": "long",
+        "null_value": "0"
+      },
+      "source_namespace": {
+        "type": "keyword"
+      },
+      "source_name": {
+        "type": "keyword"
+      },
+      "dest_ip": {
+        "type": "ip",
+        "null_value": "0.0.0.0"
+      },
+      "dest_port": {
+        "type": "long",
+        "null_value": "0"
+      },
+      "dest_namespace": {
+        "type": "keyword"
+      },
+      "dest_name": {
+        "type": "keyword"
+      },
+      "flow_action": {
+        "type": "keyword"
+      },
+      "sources": {
+        "type": "keyword"
+      },
+      "suspicious_prefix": {
+        "type": "keyword"
+      },
+      "anomaly_record": {
+        "type": "object"
+      },
+      "dns_log_index": {
+        "type": "keyword"
+      },
+      "dns_log_id": {
+        "type": "keyword"
+      },
+      "suspicious_domains": {
+        "type": "keyword"
+      }
+    }
+  }
+}

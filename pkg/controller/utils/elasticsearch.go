@@ -17,11 +17,19 @@ package utils
 
 import (
 	"context"
-
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"github.com/olivere/elastic/v7"
+	"github.com/sirupsen/logrus"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"net/http"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 )
 
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
@@ -61,4 +69,72 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 	}
 
 	return render.NewElasticsearchClusterConfigFromConfigMap(configMap)
+}
+
+func GetClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
+	esSecret := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
+		if !errors.IsNotFound(err) {
+			return "", "", nil, err
+		}
+		log.Info("Elasticsearch public cert secret not found yet")
+	}
+
+	esPublicCert := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, esPublicCert); err != nil {
+		return "", "", nil, err
+	}
+
+	roots, err := getESRoots(esPublicCert)
+	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
+}
+
+func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
+	rootPEM, exists := esCertSecret.Data["tls.crt"]
+	if !exists {
+		return nil, fmt.Errorf("couldn't find tls.crt in Elasticsearch secret")
+	}
+
+	roots := x509.NewCertPool()
+	ok := roots.AppendCertsFromPEM(rootPEM)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse root certificate")
+	}
+
+	return roots, nil
+}
+
+func NewESClient(user string, password string, root *x509.CertPool) (*elastic.Client, error) {
+
+	h := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
+	}
+
+	ep := render.ElasticsearchHTTPSEndpoint
+	localRun := false
+	if os.Getenv("LOCAL_RUN") != "" {
+		localRun, _ = strconv.ParseBool(os.Getenv("LOCAL_RUN"))
+	}
+	if localRun {
+		h = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		}
+		ep = "https://localhost:9200"
+	}
+
+	options := []elastic.ClientOptionFunc{
+		elastic.SetURL(ep),
+		elastic.SetHttpClient(h),
+		elastic.SetErrorLog(logrus.StandardLogger()),
+		elastic.SetSniff(false),
+		//elastic.SetTraceLog(logrus.StandardLogger()),
+		elastic.SetBasicAuth(user, password),
+	}
+
+	esClient, err := elastic.NewClient(options...)
+	if err != nil {
+		log.Error(err, "Elastic connect failed, retrying")
+		return nil, err
+	}
+	return esClient, nil
 }

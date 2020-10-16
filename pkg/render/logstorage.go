@@ -57,6 +57,7 @@ const (
 	ElasticsearchConfigMapName            = "tigera-secure-elasticsearch"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
+	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 
 	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc"
 	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
@@ -70,6 +71,7 @@ const (
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
+	DefaultElasticStorageGi         = 10
 
 	LogStorageFinalizer = "tigera.io/eck-cleanup"
 
@@ -408,7 +410,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					"storage": resource.MustParse("10Gi"),
+					"storage": resource.MustParse(fmt.Sprintf("%dGi", DefaultElasticStorageGi)),
 				},
 			},
 			StorageClassName: &es.logStorage.Spec.StorageClassName,

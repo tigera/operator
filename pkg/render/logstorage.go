@@ -988,11 +988,11 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("1"),
-								"memory": resource.MustParse("150Mi"),
+								"memory": resource.MustParse("512Mi"),
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),
-								"memory": resource.MustParse("50Mi"),
+								"memory": resource.MustParse("512Mi"),
 							},
 						},
 						Ports: []corev1.ContainerPort{{

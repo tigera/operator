@@ -1,0 +1,57 @@
+{
+  "index_patterns": [
+    "tigera_secure_ee_compliance_reports*"
+  ],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "index.lifecycle.name": "tigera_secure_ee_compliance_reports_policy",
+    "index.lifecycle.rollover_alias": "tigera_secure_ee_compliance_reports"
+  },
+  "mappings": {
+    "properties": {
+      "reportName": {
+        "type": "keyword"
+      },
+      "reportTypeName": {
+        "type": "keyword"
+      },
+      "reportSpec": {
+        "type": "object",
+        "enabled": false
+      },
+      "reportTypeSpec": {
+        "type": "object",
+        "enabled": false
+      },
+      "startTime": {
+        "type": "date"
+      },
+      "endTime": {
+        "type": "date"
+      },
+      "generationTime": {
+        "type": "date"
+      },
+      "uiSummary": {
+        "type": "text"
+      },
+      "endpoints": {
+        "type": "object",
+        "enabled": false
+      },
+      "namespaces": {
+        "type": "object",
+        "enabled": false
+      },
+      "services": {
+        "type": "object",
+        "enabled": false
+      },
+      "auditEvents": {
+        "type": "object",
+        "enabled": false
+      }
+    }
+  }
+}

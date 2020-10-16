@@ -676,7 +676,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logStorageExists bool
-	var authentication interface{}
+	var authentication *operator.Authentication
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -708,7 +708,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, err
 		}
 
-		authentication, err = utils.GetAuthentication(ctx, r.client)
+		authentication, err = utils.GetAuthentication(ctx, r.client, true)
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())

@@ -62,6 +62,8 @@ func Compliance(
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
+	authentication *operatorv1.Authentication,
+	dexTLSSecret *corev1.Secret,
 ) (Component, error) {
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
@@ -91,6 +93,8 @@ func Compliance(
 		openshift:                   openshift,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
+		authentication:              authentication,
+		dexTLSSecret:                dexTLSSecret,
 	}, nil
 }
 
@@ -104,6 +108,8 @@ type complianceComponent struct {
 	openshift                   bool
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
+	authentication              *operatorv1.Authentication
+	dexTLSSecret                *corev1.Secret
 }
 
 func (c *complianceComponent) SupportedOSType() OSType {
@@ -151,6 +157,10 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	if c.managerInternalTLSSecret != nil {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
+	}
+
+	if c.dexTLSSecret != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.dexTLSSecret)...)...)
 	}
 
 	var objsToDelete []runtime.Object
@@ -338,7 +348,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 	}
-
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
@@ -632,6 +641,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
+	envVars = AppendDexEnv(envVars, c.authentication, "TIGERA_COMPLIANCE_")
 	defaultMode := int32(420)
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -653,9 +663,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
-					Name:  ComplianceServerName,
-					Image: components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-					Env:   envVars,
+					Name:            ComplianceServerName,
+					Image:           "gcr.io/tigera-dev/cnx/tigera/compliance-server:rene", //todo: reset components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
+					ImagePullPolicy: "Always",
+					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -680,10 +691,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: complianceVolumeMounts(c.managerInternalTLSSecret),
+					VolumeMounts: AppendDexVolumeMount(complianceVolumeMounts(c.managerInternalTLSSecret), c.authentication),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: complianceVolumes(defaultMode, c.managerInternalTLSSecret),
+			Volumes: AppendDexVolume(complianceVolumes(defaultMode, c.managerInternalTLSSecret), c.authentication),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 

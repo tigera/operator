@@ -1,0 +1,60 @@
+{
+  "index_patterns": [
+    "tigera_secure_ee_audit_ee*"
+  ],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "index.lifecycle.name": "tigera_secure_ee_audit_ee_policy",
+    "index.lifecycle.rollover_alias": "tigera_secure_ee_audit_ee"
+  },
+  "mappings": {
+    "properties": {
+      "apiVersion": { "type": "keyword" },
+      "auditID": { "type": "keyword" },
+      "kind": { "type": "keyword" },
+      "level": { "type": "keyword" },
+      "metadata": { "type": "object", "enabled": false },
+      "name": { "type": "keyword" },
+      "objectRef": {
+        "properties": {
+          "apiGroup": { "type": "keyword" },
+          "apiVersion": { "type": "keyword" },
+          "name": { "type": "keyword" },
+          "resource": { "type": "keyword" },
+          "namespace": { "type": "keyword" }
+        }
+      },
+      "requestObject": { "type": "object", "enabled": false },
+      "requestReceivedTimestamp": { "type": "date" },
+      "requestURI": { "type": "keyword" },
+      "responseObject": {
+        "properties": {
+          "apiVersion": { "type": "keyword" },
+          "kind": { "type": "keyword" },
+          "metadata": { "type": "object", "enabled": false },
+          "spec": { "type": "object", "enabled": false },
+          "status": { "type": "object", "enabled": false }
+        }
+      },
+      "responseStatus": {
+        "properties": {
+          "code": { "type": "long" },
+          "metadata": { "type": "object", "enabled": false }
+        }
+      },
+      "sourceIPs": { "type": "text" },
+      "stage": { "type": "text" },
+      "stageTimestamp": { "type": "date" },
+      "timestamp": { "type": "date" },
+      "user": {
+        "properties": {
+          "groups": { "type": "keyword" },
+          "username": { "type": "keyword" },
+          "uid": { "type": "keyword" }
+        }
+      },
+      "verb": { "type": "keyword" }
+    }
+  }
+}

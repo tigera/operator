@@ -18,36 +18,34 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"regexp"
-
-	"k8s.io/apimachinery/pkg/types"
-
-	apps "k8s.io/api/apps/v1"
-	storagev1 "k8s.io/api/storage/v1"
-
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/olivere/elastic/v7"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-
+	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"os"
+	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -229,6 +227,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
 	}
 
+	if err = c.Watch(&source.Kind{Type: &v3.ManagedCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ManagedCluster resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -244,6 +246,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
+	esClient *elastic.Client
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -504,6 +507,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if managementClusterConnection == nil {
+
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
@@ -518,6 +522,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
+		}
+
+		// Wait for ES to be in ready phase before applying ILM polices and creating indices
+		if err = r.setupESIndex(ctx, ls); err != nil {
+			log.Info("Waiting for ES ILM policies and templates to get created")
+			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -667,4 +678,32 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	}
 
 	return int(nodes) * shardPerNode
+}
+
+func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
+
+	if r.esClient == nil {
+		// TODO: wait and retry ?
+		var err error
+		r.esClient, err = utils.NewElasticsearchClient(r.client, ctx)
+		if err != nil {
+			log.Error(err, "failed to create ES client")
+			return err
+		}
+	}
+
+	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
+	var totalEsStorage = defaultStorage.Value()
+	if ls.Spec.Nodes.ResourceRequirements != nil {
+		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
+			totalEsStorage = val.Value()
+		}
+	}
+
+	managedClusterList := v3.ManagedClusterList{}
+	if err := r.client.List(ctx, &managedClusterList); err != nil {
+		return err
+	}
+
+	return utils.SetElasticsearchIndices(ctx, r.esClient, ls, totalEsStorage, managedClusterList)
 }

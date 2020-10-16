@@ -131,29 +131,20 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 	return render.NewElasticsearchClusterConfigFromConfigMap(configMap)
 }
 
-func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
-	esSecret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
-		if !errors.IsNotFound(err) {
-			return "", "", nil, err
-		}
-		log.Info("Elasticsearch public cert secret not found yet")
-	}
-
-	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, esPublicCert); err != nil {
-		return "", "", nil, err
-	}
-
-	roots, err := getESRoots(esPublicCert)
-	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
+type IEsClient interface {
+	NewElasticsearchClient(client.Client, context.Context) error
+	SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64, v3.ManagedClusterList) error
+	GetElasticsearchClient() *elastic.Client
 }
 
-func NewElasticsearchClient(client client.Client, ctx context.Context) (*elastic.Client, error) {
-	//user string, password string, root *x509.CertPool
+type EsClient struct {
+	client *elastic.Client
+}
+
+func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Context) error {
 	user, password, root, err := getClientCredentials(client, ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	h := &http.Client{
@@ -172,12 +163,13 @@ func NewElasticsearchClient(client client.Client, ctx context.Context) (*elastic
 	esClient, err := elastic.NewClient(options...)
 	if err != nil {
 		log.Error(err, "Elastic connect failed, retrying")
-		return nil, err
+		return err
 	}
-	return esClient, nil
+	es.client = esClient
+	return nil
 }
 
-func SetElasticsearchIndices(ctx context.Context, esClient *elastic.Client, ls *operatorv1.LogStorage, totalEsStorage int64, managedClusterList v3.ManagedClusterList) error {
+func (es *EsClient) SetElasticsearchIndices(ctx context.Context, ls *operatorv1.LogStorage, totalEsStorage int64, managedClusterList v3.ManagedClusterList) error {
 
 	for _, v := range indexDiskMapping {
 		for indexName, p := range v.IndexNameSize {
@@ -203,7 +195,7 @@ func SetElasticsearchIndices(ctx context.Context, esClient *elastic.Client, ls *
 
 			// For Management cluster
 			clusterName = "cluster"
-			if err := buildAndApplyIlmPolicy(ctx, esClient, retention, rolloverSize, rolloverAge, indexName, clusterName); err != nil {
+			if err := buildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName, clusterName); err != nil {
 				return err
 			}
 
@@ -211,13 +203,17 @@ func SetElasticsearchIndices(ctx context.Context, esClient *elastic.Client, ls *
 			for k := range managedClusterList.Items {
 				managedCluster := managedClusterList.Items[k]
 				clusterName = managedCluster.ObjectMeta.Name
-				if err := buildAndApplyIlmPolicy(ctx, esClient, retention, rolloverSize, rolloverAge, indexName, clusterName); err != nil {
+				if err := buildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName, clusterName); err != nil {
 					return err
 				}
 			}
 		}
 	}
 	return nil
+}
+
+func (es *EsClient) GetElasticsearchClient() *elastic.Client {
+	return es.client
 }
 
 func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
@@ -245,6 +241,24 @@ func calculateRolloverAge(retention int) string {
 		age = fmt.Sprintf("%dd", rolloverAge)
 	}
 	return age
+}
+
+func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
+	esSecret := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
+		if !errors.IsNotFound(err) {
+			return "", "", nil, err
+		}
+		log.Info("Elasticsearch public cert secret not found yet")
+	}
+
+	esPublicCert := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, esPublicCert); err != nil {
+		return "", "", nil, err
+	}
+
+	roots, err := getESRoots(esPublicCert)
+	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
 }
 
 func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {

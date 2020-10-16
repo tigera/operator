@@ -21,7 +21,6 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"github.com/olivere/elastic/v7"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -67,7 +66,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, &utils.EsClient{})
 	if err != nil {
 		return err
 	}
@@ -76,7 +75,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.IEsClient) (*ReconcileLogStorage, error) {
 	localDNS, err := getLocalDNSName(resolvConfPath)
 	if err != nil {
 		localDNS = defaultLocalDNS
@@ -89,6 +88,7 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 		status:   statusMgr,
 		provider: provider,
 		localDNS: localDNS,
+		esClient: esClient,
 	}
 
 	c.status.Run()
@@ -246,7 +246,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
-	esClient *elastic.Client
+	esClient utils.IEsClient
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -682,10 +682,10 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 
 func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
 
-	if r.esClient == nil {
+	if r.esClient.GetElasticsearchClient() == nil {
 		// TODO: wait and retry ?
 		var err error
-		r.esClient, err = utils.NewElasticsearchClient(r.client, ctx)
+		err = r.esClient.NewElasticsearchClient(r.client, ctx)
 		if err != nil {
 			log.Error(err, "failed to create ES client")
 			return err
@@ -705,5 +705,5 @@ func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.L
 		return err
 	}
 
-	return utils.SetElasticsearchIndices(ctx, r.esClient, ls, totalEsStorage, managedClusterList)
+	return r.esClient.SetElasticsearchIndices(ctx, ls, totalEsStorage, managedClusterList)
 }

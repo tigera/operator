@@ -15,10 +15,9 @@
 package installation
 
 import (
-	"fmt"
 	"reflect"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
@@ -32,73 +31,79 @@ const (
 	Different
 )
 
-func mergeCustomResources(main, secondary *operatorv1.Installation) (*operatorv1.Installation, error) {
-	inst := main.DeepCopy()
+func overrideInstallationResource(cfg, override *operatorv1.Installation) *operatorv1.Installation {
+	inst := cfg.DeepCopy()
 
-	switch compareFields(inst.Spec.Variant, secondary.Spec.Variant) {
-	case BOnlySet:
-		inst.Spec.Variant = secondary.Spec.Variant
-	case Different:
-		return nil, fmt.Errorf("Installation variant does not match")
+	switch compareFields(inst.Spec.Variant, override.Spec.Variant) {
+	case BOnlySet, Different:
+		inst.Spec.Variant = override.Spec.Variant
 	}
 
-	switch compareFields(main.Spec.Registry, secondary.Spec.Registry) {
-	case BOnlySet:
-		inst.Spec.Registry = secondary.Spec.Registry
-	case Different:
-		return nil, fmt.Errorf("Installation registry does not match")
+	switch compareFields(inst.Spec.Registry, override.Spec.Registry) {
+	case BOnlySet, Different:
+		inst.Spec.Registry = override.Spec.Registry
 	}
 
-	switch compareFields(inst.Spec.ImagePath, secondary.Spec.ImagePath) {
-	case BOnlySet:
-		inst.Spec.ImagePath = secondary.Spec.ImagePath
-	case Different:
-		return nil, fmt.Errorf("Installation imagePath does not match")
+	switch compareFields(inst.Spec.ImagePath, override.Spec.ImagePath) {
+	case BOnlySet, Different:
+		inst.Spec.ImagePath = override.Spec.ImagePath
 	}
 
-	switch compareFields(inst.Spec.ImagePullSecrets, secondary.Spec.ImagePullSecrets) {
-	case BOnlySet:
-		inst.Spec.ImagePullSecrets = secondary.Spec.ImagePullSecrets
-	case Different:
-		inst.Spec.ImagePullSecrets = mergeImagePullSecrets(inst.Spec.ImagePullSecrets, secondary.Spec.ImagePullSecrets)
+	switch compareFields(inst.Spec.ImagePullSecrets, override.Spec.ImagePullSecrets) {
+	case BOnlySet, Different:
+		inst.Spec.ImagePullSecrets = make([]v1.LocalObjectReference, len(override.Spec.ImagePullSecrets))
+		copy(inst.Spec.ImagePullSecrets, override.Spec.ImagePullSecrets)
 	}
 
-	switch compareFields(inst.Spec.KubernetesProvider, secondary.Spec.KubernetesProvider) {
-	case BOnlySet:
-		inst.Spec.KubernetesProvider = secondary.Spec.KubernetesProvider
-	case Different:
-		return nil, fmt.Errorf("Installation KubernetesProvider does not match")
+	switch compareFields(inst.Spec.KubernetesProvider, override.Spec.KubernetesProvider) {
+	case BOnlySet, Different:
+		inst.Spec.KubernetesProvider = override.Spec.KubernetesProvider
 	}
 
-	switch compareFields(inst.Spec.CNI, secondary.Spec.CNI) {
+	switch compareFields(inst.Spec.CNI, override.Spec.CNI) {
 	case BOnlySet:
-		inst.Spec.CNI = secondary.Spec.CNI
+		inst.Spec.CNI = override.Spec.CNI.DeepCopy()
 	case Different:
-		var err error
-		inst.Spec.CNI, err = mergeCNISpecs(inst.Spec.CNI, secondary.Spec.CNI)
-		if err != nil {
-			return nil, err
+		inst.Spec.CNI = mergeCNISpecs(inst.Spec.CNI, override.Spec.CNI)
+	}
+
+	switch compareFields(inst.Spec.CalicoNetwork, override.Spec.CalicoNetwork) {
+	case BOnlySet:
+		inst.Spec.CalicoNetwork = override.Spec.CalicoNetwork.DeepCopy()
+	case Different:
+		inst.Spec.CalicoNetwork = mergeCalicoNetwork(inst.Spec.CalicoNetwork, override.Spec.CalicoNetwork)
+	}
+
+	switch compareFields(inst.Spec.ControlPlaneNodeSelector, override.Spec.ControlPlaneNodeSelector) {
+	case BOnlySet, Different:
+		inst.Spec.ControlPlaneNodeSelector = make(map[string]string, len(override.Spec.ControlPlaneNodeSelector))
+		for key, val := range override.Spec.ControlPlaneNodeSelector {
+			inst.Spec.ControlPlaneNodeSelector[key] = val
 		}
 	}
 
-	switch compareFields(inst.Spec.CalicoNetwork, secondary.Spec.CalicoNetwork) {
-	case BOnlySet:
-		inst.Spec.CalicoNetwork = secondary.Spec.CalicoNetwork
-	case Different:
-		var err error
-		inst.Spec.CalicoNetwork, err = mergeCalicoNetwork(inst.Spec.CalicoNetwork, secondary.Spec.CalicoNetwork)
-		if err != nil {
-			return nil, err
-		}
+	switch compareFields(inst.Spec.NodeMetricsPort, override.Spec.NodeMetricsPort) {
+	case BOnlySet, Different:
+		inst.Spec.NodeMetricsPort = override.Spec.NodeMetricsPort
 	}
-	//CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
-	//ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
-	//NodeMetricsPort *int32 `json:"nodeMetricsPort,omitempty"`
-	//FlexVolumePath string `json:"flexVolumePath,omitempty"`
-	//NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
-	//ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 
-	return inst, nil
+	switch compareFields(inst.Spec.FlexVolumePath, override.Spec.FlexVolumePath) {
+	case BOnlySet, Different:
+		inst.Spec.FlexVolumePath = override.Spec.FlexVolumePath
+	}
+
+	switch compareFields(inst.Spec.NodeUpdateStrategy, override.Spec.NodeUpdateStrategy) {
+	case BOnlySet, Different:
+		override.Spec.NodeUpdateStrategy.DeepCopyInto(&inst.Spec.NodeUpdateStrategy)
+	}
+
+	switch compareFields(inst.Spec.ComponentResources, override.Spec.ComponentResources) {
+	case BOnlySet, Different:
+		inst.Spec.ComponentResources = make([]operatorv1.ComponentResource, len(override.Spec.ComponentResources))
+		copy(inst.Spec.ComponentResources, override.Spec.ComponentResources)
+	}
+
+	return inst
 }
 
 func compareFields(a, b interface{}) CompareResult {
@@ -119,75 +124,66 @@ func compareFields(a, b interface{}) CompareResult {
 	return Different
 }
 
-func mergeImagePullSecrets(a, b []v1.LocalObjectReference) []v1.LocalObjectReference {
-	out := []v1.LocalObjectReference{}
+func mergeCNISpecs(cfg, override *operatorv1.CNISpec) *operatorv1.CNISpec {
+	out := cfg.DeepCopy()
 
-	for _, x := range append(a, b...) {
-		added := false
-		for _, y := range out {
-			if y.Name == x.Name {
-				added = true
-				break
-			}
-		}
-		if !added {
-			out = append(out, x)
-		}
+	switch compareFields(out.Type, override.Type) {
+	case BOnlySet, Different:
+		out.Type = override.Type
 	}
+
+	switch compareFields(out.IPAM, override.IPAM) {
+	case BOnlySet, Different:
+		out.IPAM = override.IPAM.DeepCopy()
+	}
+
 	return out
 }
 
-func mergeCNISpecs(a, b *operatorv1.CNISpec) (*operatorv1.CNISpec, error) {
-	out := a.DeepCopy()
+func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1.CalicoNetworkSpec {
+	out := cfg.DeepCopy()
 
-	switch compareFields(out.Type, b.Type) {
-	case BOnlySet:
-		out.Type = b.Type
-	case Different:
-		return nil, fmt.Errorf("Type does not match")
+	switch compareFields(out.BGP, override.BGP) {
+	case BOnlySet, Different:
+		out.BGP = override.BGP
 	}
 
-	switch compareFields(out.IPAM, b.IPAM) {
-	case BOnlySet:
-		out.IPAM = b.IPAM
-	case Different:
-		return nil, fmt.Errorf("IPAM does not match")
+	switch compareFields(out.IPPools, override.IPPools) {
+	case BOnlySet, Different:
+		out.IPPools = make([]operatorv1.IPPool, len(override.IPPools))
+		for i := range override.IPPools {
+			override.IPPools[i].DeepCopyInto(&out.IPPools[i])
+		}
 	}
 
-	return out, nil
-}
-
-//BGP *BGPOption `json:"bgp,omitempty"`
-//IPPools []IPPool `json:"ipPools,omitempty"`
-//MTU *int32 `json:"mtu,omitempty"`
-//NodeAddressAutodetectionV4 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV4,omitempty"`
-//NodeAddressAutodetectionV6 *NodeAddressAutodetection `json:"nodeAddressAutodetectionV6,omitempty"`
-//HostPorts *HostPortsType `json:"hostPorts,omitempty"`
-//MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`
-//ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
-func mergeCalicoNetwork(a, b *operatorv1.CalicoNetworkSpec) (*operatorv1.CalicoNetworkSpec, error) {
-	out := a.DeepCopy()
-
-	switch compareFields(out.BGP, b.BGP) {
-	case BOnlySet:
-		out.BGP = b.BGP
-	case Different:
-		return nil, fmt.Errorf("BGP does not match")
+	switch compareFields(out.MTU, override.MTU) {
+	case BOnlySet, Different:
+		out.MTU = override.MTU
 	}
 
-	switch compareFields(out.IPPools, b.IPPools) {
-	case BOnlySet:
-		out.IPPools = b.IPPools
-	case Different:
-		return nil, fmt.Errorf("IPPools does not match")
+	switch compareFields(out.NodeAddressAutodetectionV4, override.NodeAddressAutodetectionV4) {
+	case BOnlySet, Different:
+		out.NodeAddressAutodetectionV4 = override.NodeAddressAutodetectionV4
 	}
 
-	switch compareFields(out.MTU, b.MTU) {
-	case BOnlySet:
-		out.MTU = b.MTU
-	case Different:
-		return nil, fmt.Errorf("MTU does not match")
+	switch compareFields(out.NodeAddressAutodetectionV6, override.NodeAddressAutodetectionV6) {
+	case BOnlySet, Different:
+		out.NodeAddressAutodetectionV6 = override.NodeAddressAutodetectionV6
 	}
 
-	return out, nil
+	switch compareFields(out.HostPorts, override.HostPorts) {
+	case BOnlySet, Different:
+		out.HostPorts = override.HostPorts
+	}
+
+	switch compareFields(out.MultiInterfaceMode, override.MultiInterfaceMode) {
+	case BOnlySet, Different:
+		out.MultiInterfaceMode = override.MultiInterfaceMode
+	}
+
+	switch compareFields(out.ContainerIPForwarding, override.ContainerIPForwarding) {
+	case BOnlySet, Different:
+		out.ContainerIPForwarding = override.ContainerIPForwarding
+	}
+	return out
 }

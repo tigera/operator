@@ -574,10 +574,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 				r.SetDegraded("Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			instance, err = mergeCustomResources(instance, install)
-			if err != nil {
-				r.SetDegraded("Error merging existing installation and specified configuration", err, reqLogger)
-			}
+			instance = overrideInstallationResource(install, instance)
 		}
 	}
 

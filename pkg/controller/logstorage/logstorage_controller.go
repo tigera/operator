@@ -18,36 +18,34 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"regexp"
-
-	"k8s.io/apimachinery/pkg/types"
-
-	apps "k8s.io/api/apps/v1"
-	storagev1 "k8s.io/api/storage/v1"
-
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/olivere/elastic/v7"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-
+	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"os"
+	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -60,7 +58,46 @@ const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
+	ElasticsearchRetentionFactor       = 4
+	// NumOfIndexNotFlowsDnsBgp is the number of index created that are not flows, dns or bgp.
+	NumOfIndexNotFlowsDnsBgp = 6
+	// diskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
+	diskDistribution               = 0.1 / NumOfIndexNotFlowsDnsBgp
+	TemplateFilePath               = "/usr/local/bin/"
+	ElasticsearchConnectionRetries = 10
+	DefaultMaxIndexSizeGi          = 30
 )
+
+type IndexDiskAllocation struct {
+	TotalDiskPercentage float64
+	IndexNameSize       map[string]float64
+}
+
+// indexDiskMapping gives disk allocation for each log type.
+// Allocate 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
+// Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs
+// Equally distribute 10% ES disk space among all the other logs
+var indexDiskMapping = []IndexDiskAllocation{
+	{
+		TotalDiskPercentage: 0.7,
+		IndexNameSize: map[string]float64{
+			"tigera_secure_ee_flows": 0.9,
+			"tigera_secure_ee_dns":   0.05,
+			"tigera_secure_ee_bgp":   0.05,
+		},
+	},
+	{
+		TotalDiskPercentage: 0.1,
+		IndexNameSize: map[string]float64{
+			"tigera_secure_ee_audit_ee":           diskDistribution,
+			"tigera_secure_ee_audit_kube":         diskDistribution,
+			"tigera_secure_ee_snapshots":          diskDistribution,
+			"tigera_secure_ee_benchmark_results":  diskDistribution,
+			"tigera_secure_ee_compliance_reports": diskDistribution,
+			"tigera_secure_ee_events":             diskDistribution,
+		},
+	},
+}
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -229,6 +266,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
 	}
 
+	if err = c.Watch(&source.Kind{Type: &v3.ManagedCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ManagedCluster resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -244,6 +285,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
+	esClient *elastic.Client
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -504,6 +546,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if managementClusterConnection == nil {
+
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
@@ -518,6 +561,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
+		}
+
+		// Wait for ES to be in ready phase before applying ILM polices and creating indices
+		if err = r.setupESIndex(ctx, ls); err != nil {
+			log.Info("Waiting for ES ILM policies and templates to get created")
+			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -667,4 +717,36 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	}
 
 	return int(nodes) * shardPerNode
+}
+
+func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
+
+	if r.esClient == nil {
+		user, password, roots, err := utils.GetClientCredentials(r.client, ctx)
+		if err != nil {
+			return err
+		}
+
+		// TODO: wait and retry ?
+		r.esClient, err = utils.NewElasticsearchClient(user, password, roots)
+		if err != nil {
+			log.Error(err, "failed to create ES client")
+			return err
+		}
+	}
+
+	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
+	var totalEsStorage = defaultStorage.Value()
+	if ls.Spec.Nodes.ResourceRequirements != nil {
+		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
+			totalEsStorage = val.Value()
+		}
+	}
+
+	managedClusterList := v3.ManagedClusterList{}
+	if err := r.client.List(ctx, &managedClusterList); err != nil {
+		return err
+	}
+
+	return utils.SetElasticsearchIndices(ctx, r.esClient, ls, totalEsStorage, managedClusterList)
 }

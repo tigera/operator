@@ -530,10 +530,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			InitContainers:   initContainers,
-			Containers:       []corev1.Container{esContainer},
-			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-			NodeSelector:     es.logStorage.Spec.DataNodeSelector,
+			InitContainers:     initContainers,
+			Containers:         []corev1.Container{esContainer},
+			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
 			ServiceAccountName: "tigera-elasticsearch",
 			Volumes: []corev1.Volume{
 				{
@@ -775,7 +775,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	principal := "email"
 	groups := "groups"
 	requestedScopes := []string{"openid", "email", "profile", "groups", "offline_access"}
-	if es.authentication.Spec.OIDC != nil {
+	if es.authentication != nil && es.authentication.Spec.OIDC != nil {
 		if len(es.authentication.Spec.OIDC.RequestedScopes) > 0 {
 			requestedScopes = es.authentication.Spec.OIDC.RequestedScopes
 		}
@@ -792,7 +792,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"rp.requested_scopes":         requestedScopes,
 			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.authentication.Spec.ManagerDomain),
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.authentication.Spec.ManagerDomain),
-			"op.authorization_endpoint":   "https://127.0.0.1:9443/dex/auth",
+			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.authentication.Spec.ManagerDomain),
 			"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
 			"op.jwkset_path":              DexJWKSURI,
 			"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",

@@ -23,10 +23,8 @@ import (
 	"fmt"
 	"github.com/olivere/elastic/v7"
 	"github.com/sirupsen/logrus"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	"io/ioutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -131,29 +129,20 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 	return render.NewElasticsearchClusterConfigFromConfigMap(configMap)
 }
 
-func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
-	esSecret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
-		if !errors.IsNotFound(err) {
-			return "", "", nil, err
-		}
-		log.Info("Elasticsearch public cert secret not found yet")
-	}
-
-	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, esPublicCert); err != nil {
-		return "", "", nil, err
-	}
-
-	roots, err := getESRoots(esPublicCert)
-	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
+type IEsClient interface {
+	NewElasticsearchClient(client.Client, context.Context) error
+	SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64) error
+	GetElasticsearchClient() *elastic.Client
 }
 
-func NewElasticsearchClient(client client.Client, ctx context.Context) (*elastic.Client, error) {
-	//user string, password string, root *x509.CertPool
+type EsClient struct {
+	client *elastic.Client
+}
+
+func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Context) error {
 	user, password, root, err := getClientCredentials(client, ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	h := &http.Client{
@@ -172,17 +161,17 @@ func NewElasticsearchClient(client client.Client, ctx context.Context) (*elastic
 	esClient, err := elastic.NewClient(options...)
 	if err != nil {
 		log.Error(err, "Elastic connect failed, retrying")
-		return nil, err
+		return err
 	}
-	return esClient, nil
+	es.client = esClient
+	return nil
 }
 
-func SetElasticsearchIndices(ctx context.Context, esClient *elastic.Client, ls *operatorv1.LogStorage, totalEsStorage int64, managedClusterList v3.ManagedClusterList) error {
+func (es *EsClient) SetElasticsearchIndices(ctx context.Context, ls *operatorv1.LogStorage, totalEsStorage int64) error {
 
 	for _, v := range indexDiskMapping {
 		for indexName, p := range v.IndexNameSize {
 			var retention int
-			var clusterName string
 			switch indexName {
 			case "tigera_secure_ee_flows":
 				retention = int(*ls.Spec.Retention.Flows)
@@ -201,23 +190,16 @@ func SetElasticsearchIndices(ctx context.Context, esClient *elastic.Client, ls *
 			rolloverSize := calculateRolloverSize(totalEsStorage, v.TotalDiskPercentage, p)
 			rolloverAge := calculateRolloverAge(retention)
 
-			// For Management cluster
-			clusterName = "cluster"
-			if err := buildAndApplyIlmPolicy(ctx, esClient, retention, rolloverSize, rolloverAge, indexName, clusterName); err != nil {
+			if err := buildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName); err != nil {
 				return err
-			}
-
-			// For managed cluster
-			for k := range managedClusterList.Items {
-				managedCluster := managedClusterList.Items[k]
-				clusterName = managedCluster.ObjectMeta.Name
-				if err := buildAndApplyIlmPolicy(ctx, esClient, retention, rolloverSize, rolloverAge, indexName, clusterName); err != nil {
-					return err
-				}
 			}
 		}
 	}
 	return nil
+}
+
+func (es *EsClient) GetElasticsearchClient() *elastic.Client {
+	return es.client
 }
 
 func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
@@ -247,6 +229,24 @@ func calculateRolloverAge(retention int) string {
 	return age
 }
 
+func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
+	esSecret := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
+		if !errors.IsNotFound(err) {
+			return "", "", nil, err
+		}
+		log.Info("Elasticsearch public cert secret not found yet")
+	}
+
+	esPublicCert := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, esPublicCert); err != nil {
+		return "", "", nil, err
+	}
+
+	roots, err := getESRoots(esPublicCert)
+	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
+}
+
 func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
 	rootPEM, exists := esCertSecret.Data["tls.crt"]
 	if !exists {
@@ -260,6 +260,38 @@ func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
 	}
 
 	return roots, nil
+}
+
+func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string) error {
+	policyName := name + "_policy"
+
+	rollover := map[string]interface{}{
+		"max_size": rolloverSize,
+		"max_age":  rolloverAge,
+	}
+	minRetentionAge := fmt.Sprintf("%dd", retention)
+
+	newIlmPolicy := buildIlmPolicy(rollover, minRetentionAge)
+
+	res, err := esClient.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
+	if err != nil {
+		if eerr, ok := err.(*elastic.Error); ok && eerr.Status == 404 {
+			// If policy doesn't exist, create one
+			return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
+		}
+		return err
+	}
+
+	// If policy exists, check if needs to be updated
+	currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
+	if err != nil {
+		return err
+	}
+	if currentMaxAge != rollover["max_age"] || currentMaxSize != rollover["max_size"] || currentMinAge != minRetentionAge {
+		return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
+	}
+	// if there is an existing policy with latest retention, do nothing
+	return nil
 }
 
 func buildIlmPolicy(rollover map[string]interface{}, minRetentionAge string) map[string]interface{} {
@@ -298,108 +330,15 @@ func buildIlmPolicy(rollover map[string]interface{}, minRetentionAge string) map
 	return newPolicy
 }
 
-func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string, clusterName string) error {
-	policyName := name + "_" + clusterName + "_policy"
+func applyIlmPolicy(ctx context.Context, esClient *elastic.Client, indexName string, policy map[string]interface{}) error {
 
-	rollover := map[string]interface{}{
-		"max_size": rolloverSize,
-		"max_age":  rolloverAge,
-	}
-	minRetentionAge := fmt.Sprintf("%dd", retention)
-
-	newIlmPolicy := buildIlmPolicy(rollover, minRetentionAge)
-
-	res, err := esClient.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
-	if err != nil {
-		if eerr, ok := err.(*elastic.Error); ok && eerr.Status == 404 {
-			// If policy doesn't exist, create one
-			return applyIlmPolicy(ctx, esClient, name, newIlmPolicy, clusterName)
-		}
-		return err
-	}
-
-	// If policy exists, check if needs to be updated
-	currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
-	if err != nil {
-		return err
-	}
-	if currentMaxAge != rollover["max_age"] || currentMaxSize != rollover["max_size"] || currentMinAge != minRetentionAge {
-		return applyIlmPolicy(ctx, esClient, name, newIlmPolicy, clusterName)
-	}
-	// if there is an existing policy with latest retention, do nothing
-	return nil
-}
-
-func applyIlmPolicy(ctx context.Context, esClient *elastic.Client, indexName string, policy map[string]interface{}, clusterName string) error {
-
-	policyName := indexName + "_" + clusterName + "_policy"
+	policyName := indexName + "_policy"
 	_, err := esClient.XPackIlmPutLifecycle().Policy(policyName).BodyJson(policy).Do(ctx)
 	if err != nil {
 		log.Error(err, "Error applying Ilm Policy")
 		return err
 	}
 
-	if err := applyIndexTemplates(ctx, esClient, indexName, clusterName); err != nil {
-		log.Error(err, "failed to create/update ES Index templates")
-		return err
-	}
-
-	if err := bootstrapWriteIndex(ctx, esClient, indexName, clusterName); err != nil {
-		return err
-	}
-	return nil
-}
-
-func applyIndexTemplates(ctx context.Context, esClient *elastic.Client, indexName string, clusterName string) error {
-	var byteValue []byte
-	var err error
-
-	indexAlias := indexName + "." + clusterName + "."
-	// read index template and update alias and index patter based on cluster name
-	if byteValue, err = ioutil.ReadFile(TemplateFilePath + indexName + ".json"); err != nil {
-		return err
-	}
-	var result map[string]interface{}
-	json.Unmarshal(byteValue, &result)
-	result["index_patterns"] = indexAlias + "*"
-	settings := result["settings"].(map[string]interface{})
-	settings["index.lifecycle.rollover_alias"] = indexAlias
-
-	if _, err = esClient.IndexPutTemplate(indexName + "_" + clusterName + "_template").BodyJson(result).Do(ctx); err != nil {
-		log.Error(err, "Error applying Index template")
-		return err
-	}
-	return nil
-}
-
-func bootstrapWriteIndex(ctx context.Context, esClient *elastic.Client, name string, clusterName string) error {
-	var result map[string]interface{}
-	_, err := esClient.Aliases().Index(name + "." + clusterName + ".").Do(ctx)
-	if err != nil {
-		// If Alias index doesn't exist, bootstrap a new write index
-		result = map[string]interface{}{
-			"aliases": map[string]interface{}{
-				name + "." + clusterName + ".": map[string]interface{}{
-					"is_write_index": true,
-				},
-			},
-		}
-		indexName := "<" + name + "." + clusterName + "." + "{now/s{yyyyMMdd-A}}-000000>"
-		if _, err := esClient.CreateIndex(indexName).BodyJson(result).Do(ctx); err != nil {
-			log.Error(err, "err bootstraping write index %#v")
-			return err
-		}
-		return nil
-	}
-	//If Alias index exists, rollover the current index so new index gets created with new policy
-	rolloverCondition := map[string]interface{}{
-		"conditions": map[string]interface{}{
-			"max_age": "0ms",
-		},
-	}
-	if _, err = esClient.RolloverIndex(name + "." + clusterName + ".").BodyJson(rolloverCondition).Do(ctx); err != nil {
-		return err
-	}
 	return nil
 }
 

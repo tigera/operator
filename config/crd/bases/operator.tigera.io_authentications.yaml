@@ -47,8 +47,7 @@ spec:
                 type: string
               oidc:
                 description: OIDC contains the configuration needed to setup OIDC
-                  authentication. If the method is OIDC then this is required, if
-                  the method is not OIDC then this must not be specified.
+                  authentication.
                 properties:
                   groupsClaim:
                     description: GroupsClaim specifies which claim to use from the
@@ -62,9 +61,9 @@ spec:
                     description: IssuerURL is the URL to the OIDC provider.
                     type: string
                   requestedScopes:
-                    description: RequestedScopes is a list of scopes to request from
-                      the OIDC provider. If not provided, all the available scopes
-                      are requested.
+                    description: 'RequestedScopes is a list of scopes to request from
+                      the OIDC provider. If not provided, the following scopes are
+                      requested: ["openid", "email", "profile", "groups", "offline_access"].'
                     items:
                       type: string
                     type: array
@@ -78,8 +77,8 @@ spec:
                     type: string
                 type: object
               openshift:
-                description: AuthenticationOIDC is the configuration needed to setup
-                  OIDC.
+                description: Openshift contains the configuration needed to setup
+                  Openshift OAuth authentication.
                 properties:
                   issuerURL:
                     description: 'IssuerURL is the URL to the Opensift OAuth provider.

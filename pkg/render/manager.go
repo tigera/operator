@@ -50,8 +50,6 @@ const (
 	ManagerInternalSecretKeyName     = "key"
 	ManagerInternalSecretCertName    = "cert"
 	ManagerOIDCConfig                = "tigera-manager-oidc-config"
-	ManagerOIDCWellknownURI          = "/usr/share/nginx/html/.well-known"
-	ManagerOIDCJwksURI               = "/usr/share/nginx/html/discovery"
 
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"

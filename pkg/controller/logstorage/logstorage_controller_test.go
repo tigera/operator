@@ -16,6 +16,8 @@ package logstorage_test
 
 import (
 	"context"
+	"github.com/olivere/elastic/v7"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"os"
 
 	. "github.com/onsi/ginkgo"
@@ -56,11 +58,15 @@ var (
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
 
-	esPublicCertObjMeta     = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	kbPublicCertObjMeta     = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	curatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
-	storageClassName        = "test-storage-class"
+	esPublicCertObjMeta      = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
+	kbPublicCertObjMeta      = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
+	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
+	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}
+	storageClassName         = "test-storage-class"
 )
+
+type mockESClient struct {
+}
 
 var _ = Describe("LogStorage controller", func() {
 	Context("Reconcile", func() {
@@ -152,7 +158,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("ClearDegraded")
 					})
 					It("tests that the ExternalService is setup with the default service name", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
 						Expect(err).ShouldNot(HaveOccurred())
 
 						_, err = r.Reconcile(reconcile.Request{})
@@ -173,7 +179,7 @@ var _ = Describe("LogStorage controller", func() {
 						}
 						resolvConfPath := dir + "/testdata/resolv.conf"
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath)
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath, &mockESClient{})
 						Expect(err).ShouldNot(HaveOccurred())
 
 						_, err = r.Reconcile(reconcile.Request{})
@@ -196,7 +202,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
 						result, err := r.Reconcile(reconcile.Request{})
@@ -213,7 +219,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
@@ -304,7 +310,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -333,7 +339,9 @@ var _ = Describe("LogStorage controller", func() {
 					kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 					Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
-					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esPublicCertObjMeta})).ShouldNot(HaveOccurred())
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esPublicCertObjMeta, Data: map[string][]byte{
+						"tls.cert": nil,
+					}})).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: kbPublicCertObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
@@ -391,7 +399,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
@@ -535,4 +543,16 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			ObjectMeta: curatorUsrSecretObjMeta,
 		}),
 	).ShouldNot(HaveOccurred())
+}
+
+func (*mockESClient) NewElasticsearchClient(client.Client, context.Context) error {
+	return nil
+}
+
+func (*mockESClient) SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64, v3.ManagedClusterList) error {
+	return nil
+}
+
+func (*mockESClient) GetElasticsearchClient() *elastic.Client {
+	return &elastic.Client{}
 }

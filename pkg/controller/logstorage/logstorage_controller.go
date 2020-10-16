@@ -17,39 +17,35 @@ package logstorage
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/olivere/elastic/v7"
-	"io/ioutil"
-	apps "k8s.io/api/apps/v1"
-	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/types"
-	"os"
-	"regexp"
-
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/olivere/elastic/v7"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-
+	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"os"
+	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -63,7 +59,6 @@ const (
 	defaultElasticsearchShards         = 1
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
 	ElasticsearchRetentionFactor       = 4
-	ElasticsearchOperatorUserSecret    = "tigera-ee-operator-elasticsearch-access"
 	// NumOfIndexNotFlowsDnsBgp is the number of index created that are not flows, dns or bgp.
 	NumOfIndexNotFlowsDnsBgp = 6
 	// diskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
@@ -102,22 +97,6 @@ var indexDiskMapping = []IndexDiskAllocation{
 			"tigera_secure_ee_events":             diskDistribution,
 		},
 	},
-}
-
-type Policy struct {
-	Phases struct {
-		Hot struct {
-			Actions struct {
-				Rollover struct {
-					MaxSize string `json:"max_size"`
-					MaxAge  string `json:"max_age"`
-				}
-			}
-		}
-		Delete struct {
-			MinAge string `json:"min_age"`
-		}
-	}
 }
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -285,6 +264,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+	}
+
+	if err = c.Watch(&source.Kind{Type: &v3.ManagedCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ManagedCluster resource: %v", err)
 	}
 
 	return nil
@@ -580,6 +563,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, nil
 		}
 
+		// Wait for ES to be in ready phase before applying ILM polices and creating indices
 		if err = r.setupESIndex(ctx, ls); err != nil {
 			log.Info("Waiting for ES ILM policies and templates to get created")
 			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
@@ -738,14 +722,13 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
 
 	if r.esClient == nil {
-
 		user, password, roots, err := utils.GetClientCredentials(r.client, ctx)
 		if err != nil {
 			return err
 		}
 
 		// TODO: wait and retry ?
-		r.esClient, err = utils.NewESClient(user, password, roots)
+		r.esClient, err = utils.NewElasticsearchClient(user, password, roots)
 		if err != nil {
 			log.Error(err, "failed to create ES client")
 			return err
@@ -760,191 +743,10 @@ func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.L
 		}
 	}
 
-	if err := putIlmPolicies(ctx, ls, r.esClient, totalEsStorage); err != nil {
-		log.Error(err, "failed to create/update ILM policies")
+	managedClusterList := v3.ManagedClusterList{}
+	if err := r.client.List(ctx, &managedClusterList); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func putIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, esClient *elastic.Client, totalEsStorage int64) error {
-
-	for _, v := range indexDiskMapping {
-		for indexName, p := range v.IndexNameSize {
-			var retention int
-			switch indexName {
-			case "tigera_secure_ee_flows":
-				retention = int(*ls.Spec.Retention.Flows)
-			case "tigera_secure_ee_audit_ee", "tigera_secure_ee_audit_kube":
-				retention = int(*ls.Spec.Retention.AuditReports)
-			case "tigera_secure_ee_snapshots":
-				retention = int(*ls.Spec.Retention.Snapshots)
-			case "tigera_secure_ee_compliance_reports":
-				retention = int(*ls.Spec.Retention.ComplianceReports)
-			// TODO: set these default values in operator.yaml like other values
-			case "tigera_secure_ee_benchmark_results", "tigera_secure_ee_events":
-				retention = 91
-			case "tigera_secure_ee_dns", "tigera_secure_ee_bgp":
-				retention = 8
-			}
-
-			rolloverAge := retention / ElasticsearchRetentionFactor
-			rolloverSize := (float64(totalEsStorage) * v.TotalDiskPercentage * p) / ElasticsearchRetentionFactor
-			rollover := resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
-			var maxRolloverSize = float64(rollover.Value())
-
-			if rolloverSize > maxRolloverSize {
-				rolloverSize = maxRolloverSize
-			}
-			if err := buildAndApplyIlmPolicy(ctx, esClient, rolloverAge, retention, int64(rolloverSize), indexName); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func buildPolicyMap(rollover map[string]interface{}, minRetentionAge string) map[string]interface{} {
-	hotPriority := map[string]interface{}{
-		"priority": 100,
-	}
-	hotAction := make(map[string]interface{})
-	hotAction["rollover"] = rollover
-	hotAction["set_priority"] = hotPriority
-
-	warmPriority := map[string]interface{}{
-		"priority": 50,
-	}
-	warmAction := make(map[string]interface{})
-	warmAction["readonly"] = make(map[string]interface{})
-	warmAction["set_priority"] = warmPriority
-
-	deleteAction := make(map[string]interface{})
-	deleteAction["delete"] = make(map[string]interface{})
-
-
-	newPolicy := make(map[string]interface{})
-	newPolicy["Policy"] = map[string]interface{}{
-		"phases": map[string]interface{}{
-			"hot": map[string]interface{}{
-				"actions": hotAction,
-			},
-			"warm": map[string]interface{}{
-				"actions": warmAction,
-			},
-			"delete": map[string]interface{}{
-				"min_age": minRetentionAge,
-				"actions": deleteAction,
-			},
-		},
-	}
-	return newPolicy
-}
-
-func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, rolloverAge int, minDeleteAge int, rolloverSize int64, name string) error {
-	rollover := map[string]interface{}{
-		"max_size": fmt.Sprintf("%db", rolloverSize),
-		"max_age":  fmt.Sprintf("%dd", rolloverAge),
-	}
-	minRetentionAge := fmt.Sprintf("%dd", minDeleteAge)
-
-	newPolicy := buildPolicyMap(rollover, minRetentionAge)
-	res, err := esClient.XPackIlmGetLifecycle().Policy(name + "_policy").Do(ctx)
-	if err != nil {
-		return putPolicyTemplate(ctx, esClient, name, newPolicy)
-	}
-
-	p := res[name+"_policy"].Policy
-	jsonbody, err := json.Marshal(p)
-	if err != nil {
-		return err
-	}
-	existingPolicy := Policy{}
-	if err = json.Unmarshal(jsonbody, &existingPolicy); err != nil {
-		return err
-	}
-
-	currentMaxAge := existingPolicy.Phases.Hot.Actions.Rollover.MaxAge
-	currentMaxSize := existingPolicy.Phases.Hot.Actions.Rollover.MaxSize
-	currentMinAge := existingPolicy.Phases.Delete.MinAge
-	if currentMaxAge != rollover["max_age"] || currentMaxSize != rollover["max_size"] || currentMinAge != minRetentionAge {
-		// update
-		return putPolicyTemplate(ctx, esClient, name, newPolicy)
-
-	}
-	return nil
-}
-
-func putPolicyTemplate(ctx context.Context, esClient *elastic.Client, name string, policy map[string]interface{}) error {
-	_, err := esClient.XPackIlmPutLifecycle().Policy(name + "_policy").BodyJson(policy).Do(ctx)
-	if err != nil {
-		log.Error(err, "Error applying Ilm Policy")
-		return err
-	}
-
-	if err := putIndexTemplates(ctx, esClient, name); err != nil {
-		log.Error(err, "failed to create/update ES Index templates")
-		return err
-	}
-
-	// TODO: bootstrap only if there are no write index else rollover and bootstrap
-	if err := bootstrapWriteIndex(ctx, esClient, name); err != nil {
-		return err
-	}
-	return nil
-}
-
-func putIndexTemplates(ctx context.Context, esClient *elastic.Client, name string) error {
-	//TODO: create templates for all managed clusters
-	var byteValue []byte
-	var err error
-	if byteValue, err = ioutil.ReadFile(TemplateFilePath + name + ".json"); err != nil {
-		return err
-	}
-	var result map[string]interface{}
-	json.Unmarshal(byteValue, &result)
-	// new index will be of form tigera_secure_ee_audit_ee.cluster.20201013-78634000
-	// so index_pattern tigera_secure_ee_audit_ee.cluster.*-*, this differentates index that uses ilm and curator
-	// TODO: cehck if we need to differentiate between them, is there a problem if managed uses old cluster and management uses ilm
-	result["index_patterns"] = name + ".cluster.*"
-	settings := result["settings"].(map[string]interface{})
-	settings["index.lifecycle.rollover_alias"] = name + ".cluster."
-
-	if _, err = esClient.IndexPutTemplate(name + "_cluster_template").BodyJson(result).Do(ctx); err != nil {
-		log.Error(err, "Error applying Index template")
-		return err
-	}
-	return nil
-}
-
-func bootstrapWriteIndex(ctx context.Context, esClient *elastic.Client, name string) error {
-	//TODO: create templates for all managed clusters
-	var result map[string]interface{}
-	_, err := esClient.Aliases().Index(name + ".cluster.").Do(ctx)
-	if err != nil {
-		result = map[string]interface{}{
-			"aliases": map[string]interface{}{
-				name + ".cluster.": map[string]interface{}{
-					"is_write_index": true,
-				},
-			},
-		}
-		indexName := "<" + name + ".cluster." + "{now/s{yyyyMMdd-A}}-000000>"
-		if _, err := esClient.CreateIndex(indexName).BodyJson(result).Do(ctx); err != nil {
-			log.Error(err, "err bootstraping write index %#v")
-			return err
-		}
-		return nil
-	}
-	rolloverCondition := map[string]interface{}{
-		"conditions": map[string]interface{}{
-			"max_age": "0ms",
-		},
-	}
-	if _, err = esClient.RolloverIndex(name + ".cluster.").BodyJson(rolloverCondition).Do(ctx); err != nil {
-		return err
-	}
-	return nil
+	return utils.SetElasticsearchIndices(ctx, r.esClient, ls, totalEsStorage, managedClusterList)
 }

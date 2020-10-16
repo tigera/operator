@@ -27,7 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 )
 
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
@@ -71,7 +73,7 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 
 func GetClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: "tigera-secure-es-elastic-user", Namespace: render.ElasticsearchNamespace}, esSecret); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
 		if !errors.IsNotFound(err) {
 			return "", "", nil, err
 		}
@@ -84,7 +86,7 @@ func GetClientCredentials(client client.Client, ctx context.Context) (string, st
 	}
 
 	roots, err := getESRoots(esPublicCert)
-	return "elastic", string(esSecret.Data["elastic"]), roots, err
+	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
 }
 
 func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
@@ -108,8 +110,20 @@ func NewESClient(user string, password string, root *x509.CertPool) (*elastic.Cl
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
 	}
 
+	ep := render.ElasticsearchHTTPSEndpoint
+	localRun := false
+	if os.Getenv("LOCAL_RUN") != "" {
+		localRun, _ = strconv.ParseBool(os.Getenv("LOCAL_RUN"))
+	}
+	if localRun {
+		h = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		}
+		ep = "https://localhost:9200"
+	}
+
 	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(render.ElasticsearchHTTPSEndpoint),
+		elastic.SetURL(ep),
 		elastic.SetHttpClient(h),
 		elastic.SetErrorLog(logrus.StandardLogger()),
 		elastic.SetSniff(false),

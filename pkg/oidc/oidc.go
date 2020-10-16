@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -17,7 +18,14 @@ type WellKnownConfig struct {
 }
 
 func LookupWellKnownConfig(issuerURL string) (*WellKnownConfig, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/.well-known/openid-configuration", issuerURL))
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	client := &http.Client{Transport: tr}
+
+	resp, err := client.Get(fmt.Sprintf("%s/.well-known/openid-configuration", issuerURL))
 	if err != nil {
 		return nil, err
 	}

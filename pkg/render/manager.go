@@ -21,8 +21,6 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -32,6 +30,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -57,7 +56,6 @@ const (
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
 	ManagerInternalTLSHashAnnotation = "hash.operator.tigera.io/internal-tls-secret"
-	oidcConfigHashAnnotation         = "hash.operator.tigera.io/oidc-config"
 )
 
 // ManagementClusterConnection configuration constants
@@ -72,7 +70,7 @@ const (
 )
 
 func Manager(
-	cr *operator.Manager,
+	authentication *operator.Authentication,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
@@ -81,10 +79,10 @@ func Manager(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	installation *operator.Installation,
-	oidcConfig *corev1.ConfigMap,
 	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
+	dexSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsAnnotations := make(map[string]string)
@@ -105,6 +103,11 @@ func Manager(
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
+	if dexSecret != nil {
+		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, dexSecret)...)
+		tlsAnnotations[DexTLSSecretAnnotation] = AnnotationHash(dexSecret.Data)
+	}
+
 	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 
 	if managementCluster != nil {
@@ -117,7 +120,7 @@ func Manager(
 		tlsAnnotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
-		cr:                         cr,
+		authentication:             authentication,
 		esSecrets:                  esSecrets,
 		kibanaSecrets:              kibanaSecrets,
 		complianceServerCertSecret: complianceServerCertSecret,
@@ -127,13 +130,12 @@ func Manager(
 		pullSecrets:                pullSecrets,
 		openshift:                  openshift,
 		installation:               installation,
-		oidcConfig:                 oidcConfig,
 		managementCluster:          managementCluster,
 	}, nil
 }
 
 type managerComponent struct {
-	cr                         *operator.Manager
+	authentication             *operator.Authentication
 	esSecrets                  []*corev1.Secret
 	kibanaSecrets              []*corev1.Secret
 	complianceServerCertSecret *corev1.Secret
@@ -143,7 +145,6 @@ type managerComponent struct {
 	pullSecrets                []*corev1.Secret
 	openshift                  bool
 	installation               *operator.Installation
-	oidcConfig                 *corev1.ConfigMap
 	managementCluster          *operator.ManagementCluster
 }
 
@@ -183,9 +184,6 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
-	if c.oidcConfig != nil {
-		objs = append(objs, copyConfigMaps(ManagerNamespace, c.oidcConfig)...)
-	}
 	objs = append(objs, c.managerDeployment())
 
 	return objs, nil
@@ -213,9 +211,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	// tigera-management-cluster-connection : cert used to generate guardian certificates
 	for k, v := range c.tlsAnnotations {
 		annotations[k] = v
-	}
-	if c.oidcConfig != nil {
-		annotations[oidcConfigHashAnnotation] = AnnotationHash(c.oidcConfig.Data)
 	}
 
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
@@ -335,23 +330,8 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			},
 		)
 	}
-	if c.oidcConfig != nil {
-		defaultMode := int32(420)
-		v = append(v,
-			v1.Volume{
-				Name: ManagerOIDCConfig,
-				VolumeSource: v1.VolumeSource{
-					ConfigMap: &v1.ConfigMapVolumeSource{
-						LocalObjectReference: v1.LocalObjectReference{
-							Name: ManagerOIDCConfig,
-						},
-						DefaultMode: &defaultMode,
-					},
-				},
-			})
-	}
 
-	return v
+	return AppendDexVolume(v, c.authentication)
 }
 
 // managerProbe returns the probe for the manager container.
@@ -422,18 +402,11 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
-		Image:           components.GetReference(components.ComponentManager, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image:           "gcr.io/tigera-dev/cnx/tigera/cnx-manager:rene",
+		ImagePullPolicy: "Always",
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
-	}
-
-	if c.oidcConfig != nil {
-		// If OIDC configuration is defined, use manager to avail well-known and JWKS configuration.
-		tm.VolumeMounts = []corev1.VolumeMount{
-			{Name: ManagerOIDCConfig, MountPath: ManagerOIDCWellknownURI},
-			{Name: ManagerOIDCConfig, MountPath: ManagerOIDCJwksURI},
-		}
 	}
 
 	return tm
@@ -441,42 +414,41 @@ func (c *managerComponent) managerContainer() corev1.Container {
 
 // managerOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
 func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
-	envs := []corev1.EnvVar{
-		{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: string(c.cr.Spec.Auth.Type)},
-	}
+	var envs []corev1.EnvVar
 
-	switch c.cr.Spec.Auth.Type {
-	case operator.AuthTypeOIDC:
-		oidcEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.cr.Spec.Auth.Authority},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cr.Spec.Auth.ClientID},
-		}
-		envs = append(envs, oidcEnvs...)
-	case operator.AuthTypeOAuth:
-		oauthEnvs := []corev1.EnvVar{
-			{Name: "CNX_WEB_OAUTH_AUTHORITY", Value: c.cr.Spec.Auth.Authority},
-			{Name: "CNX_WEB_OAUTH_CLIENT_ID", Value: c.cr.Spec.Auth.ClientID},
-		}
-		envs = append(envs, oauthEnvs...)
+	if c.authentication == nil {
+		envs = []corev1.EnvVar{{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "Token"}}
+	} else {
+		envs = []corev1.EnvVar{
+			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.authentication.Spec.ManagerDomain)},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: DexClientId}}
 	}
 	return envs
 }
 
 // managerProxyContainer returns the container for the manager proxy container.
 func (c *managerComponent) managerProxyContainer() corev1.Container {
+	env := []corev1.EnvVar{
+		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
+		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
+		{Name: "VOLTRON_LOGLEVEL", Value: "info"},
+		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
+		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
+		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
+		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
+	}
+
+	if c.authentication != nil {
+		env = AppendDexEnv(env, c.authentication, "VOLTRON_")
+	}
+
 	return corev1.Container{
-		Name:  VoltronName,
-		Image: components.GetReference(components.ComponentManagerProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-		Env: []corev1.EnvVar{
-			{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
-			{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc", ComplianceNamespace)},
-			{Name: "VOLTRON_LOGLEVEL", Value: "info"},
-			{Name: "VOLTRON_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
-			{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
-			{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
-			{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
-			{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
-		},
+		Name:            VoltronName,
+		Image:           "gcr.io/tigera-dev/cnx/tigera/voltron:rene", //todo: revert
+		ImagePullPolicy: "Always",                                    //todo: revert
+		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securityContext(),
@@ -495,22 +467,26 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 
-	return mounts
+	return AppendDexVolumeMount(mounts, c.authentication)
 }
 
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:            "tigera-es-proxy",
-		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image:           "gcr.io/tigera-dev/cnx/tigera/es-proxy:rene", //todo: revert this to components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		ImagePullPolicy: "Always",                                     //todo: remove
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
+		Env:             AppendDexEnv([]v1.EnvVar{}, c.authentication, ""),
 	}
+
+	volumeMounts := []corev1.VolumeMount{}
 	if c.managementCluster != nil {
-		apiServer.VolumeMounts = []corev1.VolumeMount{
-			{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true},
-		}
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
 	}
+
+	apiServer.VolumeMounts = AppendDexVolumeMount(volumeMounts, c.authentication)
 	return apiServer
 }
 
@@ -608,6 +584,11 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				APIGroups: []string{""},
 				Resources: []string{"serviceaccounts", "namespaces"},
 				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"users", "groups", "serviceaccounts"},
+				Verbs:     []string{"impersonate"},
 			},
 		},
 	}

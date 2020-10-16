@@ -1,9 +1,27 @@
+// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package test
 
 import (
 	"fmt"
 	"reflect"
 )
+
+// The code here is for testing purposes and can be used to populate all fields of a struct
+// with a value. This can be useful for writing unit tests to check that all fields are processed
+// by a function.
 
 const (
 	DefaultNonZeroInt64   int64   = 1
@@ -108,29 +126,11 @@ func (defaulter *nonZeroValueDefaulter) setDefaultValue(value reflect.Value) err
 
 func setPrimitive(v reflect.Value) error {
 	switch v.Kind() {
-	case reflect.Int:
-		fallthrough
-	case reflect.Int8:
-		fallthrough
-	case reflect.Int16:
-		fallthrough
-	case reflect.Int32:
-		fallthrough
-	case reflect.Int64:
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		v.SetInt(DefaultNonZeroInt64)
-	case reflect.Uint:
-		fallthrough
-	case reflect.Uint8:
-		fallthrough
-	case reflect.Uint16:
-		fallthrough
-	case reflect.Uint32:
-		fallthrough
-	case reflect.Uint64:
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		v.SetUint(DefaultNonZeroUint64)
-	case reflect.Float32:
-		fallthrough
-	case reflect.Float64:
+	case reflect.Float32, reflect.Float64:
 		v.SetFloat(DefaultNonZeroFloat64)
 	case reflect.String:
 		v.SetString(DefaultNonZeroString)

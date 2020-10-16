@@ -59,6 +59,7 @@ const (
 	ElasticsearchConfigMapName            = "tigera-secure-elasticsearch"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
+	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 
 	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc"
 	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"

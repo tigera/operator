@@ -364,7 +364,7 @@ func (c *dexComponent) env() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.idpSecret.Name}}}},
 		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.idpSecret.Name}}}},
-		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.idpSecret.Name}}}},
+		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexSecret.Name}}}},
 	}
 
 	if c.idpSecret.Data[ServiceAccountSecretField] != nil {
@@ -436,7 +436,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 func dexAnnotations(c *dexComponent) map[string]string {
 	var annotations = map[string]string{
 		DexTLSSecretAnnotation: AnnotationHash(c.tlsSecret.Data),
-		dexConfigAnnotation:    AnnotationHash(c.connector),
+		dexConfigAnnotation:    AnnotationHash(c.configMap()),
 		dexIdpSecretAnnotation: AnnotationHash(c.idpSecret.Data),
 		dexSecretAnnotation:    AnnotationHash(c.dexSecret.Data),
 	}

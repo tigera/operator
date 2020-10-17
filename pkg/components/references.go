@@ -39,6 +39,8 @@ func GetReference(c component, registry, imagepath string) string {
 			registry = CalicoRegistry
 		case ComponentElasticsearchOperator:
 			registry = ECKRegistry
+		case ComponentDex:
+			registry = DexRegistry
 		default:
 			registry = TigeraRegistry
 		}

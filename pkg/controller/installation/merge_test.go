@@ -15,10 +15,14 @@
 package installation
 
 import (
+	"fmt"
+	"reflect"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	diff "github.com/r3labs/diff/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -435,8 +439,8 @@ var _ = Describe("Installation merge tests", func() {
 					HostPorts:                  &_hpe,
 				},
 				&opv1.CalicoNetworkSpec{
-					BGP:                        &_BGPE,
-					MTU:                        intPtr(100),
+					BGP: &_BGPE,
+					MTU: intPtr(100),
 					NodeAddressAutodetectionV4: &opv1.NodeAddressAutodetection{Interface: "enp0s*"},
 					HostPorts:                  &_hpe,
 				}),
@@ -671,4 +675,83 @@ var _ = Describe("Installation merge tests", func() {
 				&metav1.ObjectMeta{Name: "omSetname"}),
 		)
 	})
+	Context("all fields handled", func() {
+		var defaulted *opv1.Installation
+		BeforeEach(func() {
+			defaulted = new(opv1.Installation)
+			defaultStruct(reflect.ValueOf(defaulted).Elem())
+			defaulted.Status = opv1.InstallationStatus{}
+		})
+
+		It("when set in cfg", func() {
+			defaulted.ObjectMeta = metav1.ObjectMeta{}
+			inst := overrideInstallationResource(
+				defaulted,
+				&opv1.Installation{},
+				metav1.ObjectMeta{},
+			)
+
+			changeLog, err := diff.Diff(defaulted, inst)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(changeLog).To(HaveLen(0))
+			Expect(reflect.DeepEqual(*inst, *defaulted)).To(BeTrue(),
+				fmt.Sprintf("Differences: %+v", changeLog))
+		})
+		It("when set in override", func() {
+			defaulted.ObjectMeta = metav1.ObjectMeta{}
+			inst := overrideInstallationResource(
+				&opv1.Installation{Spec: opv1.InstallationSpec{CalicoNetwork: &opv1.CalicoNetworkSpec{}}},
+				defaulted,
+				metav1.ObjectMeta{},
+			)
+
+			changeLog, err := diff.Diff(defaulted, inst)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(changeLog).To(HaveLen(0))
+			Expect(reflect.DeepEqual(*inst, *defaulted)).To(BeTrue(),
+				fmt.Sprintf("Differences: %+v", changeLog))
+		})
+		DescribeTable("merge defaulted", func(cfg, override, expect *opv1.Installation) {
+			inst := overrideInstallationResource(cfg, override, metav1.ObjectMeta{})
+			Expect(reflect.DeepEqual(inst, expect)).To(BeTrue())
+		},
+			Entry("empty cfg", &opv1.Installation{}, defaulted, defaulted),
+			Entry("empty override",
+				defaulted,
+				&opv1.Installation{},
+				defaulted),
+		)
+	})
 })
+
+func defaultStruct(strct reflect.Value) {
+	if strct.Kind() == reflect.Struct {
+		for i := 0; i < strct.NumField(); i++ {
+			f := strct.Field(i)
+			if !f.CanSet() {
+				continue
+			}
+			switch f.Kind() {
+			case reflect.Struct:
+				defaultStruct(f)
+			case reflect.Ptr:
+				f1 := reflect.New(f.Type().Elem())
+				defaultStruct(f1.Elem())
+				setPrimitive(f1.Elem())
+				f.Set(f1)
+			case reflect.Int, reflect.String:
+				setPrimitive(f)
+			}
+		}
+	}
+}
+func setPrimitive(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Int:
+		v.SetInt(6)
+	case reflect.String:
+		v.SetString("hi")
+	}
+}

@@ -182,12 +182,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
-				// Used when configuring bgp password in bgppeer
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
 				// Some information is stored on the node status.
 				APIGroups: []string{""},
 				Resources: []string{"nodes/status"},

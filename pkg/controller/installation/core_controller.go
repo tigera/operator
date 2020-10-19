@@ -574,7 +574,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 				r.SetDegraded("Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			instance = overrideInstallationResource(install, instance)
+			instance = overrideInstallationResource(install, instance, instance.ObjectMeta)
 		}
 	}
 

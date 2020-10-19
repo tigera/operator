@@ -18,6 +18,7 @@ import (
 	"reflect"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
@@ -31,8 +32,16 @@ const (
 	Different
 )
 
-func overrideInstallationResource(cfg, override *operatorv1.Installation) *operatorv1.Installation {
+func overrideInstallationResource(cfg, override *operatorv1.Installation, objectMeta metav1.ObjectMeta) *operatorv1.Installation {
 	inst := cfg.DeepCopy()
+	if override.Kind != "" {
+		inst.Kind = override.Kind
+	}
+	if override.APIVersion != "" {
+		inst.APIVersion = override.APIVersion
+	}
+
+	objectMeta.DeepCopyInto(&inst.ObjectMeta)
 
 	switch compareFields(inst.Spec.Variant, override.Spec.Variant) {
 	case BOnlySet, Different:
@@ -107,6 +116,7 @@ func overrideInstallationResource(cfg, override *operatorv1.Installation) *opera
 }
 
 func compareFields(a, b interface{}) CompareResult {
+	// Flag if az or bz are the nil/zero value
 	az := reflect.DeepEqual(a, reflect.Zero(reflect.TypeOf(a)).Interface())
 	bz := reflect.DeepEqual(b, reflect.Zero(reflect.TypeOf(b)).Interface())
 	if az && bz {

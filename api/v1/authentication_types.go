@@ -59,11 +59,11 @@ type AuthenticationStatus struct {
 type AuthenticationOIDC struct {
 	// IssuerURL is the URL to the OIDC provider.
 	// +required
-	IssuerURL string `json:"issuerURL,omitempty"`
+	IssuerURL string `json:"issuerURL"`
 
 	// UsernameClaim specifies which claim to use from the OIDC provider as the username.
 	// +required
-	UsernameClaim string `json:"usernameClaim,omitempty"`
+	UsernameClaim string `json:"usernameClaim"`
 
 	// RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, the following scopes are
 	// requested: ["openid", "email", "profile", "groups", "offline_access"].
@@ -87,7 +87,7 @@ type AuthenticationOIDC struct {
 type AuthenticationOpenshift struct {
 	// IssuerURL is the URL to the Opensift OAuth provider. Ex.: https://api.my-ocp-domain.com:6443
 	// +required
-	IssuerURL string `json:"issuerURL,omitempty"`
+	IssuerURL string `json:"issuerURL"`
 }
 
 // +kubebuilder:object:root=true

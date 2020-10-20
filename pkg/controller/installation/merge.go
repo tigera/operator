@@ -18,7 +18,6 @@ import (
 	"reflect"
 
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
@@ -32,84 +31,76 @@ const (
 	Different
 )
 
-func overrideInstallationResource(cfg, override *operatorv1.Installation, objectMeta metav1.ObjectMeta) *operatorv1.Installation {
-	inst := cfg.DeepCopy()
-	if override.Kind != "" {
-		inst.Kind = override.Kind
-	}
-	if override.APIVersion != "" {
-		inst.APIVersion = override.APIVersion
-	}
+func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operatorv1.InstallationSpec {
+	inst := *cfg.DeepCopy()
 
-	objectMeta.DeepCopyInto(&inst.ObjectMeta)
-
-	switch compareFields(inst.Spec.Variant, override.Spec.Variant) {
+	switch compareFields(inst.Variant, override.Variant) {
 	case BOnlySet, Different:
-		inst.Spec.Variant = override.Spec.Variant
+		inst.Variant = override.Variant
 	}
 
-	switch compareFields(inst.Spec.Registry, override.Spec.Registry) {
+	switch compareFields(inst.Registry, override.Registry) {
 	case BOnlySet, Different:
-		inst.Spec.Registry = override.Spec.Registry
+		inst.Registry = override.Registry
 	}
 
-	switch compareFields(inst.Spec.ImagePath, override.Spec.ImagePath) {
+	switch compareFields(inst.ImagePath, override.ImagePath) {
 	case BOnlySet, Different:
-		inst.Spec.ImagePath = override.Spec.ImagePath
+		inst.ImagePath = override.ImagePath
 	}
 
-	switch compareFields(inst.Spec.ImagePullSecrets, override.Spec.ImagePullSecrets) {
+	switch compareFields(inst.ImagePullSecrets, override.ImagePullSecrets) {
 	case BOnlySet, Different:
-		inst.Spec.ImagePullSecrets = make([]v1.LocalObjectReference, len(override.Spec.ImagePullSecrets))
-		copy(inst.Spec.ImagePullSecrets, override.Spec.ImagePullSecrets)
+		inst.ImagePullSecrets = make([]v1.LocalObjectReference, len(override.ImagePullSecrets))
+		copy(inst.ImagePullSecrets, override.ImagePullSecrets)
 	}
 
-	switch compareFields(inst.Spec.KubernetesProvider, override.Spec.KubernetesProvider) {
+	switch compareFields(inst.KubernetesProvider, override.KubernetesProvider) {
 	case BOnlySet, Different:
-		inst.Spec.KubernetesProvider = override.Spec.KubernetesProvider
+		inst.KubernetesProvider = override.KubernetesProvider
 	}
 
-	switch compareFields(inst.Spec.CNI, override.Spec.CNI) {
+	switch compareFields(inst.CNI, override.CNI) {
 	case BOnlySet:
-		inst.Spec.CNI = override.Spec.CNI.DeepCopy()
+		inst.CNI = override.CNI.DeepCopy()
 	case Different:
-		inst.Spec.CNI = mergeCNISpecs(inst.Spec.CNI, override.Spec.CNI)
+		inst.CNI = mergeCNISpecs(inst.CNI, override.CNI)
 	}
 
-	switch compareFields(inst.Spec.CalicoNetwork, override.Spec.CalicoNetwork) {
+	switch compareFields(inst.CalicoNetwork, override.CalicoNetwork) {
 	case BOnlySet:
-		inst.Spec.CalicoNetwork = override.Spec.CalicoNetwork.DeepCopy()
+		inst.CalicoNetwork = override.CalicoNetwork.DeepCopy()
 	case Different:
-		inst.Spec.CalicoNetwork = mergeCalicoNetwork(inst.Spec.CalicoNetwork, override.Spec.CalicoNetwork)
+		inst.CalicoNetwork = mergeCalicoNetwork(inst.CalicoNetwork, override.CalicoNetwork)
 	}
 
-	switch compareFields(inst.Spec.ControlPlaneNodeSelector, override.Spec.ControlPlaneNodeSelector) {
+	switch compareFields(inst.ControlPlaneNodeSelector, override.ControlPlaneNodeSelector) {
 	case BOnlySet, Different:
-		inst.Spec.ControlPlaneNodeSelector = make(map[string]string, len(override.Spec.ControlPlaneNodeSelector))
-		for key, val := range override.Spec.ControlPlaneNodeSelector {
-			inst.Spec.ControlPlaneNodeSelector[key] = val
+		inst.ControlPlaneNodeSelector = make(map[string]string, len(override.ControlPlaneNodeSelector))
+		for key, val := range override.ControlPlaneNodeSelector {
+			inst.ControlPlaneNodeSelector[key] = val
 		}
 	}
 
-	switch compareFields(inst.Spec.NodeMetricsPort, override.Spec.NodeMetricsPort) {
+	switch compareFields(inst.NodeMetricsPort, override.NodeMetricsPort) {
 	case BOnlySet, Different:
-		inst.Spec.NodeMetricsPort = override.Spec.NodeMetricsPort
+		inst.NodeMetricsPort = override.NodeMetricsPort
 	}
 
-	switch compareFields(inst.Spec.FlexVolumePath, override.Spec.FlexVolumePath) {
+	switch compareFields(inst.FlexVolumePath, override.FlexVolumePath) {
 	case BOnlySet, Different:
-		inst.Spec.FlexVolumePath = override.Spec.FlexVolumePath
+		inst.FlexVolumePath = override.FlexVolumePath
 	}
 
-	switch compareFields(inst.Spec.NodeUpdateStrategy, override.Spec.NodeUpdateStrategy) {
+	switch compareFields(inst.NodeUpdateStrategy, override.NodeUpdateStrategy) {
 	case BOnlySet, Different:
-		override.Spec.NodeUpdateStrategy.DeepCopyInto(&inst.Spec.NodeUpdateStrategy)
+		override.NodeUpdateStrategy.DeepCopyInto(&inst.NodeUpdateStrategy)
 	}
 
-	switch compareFields(inst.Spec.ComponentResources, override.Spec.ComponentResources) {
+	switch compareFields(inst.ComponentResources, override.ComponentResources) {
 	case BOnlySet, Different:
-		inst.Spec.ComponentResources = make([]operatorv1.ComponentResource, len(override.Spec.ComponentResources))
-		copy(inst.Spec.ComponentResources, override.Spec.ComponentResources)
+		inst.ComponentResources = make([]operatorv1.ComponentResource, len(override.ComponentResources))
+		copy(inst.ComponentResources, override.ComponentResources)
 	}
 
 	return inst

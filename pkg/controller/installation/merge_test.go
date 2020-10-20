@@ -26,7 +26,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	opv1 "github.com/tigera/operator/api/v1"
@@ -36,20 +35,20 @@ func intPtr(i int32) *int32 { return &i }
 
 var _ = Describe("Installation merge tests", func() {
 	DescribeTable("merge Variant", func(main, second, expectVariant *opv1.ProductVariant) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.Variant = *main
+			m.Variant = *main
 		}
 		if second != nil {
-			s.Spec.Variant = *second
+			s.Variant = *second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+		inst := overrideInstallationSpec(m, s)
 		if expectVariant == nil {
 			var x opv1.ProductVariant
-			Expect(inst.Spec.Variant).To(Equal(x))
+			Expect(inst.Variant).To(Equal(x))
 		} else {
-			Expect(inst.Spec.Variant).To(Equal(*expectVariant))
+			Expect(inst.Variant).To(Equal(*expectVariant))
 		}
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -60,16 +59,16 @@ var _ = Describe("Installation merge tests", func() {
 	)
 
 	DescribeTable("merge Registry", func(main, second, expect string) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != "" {
-			m.Spec.Registry = main
+			m.Registry = main
 		}
 		if second != "" {
-			s.Spec.Registry = second
+			s.Registry = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
-		Expect(inst.Spec.Registry).To(Equal(expect))
+		inst := overrideInstallationSpec(m, s)
+		Expect(inst.Registry).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set", "private.registry.com", nil, "private.registry.com"),
@@ -79,16 +78,16 @@ var _ = Describe("Installation merge tests", func() {
 	)
 
 	DescribeTable("merge ImagePath", func(main, second, expect string) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != "" {
-			m.Spec.ImagePath = main
+			m.ImagePath = main
 		}
 		if second != "" {
-			s.Spec.ImagePath = second
+			s.ImagePath = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
-		Expect(inst.Spec.ImagePath).To(Equal(expect))
+		inst := overrideInstallationSpec(m, s)
+		Expect(inst.ImagePath).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set", "pathx", nil, "pathx"),
@@ -98,16 +97,16 @@ var _ = Describe("Installation merge tests", func() {
 	)
 
 	DescribeTable("merge imagePullSecrets", func(main, second, expect []v1.LocalObjectReference) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.ImagePullSecrets = main
+			m.ImagePullSecrets = main
 		}
 		if second != nil {
-			s.Spec.ImagePullSecrets = second
+			s.ImagePullSecrets = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
-		Expect(inst.Spec.ImagePullSecrets).To(ConsistOf(expect))
+		inst := overrideInstallationSpec(m, s)
+		Expect(inst.ImagePullSecrets).To(ConsistOf(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set", []v1.LocalObjectReference{{Name: "pull-secret"}}, nil, []v1.LocalObjectReference{{Name: "pull-secret"}}),
@@ -117,21 +116,20 @@ var _ = Describe("Installation merge tests", func() {
 	)
 
 	DescribeTable("merge KubernetesProvider", func(main, second, expect *opv1.Provider) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.KubernetesProvider = *main
+			m.KubernetesProvider = *main
 		}
 		if second != nil {
-			s.Spec.KubernetesProvider = *second
+			s.KubernetesProvider = *second
 		}
-		var inst *opv1.Installation
-		inst = overrideInstallationResource(&m, &s, s.ObjectMeta)
+		inst := overrideInstallationSpec(m, s)
 		if expect == nil {
 			var x opv1.Provider
-			Expect(inst.Spec.KubernetesProvider).To(Equal(x))
+			Expect(inst.KubernetesProvider).To(Equal(x))
 		} else {
-			Expect(inst.Spec.KubernetesProvider).To(Equal(*expect))
+			Expect(inst.KubernetesProvider).To(Equal(*expect))
 		}
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -142,19 +140,19 @@ var _ = Describe("Installation merge tests", func() {
 	)
 
 	DescribeTable("merge CNISpec", func(main, second, expect *opv1.CNISpec) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.CNI = main
+			m.CNI = main
 		}
 		if second != nil {
-			s.Spec.CNI = second
+			s.CNI = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+		inst := overrideInstallationSpec(m, s)
 		if expect == nil {
-			Expect(inst.Spec.CNI).To(BeNil())
+			Expect(inst.CNI).To(BeNil())
 		} else {
-			Expect(*inst.Spec.CNI).To(Equal(*expect))
+			Expect(*inst.CNI).To(Equal(*expect))
 		}
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -178,19 +176,19 @@ var _ = Describe("Installation merge tests", func() {
 		_BGPE := opv1.BGPEnabled
 		_BGPD := opv1.BGPDisabled
 		DescribeTable("merge BGP", func(main, second, expect *opv1.BGPOption) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{BGP: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{BGP: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{BGP: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{BGP: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.BGP).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.BGP).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -201,19 +199,19 @@ var _ = Describe("Installation merge tests", func() {
 		)
 
 		DescribeTable("merge IPPools", func(main, second, expect []opv1.IPPool) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{IPPools: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{IPPools: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{IPPools: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{IPPools: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(inst.Spec.CalicoNetwork.IPPools).To(Equal(expect))
+				Expect(inst.CalicoNetwork.IPPools).To(Equal(expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -224,19 +222,19 @@ var _ = Describe("Installation merge tests", func() {
 		)
 
 		DescribeTable("merge MTU", func(main, second, expect *int32) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{MTU: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{MTU: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{MTU: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{MTU: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.MTU).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.MTU).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -248,19 +246,19 @@ var _ = Describe("Installation merge tests", func() {
 
 		_true := true
 		DescribeTable("merge NodeAddressAutodetectionV4", func(main, second, expect *opv1.NodeAddressAutodetection) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV4: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV4: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV4: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV4: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.NodeAddressAutodetectionV4).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.NodeAddressAutodetectionV4).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -281,19 +279,19 @@ var _ = Describe("Installation merge tests", func() {
 		)
 
 		DescribeTable("merge NodeAddressAutodetectionV6", func(main, second, expect *opv1.NodeAddressAutodetection) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV6: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV6: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV6: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV6: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.NodeAddressAutodetectionV6).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.NodeAddressAutodetectionV6).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -316,19 +314,19 @@ var _ = Describe("Installation merge tests", func() {
 		_hpe := opv1.HostPortsEnabled
 		_hpd := opv1.HostPortsDisabled
 		DescribeTable("merge HostPorts", func(main, second, expect *opv1.HostPortsType) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{HostPorts: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{HostPorts: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{HostPorts: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{HostPorts: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.HostPorts).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.HostPorts).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -341,19 +339,19 @@ var _ = Describe("Installation merge tests", func() {
 		_miNone := opv1.MultiInterfaceModeNone
 		_miMultus := opv1.MultiInterfaceModeMultus
 		DescribeTable("merge MultiInterfaceMode", func(main, second, expect *opv1.MultiInterfaceMode) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{MultiInterfaceMode: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{MultiInterfaceMode: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{MultiInterfaceMode: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{MultiInterfaceMode: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.MultiInterfaceMode).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.MultiInterfaceMode).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -366,19 +364,19 @@ var _ = Describe("Installation merge tests", func() {
 		_cipfE := opv1.ContainerIPForwardingEnabled
 		_cipfD := opv1.ContainerIPForwardingDisabled
 		DescribeTable("merge ContainerIPForwarding", func(main, second, expect *opv1.ContainerIPForwardingType) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{ContainerIPForwarding: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{ContainerIPForwarding: main}
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = &opv1.CalicoNetworkSpec{ContainerIPForwarding: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{ContainerIPForwarding: second}
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.Spec.CalicoNetwork.ContainerIPForwarding).To(Equal(*expect))
+				Expect(*inst.CalicoNetwork.ContainerIPForwarding).To(Equal(*expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -389,19 +387,19 @@ var _ = Describe("Installation merge tests", func() {
 		)
 
 		DescribeTable("merge ControlPlaneNodeSelector", func(main, second, expect map[string]string) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.ControlPlaneNodeSelector = main
+				m.ControlPlaneNodeSelector = main
 			}
 			if second != nil {
-				s.Spec.ControlPlaneNodeSelector = second
+				s.ControlPlaneNodeSelector = second
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.ControlPlaneNodeSelector).To(BeNil())
+				Expect(inst.ControlPlaneNodeSelector).To(BeNil())
 			} else {
-				Expect(inst.Spec.ControlPlaneNodeSelector).To(Equal(expect))
+				Expect(inst.ControlPlaneNodeSelector).To(Equal(expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -413,19 +411,19 @@ var _ = Describe("Installation merge tests", func() {
 		//TODO: Have some test that have different fields set and they merge.
 
 		DescribeTable("merge multiple CalicoNetwork fields", func(main, second, expect *opv1.CalicoNetworkSpec) {
-			m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-			s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.Spec.CalicoNetwork = main
+				m.CalicoNetwork = main
 			}
 			if second != nil {
-				s.Spec.CalicoNetwork = second
+				s.CalicoNetwork = second
 			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+			inst := overrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.Spec.CalicoNetwork).To(BeNil())
+				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(inst.Spec.CalicoNetwork).To(Equal(expect))
+				Expect(inst.CalicoNetwork).To(Equal(expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
@@ -462,19 +460,19 @@ var _ = Describe("Installation merge tests", func() {
 	})
 
 	DescribeTable("merge NodeMetricsPort", func(main, second, expect *int32) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.NodeMetricsPort = main
+			m.NodeMetricsPort = main
 		}
 		if second != nil {
-			s.Spec.NodeMetricsPort = second
+			s.NodeMetricsPort = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+		inst := overrideInstallationSpec(m, s)
 		if expect == nil {
-			Expect(inst.Spec.NodeMetricsPort).To(BeNil())
+			Expect(inst.NodeMetricsPort).To(BeNil())
 		} else {
-			Expect(*inst.Spec.NodeMetricsPort).To(Equal(*expect))
+			Expect(*inst.NodeMetricsPort).To(Equal(*expect))
 		}
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -485,16 +483,16 @@ var _ = Describe("Installation merge tests", func() {
 	)
 
 	DescribeTable("merge FlexVolumePath", func(main, second, expect string) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != "" {
-			m.Spec.FlexVolumePath = main
+			m.FlexVolumePath = main
 		}
 		if second != "" {
-			s.Spec.FlexVolumePath = second
+			s.FlexVolumePath = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
-		Expect(inst.Spec.FlexVolumePath).To(Equal(expect))
+		inst := overrideInstallationSpec(m, s)
+		Expect(inst.FlexVolumePath).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set", "pathx", nil, "pathx"),
@@ -514,20 +512,20 @@ var _ = Describe("Installation merge tests", func() {
 		RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &_2},
 	}
 	DescribeTable("merge NodeUpdateStrategy", func(main, second, expect *appsv1.DaemonSetUpdateStrategy) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.NodeUpdateStrategy = *main
+			m.NodeUpdateStrategy = *main
 		}
 		if second != nil {
-			s.Spec.NodeUpdateStrategy = *second
+			s.NodeUpdateStrategy = *second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+		inst := overrideInstallationSpec(m, s)
 		if expect == nil {
 			var x appsv1.DaemonSetUpdateStrategy
-			Expect(inst.Spec.NodeUpdateStrategy).To(Equal(x))
+			Expect(inst.NodeUpdateStrategy).To(Equal(x))
 		} else {
-			Expect(inst.Spec.NodeUpdateStrategy).To(Equal(*expect))
+			Expect(inst.NodeUpdateStrategy).To(Equal(*expect))
 		}
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -550,19 +548,19 @@ var _ = Describe("Installation merge tests", func() {
 		},
 	}
 	DescribeTable("merge ComponentResources", func(main, second, expect []opv1.ComponentResource) {
-		m := opv1.Installation{Spec: opv1.InstallationSpec{}}
-		s := opv1.Installation{Spec: opv1.InstallationSpec{}}
+		m := opv1.InstallationSpec{}
+		s := opv1.InstallationSpec{}
 		if main != nil {
-			m.Spec.ComponentResources = main
+			m.ComponentResources = main
 		}
 		if second != nil {
-			s.Spec.ComponentResources = second
+			s.ComponentResources = second
 		}
-		inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
+		inst := overrideInstallationSpec(m, s)
 		if expect == nil {
-			Expect(inst.Spec.ComponentResources).To(HaveLen(0))
+			Expect(inst.ComponentResources).To(HaveLen(0))
 		} else {
-			Expect(inst.Spec.ComponentResources).To(ConsistOf(expect))
+			Expect(inst.ComponentResources).To(ConsistOf(expect))
 		}
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -584,143 +582,60 @@ var _ = Describe("Installation merge tests", func() {
 			[]opv1.ComponentResource{_typhaComp}),
 	)
 
-	Context("test metadata merge", func() {
-		DescribeTable("merge TypeMeta", func(main, second, expect *metav1.TypeMeta) {
-			m := opv1.Installation{}
-			s := opv1.Installation{}
-			if main != nil {
-				m.TypeMeta = *main
-			}
-			if second != nil {
-				s.TypeMeta = *second
-			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
-			if expect == nil {
-				Expect(inst.Kind).To(Equal(""))
-				Expect(inst.APIVersion).To(Equal(""))
-			} else {
-				Expect(inst.Kind).To(Equal(expect.Kind))
-				Expect(inst.APIVersion).To(Equal(expect.APIVersion))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set",
-				&metav1.TypeMeta{Kind: "kindString", APIVersion: "1"},
-				nil,
-				&metav1.TypeMeta{Kind: "kindString", APIVersion: "1"}),
-			Entry("Second only set",
-				nil,
-				&metav1.TypeMeta{Kind: "kind2ndString", APIVersion: "2"},
-				&metav1.TypeMeta{Kind: "kind2ndString", APIVersion: "2"}),
-			Entry("Both set equal",
-				&metav1.TypeMeta{Kind: "kindBothString", APIVersion: "2"},
-				&metav1.TypeMeta{Kind: "kindBothString", APIVersion: "2"},
-				&metav1.TypeMeta{Kind: "kindBothString", APIVersion: "2"}),
-			Entry("Both set not matching",
-				&metav1.TypeMeta{Kind: "kindString", APIVersion: "1"},
-				&metav1.TypeMeta{Kind: "kind2ndString", APIVersion: "2"},
-				&metav1.TypeMeta{Kind: "kind2ndString", APIVersion: "2"}),
-		)
-		It("should merge ObjectMeta", func() {
-			m := opv1.Installation{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "installationKind",
-					APIVersion: "v4",
-				},
-			}
-			s := opv1.Installation{
-				TypeMeta: metav1.TypeMeta{},
-			}
-			inst := overrideInstallationResource(&m, &s, s.ObjectMeta)
-			Expect(inst.Kind).To(Equal("installationKind"))
-			Expect(inst.APIVersion).To(Equal("v4"))
-		})
-		DescribeTable("merge TypeMeta", func(main, second, om, expect *metav1.ObjectMeta) {
-			m := opv1.Installation{}
-			s := opv1.Installation{}
-			if main != nil {
-				m.ObjectMeta = *main
-			}
-			if second != nil {
-				s.ObjectMeta = *second
-			}
-			inst := overrideInstallationResource(&m, &s, *om)
-			if expect == nil {
-				var empty metav1.ObjectMeta
-				Expect(inst.GetObjectMeta()).To(Equal(empty.GetObjectMeta()))
-			} else {
-				Expect(inst.GetObjectMeta()).To(Equal(expect.GetObjectMeta()))
-			}
-		},
-			Entry("Both unset", nil, nil, &metav1.ObjectMeta{}, nil),
-			Entry("Main only set",
-				&metav1.ObjectMeta{Name: "mainname"},
-				nil,
-				&metav1.ObjectMeta{},
-				nil),
-			Entry("Second only set",
-				nil,
-				&metav1.ObjectMeta{Name: "2ndname"},
-				&metav1.ObjectMeta{},
-				nil),
-			Entry("With ObjectMeta set",
-				&metav1.ObjectMeta{Name: "name"},
-				&metav1.ObjectMeta{Name: "name"},
-				&metav1.ObjectMeta{Name: "omname"},
-				&metav1.ObjectMeta{Name: "omname"}),
-			Entry("Both set not matching",
-				&metav1.ObjectMeta{Name: "mainname"},
-				&metav1.ObjectMeta{Name: "2ndname"},
-				&metav1.ObjectMeta{Name: "omSetname"},
-				&metav1.ObjectMeta{Name: "omSetname"}),
-		)
-	})
 	Context("all fields handled", func() {
-		var defaulted *opv1.Installation
+		var defaulted opv1.InstallationSpec
 		BeforeEach(func() {
-			defaulted = new(opv1.Installation)
-			defaultStruct(reflect.ValueOf(defaulted).Elem())
-			defaulted.Status = opv1.InstallationStatus{}
+			defaultStruct(reflect.ValueOf(&defaulted).Elem())
 		})
 
 		It("when set in cfg", func() {
-			defaulted.ObjectMeta = metav1.ObjectMeta{}
-			inst := overrideInstallationResource(
+			inst := overrideInstallationSpec(
 				defaulted,
-				&opv1.Installation{},
-				metav1.ObjectMeta{},
+				opv1.InstallationSpec{},
 			)
 
 			changeLog, err := diff.Diff(defaulted, inst)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(changeLog).To(HaveLen(0))
-			Expect(reflect.DeepEqual(*inst, *defaulted)).To(BeTrue(),
+			Expect(reflect.DeepEqual(inst, defaulted)).To(BeTrue(),
 				fmt.Sprintf("Differences: %+v", changeLog))
 		})
 		It("when set in override", func() {
-			defaulted.ObjectMeta = metav1.ObjectMeta{}
-			inst := overrideInstallationResource(
-				&opv1.Installation{Spec: opv1.InstallationSpec{CalicoNetwork: &opv1.CalicoNetworkSpec{}}},
-				defaulted,
-				metav1.ObjectMeta{},
-			)
+			cfg := opv1.InstallationSpec{CalicoNetwork: &opv1.CalicoNetworkSpec{}}
+			fmt.Printf("This test")
+			inst := overrideInstallationSpec(cfg, defaulted)
 
 			changeLog, err := diff.Diff(defaulted, inst)
 			Expect(err).NotTo(HaveOccurred())
-
 			Expect(changeLog).To(HaveLen(0))
-			Expect(reflect.DeepEqual(*inst, *defaulted)).To(BeTrue(),
+			Expect(reflect.DeepEqual(inst, defaulted)).To(BeTrue(),
 				fmt.Sprintf("Differences: %+v", changeLog))
 		})
-		DescribeTable("merge defaulted", func(cfg, override, expect *opv1.Installation) {
-			inst := overrideInstallationResource(cfg, override, metav1.ObjectMeta{})
+		DescribeTable("merge defaulted", func(cfg, override, expect opv1.InstallationSpec) {
+			inst := overrideInstallationSpec(cfg, override)
+
+			changeLog, err := diff.Diff(expect, inst)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(changeLog).To(HaveLen(0))
+			Expect(reflect.DeepEqual(inst, expect)).To(BeTrue(),
+				fmt.Sprintf("Differences: %+v", changeLog))
 			Expect(reflect.DeepEqual(inst, expect)).To(BeTrue())
 		},
-			Entry("empty cfg", &opv1.Installation{}, defaulted, defaulted),
+			Entry("empty cfg",
+				opv1.InstallationSpec{},
+				defaulted,
+				defaulted),
 			Entry("empty override",
 				defaulted,
-				&opv1.Installation{},
+				opv1.InstallationSpec{},
+				defaulted),
+			Entry("empty cfg with substruct defaults",
+				opv1.InstallationSpec{
+					CalicoNetwork: &opv1.CalicoNetworkSpec{},
+					CNI:           &opv1.CNISpec{},
+				},
+				defaulted,
 				defaulted),
 		)
 	})

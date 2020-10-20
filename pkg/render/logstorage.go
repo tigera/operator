@@ -25,9 +25,12 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+
 	"gopkg.in/inf.v0"
+
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -118,22 +121,6 @@ done
 echo "Keystore initialization successful."
 `
 )
-
-type OIDCAuthentication struct {
-	ClientID              string
-	Secret                string
-	IssuerURL             string
-	SiteURL               string
-	UsernameClaim         string
-	UsernamePrefix        string
-	GroupPrefix           string
-	GroupsClaim           string
-	AuthorizationEndpoint string
-	TokenEndpoint         string
-	JWKSetURI             string
-	RequestedScopes       []string
-	UserInfoEndpoint      string
-}
 
 // Elasticsearch renders the
 func LogStorage(
@@ -769,11 +756,11 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"order":                       1,
 			"rp.client_id":                DexClientId,
 			"rp.response_type":            "code",
-			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerDomain()),
+			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.BaseURL()),
 			"rp.requested_scopes":         requestedScopes,
-			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerDomain()),
-			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerDomain()),
-			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerDomain()),
+			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.BaseURL()),
+			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.BaseURL()),
+			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.BaseURL()),
 			"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
 			"op.jwkset_path":              DexJWKSURI,
 			"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",

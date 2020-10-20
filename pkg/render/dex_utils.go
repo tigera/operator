@@ -17,15 +17,24 @@ package render
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 )
 
+type ConnectorType string
+
+const (
+	ConnectorTypeOIDC      = "oidc"
+	ConnectorTypeOpenshift = "openshift"
+	ConnectorTypeGoogle    = "google"
+)
+
 type DexConfig interface {
-	// ManagerDomain returns the address where the Manager UI can be found. Ex: https://example.org
-	ManagerDomain() string
+	// BaseURL returns the address where the Manager UI can be found. Ex: https://example.org
+	BaseURL() string
 	// UsernamePrefix returns the string to prepend to every username for RBAC.
 	UsernamePrefix() string
 	// GroupsPrefix returns the string to prepend to every group for RBAC.
@@ -48,10 +57,16 @@ type DexConfig interface {
 	AppendDexVolume(volumes []corev1.Volume) []corev1.Volume
 	//AppendDexVolumeMount adds volume mounts that are related to dex.
 	AppendDexVolumeMount(mounts []corev1.VolumeMount) []corev1.VolumeMount
+
+	ConnectorType() string
+	IssuerURL() string
 }
 
+// DexOption can be passed during the creation of a DexConfig.
 type DexOption func(*dexConfig) error
 
+// WithDexSecret creates a DexConfig for consumers that need the client secret of Dex. It can use an existing secret
+// or generate a new one.
 func WithDexSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
 	return func(d *dexConfig) error {
 		if secret == nil {
@@ -66,16 +81,23 @@ func WithDexSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
 	}
 }
 
-func WithTLSSecret(secret *corev1.Secret) DexOption {
+// WithDexSecret creates a DexConfig for consumers that need to create a secure tls connection with Dex. It can use an
+// existing secret or generate a new one.
+func WithTLSSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
 	return func(d *dexConfig) error {
 		if secret == nil {
-			return fmt.Errorf("tlsSecret is missing")
+			if createIfMissing {
+				secret = CreateDexTLSSecret()
+			} else {
+				return fmt.Errorf("tlsSecret is missing")
+			}
 		}
 		d.tlsSecret = secret
 		return nil
 	}
 }
 
+// WithIdpSecret creates a DexConfig and pass in the config of the upstream IdP, such that Dex can connect to it.
 func WithIdpSecret(secret *corev1.Secret) DexOption {
 	return func(d *dexConfig) error {
 		if secret == nil {
@@ -86,6 +108,7 @@ func WithIdpSecret(secret *corev1.Secret) DexOption {
 	}
 }
 
+// Create a new DexConfig.
 func NewDexConfig(
 	authentication *oprv1.Authentication,
 	options []DexOption) (DexConfig, error) {
@@ -109,7 +132,32 @@ func NewDexConfig(
 		}
 	}
 
-	dexConfig := &dexConfig{authentication: authentication}
+	// If the manager domain is not a URL, prepend https://.
+	baseUrl := authentication.Spec.ManagerDomain
+	if !strings.HasPrefix(baseUrl, "http://") && !strings.HasPrefix(baseUrl, "https://") {
+		baseUrl = fmt.Sprintf("https://%s", baseUrl)
+	}
+
+	var connectorType ConnectorType
+	var issuer string
+	if authentication.Spec.OIDC != nil {
+		issuer = authentication.Spec.OIDC.IssuerURL
+		if issuer == "https://accounts.google.com" {
+			connectorType = ConnectorTypeGoogle
+		} else {
+			connectorType = ConnectorTypeOIDC
+		}
+	} else if authentication.Spec.Openshift != nil {
+		issuer = authentication.Spec.OIDC.IssuerURL
+		connectorType = ConnectorTypeOpenshift
+	}
+
+	dexConfig := &dexConfig{
+		authentication: authentication,
+		connectorType:  connectorType,
+		issuer:         issuer,
+		baseUrl:        baseUrl,
+	}
 
 	for _, option := range options {
 		if err := option(dexConfig); err != nil {
@@ -125,10 +173,13 @@ type dexConfig struct {
 	tlsSecret      *corev1.Secret
 	idpSecret      *corev1.Secret
 	dexSecret      *corev1.Secret
+	baseUrl        string
+	issuer         string
+	connectorType  ConnectorType
 }
 
-func (d *dexConfig) ManagerDomain() string {
-	return d.authentication.Spec.ManagerDomain
+func (d *dexConfig) BaseURL() string {
+	return d.baseUrl
 }
 
 func (d *dexConfig) UsernamePrefix() string {
@@ -140,17 +191,19 @@ func (d *dexConfig) GroupsPrefix() string {
 }
 
 func (d *dexConfig) UsernameClaim() string {
-	if d.authentication.Spec.OIDC != nil {
-		return d.authentication.Spec.OIDC.UsernameClaim
+	claim := "email"
+	if d.connectorType == ConnectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
+		claim = d.authentication.Spec.OIDC.UsernameClaim
 	}
-	return "email"
+	return claim
 }
 
 func (d *dexConfig) GroupsClaim() string {
-	if d.authentication.Spec.OIDC != nil {
-		return d.authentication.Spec.OIDC.GroupsClaim
+	claim := "groups"
+	if d.connectorType == ConnectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
+		claim = d.authentication.Spec.OIDC.GroupsClaim
 	}
-	return "groups"
+	return claim
 }
 
 func (d *dexConfig) ClientSecret() []byte {
@@ -187,7 +240,7 @@ func (d *dexConfig) OpenshiftRootCA() []byte {
 func (d *dexConfig) AppendDexEnv(env []corev1.EnvVar, prefix string) []corev1.EnvVar {
 	return append(env,
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerDomain())},
+		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.BaseURL())},
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
@@ -213,7 +266,23 @@ func (d *dexConfig) AppendDexVolume(volumes []corev1.Volume) []corev1.Volume {
 	})
 }
 
-// Add mount for ubi base image trusted cert location
+// AppendDexVolumeMount adds mount for ubi base image trusted cert location
 func (d *dexConfig) AppendDexVolumeMount(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 	return append(mounts, corev1.VolumeMount{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"})
+}
+
+// ConnectorType returns the type of connector that is configured.
+func (d *dexConfig) ConnectorType() string {
+	return string(d.connectorType)
+}
+
+// Issuer URL of the connector
+func (d *dexConfig) IssuerURL() string {
+	if d.connectorType == ConnectorTypeOIDC {
+		return d.authentication.Spec.OIDC.IssuerURL
+	}
+	if d.connectorType == ConnectorTypeOpenshift {
+		return d.authentication.Spec.Openshift.IssuerURL
+	}
+	return ""
 }

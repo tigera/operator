@@ -338,21 +338,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	tlsSecret *corev1.Secret) []runtime.Object {
 	var authentication *operator.Authentication
-	var dexSecret *corev1.Secret
 	if oidc {
-		dexSecret = &corev1.Secret{
-			Data: map[string][]byte{
-				"tls.crt": []byte("bla"),
-			},
-		}
 		authentication = &operator.Authentication{
 			Spec: operator.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 	}
 	dexCfg, _ := render.NewDexConfig(authentication, []render.DexOption{
-		render.WithTLSSecret(tlsSecret),
-		render.WithDexSecret(dexSecret, false),
+		render.WithTLSSecret(tlsSecret, false),
+		render.WithDexSecret(nil, true),
 	})
 
 	var tunnelSecret *corev1.Secret

@@ -131,7 +131,7 @@ func CreateDexClientSecret() *corev1.Secret {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-dex",
-			Namespace: "tigera-operator",
+			Namespace: OperatorNamespace(),
 		},
 		Data: map[string][]byte{
 			ClientSecretSecretField: []byte(generatePassword(24)),

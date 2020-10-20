@@ -110,12 +110,6 @@ spec:
                         description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
                         type: string
                       logTypes:
-                        default:
-                        - AuditEE
-                        - AuditKube
-                        - DNS
-                        - Flows
-                        - IDSEvents
                         description: LogTypes contains a list of types of logs to
                           export to syslog. By default, if this field is omitted,
                           it will be set to include all possible values.

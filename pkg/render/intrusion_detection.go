@@ -647,6 +647,16 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 func (c *intrusionDetectionComponent) intrusionDetectionPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("intrusion-detection")
+
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
+		{
+			PathPrefix: "/var/log/calico",
+			ReadOnly:   false,
+		},
+	}
+
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }
 

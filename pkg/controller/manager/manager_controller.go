@@ -375,10 +375,9 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
-	var dexTLSSecret *corev1.Secret
+	var dexCfg render.DexConfig
 	if authentication != nil {
-		dexTLSSecret = &corev1.Secret{}
+		dexTLSSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
 			if errors.IsNotFound(err) {
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
@@ -387,13 +386,13 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 				return reconcile.Result{}, err
 			}
 		}
-	}
-	dexCfg, err := render.NewDexConfig(authentication, []render.DexOption{
-		render.WithTLSSecret(dexTLSSecret),
-	})
-	if err != nil {
-		r.status.SetDegraded("Failed to create dex config", err.Error())
-		return reconcile.Result{}, err
+		dexCfg, err = render.NewDexConfig(authentication, []render.DexOption{
+			render.WithTLSSecret(dexTLSSecret, false),
+		})
+		if err != nil {
+			r.status.SetDegraded("Failed to create dex config", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Create a component handler to manage the rendered component.

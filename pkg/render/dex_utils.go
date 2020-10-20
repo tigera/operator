@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -24,8 +25,8 @@ import (
 )
 
 type DexConfig interface {
-	// ManagerDomain returns the address where the Manager UI can be found. Ex: https://example.org
-	ManagerDomain() string
+	// BaseURL returns the address where the Manager UI can be found. Ex: https://example.org
+	BaseURL() string
 	// UsernamePrefix returns the string to prepend to every username for RBAC.
 	UsernamePrefix() string
 	// GroupsPrefix returns the string to prepend to every group for RBAC.
@@ -50,8 +51,11 @@ type DexConfig interface {
 	AppendDexVolumeMount(mounts []corev1.VolumeMount) []corev1.VolumeMount
 }
 
+// DexOption can be passed during the creation of a DexConfig.
 type DexOption func(*dexConfig) error
 
+// WithDexSecret creates a DexConfig for consumers that need the client secret of Dex. It can use an existing secret
+// or generate a new one.
 func WithDexSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
 	return func(d *dexConfig) error {
 		if secret == nil {
@@ -66,16 +70,23 @@ func WithDexSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
 	}
 }
 
-func WithTLSSecret(secret *corev1.Secret) DexOption {
+// WithDexSecret creates a DexConfig for consumers that need to create a secure tls connection with Dex. It can use an
+// existing secret or generate a new one.
+func WithTLSSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
 	return func(d *dexConfig) error {
 		if secret == nil {
-			return fmt.Errorf("tlsSecret is missing")
+			if createIfMissing {
+				secret = CreateDexTLSSecret()
+			} else {
+				return fmt.Errorf("tlsSecret is missing")
+			}
 		}
 		d.tlsSecret = secret
 		return nil
 	}
 }
 
+// WithIdpSecret creates a DexConfig and pass in the config of the upstream IdP, such that Dex can connect to it.
 func WithIdpSecret(secret *corev1.Secret) DexOption {
 	return func(d *dexConfig) error {
 		if secret == nil {
@@ -86,6 +97,7 @@ func WithIdpSecret(secret *corev1.Secret) DexOption {
 	}
 }
 
+// Create a new DexConfig.
 func NewDexConfig(
 	authentication *oprv1.Authentication,
 	options []DexOption) (DexConfig, error) {
@@ -109,6 +121,12 @@ func NewDexConfig(
 		}
 	}
 
+	// If the manager domain is not a URL, prepend https://.
+	baseUrl := authentication.Spec.ManagerDomain
+	if !strings.HasPrefix(baseUrl, "http://") && !strings.HasPrefix(baseUrl, "https://") {
+		baseUrl = fmt.Sprintf("https://%s", baseUrl)
+	}
+
 	dexConfig := &dexConfig{authentication: authentication}
 
 	for _, option := range options {
@@ -125,10 +143,11 @@ type dexConfig struct {
 	tlsSecret      *corev1.Secret
 	idpSecret      *corev1.Secret
 	dexSecret      *corev1.Secret
+	baseUrl        string
 }
 
-func (d *dexConfig) ManagerDomain() string {
-	return d.authentication.Spec.ManagerDomain
+func (d *dexConfig) BaseURL() string {
+	return d.baseUrl
 }
 
 func (d *dexConfig) UsernamePrefix() string {
@@ -187,7 +206,7 @@ func (d *dexConfig) OpenshiftRootCA() []byte {
 func (d *dexConfig) AppendDexEnv(env []corev1.EnvVar, prefix string) []corev1.EnvVar {
 	return append(env,
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerDomain())},
+		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.BaseURL())},
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
 		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},

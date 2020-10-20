@@ -485,7 +485,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 				},
 			}, []render.DexOption{
-				render.WithDexSecret(&corev1.Secret{Data: map[string][]byte{render.ClientSecretSecretField: []byte("secret")}}, false),
+				render.WithDexSecret(nil, true),
 			})
 
 			component := render.LogStorage(

@@ -75,6 +75,9 @@ spec:
                     description: Deprecated. Please use Authentication.Spec.UsernamePrefix
                       instead.
                     type: string
+                required:
+                - issuerURL
+                - usernameClaim
                 type: object
               openshift:
                 description: Openshift contains the configuration needed to setup
@@ -84,6 +87,8 @@ spec:
                     description: 'IssuerURL is the URL to the Opensift OAuth provider.
                       Ex.: https://api.my-ocp-domain.com:6443'
                     type: string
+                required:
+                - issuerURL
                 type: object
               usernamePrefix:
                 description: If specified, UsernamePrefix is prepended to each user

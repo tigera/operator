@@ -66,7 +66,6 @@ const (
 )
 
 func Dex(
-	authentication *oprv1.Authentication,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	installation *oprv1.Installation,
@@ -78,7 +77,7 @@ func Dex(
 		pullSecrets:  pullSecrets,
 		openshift:    openshift,
 		installation: installation,
-		connector:    getConnector(authentication),
+		connector:    getConnector(dexConfig),
 	}
 }
 
@@ -360,14 +359,14 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
 		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
 	}
-	host := c.dexConfig.ManagerDomain()
+	host := c.dexConfig.BaseURL()
 	if host != "" && !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", host))
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", host))
 	}
 
 	data := map[string]interface{}{
-		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.ManagerDomain()),
+		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.BaseURL()),
 		"storage": map[string]interface{}{
 			"type": "kubernetes",
 			"config": map[string]bool{
@@ -423,46 +422,31 @@ func dexAnnotations(c *dexComponent) map[string]string {
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
-func getConnector(authentication *oprv1.Authentication) map[string]interface{} {
-	c := map[string]interface{}{}
+func getConnector(dexConfig DexConfig) map[string]interface{} {
+	connectorType := dexConfig.ConnectorType()
 	config := map[string]interface{}{
-		"clientID":               fmt.Sprintf("$%s", ClientIDEnv),
-		"clientSecret":           fmt.Sprintf("$%s", ClientSecretEnv),
-		"redirectURI":            fmt.Sprintf("%s/dex/callback", authentication.Spec.ManagerDomain),
+		"issuer":       dexConfig.IssuerURL(),
+		"clientID":     fmt.Sprintf("$%s", ClientIDEnv),
+		"clientSecret": fmt.Sprintf("$%s", ClientSecretEnv),
+		"redirectURI":  fmt.Sprintf("%s/dex/callback", dexConfig.BaseURL()),
+
+		// OIDC (and google) specific.
+		"userNameKey": dexConfig.UsernameClaim(),
+		"userIDKey":   dexConfig.UsernameClaim(),
+
+		//Google specific.
 		"serviceAccountFilePath": ServiceAccountSecretLocation,
 		"adminEmail":             fmt.Sprintf("$%s", GoogleAdminEmailEnv),
+
+		//Openshift specific.
+		RootCASecretField: RootCASecretLocation,
 	}
 
-	var typeid string
-	var name string
-	var issuer string
-
-	oidc := authentication.Spec.OIDC
-	if oidc != nil {
-		issuer = oidc.IssuerURL
-		if issuer == "https://accounts.google.com" {
-			name = "Google"
-			typeid = "google"
-		} else {
-			name = "OIDC"
-			typeid = "oidc"
-		}
-		config["userNameKey"] = oidc.UsernameClaim
-		config["userIDKey"] = oidc.UsernameClaim
+	c := map[string]interface{}{
+		"id":     connectorType,
+		"type":   connectorType,
+		"name":   connectorType,
+		"config": config,
 	}
-
-	if authentication.Spec.Openshift != nil {
-		name = "Openshift"
-		typeid = "openshift"
-		issuer = authentication.Spec.Openshift.IssuerURL
-		config[RootCASecretField] = RootCASecretLocation
-	}
-
-	c["type"] = typeid
-	c["id"] = typeid
-	c["name"] = name
-	c["config"] = config
-	config["issuer"] = issuer
-
 	return c
 }

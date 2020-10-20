@@ -78,8 +78,7 @@ type statusManager struct {
 	statefulsets map[string]types.NamespacedName
 	cronjobs     map[string]types.NamespacedName
 	lock         sync.Mutex
-	crQueried    bool
-	crPresent    bool
+	enabled      *bool
 
 	// Track degraded state as set by external controllers.
 	degraded               bool
@@ -160,8 +159,8 @@ func (m *statusManager) Run() {
 func (m *statusManager) OnCRFound() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.crQueried = true
-	m.crPresent = true
+	_t := true
+	m.enabled = &_t
 }
 
 // OnCRNotFound indicates that the CR managed by the parent controller has not been found. The
@@ -172,8 +171,8 @@ func (m *statusManager) OnCRNotFound() {
 	m.clearProgressing()
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.crQueried = true
-	m.crPresent = false
+	_f := false
+	m.enabled = &_f
 	m.progressing = []string{}
 	m.failing = []string{}
 	m.daemonsets = make(map[string]types.NamespacedName)
@@ -428,18 +427,18 @@ func (m *statusManager) syncState() bool {
 	return m.explicitDegradedReason != ""
 }
 
-// crQueried returns true if corresponding CR has been queried
+// isCRQueried returns true if corresponding CR has been queried
 func (m *statusManager) isCRQueried() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	return m.crQueried
+	return m.enabled != nil
 }
 
 // removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
 func (m *statusManager) removeTigeraStatus() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if m.crQueried && !m.crPresent {
+	if m.enabled != nil && !*m.enabled {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !apierrs.IsNotFound(err) {
@@ -495,7 +494,7 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 }
 
 func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
-	if !m.crPresent {
+	if m.enabled == nil || !*m.enabled {
 		// Never set any conditions unless the CR is present.
 		return
 	}

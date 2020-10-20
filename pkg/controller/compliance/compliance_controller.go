@@ -20,6 +20,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -91,7 +92,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexTLSSecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
 			}
@@ -112,6 +113,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+	}
+
+	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("compliance-controller failed to watch resource: %v", err)
 	}
 
 	return nil
@@ -274,13 +280,42 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
+	authentication, err := utils.GetAuthentication(ctx, r.client, true)
+	if err != nil {
+		r.status.SetDegraded("Error querying Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
+	var dexTLSSecret *corev1.Secret
+	if authentication != nil {
+		dexTLSSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+			if errors.IsNotFound(err) {
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			} else {
+				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	dexCfg, err := render.NewDexConfig(authentication, []render.DexOption{
+		render.WithTLSSecret(dexTLSSecret),
+	})
+	if err != nil {
+		r.status.SetDegraded("Failed to create dex config", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

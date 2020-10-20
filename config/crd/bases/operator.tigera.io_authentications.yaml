@@ -36,39 +36,34 @@ spec:
           spec:
             description: AuthenticationSpec defines the desired state of Authentication
             properties:
+              groupsPrefix:
+                description: If specified, GroupsPrefix is prepended to each group
+                  obtained from the identity provider. Note that Kibana does not support
+                  a groups prefix, so this prefix is removed from Kubernetes Groups
+                  when translating log access ClusterRoleBindings into Elastic.
+                type: string
               managerDomain:
                 description: ManagerDomain is the domain name of the Manager
                 type: string
-              method:
-                description: 'Method configures the method of authentication used
-                  by Kibana. Default: Basic'
-                enum:
-                - Basic
-                - OIDC
-                type: string
               oidc:
                 description: OIDC contains the configuration needed to setup OIDC
-                  authentication. If the method is OIDC then this is required, if
-                  the method is not OIDC then this must not be specified.
+                  authentication.
                 properties:
                   groupsClaim:
                     description: GroupsClaim specifies which claim to use from the
                       OIDC provider as the group.
                     type: string
                   groupsPrefix:
-                    description: If specified, GroupsPrefix is prepended to each group
-                      obtained from the claims specified by GroupsClaim. Note that
-                      Kibana does not support a groups prefix, so this prefix is removed
-                      from Kubernetes Groups when translating log access ClusterRoleBindings
-                      into Elastic.
+                    description: Deprecated. Please use Authentication.Spec.GroupsPrefix
+                      instead.
                     type: string
                   issuerURL:
                     description: IssuerURL is the URL to the OIDC provider.
                     type: string
                   requestedScopes:
-                    description: RequestedScopes is a list of scopes to request from
-                      the OIDC provider. If not provided, all the available scopes
-                      are requested.
+                    description: 'RequestedScopes is a list of scopes to request from
+                      the OIDC provider. If not provided, the following scopes are
+                      requested: ["openid", "email", "profile", "groups", "offline_access"].'
                     items:
                       type: string
                     type: array
@@ -77,16 +72,25 @@ spec:
                       OIDC provider as the username.
                     type: string
                   usernamePrefix:
-                    description: If specified, UsernamePrefix is prepended to each
-                      user obtained from the claims specified by UsernameClaim. Note
-                      that Kibana does not support a user prefix, so this prefix is
-                      removed from Kubernetes User when translating log access ClusterRoleBindings
-                      into Elastic.
+                    description: Deprecated. Please use Authentication.Spec.UsernamePrefix
+                      instead.
                     type: string
-                required:
-                - issuerURL
-                - usernameClaim
                 type: object
+              openshift:
+                description: Openshift contains the configuration needed to setup
+                  Openshift OAuth authentication.
+                properties:
+                  issuerURL:
+                    description: 'IssuerURL is the URL to the Opensift OAuth provider.
+                      Ex.: https://api.my-ocp-domain.com:6443'
+                    type: string
+                type: object
+              usernamePrefix:
+                description: If specified, UsernamePrefix is prepended to each user
+                  obtained from the identity provider. Note that Kibana does not support
+                  a user prefix, so this prefix is removed from Kubernetes User when
+                  translating log access ClusterRoleBindings into Elastic.
+                type: string
             type: object
           status:
             description: AuthenticationStatus defines the observed state of Authentication

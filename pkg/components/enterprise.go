@@ -105,6 +105,11 @@ var (
 		Image:   "tigera/cnx-manager",
 	}
 
+	ComponentDex = component{
+		Version: "v2.25.0",
+		Image:   "dexidp/dex",
+	}
+
 	ComponentManagerProxy = component{
 		Version: "master",
 		Image:   "tigera/voltron",

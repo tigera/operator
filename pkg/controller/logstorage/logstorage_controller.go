@@ -500,7 +500,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		}
 		dexCfg, err = render.NewDexConfig(authentication, []render.DexOption{
-			render.WithTLSSecret(dexTLSSecret),
+			render.WithTLSSecret(dexTLSSecret, false),
 			render.WithDexSecret(dexSecret, false),
 		})
 		if err != nil {

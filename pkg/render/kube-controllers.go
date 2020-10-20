@@ -37,7 +37,7 @@ func KubeControllers(
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
-	authentication *operator.Authentication,
+	dexConfig DexConfig,
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
@@ -45,7 +45,7 @@ func KubeControllers(
 		managementClusterConnection: managementClusterConnection,
 		managerInternalSecret:       managerInternalSecret,
 		logStorageExists:            logStorageExists,
-		authentication:              authentication,
+		dexConfig:                   dexConfig,
 	}
 }
 
@@ -55,7 +55,7 @@ type kubeControllersComponent struct {
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
 	logStorageExists            bool
-	authentication              *operator.Authentication
+	dexConfig                   DexConfig
 }
 
 func (c *kubeControllersComponent) SupportedOSType() OSType {
@@ -265,10 +265,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.
-			if c.authentication != nil {
+			if c.dexConfig != nil {
 				env = append(env,
-					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.Spec.UsernamePrefix},
-					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.Spec.GroupsPrefix},
+					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.dexConfig.UsernamePrefix()},
+					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.dexConfig.GroupsPrefix()},
 				)
 			}
 		}

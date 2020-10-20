@@ -153,7 +153,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret()
+			tlsSecret = nil
 		} else {
 			log.Error(err, "Failed to read dex tls secret")
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
@@ -189,9 +189,10 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
+	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg, err := render.NewDexConfig(authentication, []render.DexOption{
 		render.WithDexSecret(dexSecret, true),
-		render.WithTLSSecret(tlsSecret),
+		render.WithTLSSecret(tlsSecret, true),
 		render.WithIdpSecret(idpSecret),
 	})
 	if err != nil {

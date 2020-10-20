@@ -360,14 +360,14 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
 		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
 	}
-	host := c.dexConfig.ManagerDomain()
+	host := c.dexConfig.BaseURL()
 	if host != "" && !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", host))
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", host))
 	}
 
 	data := map[string]interface{}{
-		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.ManagerDomain()),
+		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.BaseURL()),
 		"storage": map[string]interface{}{
 			"type": "kubernetes",
 			"config": map[string]bool{

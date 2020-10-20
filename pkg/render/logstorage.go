@@ -21,11 +21,10 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"gopkg.in/inf.v0"
@@ -155,7 +154,7 @@ func LogStorage(
 	kbService *corev1.Service,
 	clusterDNS string,
 	applyTrial bool,
-	authentication interface{}) Component {
+	dexCfg DexConfig) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -175,7 +174,7 @@ func LogStorage(
 		kbService:                   kbService,
 		clusterDNS:                  clusterDNS,
 		applyTrial:                  applyTrial,
-		authentication:              authentication,
+		dexCfg:                      dexCfg,
 	}
 }
 
@@ -197,7 +196,7 @@ type elasticsearchComponent struct {
 	kbService                   *corev1.Service
 	clusterDNS                  string
 	applyTrial                  bool
-	authentication              interface{}
+	dexCfg                      DexConfig
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -354,6 +353,10 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		)
 	}
 
+	if es.dexCfg != nil {
+		toCreate = append(toCreate, CopySecrets(ElasticsearchNamespace, es.dexCfg.TLSSecret())[0])
+	}
+
 	return toCreate, toDelete
 }
 
@@ -430,6 +433,12 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
+	var volumeMounts []corev1.VolumeMount
+	if es.dexCfg != nil {
+		volumeMounts = []corev1.VolumeMount{
+			{Name: DexTLSSecretName, MountPath: "/usr/share/elasticsearch/config/dex/"}}
+	}
+
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
 		Resources: corev1.ResourceRequirements{
@@ -446,6 +455,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			// Set to 30% of the default memory, such that resources can be divided over ES, Lucene and ML.
 			{Name: "ES_JAVA_OPTS", Value: "-Xms1398101K -Xmx1398101K"},
 		},
+		VolumeMounts: volumeMounts,
 	}
 
 	// If the user has provided resource requirements, then use the user overrides instead
@@ -482,9 +492,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
-
+	annotations := map[string]string{}
+	if es.dexCfg != nil {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
 			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
@@ -499,15 +508,34 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			}},
 		}
 		initContainers = append(initContainers, initKeystore)
+
+		annotations[DexTLSSecretAnnotation] = AnnotationHash(es.dexCfg.TLSSecret().Data)
+		annotations[dexSecretAnnotation] = AnnotationHash(es.dexCfg.DexSecret().Data)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: annotations,
+		},
 		Spec: corev1.PodSpec{
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
 			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
 			ServiceAccountName: "tigera-elasticsearch",
+			Volumes: []corev1.Volume{
+				{
+					Name: DexTLSSecretName,
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: DexTLSSecretName,
+							Items: []corev1.KeyToPath{
+								{Key: "tls.crt", Path: "tls-dex.crt"},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -623,10 +651,8 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 func (es elasticsearchComponent) secureSettingsSecret() *corev1.Secret {
 	secureSettings := make(map[string][]byte)
 
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
-		clientSecret := es.authentication.(OIDCAuthentication).Secret
-		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = []byte(clientSecret)
+	if es.dexCfg != nil {
+		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = es.dexCfg.ClientSecret()
 	}
 
 	return &corev1.Secret{
@@ -734,24 +760,26 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
+	principal := "email"
+	groups := "groups"
+	requestedScopes := []string{"openid", "email", "profile", "groups", "offline_access"}
 
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
-		oidcAuth := es.authentication.(OIDCAuthentication)
+	if es.dexCfg != nil {
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
-			"rp.client_id":                oidcAuth.ClientID,
+			"rp.client_id":                DexClientId,
 			"rp.response_type":            "code",
-			"rp.redirect_uri":             fmt.Sprintf("https://%s:9443/tigera-kibana/api/security/oidc/callback", oidcAuth.SiteURL),
-			"rp.requested_scopes":         oidcAuth.RequestedScopes,
-			"op.issuer":                   oidcAuth.IssuerURL,
-			"op.authorization_endpoint":   oidcAuth.AuthorizationEndpoint,
-			"op.token_endpoint":           oidcAuth.TokenEndpoint,
-			"op.jwkset_path":              oidcAuth.JWKSetURI,
-			"op.userinfo_endpoint":        oidcAuth.UserInfoEndpoint,
-			"rp.post_logout_redirect_uri": fmt.Sprintf("https://%s:9443/tigera-kibana/logged_out", oidcAuth.SiteURL),
-			"claims.principal":            oidcAuth.UsernameClaim,
-			"claims.groups":               oidcAuth.GroupsClaim,
+			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerDomain()),
+			"rp.requested_scopes":         requestedScopes,
+			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerDomain()),
+			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerDomain()),
+			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerDomain()),
+			"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
+			"op.jwkset_path":              DexJWKSURI,
+			"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",
+			"claims.principal":            principal,
+			"claims.groups":               groups,
+			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 		}
 	}
 
@@ -1046,8 +1074,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 	}
 
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
+	if es.dexCfg != nil {
 		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
 		config["xpack.security.authc.oidc.realm"] = "oidc1"
 		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}

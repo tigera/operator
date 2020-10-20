@@ -30,27 +30,15 @@ import (
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
-	var instance *operator.Manager
 	oidcEnvVar := corev1.EnvVar{
 		Name:      "CNX_WEB_OIDC_AUTHORITY",
 		Value:     "",
 		ValueFrom: nil,
 	}
-	BeforeEach(func() {
-		// Initialize a default instance to use. Each test can override this to its
-		// desired configuration.
-		instance = &operator.Manager{
-			Spec: operator.ManagerSpec{
-				Auth: &operator.Auth{
-					Type: operator.AuthTypeBasic,
-				},
-			},
-		}
-	})
 
 	const expectedResourcesNumber = 10
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(instance, nil, nil, nil)
+		resources := renderObjects(false, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resources.
@@ -113,7 +101,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(instance, nil, nil, nil)
+		resources := renderObjects(false, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -178,58 +166,30 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:         []string{"use"},
 				ResourceNames: []string{"tigera-manager"},
 			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"users", "groups", "serviceaccounts"},
+				Verbs:     []string{"impersonate"},
+			},
 		}))
 	})
 
-	It("should render OIDC configmaps given OIDC configuration", func() {
-		instance.Spec.Auth.Type = operator.AuthTypeOIDC
-		oidcConfig := &corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ManagerOIDCConfig,
-				Namespace: render.OperatorNamespace(),
-			},
-		}
-		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, oidcConfig, nil, nil)
-		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1))
-
-		Expect(GetResource(resources, render.ManagerOIDCConfig, "tigera-manager", "", "v1", "ConfigMap")).ToNot(BeNil())
-		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
-
-		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
-
-		// Make sure well-known and JWKS are accessible from manager.
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(render.ManagerOIDCWellknownURI))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(render.ManagerOIDCJwksURI))
-
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
-		Expect(d.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerOIDCConfig))
-		Expect(d.Spec.Template.Spec.Volumes[3].ConfigMap.Name).To(Equal(render.ManagerOIDCConfig))
-	})
-
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
-		instance.Spec.Auth.Type = operator.AuthTypeOIDC
-
-		const authority = "https://foo.bar"
-		instance.Spec.Auth.Authority = authority
+		const authority = "https://127.0.0.1/dex"
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(instance, nil, nil, nil)
-		Expect(len(resources)).To(Equal(expectedResourcesNumber))
+		resources := renderObjects(true, nil, nil)
+		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
 		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(instance, nil, &operator.ManagementCluster{}, nil)
+		resources := renderObjects(false, &operator.ManagementCluster{}, nil)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -366,12 +326,35 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:         []string{"use"},
 				ResourceNames: []string{"tigera-manager"},
 			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"users", "groups", "serviceaccounts"},
+				Verbs:     []string{"impersonate"},
+			},
 		}))
 	})
 })
 
-func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, managementCluster *operator.ManagementCluster,
+func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	tlsSecret *corev1.Secret) []runtime.Object {
+	var authentication *operator.Authentication
+	var dexSecret *corev1.Secret
+	if oidc {
+		dexSecret = &corev1.Secret{
+			Data: map[string][]byte{
+				"tls.crt": []byte("bla"),
+			},
+		}
+		authentication = &operator.Authentication{
+			Spec: operator.AuthenticationSpec{
+				ManagerDomain: "https://127.0.0.1",
+				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+	}
+	dexCfg, _ := render.NewDexConfig(authentication, []render.DexOption{
+		render.WithTLSSecret(tlsSecret),
+		render.WithDexSecret(dexSecret, false),
+	})
+
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
 	if managementCluster != nil {
@@ -379,7 +362,7 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, man
 		internalTraffic = &internalManagerTLSSecret
 	}
 	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
-	component, err := render.Manager(instance,
+	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
 		&corev1.Secret{
@@ -397,7 +380,6 @@ func renderObjects(instance *operator.Manager, oidcConfig *corev1.ConfigMap, man
 		nil,
 		false,
 		&operator.Installation{Spec: operator.InstallationSpec{}},
-		oidcConfig,
 		managementCluster,
 		tunnelSecret,
 		internalTraffic)

@@ -70,7 +70,7 @@ func Calico(
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
-	authentication interface{},
+	authentication *operator.Authentication,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
@@ -229,7 +229,7 @@ type calicoRenderer struct {
 	provider                    operator.Provider
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
-	authentication              interface{}
+	authentication              *operator.Authentication
 }
 
 func (r calicoRenderer) Render() []Component {

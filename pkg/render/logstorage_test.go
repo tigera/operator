@@ -473,6 +473,21 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 
 		It("Configures OIDC for Kibana when the OIDC configuration is provided", func() {
+
+			dexCfg, _ := render.NewDexConfig(&operatorv1.Authentication{
+				Spec: operatorv1.AuthenticationSpec{
+					ManagerDomain: "https://example.com",
+					OIDC: &operatorv1.AuthenticationOIDC{
+						IssuerURL:       "https://accounts.google.com",
+						UsernameClaim:   "email",
+						GroupsClaim:     "group",
+						RequestedScopes: []string{"scope"},
+					},
+				},
+			}, []render.DexOption{
+				render.WithDexSecret(&corev1.Secret{Data: map[string][]byte{render.ClientSecretSecretField: []byte("secret")}}, false),
+			})
+
 			component := render.LogStorage(
 				logStorage,
 				installation, nil, nil, nil, nil,
@@ -487,19 +502,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}, true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, render.OIDCAuthentication{
-					ClientID:              "id",
-					Secret:                "secret",
-					IssuerURL:             "issuer",
-					RequestedScopes:       []string{"scope"},
-					SiteURL:               "siteurl",
-					UsernameClaim:         "username",
-					GroupsClaim:           "group",
-					AuthorizationEndpoint: "authend",
-					TokenEndpoint:         "tokenend",
-					JWKSetURI:             "jwkset",
-					UserInfoEndpoint:      "https://https://openidconnect.googleapis.com/v1/userinfo",
-				})
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, dexCfg,
+			)
 
 			createResources, _ := component.Objects()
 			securitySecret := GetResource(createResources, render.ElasticsearchSecureSettingsSecretName, render.ElasticsearchNamespace, "", "", "")
@@ -509,18 +513,18 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(elasticsearch.Spec.NodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
 				"cluster.max_shards_per_node": 10000,
 				"xpack.security.authc.realms.oidc.oidc1": map[string]interface{}{
-					"rp.client_id":                "id",
+					"rp.client_id":                "tigera-manager",
 					"rp.requested_scopes":         []string{"scope"},
-					"op.jwkset_path":              "jwkset",
-					"op.userinfo_endpoint":        "https://https://openidconnect.googleapis.com/v1/userinfo",
-					"claims.principal":            "username",
+					"op.jwkset_path":              "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys",
+					"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",
+					"claims.principal":            "email",
 					"order":                       1,
 					"rp.response_type":            "code",
-					"rp.redirect_uri":             "https://siteurl:9443/tigera-kibana/api/security/oidc/callback",
-					"op.issuer":                   "issuer",
-					"op.authorization_endpoint":   "authend",
-					"op.token_endpoint":           "tokenend",
-					"rp.post_logout_redirect_uri": "https://siteurl:9443/tigera-kibana/logged_out",
+					"rp.redirect_uri":             "https://example.com/tigera-kibana/api/security/oidc/callback",
+					"op.issuer":                   "https://tigera-dex.tigera-dex:5556.svc.cluster.local/dex",
+					"op.authorization_endpoint":   "https://tigera-dex.tigera-dex:5556.svc.cluster.local/dex/auth",
+					"op.token_endpoint":           "https://tigera-dex.tigera-dex:5556.svc.cluster.local/dex/token",
+					"rp.post_logout_redirect_uri": "https://example.com/tigera-kibana/logged_out",
 					"claims.groups":               "group",
 				},
 				"node.master": "true",

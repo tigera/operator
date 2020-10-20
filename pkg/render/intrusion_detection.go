@@ -389,7 +389,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 	volumeMounts := []corev1.VolumeMount{}
 	if c.syslogForwardingIsEnabled() {
 		envs = append(envs,
-			corev1.EnvVar{Name: "IDS_EVENT_LOG_TO_SYSLOG", Value: "true"},
+			corev1.EnvVar{Name: "IDS_ENABLE_EVENT_FORWARDING", Value: "true"},
 		)
 		volumeMounts = append(volumeMounts, syslogEventsForwardingVolumeMount())
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,

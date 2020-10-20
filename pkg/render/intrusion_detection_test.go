@@ -96,7 +96,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			secretName string
 			secretKey  string
 		}{
-			{"IDS_EVENT_LOG_TO_SYSLOG", "true", "", ""},
+			{"IDS_ENABLE_EVENT_FORWARDING", "true", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

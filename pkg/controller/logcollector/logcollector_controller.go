@@ -260,8 +260,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
 				// Set all available log types (except for v1.SyslogLogIDSEvents)
 				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
-					v1.SyslogLogAuditEE,
-					v1.SyslogLogAuditKube,
+					v1.SyslogLogAudit,
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}

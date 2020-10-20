@@ -425,16 +425,13 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				)
 			}
 
-			// When LogTypes is not defined explicitly, the default is to enable
-			// all the log types.
 			if syslog.LogTypes != nil {
 				for _, t := range syslog.LogTypes {
 					switch t {
-					case operatorv1.SyslogLogAuditEE:
+					case operatorv1.SyslogLogAudit:
 						envs = append(envs,
 							corev1.EnvVar{Name: "SYSLOG_AUDIT_EE_LOG", Value: "true"},
 						)
-					case operatorv1.SyslogLogAuditKube:
 						envs = append(envs,
 							corev1.EnvVar{Name: "SYSLOG_AUDIT_KUBE_LOG", Value: "true"},
 						)

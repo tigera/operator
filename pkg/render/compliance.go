@@ -62,8 +62,7 @@ func Compliance(
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
-	authentication *operatorv1.Authentication,
-	dexTLSSecret *corev1.Secret,
+	dexCfg DexConfig,
 ) (Component, error) {
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
@@ -93,8 +92,7 @@ func Compliance(
 		openshift:                   openshift,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
-		authentication:              authentication,
-		dexTLSSecret:                dexTLSSecret,
+		dexCfg:                      dexCfg,
 	}, nil
 }
 
@@ -108,8 +106,7 @@ type complianceComponent struct {
 	openshift                   bool
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
-	authentication              *operatorv1.Authentication
-	dexTLSSecret                *corev1.Secret
+	dexCfg                      DexConfig
 }
 
 func (c *complianceComponent) SupportedOSType() OSType {
@@ -159,8 +156,8 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
-	if c.dexTLSSecret != nil {
-		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.dexTLSSecret)...)...)
+	if c.dexCfg != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.dexCfg.TLSSecret())...)...)
 	}
 
 	var objsToDelete []runtime.Object
@@ -641,8 +638,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
-	envVars = AppendDexEnv(envVars, c.authentication, "TIGERA_COMPLIANCE_")
-	defaultMode := int32(420)
+	if c.dexCfg != nil {
+		envVars = c.dexCfg.AppendDexEnv(envVars, "TIGERA_COMPLIANCE_")
+	}
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
@@ -691,10 +689,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: AppendDexVolumeMount(complianceVolumeMounts(c.managerInternalTLSSecret), c.authentication),
+					VolumeMounts: c.complianceVolumeMounts(),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: AppendDexVolume(complianceVolumes(defaultMode, c.managerInternalTLSSecret), c.authentication),
+			Volumes: c.complianceVolumes(),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -724,14 +722,14 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 	return psp
 }
 
-func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
+func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{{
 		Name:      "cert",
 		MountPath: "/code/apiserver.local.config/certificates",
 		ReadOnly:  true,
 	}}
 
-	if managerSecret != nil {
+	if c.managerInternalTLSSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      ManagerInternalTLSSecretName,
 			MountPath: "/manager-tls",
@@ -739,16 +737,19 @@ func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
 		})
 	}
 
+	if c.dexCfg != nil {
+		mounts = c.dexCfg.AppendDexVolumeMount(mounts)
+	}
+
 	return mounts
 }
 
-func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1.Volume {
+func (c *complianceComponent) complianceVolumes() []corev1.Volume {
 	var volumes = []corev1.Volume{{
 		Name: "cert",
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				DefaultMode: &defaultMode,
-				SecretName:  ComplianceServerCertSecret,
+				SecretName: ComplianceServerCertSecret,
 				Items: []corev1.KeyToPath{
 					{
 						Key:  "tls.crt",
@@ -762,14 +763,13 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 			},
 		}}}
 
-	if managerSecret != nil {
+	if c.managerInternalTLSSecret != nil {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: ManagerInternalTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  ManagerInternalTLSSecretName,
+						SecretName: ManagerInternalTLSSecretName,
 						Items: []corev1.KeyToPath{
 							{
 								Key:  "cert",
@@ -779,6 +779,10 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 					},
 				},
 			})
+	}
+
+	if c.dexCfg != nil {
+		volumes = c.dexCfg.AppendDexVolume(volumes)
 	}
 
 	return volumes

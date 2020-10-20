@@ -57,7 +57,7 @@ func voltronTunnelSecret() *corev1.Secret {
 	}
 }
 
-func dexTLSSecret() *corev1.Secret {
+func CreateDexTLSSecret() *corev1.Secret {
 	key, cert := createSelfSignedSecret(DexCN, []string{DexCN})
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -124,4 +124,17 @@ func generatePassword(length int) string {
 		b.WriteRune(chars[mrand.Intn(len(chars))])
 	}
 	return b.String()
+}
+
+func CreateDexClientSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-dex",
+			Namespace: "tigera-operator",
+		},
+		Data: map[string][]byte{
+			ClientSecretSecretField: []byte(generatePassword(24)),
+		},
+	}
 }

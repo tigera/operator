@@ -153,7 +153,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = nil
+			tlsSecret = render.CreateDexTLSSecret()
 		} else {
 			log.Error(err, "Failed to read dex tls secret")
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
@@ -174,10 +174,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 
 	dexSecret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
-		if errors.IsNotFound(err) {
-			// We need to render a new one.
-			dexSecret = nil
-		} else {
+		if !errors.IsNotFound(err) {
 			log.Error(err, "Failed to read dex secret")
 			r.status.SetDegraded("Failed to read dex secret", err.Error())
 			return reconcile.Result{}, err
@@ -192,6 +189,17 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
+	dexCfg, err := render.NewDexConfig(authentication, []render.DexOption{
+		render.WithDexSecret(dexSecret, true),
+		render.WithTLSSecret(tlsSecret),
+		render.WithIdpSecret(idpSecret),
+	})
+	if err != nil {
+		log.Error(err, "Failed to create dex config")
+		r.status.SetDegraded("Failed to create dex config", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
 
@@ -202,9 +210,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
 		network,
-		tlsSecret,
-		idpSecret,
-		dexSecret,
+		dexCfg,
 	)
 
 	if err := hlr.CreateOrUpdate(context.Background(), component, r.status); err != nil {
@@ -251,7 +257,7 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 		return nil, fmt.Errorf("clientSecret is a required field for secret %v", secret.Name)
 	}
 
-	if authentication.Spec.Openshift != nil && len(secret.Data["rootCA"]) == 0 {
+	if authentication.Spec.Openshift != nil && len(secret.Data[render.RootCASecretField]) == 0 {
 		return nil, fmt.Errorf("rootCA is a required field for secret %v", secret.Name)
 	}
 	return secret, nil

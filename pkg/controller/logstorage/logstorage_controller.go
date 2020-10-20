@@ -475,8 +475,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	var dexTLSSecret *corev1.Secret
+	var dexCfg render.DexConfig
 	if authentication != nil {
+		var dexTLSSecret *corev1.Secret
 		dexTLSSecret = &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
 			if errors.IsNotFound(err) {
@@ -486,18 +487,25 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-	}
-
-	var dexSecret *corev1.Secret
-	if authentication != nil {
-		dexSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
-			if errors.IsNotFound(err) {
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			} else {
-				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-				return reconcile.Result{}, err
+		var dexSecret *corev1.Secret
+		if authentication != nil {
+			dexSecret = &corev1.Secret{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
+				if errors.IsNotFound(err) {
+					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				} else {
+					r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+					return reconcile.Result{}, err
+				}
 			}
+		}
+		dexCfg, err = render.NewDexConfig(authentication, []render.DexOption{
+			render.WithTLSSecret(dexTLSSecret),
+			render.WithDexSecret(dexSecret, false),
+		})
+		if err != nil {
+			r.status.SetDegraded("Failed to create dex config", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -519,9 +527,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		kbService,
 		r.localDNS,
 		applyTrial,
-		authentication,
-		dexTLSSecret,
-		dexSecret,
+		dexCfg,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {

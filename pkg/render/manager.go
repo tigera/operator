@@ -68,7 +68,7 @@ const (
 )
 
 func Manager(
-	authentication *operator.Authentication,
+	dexCfg DexConfig,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
@@ -80,7 +80,6 @@ func Manager(
 	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
-	dexSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsAnnotations := make(map[string]string)
@@ -101,9 +100,9 @@ func Manager(
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
-	if dexSecret != nil {
-		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, dexSecret)...)
-		tlsAnnotations[DexTLSSecretAnnotation] = AnnotationHash(dexSecret.Data)
+	if dexCfg != nil {
+		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, dexCfg.TLSSecret())...)
+		tlsAnnotations[DexTLSSecretAnnotation] = AnnotationHash(dexCfg.TLSSecret().Data)
 	}
 
 	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
@@ -118,7 +117,7 @@ func Manager(
 		tlsAnnotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
-		authentication:             authentication,
+		dexCfg:                     dexCfg,
 		esSecrets:                  esSecrets,
 		kibanaSecrets:              kibanaSecrets,
 		complianceServerCertSecret: complianceServerCertSecret,
@@ -133,7 +132,7 @@ func Manager(
 }
 
 type managerComponent struct {
-	authentication             *operator.Authentication
+	dexCfg                     DexConfig
 	esSecrets                  []*corev1.Secret
 	kibanaSecrets              []*corev1.Secret
 	complianceServerCertSecret *corev1.Secret
@@ -328,8 +327,11 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			},
 		)
 	}
+	if c.dexCfg != nil {
+		return c.dexCfg.AppendDexVolume(v)
+	}
 
-	return AppendDexVolume(v, c.authentication)
+	return v
 }
 
 // managerProbe returns the probe for the manager container.
@@ -414,12 +416,12 @@ func (c *managerComponent) managerContainer() corev1.Container {
 func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	var envs []corev1.EnvVar
 
-	if c.authentication == nil {
+	if c.dexCfg == nil {
 		envs = []corev1.EnvVar{{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "Token"}}
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.authentication.Spec.ManagerDomain)},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.dexCfg.ManagerDomain())},
 			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: DexClientId}}
 	}
 	return envs
@@ -438,8 +440,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 	}
 
-	if c.authentication != nil {
-		env = AppendDexEnv(env, c.authentication, "VOLTRON_")
+	if c.dexCfg != nil {
+		env = c.dexCfg.AppendDexEnv(env, "VOLTRON_")
 	}
 
 	return corev1.Container{
@@ -465,27 +467,35 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 
-	return AppendDexVolumeMount(mounts, c.authentication)
+	if c.dexCfg != nil {
+		return c.dexCfg.AppendDexVolumeMount(mounts)
+	}
+
+	return mounts
 }
 
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
-	apiServer := corev1.Container{
+	var volumeMounts []corev1.VolumeMount
+	if c.managementCluster != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
+	}
+
+	var env []v1.EnvVar
+	if c.dexCfg != nil {
+		env = c.dexCfg.AppendDexEnv(env, "")
+		volumeMounts = c.dexCfg.AppendDexVolumeMount(volumeMounts)
+	}
+
+	return corev1.Container{
 		Name:            "tigera-es-proxy",
 		Image:           "gcr.io/tigera-dev/cnx/tigera/es-proxy:rene", //todo: revert this to components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		ImagePullPolicy: "Always",                                     //todo: remove
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
-		Env:             AppendDexEnv([]v1.EnvVar{}, c.authentication, ""),
+		Env:             env,
+		VolumeMounts:    volumeMounts,
 	}
-
-	volumeMounts := []corev1.VolumeMount{}
-	if c.managementCluster != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
-	}
-
-	apiServer.VolumeMounts = AppendDexVolumeMount(volumeMounts, c.authentication)
-	return apiServer
 }
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.

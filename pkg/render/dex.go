@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	oprv1 "github.com/tigera/operator/api/v1"
@@ -44,16 +43,16 @@ const (
 	dexSecretAnnotation    = "hash.operator.tigera.io/tigera-dex-secret"
 	DexTLSSecretAnnotation = "hash.operator.tigera.io/tigera-dex-tls-secret"
 
-	// Constants related to the idp secrets.
-	OIDCSecretName               = "tigera-oidc-credentials"
-	OpenshiftSecretName          = "tigera-openshift-credentials"
+	// Constants related to secrets.
 	ServiceAccountSecretField    = "serviceAccountSecret"
-	ServiceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
+	ClientSecretSecretField      = "clientSecret"
 	AdminEmailSecretField        = "adminEmail"
 	RootCASecretField            = "rootCA"
+	OIDCSecretName               = "tigera-oidc-credentials"
+	OpenshiftSecretName          = "tigera-openshift-credentials"
+	ServiceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
 	RootCASecretLocation         = "/etc/ssl/openshift.pem"
 	ClientIDSecretField          = "clientID"
-	ClientSecretSecretField      = "clientSecret"
 	GoogleAdminEmailEnv          = "ADMIN_EMAIL"
 	ClientIDEnv                  = "CLIENT_ID"
 	ClientSecretEnv              = "CLIENT_SECRET"
@@ -71,49 +70,27 @@ func Dex(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	installation *oprv1.Installation,
-	tlsSecret *corev1.Secret,
-	idpSecret *corev1.Secret,
-	dexSecret *corev1.Secret,
+	dexConfig DexConfig,
 ) Component {
 
-	if tlsSecret == nil {
-		tlsSecret = dexTLSSecret()
-
-	}
-
-	if dexSecret == nil {
-		dexSecret = dexClientSecret()
-
-	}
-
 	return &dexComponent{
-		authentication: authentication,
-		pullSecrets:    pullSecrets,
-		openshift:      openshift,
-		installation:   installation,
-		tlsSecret:      tlsSecret,
-		tlsSecretLocal: CopySecrets(DexNamespace, tlsSecret)[0],
-		idpSecret:      idpSecret,
-		dexSecret:      dexSecret,
-		dexSecretLocal: CopySecrets(DexNamespace, dexSecret)[0],
-		connector:      getConnector(authentication),
+		dexConfig:    dexConfig,
+		pullSecrets:  pullSecrets,
+		openshift:    openshift,
+		installation: installation,
+		connector:    getConnector(authentication),
 	}
 }
 
 type dexComponent struct {
-	authentication *oprv1.Authentication
-	pullSecrets    []*corev1.Secret
-	openshift      bool
-	installation   *oprv1.Installation
-	tlsSecret      *corev1.Secret
-	tlsSecretLocal *corev1.Secret
-	idpSecret      *corev1.Secret
-	dexSecret      *corev1.Secret
-	dexSecretLocal *corev1.Secret
-	connector      map[string]interface{}
+	dexConfig    DexConfig
+	pullSecrets  []*corev1.Secret
+	openshift    bool
+	installation *oprv1.Installation
+	connector    map[string]interface{}
 }
 
-func (es *dexComponent) SupportedOSType() OSType {
+func (*dexComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
@@ -126,11 +103,12 @@ func (c *dexComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.configMap(),
-		c.idpSecret,
-		c.tlsSecret,
-		c.tlsSecretLocal,
-		c.dexSecret,
-		c.dexSecretLocal,
+		c.dexConfig.IdpSecret(),
+		c.dexConfig.DexSecret(),
+		c.dexConfig.TLSSecret(),
+		CopySecrets(DexNamespace, c.dexConfig.IdpSecret())[0],
+		CopySecrets(DexNamespace, c.dexConfig.DexSecret())[0],
+		CopySecrets(DexNamespace, c.dexConfig.TLSSecret())[0],
 	}
 
 	return objs, nil
@@ -205,7 +183,7 @@ func (c *dexComponent) deployment() runtime.Object {
 		},
 	}
 
-	if c.idpSecret.Data[ServiceAccountSecretField] != nil {
+	if c.dexConfig.GoogleServiceAccountSecret() != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
 			MountPath: "/etc/dex/secrets",
@@ -213,7 +191,7 @@ func (c *dexComponent) deployment() runtime.Object {
 		})
 	}
 
-	if c.idpSecret.Data[RootCASecretField] != nil {
+	if c.dexConfig.OpenshiftRootCA() != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
 			MountPath: "/etc/ssl/",
@@ -300,19 +278,19 @@ func (c *dexComponent) volumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: DexTLSSecretName}},
 		},
 	}
-	if c.idpSecret.Data[ServiceAccountSecretField] != nil {
+	if c.dexConfig.GoogleServiceAccountSecret() != nil {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: c.idpSecret.Name, Items: []corev1.KeyToPath{{Key: ServiceAccountSecretField, Path: "google-groups.json"}}}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: c.dexConfig.IdpSecret().Name, Items: []corev1.KeyToPath{{Key: ServiceAccountSecretField, Path: "google-groups.json"}}}},
 			},
 		)
 	}
-	if c.idpSecret.Data[RootCASecretField] != nil {
+	if c.dexConfig.OpenshiftRootCA() != nil {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: c.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "openshift.pem"}}}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: c.dexConfig.IdpSecret().Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "openshift.pem"}}}},
 			},
 		)
 	}
@@ -362,13 +340,13 @@ func (c *dexComponent) probe() *corev1.Probe {
 
 func (c *dexComponent) env() []corev1.EnvVar {
 	env := []corev1.EnvVar{
-		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.idpSecret.Name}}}},
-		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.idpSecret.Name}}}},
-		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexSecret.Name}}}},
+		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
+		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
+		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
 	}
 
-	if c.idpSecret.Data[ServiceAccountSecretField] != nil {
-		env = append(env, corev1.EnvVar{Name: GoogleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: AdminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.idpSecret.Name}}}})
+	if c.dexConfig.GoogleServiceAccountSecret() != nil {
+		env = append(env, corev1.EnvVar{Name: GoogleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: AdminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}})
 	}
 
 	return env
@@ -382,14 +360,14 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
 		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
 	}
-	host := c.authentication.Spec.ManagerDomain
+	host := c.dexConfig.ManagerDomain()
 	if host != "" && !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", host))
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", host))
 	}
 
 	data := map[string]interface{}{
-		"issuer": fmt.Sprintf("%s/dex", c.authentication.Spec.ManagerDomain),
+		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.ManagerDomain()),
 		"storage": map[string]interface{}{
 			"type": "kubernetes",
 			"config": map[string]bool{
@@ -435,67 +413,13 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 
 func dexAnnotations(c *dexComponent) map[string]string {
 	var annotations = map[string]string{
-		DexTLSSecretAnnotation: AnnotationHash(c.tlsSecret.Data),
+		DexTLSSecretAnnotation: AnnotationHash(c.dexConfig.TLSSecret().Data),
 		dexConfigAnnotation:    AnnotationHash(c.configMap()),
-		dexIdpSecretAnnotation: AnnotationHash(c.idpSecret.Data),
-		dexSecretAnnotation:    AnnotationHash(c.dexSecret.Data),
+		dexIdpSecretAnnotation: AnnotationHash(c.dexConfig.IdpSecret().Data),
+		dexSecretAnnotation:    AnnotationHash(c.dexConfig.DexSecret().Data),
 	}
 
 	return annotations
-}
-
-// Append variables that are necessary for using the dex authenticator.
-func AppendDexEnv(env []corev1.EnvVar, authentication *oprv1.Authentication, prefix string) []corev1.EnvVar {
-	if authentication == nil {
-		return append(env,
-			corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(false)})
-	}
-
-	usernameClaim := "email"
-	groupsClaim := "groups"
-
-	if authentication.Spec.OIDC != nil {
-		usernameClaim = authentication.Spec.OIDC.UsernameClaim
-		groupsClaim = authentication.Spec.OIDC.GroupsClaim
-	}
-
-	return append(env,
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", authentication.Spec.ManagerDomain)},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: usernameClaim},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: groupsClaim},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: authentication.Spec.UsernamePrefix},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: authentication.Spec.GroupsPrefix})
-}
-
-// Add volume for Dex TLS secret.
-func AppendDexVolume(volumes []corev1.Volume, authentication *oprv1.Authentication) []corev1.Volume {
-	if authentication == nil {
-		return volumes
-	}
-	return append(volumes, corev1.Volume{
-
-		Name: DexTLSSecretName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: DexTLSSecretName,
-				Items: []corev1.KeyToPath{
-					{Key: "tls.crt", Path: "tls-dex.crt"},
-				},
-			},
-		},
-	})
-}
-
-// Add mount for ubi base image trusted cert location
-func AppendDexVolumeMount(mounts []corev1.VolumeMount, authentication *oprv1.Authentication) []corev1.VolumeMount {
-	if authentication == nil {
-		return mounts
-	}
-	return append(mounts, corev1.VolumeMount{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"})
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
@@ -541,17 +465,4 @@ func getConnector(authentication *oprv1.Authentication) map[string]interface{} {
 	config["issuer"] = issuer
 
 	return c
-}
-
-func dexClientSecret() *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DexObjectName,
-			Namespace: OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			ClientSecretSecretField: []byte(generatePassword(24)),
-		},
-	}
 }

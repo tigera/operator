@@ -350,6 +350,11 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 	}
+	dexCfg, _ := render.NewDexConfig(authentication, []render.DexOption{
+		render.WithTLSSecret(tlsSecret),
+		render.WithDexSecret(dexSecret, false),
+	})
+
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
 	if managementCluster != nil {
@@ -357,7 +362,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		internalTraffic = &internalManagerTLSSecret
 	}
 	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
-	component, err := render.Manager(authentication,
+	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
 		&corev1.Secret{
@@ -377,8 +382,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		&operator.Installation{Spec: operator.InstallationSpec{}},
 		managementCluster,
 		tunnelSecret,
-		internalTraffic,
-		dexSecret)
+		internalTraffic)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources, _ := component.Objects()
 	return resources

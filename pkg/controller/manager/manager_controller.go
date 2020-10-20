@@ -376,10 +376,10 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
-	var dexSecret *corev1.Secret
+	var dexTLSSecret *corev1.Secret
 	if authentication != nil {
-		dexSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
+		dexTLSSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
 			if errors.IsNotFound(err) {
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			} else {
@@ -388,13 +388,20 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			}
 		}
 	}
+	dexCfg, err := render.NewDexConfig(authentication, []render.DexOption{
+		render.WithTLSSecret(dexTLSSecret),
+	})
+	if err != nil {
+		r.status.SetDegraded("Failed to create dex config", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
-		authentication,
+		dexCfg,
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
 		complianceServerCertSecret,
@@ -406,7 +413,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		managementCluster,
 		tunnelSecret,
 		internalTrafficSecret,
-		dexSecret,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

@@ -20,34 +20,33 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-
-	"k8s.io/apimachinery/pkg/types"
-
-	apps "k8s.io/api/apps/v1"
-	storagev1 "k8s.io/api/storage/v1"
-
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
+
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
+	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -198,7 +197,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.ECKWebhookSecretName, utils.OIDCSecretName} {
+		render.ECKWebhookSecretName, render.OIDCSecretName, render.DexObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
 		}
@@ -469,11 +468,45 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
 	}
 
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil {
-		log.Error(err, err.Error())
-		r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	var dexCfg render.DexConfig
+	if authentication != nil {
+		var dexTLSSecret *corev1.Secret
+		dexTLSSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+			if errors.IsNotFound(err) {
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			} else {
+				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+		var dexSecret *corev1.Secret
+		if authentication != nil {
+			dexSecret = &corev1.Secret{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
+				if errors.IsNotFound(err) {
+					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				} else {
+					r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+					return reconcile.Result{}, err
+				}
+			}
+		}
+		dexCfg, err = render.NewDexConfig(authentication, []render.DexOption{
+			render.WithTLSSecret(dexTLSSecret, false),
+			render.WithDexSecret(dexSecret, false),
+		})
+		if err != nil {
+			r.status.SetDegraded("Failed to create dex config", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	component := render.LogStorage(
@@ -494,7 +527,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		kbService,
 		r.localDNS,
 		applyTrial,
-		authentication,
+		dexCfg,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -524,10 +557,10 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	r.status.ClearDegraded()
 
 	if ls != nil {
-		ls.Status.State = operatorv1.LogStorageStatusReady
+		ls.Status.State = operatorv1.TigeraStatusReady
 		if err := r.client.Status().Update(ctx, ls); err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady))
-			r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady), err.Error())
+			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady))
+			r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err.Error())
 			return reconcile.Result{}, err
 		}
 	}

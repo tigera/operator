@@ -201,7 +201,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.AmazonCloudIntegrationStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

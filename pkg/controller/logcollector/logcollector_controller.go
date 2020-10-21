@@ -251,46 +251,26 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 
-			// Try to grab the ManagementClusterConnection CR (if present) because we need it for some
+			// Try to grab the ManagementClusterConnection CR because we need it for some
 			// validation with respect to Syslog.logTypes.
 			managementClusterConnection, mccErr := utils.GetManagementClusterConnection(ctx, r.client)
-
-			// In cases where Syslog configuration is present, but the logTypes field is
-			// empty or undefined, the default behavior is to enable all available logTypes.
-			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
-				// Set all available log types (except for v1.SyslogLogIDSEvents)
-				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
-					v1.SyslogLogAudit,
-					v1.SyslogLogDNS,
-					v1.SyslogLogFlows,
-				}
-
-				// If this is not a managed cluster (i.e. no ManagementClusterConnection CR), then
-				// include v1.SyslogLogIDSEvents as well.
-				if mccErr != nil || managementClusterConnection == nil {
-					instance.Spec.AdditionalStores.Syslog.LogTypes = append(
-						instance.Spec.AdditionalStores.Syslog.LogTypes,
-						v1.SyslogLogIDSEvents,
-					)
-				}
-
-				// For compatibility reasons with future operator versions, we explicitly
-				// set the list of defaults and write it back to the datastore. This ensures
-				// users continue to get the same expected behavior for Syslog forwarding
-				// when upgrading to a future release (regardless of whether or not we change
-				// the defaulting for logTypes).
-				if err = r.client.Update(ctx, instance); err != nil {
+			if mccErr != nil {
+				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+				// have this CR available, but we should communicate any other kind of error that we encounter.
+				if !errors.IsNotFound(err) {
 					r.status.SetDegraded(
-						"Failed to write default log types for Syslog configuration",
+						"An error occurred while looking for a ManagementClusterConnection",
 						err.Error(),
 					)
 					return reconcile.Result{}, err
 				}
-			} else {
-				// If the user set Syslog.logTypes, we need to ensure that they did not include
-				// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
-				// ManagementClusterConnection CR is present). This is because IDS events
-				// are only forwarded within a non-managed cluster (where LogStorage is present).
+			}
+
+			// If the user set Syslog.logTypes, we need to ensure that they did not include
+			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
+			// ManagementClusterConnection CR is present). This is because IDS events
+			// are only forwarded within a non-managed cluster (where LogStorage is present).
+			if syslog.LogTypes != nil {
 				if mccErr == nil && managementClusterConnection != nil {
 					for _, l := range syslog.LogTypes {
 						// Set status to degraded to warn user and let them fix the issue themselves.
@@ -302,6 +282,29 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 							return reconcile.Result{}, err
 						}
 					}
+				}
+			}
+
+			// Special case: For users that have a Syslog config and are upgrading from an older release
+			//  where logTypes field did not exist, we will auto-populate default values for
+			// them. This should only happen on upgrade, since logTypes is a required field.
+			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
+				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
+				// option was not available prior to the logTypes field being introduced). This ensures
+				// existing users continue to get the same expected behavior for Syslog forwarding.
+				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
+					v1.SyslogLogAudit,
+					v1.SyslogLogDNS,
+					v1.SyslogLogFlows,
+				}
+
+				// Write the default list back to the datastore.
+				if err = r.client.Update(ctx, instance); err != nil {
+					r.status.SetDegraded(
+						"Failed setting defaults for required logTypes field for Syslog config (please update manually)",
+						err.Error(),
+					)
+					return reconcile.Result{}, err
 				}
 			}
 		}

@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 
@@ -42,13 +41,14 @@ var _ = Describe("Parser", func() {
 
 	It("should detect an installation if one exists", func() {
 		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
-		err := Convert(ctx, c, &operatorv1.Installation{})
+		_, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should detect a valid installation", func() {
 		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
-		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(BeNil())
+		_, err := Convert(ctx, c)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should error if it detects a canal installation", func() {
@@ -58,7 +58,8 @@ var _ = Describe("Parser", func() {
 				Namespace: "kube-system",
 			},
 		}, pool, emptyFelixConfig())
-		Expect(Convert(ctx, c, &operatorv1.Installation{})).To(HaveOccurred())
+		_, err := Convert(ctx, c)
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("should error for unchecked env vars", func() {
@@ -68,7 +69,7 @@ var _ = Describe("Parser", func() {
 			Value: "bar",
 		}}
 		c := fake.NewFakeClientWithScheme(scheme, node, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-		err := Convert(ctx, c, &operatorv1.Installation{})
+		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -86,8 +87,7 @@ var _ = Describe("Parser", func() {
 		}
 
 		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-		cfg := &operatorv1.Installation{}
-		err := Convert(ctx, c, cfg)
+		cfg, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
 		exp := int32(24)
@@ -102,7 +102,7 @@ var _ = Describe("Parser", func() {
 		}}
 
 		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
-		err := Convert(ctx, c, &operatorv1.Installation{})
+		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
 

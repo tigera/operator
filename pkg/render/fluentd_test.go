@@ -191,6 +191,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Syslog: &operatorv1.SyslogStoreSpec{
 				Endpoint:   "tcp://1.2.3.4:80",
 				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
@@ -215,13 +220,14 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			secretName string
 			secretKey  string
 		}{
-			{"SYSLOG_FLOW_LOG", "true", "", ""},
-			{"SYSLOG_AUDIT_LOG", "true", "", ""},
 			{"SYSLOG_HOST", "1.2.3.4", "", ""},
 			{"SYSLOG_PORT", "80", "", ""},
 			{"SYSLOG_PROTOCOL", "tcp", "", ""},
 			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
 			{"SYSLOG_PACKET_SIZE", "180", "", ""},
+			{"SYSLOG_DNS_LOG", "true", "", ""},
+			{"SYSLOG_FLOW_LOG", "true", "", ""},
+			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {
@@ -244,7 +250,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 					FieldPath: "spec.nodeName",
 				}},
 		}))
-
 	})
 
 	It("should render with splunk configuration with ca", func() {

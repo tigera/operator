@@ -30,36 +30,37 @@ func NeedsConversion(ctx context.Context, client client.Client) (bool, error) {
 // Convert updates an Installation resource based on an existing Calico install (i.e.
 // one that is not managed by operator). If the existing installation cannot be represented by an Installation
 // resource, an ErrIncompatibleCluster is returned.
-func Convert(ctx context.Context, client client.Client, install *operatorv1.Installation) error {
+func Convert(ctx context.Context, client client.Client) (*operatorv1.Installation, error) {
 	comps, err := getComponents(ctx, client)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			log.Error(err, "no existing install found: %v", err)
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
 
+	install := &operatorv1.Installation{}
 	for _, hdlr := range handlers {
 		if err := hdlr(comps, install); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	// Handle the remaining FelixVars last because we only want to take env vars which weren't accounted
 	// for by the other handlers
 	if err := handleFelixVars(comps); err != nil {
-		return err
+		return nil, err
 	}
 
 	// check for unchecked env vars
 	if uncheckedVars := comps.node.uncheckedVars(); len(uncheckedVars) != 0 {
-		return ErrIncompatibleCluster{
+		return nil, ErrIncompatibleCluster{
 			err:       fmt.Sprintf("unexpected env vars: %s", uncheckedVars),
 			component: ComponentCalicoNode,
 			fix:       "remove these environment variables from the calico-node daemonest",
 		}
 	}
 
-	return nil
+	return install, nil
 }

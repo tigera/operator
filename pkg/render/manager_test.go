@@ -345,7 +345,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 	}
 	dexCfg, _ := render.NewDexConfig(authentication, []render.DexOption{
-		render.WithTLSSecret(tlsSecret, false),
+		render.WithTLSSecret(nil, true),
 		render.WithDexSecret(nil, true),
 	})
 

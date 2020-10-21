@@ -469,8 +469,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client, true)
-	if err != nil {
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -557,10 +557,10 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	r.status.ClearDegraded()
 
 	if ls != nil {
-		ls.Status.State = operatorv1.LogStorageStatusReady
+		ls.Status.State = operatorv1.TigeraStatusReady
 		if err := r.client.Status().Update(ctx, ls); err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady))
-			r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady), err.Error())
+			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady))
+			r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err.Error())
 			return reconcile.Result{}, err
 		}
 	}

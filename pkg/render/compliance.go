@@ -639,7 +639,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
 	if c.dexCfg != nil {
-		envVars = c.dexCfg.AppendDexEnv(envVars, "TIGERA_COMPLIANCE_")
+		envVars = append(envVars, c.dexCfg.DexEnv("TIGERA_COMPLIANCE_")...)
 	}
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -662,7 +662,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:            ComplianceServerName,
-					Image:           "gcr.io/tigera-dev/cnx/tigera/compliance-server:rene", //todo: reset components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
+					Image:           components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 					ImagePullPolicy: "Always",
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
@@ -738,7 +738,7 @@ func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
 	}
 
 	if c.dexCfg != nil {
-		mounts = c.dexCfg.AppendDexVolumeMount(mounts)
+		mounts = append(mounts, c.dexCfg.DexVolumeMounts()...)
 	}
 
 	return mounts
@@ -782,7 +782,7 @@ func (c *complianceComponent) complianceVolumes() []corev1.Volume {
 	}
 
 	if c.dexCfg != nil {
-		volumes = c.dexCfg.AppendDexVolume(volumes)
+		volumes = append(volumes, c.dexCfg.DexVolumes()...)
 	}
 
 	return volumes

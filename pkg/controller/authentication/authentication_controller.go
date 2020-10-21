@@ -43,7 +43,6 @@ var log = logf.Log.WithName("controller_authentication")
 
 const (
 	ControllerName = "authentication-controller"
-	StatusReady    = "Ready"
 )
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -90,11 +89,6 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		}
 	}
 
-	err = c.Watch(&source.Kind{Type: &oprv1.Authentication{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("%s failed to watch resource: %v", ControllerName, err)
-	}
-
 	return nil
 }
 
@@ -120,7 +114,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	ctx := context.Background()
 
 	// Fetch the Authentication spec. If present, we deploy dex in the cluster
-	authentication, err := utils.GetAuthentication(ctx, r.client, false)
+	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
@@ -230,7 +224,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// Everything is available - update the CRD status.
-	authentication.Status.State = StatusReady
+	authentication.Status.State = oprv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, authentication); err != nil {
 		return reconcile.Result{}, err
 	}

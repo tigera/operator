@@ -341,7 +341,7 @@ func (c *dexComponent) env() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
 		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
-		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
+		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.DexSecret().Name}}}},
 	}
 
 	if c.dexConfig.GoogleServiceAccountSecret() != nil {

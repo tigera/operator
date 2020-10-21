@@ -24,12 +24,12 @@ import (
 	oprv1 "github.com/tigera/operator/api/v1"
 )
 
-type ConnectorType string
+type connectorType string
 
 const (
-	ConnectorTypeOIDC      = "oidc"
-	ConnectorTypeOpenshift = "openshift"
-	ConnectorTypeGoogle    = "google"
+	connectorTypeOIDC      = "oidc"
+	connectorTypeOpenshift = "openshift"
+	connectorTypeGoogle    = "google"
 )
 
 type DexConfig interface {
@@ -51,15 +51,16 @@ type DexConfig interface {
 	GoogleServiceAccountSecret() []byte
 	OpenshiftRootCA() []byte
 
-	// AppendDexEnv adds env that is used to configure pods with dex options.
-	AppendDexEnv(env []corev1.EnvVar, prefix string) []corev1.EnvVar
-	// AppendDexVolume adds volumes that are related to dex.
-	AppendDexVolume(volumes []corev1.Volume) []corev1.Volume
-	//AppendDexVolumeMount adds volume mounts that are related to dex.
-	AppendDexVolumeMount(mounts []corev1.VolumeMount) []corev1.VolumeMount
+	// DexEnv returns env that is used to configure pods with dex options.
+	DexEnv(prefix string) []corev1.EnvVar
+	// DexVolumes returns volumes that are related to dex.
+	DexVolumes() []corev1.Volume
+	//DexVolumeMounts returns volume mounts that are related to dex.
+	DexVolumeMounts() []corev1.VolumeMount
 
 	ConnectorType() string
 	IssuerURL() string
+	RequestedScopes() []string
 }
 
 // DexOption can be passed during the creation of a DexConfig.
@@ -123,12 +124,15 @@ func NewDexConfig(
 	}
 
 	// Backwards compatibility settings.
+	userPrefix := authentication.Spec.UsernamePrefix
+	groupsPrefix := authentication.Spec.GroupsPrefix
+
 	if authentication.Spec.OIDC != nil {
-		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix == "" {
-			authentication.Spec.UsernamePrefix = authentication.Spec.OIDC.UsernamePrefix
+		if authentication.Spec.OIDC.UsernamePrefix != "" && userPrefix == "" {
+			userPrefix = authentication.Spec.OIDC.UsernamePrefix
 		}
-		if authentication.Spec.OIDC.GroupsPrefix != "" && authentication.Spec.GroupsPrefix == "" {
-			authentication.Spec.GroupsPrefix = authentication.Spec.OIDC.GroupsPrefix
+		if authentication.Spec.OIDC.GroupsPrefix != "" && groupsPrefix == "" {
+			groupsPrefix = authentication.Spec.OIDC.GroupsPrefix
 		}
 	}
 
@@ -138,25 +142,27 @@ func NewDexConfig(
 		baseUrl = fmt.Sprintf("https://%s", baseUrl)
 	}
 
-	var connectorType ConnectorType
+	var connType connectorType
 	var issuer string
 	if authentication.Spec.OIDC != nil {
 		issuer = authentication.Spec.OIDC.IssuerURL
 		if issuer == "https://accounts.google.com" {
-			connectorType = ConnectorTypeGoogle
+			connType = connectorTypeGoogle
 		} else {
-			connectorType = ConnectorTypeOIDC
+			connType = connectorTypeOIDC
 		}
 	} else if authentication.Spec.Openshift != nil {
-		issuer = authentication.Spec.OIDC.IssuerURL
-		connectorType = ConnectorTypeOpenshift
+		issuer = authentication.Spec.Openshift.IssuerURL
+		connType = connectorTypeOpenshift
 	}
 
 	dexConfig := &dexConfig{
 		authentication: authentication,
-		connectorType:  connectorType,
+		connectorType:  connType,
 		issuer:         issuer,
 		baseUrl:        baseUrl,
+		usernamePrefix: userPrefix,
+		groupsPrefix:   groupsPrefix,
 	}
 
 	for _, option := range options {
@@ -175,7 +181,9 @@ type dexConfig struct {
 	dexSecret      *corev1.Secret
 	baseUrl        string
 	issuer         string
-	connectorType  ConnectorType
+	connectorType  connectorType
+	usernamePrefix string
+	groupsPrefix   string
 }
 
 func (d *dexConfig) BaseURL() string {
@@ -183,16 +191,16 @@ func (d *dexConfig) BaseURL() string {
 }
 
 func (d *dexConfig) UsernamePrefix() string {
-	return d.authentication.Spec.UsernamePrefix
+	return d.usernamePrefix
 }
 
 func (d *dexConfig) GroupsPrefix() string {
-	return d.authentication.Spec.GroupsPrefix
+	return d.groupsPrefix
 }
 
 func (d *dexConfig) UsernameClaim() string {
 	claim := "email"
-	if d.connectorType == ConnectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
 		claim = d.authentication.Spec.OIDC.UsernameClaim
 	}
 	return claim
@@ -200,7 +208,7 @@ func (d *dexConfig) UsernameClaim() string {
 
 func (d *dexConfig) GroupsClaim() string {
 	claim := "groups"
-	if d.connectorType == ConnectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
 		claim = d.authentication.Spec.OIDC.GroupsClaim
 	}
 	return claim
@@ -237,52 +245,61 @@ func (d *dexConfig) OpenshiftRootCA() []byte {
 }
 
 // Append variables that are necessary for using the dex authenticator.
-func (d *dexConfig) AppendDexEnv(env []corev1.EnvVar, prefix string) []corev1.EnvVar {
-	return append(env,
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.BaseURL())},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.UsernamePrefix()},
-		corev1.EnvVar{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.GroupsPrefix()})
+func (d *dexConfig) DexEnv(prefix string) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
+		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.BaseURL())},
+		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
+		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
+		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
+		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
+		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.UsernamePrefix()},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.GroupsPrefix()},
+	}
 }
 
 // Add volume for Dex TLS secret.
-func (d *dexConfig) AppendDexVolume(volumes []corev1.Volume) []corev1.Volume {
-	return append(volumes, corev1.Volume{
-
-		Name: DexTLSSecretName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: DexTLSSecretName,
-				Items: []corev1.KeyToPath{
-					{Key: "tls.crt", Path: "tls-dex.crt"},
+func (d *dexConfig) DexVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: DexTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: DexTLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls-dex.crt"},
+					},
 				},
 			},
 		},
-	})
+	}
 }
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
-func (d *dexConfig) AppendDexVolumeMount(mounts []corev1.VolumeMount) []corev1.VolumeMount {
-	return append(mounts, corev1.VolumeMount{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"})
+func (d *dexConfig) DexVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"}}
 }
 
-// ConnectorType returns the type of connector that is configured.
+// connectorType returns the type of connector that is configured.
 func (d *dexConfig) ConnectorType() string {
 	return string(d.connectorType)
 }
 
 // Issuer URL of the connector
 func (d *dexConfig) IssuerURL() string {
-	if d.connectorType == ConnectorTypeOIDC {
+	if d.connectorType == connectorTypeOIDC {
 		return d.authentication.Spec.OIDC.IssuerURL
 	}
-	if d.connectorType == ConnectorTypeOpenshift {
+	if d.connectorType == connectorTypeOpenshift {
 		return d.authentication.Spec.Openshift.IssuerURL
 	}
 	return ""
+}
+
+func (d *dexConfig) RequestedScopes() []string {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.RequestedScopes != nil {
+		return d.authentication.Spec.OIDC.RequestedScopes
+	}
+	return []string{"openid", "email", "profile", "groups", "offline_access"}
 }

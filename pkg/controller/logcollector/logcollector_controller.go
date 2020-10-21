@@ -17,6 +17,7 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -141,9 +143,14 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogCollector")
+	ctx := context.Background()
+	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
+	isModified := false
+	// Keep track of which fields were modified (helpful for error messages)
+	modifiedFields := []string{}
 
 	// Fetch the LogCollector instance
-	instance, err := GetLogCollector(context.Background(), r.client)
+	instance, err := GetLogCollector(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -152,7 +159,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Error querying Manager", err.Error())
+		r.status.SetDegraded("Error querying for LogCollector", err.Error())
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
@@ -163,7 +170,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	if err = utils.CheckLicenseKey(context.Background(), r.client); err != nil {
+	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
 		r.status.SetDegraded("License not found", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
@@ -171,7 +178,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	installation, err := installation.GetInstallation(context.Background(), r.client)
+	installation, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -181,7 +188,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
@@ -200,7 +207,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
@@ -241,6 +248,65 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 				log.Info("Splunk credential secret does not exist")
 				r.status.SetDegraded("Splunk credential secret does not exist", "")
 				return reconcile.Result{}, nil
+			}
+		}
+	}
+
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
+			syslog := instance.Spec.AdditionalStores.Syslog
+
+			// Try to grab the ManagementClusterConnection CR because we need it for some
+			// validation with respect to Syslog.logTypes.
+			managementClusterConnection, mccErr := utils.GetManagementClusterConnection(ctx, r.client)
+			if mccErr != nil {
+				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+				// have this CR available, but we should communicate any other kind of error that we encounter.
+				if !errors.IsNotFound(err) {
+					r.status.SetDegraded(
+						"An error occurred while looking for a ManagementClusterConnection",
+						err.Error(),
+					)
+					return reconcile.Result{}, err
+				}
+			}
+
+			// If the user set Syslog.logTypes, we need to ensure that they did not include
+			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
+			// ManagementClusterConnection CR is present). This is because IDS events
+			// are only forwarded within a non-managed cluster (where LogStorage is present).
+			if syslog.LogTypes != nil {
+				if mccErr == nil && managementClusterConnection != nil {
+					for _, l := range syslog.LogTypes {
+						// Set status to degraded to warn user and let them fix the issue themselves.
+						if l == v1.SyslogLogIDSEvents {
+							r.status.SetDegraded(
+								"IDSEvents option is not supported for Syslog config in a managed cluster",
+								err.Error(),
+							)
+							return reconcile.Result{}, err
+						}
+					}
+				}
+			}
+
+			// Special case: For users that have a Syslog config and are upgrading from an older release
+			//  where logTypes field did not exist, we will auto-populate default values for
+			// them. This should only happen on upgrade, since logTypes is a required field.
+			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
+				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
+				// option was not available prior to the logTypes field being introduced). This ensures
+				// existing users continue to get the same expected behavior for Syslog forwarding.
+				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
+					v1.SyslogLogAudit,
+					v1.SyslogLogDNS,
+					v1.SyslogLogFlows,
+				}
+
+				// Mark LogCollector as changed so we know to save it
+				isModified = true
+				// Include the field that was modified (in case we need to display error messages)
+				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}
 		}
 	}
@@ -287,7 +353,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		installation,
 	)
 
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -301,9 +367,23 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Everything is available - update the CRD status.
+	// Update the LogCollector instance with any changes that have occurred.
+	if isModified {
+		if err = r.client.Update(ctx, instance); err != nil {
+			r.status.SetDegraded(
+				fmt.Sprintf(
+					"Failed to set defaults for LogCollector fields: [%s]",
+					strings.Join(modifiedFields, ", "),
+				),
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Everything is available - update the CR status.
 	instance.Status.State = operatorv1.LogControllerStatusReady
-	if err = r.client.Status().Update(context.Background(), instance); err != nil {
+	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil

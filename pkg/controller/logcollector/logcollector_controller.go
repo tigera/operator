@@ -17,6 +17,7 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -143,6 +144,10 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogCollector")
 	ctx := context.Background()
+	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
+	isModified := false
+	// Keep track of which fields were modified (helpful for error messages)
+	modifiedFields := []string{}
 
 	// Fetch the LogCollector instance
 	instance, err := GetLogCollector(ctx, r.client)
@@ -154,7 +159,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Error querying Manager", err.Error())
+		r.status.SetDegraded("Error querying for LogCollector", err.Error())
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
@@ -298,14 +303,10 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 					v1.SyslogLogFlows,
 				}
 
-				// Write the default list back to the datastore.
-				if err = r.client.Update(ctx, instance); err != nil {
-					r.status.SetDegraded(
-						"Failed setting defaults for required logTypes field for Syslog config (please update manually)",
-						err.Error(),
-					)
-					return reconcile.Result{}, err
-				}
+				// Mark LogCollector as changed so we know to save it
+				isModified = true
+				// Include the field that was modified (in case we need to display error messages)
+				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}
 		}
 	}
@@ -366,7 +367,21 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Everything is available - update the CRD status.
+	// Update the LogCollector instance with any changes that have occurred.
+	if isModified {
+		if err = r.client.Update(ctx, instance); err != nil {
+			r.status.SetDegraded(
+				fmt.Sprintf(
+					"Failed to set defaults for LogCollector fields: [%s]",
+					strings.Join(modifiedFields, ", "),
+				),
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Everything is available - update the CR status.
 	instance.Status.State = operatorv1.LogControllerStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

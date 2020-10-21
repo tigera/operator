@@ -426,7 +426,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 // Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
 // exists. If it does, then we need to turn on forwarding for IDS event logs.
 func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
-	if c.lc.Spec.AdditionalStores != nil {
+	if c.lc != nil && c.lc.Spec.AdditionalStores != nil {
 		syslog := c.lc.Spec.AdditionalStores.Syslog
 		if syslog != nil {
 			if syslog.LogTypes != nil {
@@ -648,12 +648,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionPodSecurityPolicy() *pol
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("intrusion-detection")
 
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
-		{
-			PathPrefix: "/var/log/calico",
-			ReadOnly:   false,
-		},
+	if c.syslogForwardingIsEnabled() {
+		psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+		psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
+			{
+				PathPrefix: "/var/log/calico",
+				ReadOnly:   false,
+			},
+		}
 	}
 
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny

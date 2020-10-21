@@ -337,6 +337,20 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	// Update the LogCollector instance with any changes that have occurred.
+	if isModified {
+		if err = r.client.Update(ctx, instance); err != nil {
+			r.status.SetDegraded(
+				fmt.Sprintf(
+					"Failed to set defaults for LogCollector fields: [%s]",
+					strings.Join(modifiedFields, ", "),
+				),
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -365,20 +379,6 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
-	// Update the LogCollector instance with any changes that have occurred.
-	if isModified {
-		if err = r.client.Update(ctx, instance); err != nil {
-			r.status.SetDegraded(
-				fmt.Sprintf(
-					"Failed to set defaults for LogCollector fields: [%s]",
-					strings.Join(modifiedFields, ", "),
-				),
-				err.Error(),
-			)
-			return reconcile.Result{}, err
-		}
 	}
 
 	// Everything is available - update the CR status.

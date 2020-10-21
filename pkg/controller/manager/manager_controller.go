@@ -251,7 +251,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("Error querying compliance", err.Error())
 		return reconcile.Result{}, err
 	}
-	if compliance.Status.State != operatorv1.ComplianceStatusReady {
+	if compliance.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
 		return reconcile.Result{}, nil
 	}
@@ -369,8 +369,8 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client, true)
-	if err != nil {
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
 	}

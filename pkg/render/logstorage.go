@@ -614,7 +614,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			// todo: add again Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -747,25 +747,21 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
-	principal := "email"
-	groups := "groups"
-	requestedScopes := []string{"openid", "email", "profile", "groups", "offline_access"}
-
 	if es.dexCfg != nil {
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
 			"rp.client_id":                DexClientId,
 			"rp.response_type":            "code",
 			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.BaseURL()),
-			"rp.requested_scopes":         requestedScopes,
+			"rp.requested_scopes":         es.dexCfg.RequestedScopes(),
 			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.BaseURL()),
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.BaseURL()),
 			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.BaseURL()),
 			"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
 			"op.jwkset_path":              DexJWKSURI,
 			"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",
-			"claims.principal":            principal,
-			"claims.groups":               groups,
+			"claims.principal":            es.dexCfg.UsernameClaim(),
+			"claims.groups":               es.dexCfg.GroupsClaim(),
 			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 		}
 	}

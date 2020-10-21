@@ -706,8 +706,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, err
 		}
 
-		authentication, err := utils.GetAuthentication(ctx, r.client, true)
-		if err != nil {
+		authentication, err := utils.GetAuthentication(ctx, r.client)
+		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err

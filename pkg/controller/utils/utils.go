@@ -154,7 +154,7 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 
-	if instance.Status.State != operatorv1.APIServerStatusReady {
+	if instance.Status.State != operatorv1.TigeraStatusReady {
 		l.V(3).Info("APIServer resource not ready")
 		return false
 	}
@@ -271,15 +271,11 @@ func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 	return instance, nil
 }
 
-// GetAuthentication finds the authentication CR in your cluster. If you do not want to return an error, but (nil,nil)
-// when it cannot be found, pass ignoreNotFound=true
-func GetAuthentication(ctx context.Context, cli client.Client, ignoreNotFound bool) (*operatorv1.Authentication, error) {
+// GetAuthentication finds the authentication CR in your cluster.
+func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
 	authentication := &operatorv1.Authentication{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, authentication)
 	if err != nil {
-		if kerrors.IsNotFound(err) && ignoreNotFound {
-			return nil, nil
-		}
 		return nil, err
 	}
 

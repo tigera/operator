@@ -478,7 +478,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Spec: operatorv1.AuthenticationSpec{
 					ManagerDomain: "https://example.com",
 					OIDC: &operatorv1.AuthenticationOIDC{
-						IssuerURL:       "https://accounts.google.com",
+						IssuerURL:       "https://example.com",
 						UsernameClaim:   "email",
 						GroupsClaim:     "group",
 						RequestedScopes: []string{"scope"},
@@ -486,6 +486,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 			}, []render.DexOption{
 				render.WithDexSecret(nil, true),
+				render.WithTLSSecret(nil, true),
 			})
 
 			component := render.LogStorage(
@@ -508,7 +509,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			createResources, _ := component.Objects()
 			securitySecret := GetResource(createResources, render.ElasticsearchSecureSettingsSecretName, render.ElasticsearchNamespace, "", "", "")
 			Expect(securitySecret).ShouldNot(BeNil())
-			Expect(securitySecret.(*corev1.Secret).Data["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"]).Should(Equal([]byte("secret")))
+			Expect(securitySecret.(*corev1.Secret).Data["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"]).Should(HaveLen(24))
 			elasticsearch := getElasticsearch(createResources)
 			Expect(elasticsearch.Spec.NodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
 				"cluster.max_shards_per_node": 10000,
@@ -521,11 +522,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"order":                       1,
 					"rp.response_type":            "code",
 					"rp.redirect_uri":             "https://example.com/tigera-kibana/api/security/oidc/callback",
-					"op.issuer":                   "https://tigera-dex.tigera-dex:5556.svc.cluster.local/dex",
-					"op.authorization_endpoint":   "https://tigera-dex.tigera-dex:5556.svc.cluster.local/dex/auth",
-					"op.token_endpoint":           "https://tigera-dex.tigera-dex:5556.svc.cluster.local/dex/token",
+					"op.issuer":                   "https://example.com/dex",
+					"op.authorization_endpoint":   "https://example.com/dex/auth",
+					"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
 					"rp.post_logout_redirect_uri": "https://example.com/tigera-kibana/logged_out",
 					"claims.groups":               "group",
+					"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 				},
 				"node.master": "true",
 				"node.data":   "true",

@@ -281,8 +281,8 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client, true)
-	if err != nil {
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error querying Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -336,7 +336,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.ComplianceStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

@@ -21,6 +21,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -100,12 +101,11 @@ func Manager(
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
+	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 	if dexCfg != nil {
 		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, dexCfg.TLSSecret())...)
 		tlsAnnotations[DexTLSSecretAnnotation] = AnnotationHash(dexCfg.TLSSecret().Data)
 	}
-
-	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
@@ -328,7 +328,7 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		)
 	}
 	if c.dexCfg != nil {
-		return c.dexCfg.AppendDexVolume(v)
+		v = append(v, c.dexCfg.DexVolumes()...)
 	}
 
 	return v
@@ -402,8 +402,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
-		Image:           "gcr.io/tigera-dev/cnx/tigera/cnx-manager:rene",
-		ImagePullPolicy: "Always",
+		Image:           components.GetReference(components.ComponentManager, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
@@ -441,13 +440,12 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	if c.dexCfg != nil {
-		env = c.dexCfg.AppendDexEnv(env, "VOLTRON_")
+		env = append(env, c.dexCfg.DexEnv("VOLTRON_")...)
 	}
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           "gcr.io/tigera-dev/cnx/tigera/voltron:rene", //todo: revert
-		ImagePullPolicy: "Always",                                    //todo: revert
+		Image:           components.GetReference(components.ComponentManagerProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
@@ -468,7 +466,7 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	}
 
 	if c.dexCfg != nil {
-		return c.dexCfg.AppendDexVolumeMount(mounts)
+		mounts = append(mounts, c.dexCfg.DexVolumeMounts()...)
 	}
 
 	return mounts
@@ -483,14 +481,13 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	var env []v1.EnvVar
 	if c.dexCfg != nil {
-		env = c.dexCfg.AppendDexEnv(env, "")
-		volumeMounts = c.dexCfg.AppendDexVolumeMount(volumeMounts)
+		env = append(env, c.dexCfg.DexEnv("")...)
+		volumeMounts = append(volumeMounts, c.dexCfg.DexVolumeMounts()...)
 	}
 
 	return corev1.Container{
 		Name:            "tigera-es-proxy",
-		Image:           "gcr.io/tigera-dev/cnx/tigera/es-proxy:rene", //todo: revert this to components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-		ImagePullPolicy: "Always",                                     //todo: remove
+		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 		Env:             env,

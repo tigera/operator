@@ -20,13 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	LogControllerStatusReady = "Ready"
-)
-
 // LogCollectorSpec defines the desired state of Tigera flow, audit, and DNS log collection.
 type LogCollectorSpec struct {
-
 	// Configuration for exporting flow, audit, and DNS logs to external storage.
 	// +optional
 	AdditionalStores *AdditionalLogStoreSpec `json:"additionalStores,omitempty"`

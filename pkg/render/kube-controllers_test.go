@@ -271,10 +271,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add the OIDC prefix env variables", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		dexCfg, _ := render.NewDexConfig(&operator.Authentication{Spec: operator.AuthenticationSpec{
+		dexCfg, err := render.NewDexConfig(&operator.Authentication{Spec: operator.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
 			GroupsPrefix:   "gOIDC:",
+			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}, nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(dexCfg).NotTo(BeNil())
+
 		component := render.KubeControllers(instance, true, nil, nil, nil, dexCfg)
 		resources, _ := component.Objects()
 

@@ -157,7 +157,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	}
 
 	if c.dexCfg != nil {
-		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.dexCfg.TLSSecret())...)...)
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.dexCfg.RequiredSecrets(ComplianceNamespace)...)...)
 	}
 
 	var objsToDelete []runtime.Object
@@ -639,7 +639,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
 	if c.dexCfg != nil {
-		envVars = append(envVars, c.dexCfg.DexEnv("TIGERA_COMPLIANCE_")...)
+		envVars = append(envVars, c.dexCfg.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -738,7 +738,7 @@ func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
 	}
 
 	if c.dexCfg != nil {
-		mounts = append(mounts, c.dexCfg.DexVolumeMounts()...)
+		mounts = append(mounts, c.dexCfg.RequiredVolumeMounts()...)
 	}
 
 	return mounts
@@ -782,7 +782,7 @@ func (c *complianceComponent) complianceVolumes() []corev1.Volume {
 	}
 
 	if c.dexCfg != nil {
-		volumes = append(volumes, c.dexCfg.DexVolumes()...)
+		volumes = append(volumes, c.dexCfg.RequiredVolumes()...)
 	}
 
 	return volumes

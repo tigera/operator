@@ -37,21 +37,10 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 
-	// Various annotations to keep the pod up-to-date
-	dexConfigAnnotation    = "hash.operator.tigera.io/tigera-dex-config"
-	dexIdpSecretAnnotation = "hash.operator.tigera.io/tigera-idp-secret"
-	dexSecretAnnotation    = "hash.operator.tigera.io/tigera-dex-secret"
-	DexTLSSecretAnnotation = "hash.operator.tigera.io/tigera-dex-tls-secret"
-
-	// Constants related to secrets.
-	ServiceAccountSecretField    = "serviceAccountSecret"
-	ClientSecretSecretField      = "clientSecret"
-	AdminEmailSecretField        = "adminEmail"
-	RootCASecretField            = "rootCA"
 	OIDCSecretName               = "tigera-oidc-credentials"
 	OpenshiftSecretName          = "tigera-openshift-credentials"
 	ServiceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
-	RootCASecretLocation         = "/etc/ssl/openshift.pem"
+	rootCASecretLocation         = "/etc/ssl/openshift.pem"
 	ClientIDSecretField          = "clientID"
 	GoogleAdminEmailEnv          = "ADMIN_EMAIL"
 	ClientIDEnv                  = "CLIENT_ID"
@@ -102,14 +91,9 @@ func (c *dexComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.configMap(),
-		c.dexConfig.IdpSecret(),
-		c.dexConfig.DexSecret(),
-		c.dexConfig.TLSSecret(),
-		CopySecrets(DexNamespace, c.dexConfig.IdpSecret())[0],
-		CopySecrets(DexNamespace, c.dexConfig.DexSecret())[0],
-		CopySecrets(DexNamespace, c.dexConfig.TLSSecret())[0],
 	}
-
+	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
+	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(OperatorNamespace())...)...)
 	return objs, nil
 }
 
@@ -169,35 +153,6 @@ func (c *dexComponent) clusterRoleBinding() runtime.Object {
 
 func (c *dexComponent) deployment() runtime.Object {
 
-	volumeMounts := []corev1.VolumeMount{
-		{
-			Name:      "config",
-			MountPath: "/etc/dex/cfg",
-			ReadOnly:  true,
-		},
-		{
-			Name:      "tls",
-			MountPath: "/etc/dex/tls",
-			ReadOnly:  true,
-		},
-	}
-
-	if c.dexConfig.GoogleServiceAccountSecret() != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "secrets",
-			MountPath: "/etc/dex/secrets",
-			ReadOnly:  true,
-		})
-	}
-
-	if c.dexConfig.OpenshiftRootCA() != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "secrets",
-			MountPath: "/etc/ssl/",
-			ReadOnly:  true,
-		})
-	}
-
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -224,7 +179,7 @@ func (c *dexComponent) deployment() runtime.Object {
 					Labels: map[string]string{
 						"k8s-app": DexObjectName,
 					},
-					Annotations: dexAnnotations(c),
+					Annotations: c.dexConfig.RequiredAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.Spec.ControlPlaneNodeSelector,
@@ -243,11 +198,11 @@ func (c *dexComponent) deployment() runtime.Object {
 						{
 							Name:            DexObjectName,
 							Image:           components.GetReference(components.ComponentDex, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-							Env:             c.env(),
+							Env:             c.dexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
 							SecurityContext: securityContext(),
 
-							Command: []string{"/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"},
+							Command: []string{"/usr/local/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 
 							Ports: []corev1.ContainerPort{
 								{
@@ -256,45 +211,14 @@ func (c *dexComponent) deployment() runtime.Object {
 								},
 							},
 
-							VolumeMounts: volumeMounts,
+							VolumeMounts: c.dexConfig.RequiredVolumeMounts(),
 						},
 					},
-					Volumes: c.volumes(),
+					Volumes: c.dexConfig.RequiredVolumes(),
 				},
 			},
 		},
 	}
-}
-
-func (c *dexComponent) volumes() []corev1.Volume {
-	volumes := []corev1.Volume{
-		{
-			Name:         "config",
-			VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
-		},
-		{
-			Name:         "tls",
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: DexTLSSecretName}},
-		},
-	}
-	if c.dexConfig.GoogleServiceAccountSecret() != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: c.dexConfig.IdpSecret().Name, Items: []corev1.KeyToPath{{Key: ServiceAccountSecretField, Path: "google-groups.json"}}}},
-			},
-		)
-	}
-	if c.dexConfig.OpenshiftRootCA() != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: c.dexConfig.IdpSecret().Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "openshift.pem"}}}},
-			},
-		)
-	}
-
-	return volumes
 }
 
 func (c *dexComponent) service() runtime.Object {
@@ -335,21 +259,6 @@ func (c *dexComponent) probe() *corev1.Probe {
 		InitialDelaySeconds: 90,
 		PeriodSeconds:       10,
 	}
-}
-
-func (c *dexComponent) env() []corev1.EnvVar {
-	env := []corev1.EnvVar{
-		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
-		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}},
-		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.DexSecret().Name}}}},
-	}
-
-	if c.dexConfig.GoogleServiceAccountSecret() != nil {
-		env = append(env, corev1.EnvVar{Name: GoogleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: AdminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: c.dexConfig.IdpSecret().Name}}}})
-	}
-
-	return env
-
 }
 
 func (c *dexComponent) configMap() *corev1.ConfigMap {
@@ -410,17 +319,6 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 	}
 }
 
-func dexAnnotations(c *dexComponent) map[string]string {
-	var annotations = map[string]string{
-		DexTLSSecretAnnotation: AnnotationHash(c.dexConfig.TLSSecret().Data),
-		dexConfigAnnotation:    AnnotationHash(c.configMap()),
-		dexIdpSecretAnnotation: AnnotationHash(c.dexConfig.IdpSecret().Data),
-		dexSecretAnnotation:    AnnotationHash(c.dexConfig.DexSecret().Data),
-	}
-
-	return annotations
-}
-
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
 func getConnector(dexConfig DexConfig) map[string]interface{} {
 	connectorType := dexConfig.ConnectorType()
@@ -439,7 +337,7 @@ func getConnector(dexConfig DexConfig) map[string]interface{} {
 		"adminEmail":             fmt.Sprintf("$%s", GoogleAdminEmailEnv),
 
 		//Openshift specific.
-		RootCASecretField: RootCASecretLocation,
+		RootCASecretField: rootCASecretLocation,
 	}
 
 	c := map[string]interface{}{

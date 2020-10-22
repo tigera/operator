@@ -83,7 +83,6 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
-	tlsAnnotations := make(map[string]string)
 
 	if tlsKeyPair == nil {
 		var err error
@@ -101,11 +100,13 @@ func Manager(
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
-	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+	tlsAnnotations := make(map[string]string)
+
 	if dexCfg != nil {
-		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, dexCfg.TLSSecret())...)
-		tlsAnnotations[DexTLSSecretAnnotation] = AnnotationHash(dexCfg.TLSSecret().Data)
+		tlsSecrets = append(tlsSecrets, dexCfg.RequiredSecrets(ManagerNamespace)...)
+		tlsAnnotations = dexCfg.RequiredAnnotations()
 	}
+	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
@@ -328,7 +329,7 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 		)
 	}
 	if c.dexCfg != nil {
-		v = append(v, c.dexCfg.DexVolumes()...)
+		v = append(v, c.dexCfg.RequiredVolumes()...)
 	}
 
 	return v
@@ -440,7 +441,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	if c.dexCfg != nil {
-		env = append(env, c.dexCfg.DexEnv("VOLTRON_")...)
+		env = append(env, c.dexCfg.RequiredEnv("VOLTRON_")...)
 	}
 
 	return corev1.Container{
@@ -467,7 +468,7 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	}
 
 	if c.dexCfg != nil {
-		mounts = append(mounts, c.dexCfg.DexVolumeMounts()...)
+		mounts = append(mounts, c.dexCfg.RequiredVolumeMounts()...)
 	}
 
 	return mounts
@@ -482,8 +483,8 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	var env []v1.EnvVar
 	if c.dexCfg != nil {
-		env = append(env, c.dexCfg.DexEnv("")...)
-		volumeMounts = append(volumeMounts, c.dexCfg.DexVolumeMounts()...)
+		env = append(env, c.dexCfg.RequiredEnv("")...)
+		volumeMounts = append(volumeMounts, c.dexCfg.RequiredVolumeMounts()...)
 	}
 
 	return corev1.Container{

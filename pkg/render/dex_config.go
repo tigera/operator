@@ -30,62 +30,76 @@ const (
 	connectorTypeOIDC      = "oidc"
 	connectorTypeOpenshift = "openshift"
 	connectorTypeGoogle    = "google"
+
+	// Various annotations to keep the pod up-to-date
+	authenticationAnnotation = "hash.operator.tigera.io/tigera-dex-auth"
+	dexIdpSecretAnnotation   = "hash.operator.tigera.io/tigera-idp-secret"
+	dexSecretAnnotation      = "hash.operator.tigera.io/tigera-dex-secret"
+	dexTLSSecretAnnotation   = "hash.operator.tigera.io/tigera-dex-tls-secret"
+
+	// Constants related to secrets.
+	serviceAccountSecretField = "serviceAccountSecret"
+	ClientSecretSecretField   = "clientSecret"
+	adminEmailSecretField     = "adminEmail"
+	RootCASecretField         = "rootCA"
 )
 
 // DexConfig is a config for DexIdP itself.
 type DexConfig interface {
-	// UsernamePrefix returns the string to prepend to every username for RBAC.
-	UsernamePrefix() string
-	// GroupsPrefix returns the string to prepend to every group for RBAC.
-	GroupsPrefix() string
+	// UsernameClaim returns the part of the JWT that represents a unique username.
+	UsernameClaim() string
+	// GroupsClaim returns the part of the JWT that represents the list of user groups.
+	GroupsClaim() string
 	// The issuer URL of the upstream IdP
 	IssuerURL() string
-	IdpSecret() *corev1.Secret
-	GoogleServiceAccountSecret() []byte
-	OpenshiftRootCA() []byte
 	ConnectorType() string
-	DexRelyingPartyConfig
+	DexKeyValidatorConfig
 }
 
 // DexKeyValidatorConfig is a config for (backend) servers that validate JWTs issued by Dex.
 type DexKeyValidatorConfig interface {
-	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
-	ManagerURI() string
-	// DexEnv returns env that is used to configure pods with dex options.
-	DexEnv(prefix string) []corev1.EnvVar
-	// DexVolumes returns volumes that are related to dex.
-	DexVolumes() []corev1.Volume
-	//DexVolumeMounts returns volume mounts that are related to dex.
-	DexVolumeMounts() []corev1.VolumeMount
-	TLSSecret() *corev1.Secret
+	// RequiredEnv returns env that is used to configure pods with dex options.
+	RequiredEnv(prefix string) []corev1.EnvVar
+	// RequiredVolumes returns volumes that are related to dex.
+	RequiredVolumes() []corev1.Volume
+	// RequiredVolumeMounts returns volume mounts that are related to dex.
+	RequiredVolumeMounts() []corev1.VolumeMount
+	baseConfig
 }
 
 // DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
 type DexRelyingPartyConfig interface {
 	// ClientSecret returns the secret for Dex' auth endpoint
 	ClientSecret() []byte
+	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
+	RequestedScopes() []string
 	// UsernameClaim returns the part of the JWT that represents a unique username.
 	UsernameClaim() string
 	// GroupsClaim returns the part of the JWT that represents the list of user groups.
 	GroupsClaim() string
+	baseConfig
+}
+
+type baseConfig interface {
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
 	ManagerURI() string
-	RequestedScopes() []string
-	TLSSecret() *corev1.Secret
-	DexSecret() *corev1.Secret
+	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
+	RequiredAnnotations() map[string]string
+	// RequiredSecrets returns secrets that you need to render for dex.
+	RequiredSecrets(namespace string) []*corev1.Secret
 }
 
 func NewDexRelyingPartyConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret) DexRelyingPartyConfig {
-	return newCfg(authentication, tlsSecret, dexSecret, nil)
+	return &dexRelyingPartyConfig{baseCfg(authentication, tlsSecret, dexSecret, nil)}
 }
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret) DexKeyValidatorConfig {
-	return newCfg(authentication, tlsSecret, nil, nil)
+	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil)}
 }
 
 // Create a new DexConfig.
@@ -94,15 +108,27 @@ func NewDexConfig(
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret) DexConfig {
-	return newCfg(authentication, tlsSecret, dexSecret, idpSecret)
+	return &dexConfig{baseCfg(authentication, tlsSecret, dexSecret, idpSecret)}
 }
 
-// Create a new dexConfig.
-func newCfg(
+type dexKeyValidatorConfig struct {
+	*dexBaseCfg
+}
+
+type dexConfig struct {
+	*dexBaseCfg
+}
+
+type dexRelyingPartyConfig struct {
+	*dexBaseCfg
+}
+
+// Create a struct to hold the base configuration of dex.
+func baseCfg(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
-	idpSecret *corev1.Secret) *dexConfig {
+	idpSecret *corev1.Secret) *dexBaseCfg {
 
 	// If the manager domain is not a URL, prepend https://.
 	baseUrl := authentication.Spec.ManagerDomain
@@ -124,7 +150,7 @@ func newCfg(
 		connType = connectorTypeOpenshift
 	}
 
-	return &dexConfig{
+	return &dexBaseCfg{
 		authentication: authentication,
 		tlsSecret:      tlsSecret,
 		idpSecret:      idpSecret,
@@ -135,7 +161,7 @@ func newCfg(
 	}
 }
 
-type dexConfig struct {
+type dexBaseCfg struct {
 	authentication *oprv1.Authentication
 	tlsSecret      *corev1.Secret
 	idpSecret      *corev1.Secret
@@ -145,19 +171,11 @@ type dexConfig struct {
 	connectorType  connectorType
 }
 
-func (d *dexConfig) ManagerURI() string {
+func (d *dexBaseCfg) ManagerURI() string {
 	return d.managerURI
 }
 
-func (d *dexConfig) UsernamePrefix() string {
-	return d.authentication.Spec.UsernamePrefix
-}
-
-func (d *dexConfig) GroupsPrefix() string {
-	return d.authentication.Spec.GroupsPrefix
-}
-
-func (d *dexConfig) UsernameClaim() string {
+func (d *dexBaseCfg) UsernameClaim() string {
 	claim := "email"
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
 		claim = d.authentication.Spec.OIDC.UsernameClaim
@@ -165,7 +183,7 @@ func (d *dexConfig) UsernameClaim() string {
 	return claim
 }
 
-func (d *dexConfig) GroupsClaim() string {
+func (d *dexBaseCfg) GroupsClaim() string {
 	claim := "groups"
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
 		claim = d.authentication.Spec.OIDC.GroupsClaim
@@ -173,38 +191,62 @@ func (d *dexConfig) GroupsClaim() string {
 	return claim
 }
 
-func (d *dexConfig) ClientSecret() []byte {
+func (d *dexBaseCfg) ClientSecret() []byte {
 	return d.dexSecret.Data[ClientSecretSecretField]
 }
 
-func (d *dexConfig) TLSSecret() *corev1.Secret {
-	return d.tlsSecret
+// connectorType returns the type of connector that is configured.
+func (d *dexBaseCfg) ConnectorType() string {
+	return string(d.connectorType)
 }
 
-func (d *dexConfig) IdpSecret() *corev1.Secret {
-	return d.idpSecret
-}
-
-func (d *dexConfig) DexSecret() *corev1.Secret {
-	return d.dexSecret
-}
-
-func (d *dexConfig) GoogleServiceAccountSecret() []byte {
-	if d.idpSecret == nil {
-		return nil
+// Issuer URL of the connector
+func (d *dexBaseCfg) IssuerURL() string {
+	if d.connectorType == connectorTypeOIDC {
+		return d.authentication.Spec.OIDC.IssuerURL
 	}
-	return d.idpSecret.Data[ServiceAccountSecretField]
+	if d.connectorType == connectorTypeOpenshift {
+		return d.authentication.Spec.Openshift.IssuerURL
+	}
+	return ""
 }
 
-func (d *dexConfig) OpenshiftRootCA() []byte {
-	if d.idpSecret == nil {
-		return nil
+func (d *dexBaseCfg) RequestedScopes() []string {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.RequestedScopes != nil {
+		return d.authentication.Spec.OIDC.RequestedScopes
 	}
-	return d.idpSecret.Data[RootCASecretField]
+	return []string{"openid", "email", "profile", "groups", "offline_access"}
+}
+
+func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
+	secrets := []*corev1.Secret{
+		CopySecrets(namespace, d.tlsSecret)[0],
+	}
+	if d.dexSecret != nil {
+		secrets = append(secrets, CopySecrets(namespace, d.dexSecret)...)
+	}
+	if d.idpSecret != nil {
+		secrets = append(secrets, CopySecrets(namespace, d.idpSecret)...)
+	}
+	return secrets
+}
+
+func (d *dexBaseCfg) RequiredAnnotations() map[string]string {
+	var annotations = map[string]string{
+		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
+		authenticationAnnotation: AnnotationHash(d.authentication.Spec),
+	}
+	if d.idpSecret != nil {
+		annotations[dexIdpSecretAnnotation] = AnnotationHash(d.idpSecret.Data)
+	}
+	if d.dexSecret != nil {
+		annotations[dexSecretAnnotation] = AnnotationHash(d.dexSecret.Data)
+	}
+	return annotations
 }
 
 // Append variables that are necessary for using the dex authenticator.
-func (d *dexConfig) DexEnv(prefix string) []corev1.EnvVar {
+func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
 		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
@@ -213,13 +255,58 @@ func (d *dexConfig) DexEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
-		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.UsernamePrefix()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.GroupsPrefix()},
+		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
 }
 
+// Append variables that are necessary for configuring dex.
+func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
+	env := []corev1.EnvVar{
+		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
+		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
+		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
+	}
+	if d.idpSecret != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
+		env = append(env, corev1.EnvVar{Name: GoogleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: adminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+	}
+	return env
+}
+
+func (d *dexConfig) RequiredVolumes() []corev1.Volume {
+	volumes := []corev1.Volume{
+		{
+			Name:         "config",
+			VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+		},
+		{
+			Name:         "tls",
+			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: DexTLSSecretName}},
+		},
+	}
+
+	if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name:         "secrets",
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: serviceAccountSecretField, Path: "google-groups.json"}}}},
+			},
+		)
+	}
+
+	if d.idpSecret != nil && d.idpSecret.Data[RootCASecretField] != nil {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name:         "secrets",
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "openshift.pem"}}}},
+			},
+		)
+	}
+	return volumes
+}
+
 // Add volume for Dex TLS secret.
-func (d *dexConfig) DexVolumes() []corev1.Volume {
+func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
 			Name: DexTLSSecretName,
@@ -236,29 +323,37 @@ func (d *dexConfig) DexVolumes() []corev1.Volume {
 }
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
-func (d *dexConfig) DexVolumeMounts() []corev1.VolumeMount {
+func (d *dexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"}}
 }
 
-// connectorType returns the type of connector that is configured.
-func (d *dexConfig) ConnectorType() string {
-	return string(d.connectorType)
-}
-
-// Issuer URL of the connector
-func (d *dexConfig) IssuerURL() string {
-	if d.connectorType == connectorTypeOIDC {
-		return d.authentication.Spec.OIDC.IssuerURL
+// AppendDexVolumeMount adds mount for ubi base image trusted cert location
+func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "config",
+			MountPath: "/etc/dex/baseCfg",
+			ReadOnly:  true,
+		},
+		{
+			Name:      "tls",
+			MountPath: "/etc/dex/tls",
+			ReadOnly:  true,
+		},
 	}
-	if d.connectorType == connectorTypeOpenshift {
-		return d.authentication.Spec.Openshift.IssuerURL
+	if d.idpSecret.Data[serviceAccountSecretField] != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "secrets",
+			MountPath: "/etc/dex/secrets",
+			ReadOnly:  true,
+		})
 	}
-	return ""
-}
-
-func (d *dexConfig) RequestedScopes() []string {
-	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.RequestedScopes != nil {
-		return d.authentication.Spec.OIDC.RequestedScopes
+	if d.idpSecret.Data[RootCASecretField] != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "secrets",
+			MountPath: "/etc/ssl/",
+			ReadOnly:  true,
+		})
 	}
-	return []string{"openid", "email", "profile", "groups", "offline_access"}
+	return volumeMounts
 }

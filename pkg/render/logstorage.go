@@ -341,7 +341,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 	}
 
 	if es.dexCfg != nil {
-		toCreate = append(toCreate, CopySecrets(ElasticsearchNamespace, es.dexCfg.TLSSecret())[0])
+		toCreate = append(toCreate, secretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
 	return toCreate, toDelete
@@ -495,9 +495,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			}},
 		}
 		initContainers = append(initContainers, initKeystore)
-
-		annotations[DexTLSSecretAnnotation] = AnnotationHash(es.dexCfg.TLSSecret().Data)
-		annotations[dexSecretAnnotation] = AnnotationHash(es.dexCfg.DexSecret().Data)
+		annotations = es.dexCfg.RequiredAnnotations()
 	}
 
 	podTemplate := corev1.PodTemplateSpec{

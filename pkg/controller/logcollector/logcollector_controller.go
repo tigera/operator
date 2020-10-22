@@ -382,7 +382,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Everything is available - update the CR status.
-	instance.Status.State = operatorv1.LogControllerStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

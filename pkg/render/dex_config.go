@@ -56,8 +56,6 @@ type DexConfig interface {
 type DexKeyValidatorConfig interface {
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
 	ManagerURI() string
-	// RequiredEnv returns env that is used to configure pods with dex options.
-	RequiredEnv(prefix string) []corev1.EnvVar
 	K8sAttributes
 }
 
@@ -235,6 +233,11 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
+}
+
+// Append variables that are necessary for using the dex authenticator.
+func (d *dexRelyingPartyConfig) RequiredEnv(prefix string) []corev1.EnvVar {
+	return nil
 }
 
 // Append variables that are necessary for configuring dex.

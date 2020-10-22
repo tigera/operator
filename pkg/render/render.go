@@ -252,6 +252,8 @@ func appendNotNil(components []Component, c Component) []Component {
 }
 
 type K8sAttributes interface {
+	// RequiredEnv returns env that is used to configure pods with dex options.
+	RequiredEnv(prefix string) []corev1.EnvVar
 	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
 	RequiredAnnotations() map[string]string
 	// RequiredSecrets returns secrets that you need to render for dex.

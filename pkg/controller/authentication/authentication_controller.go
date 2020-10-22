@@ -79,6 +79,11 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
 	}
 
+	err = c.Watch(&source.Kind{Type: &oprv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
+	}
+
 	for _, namespace := range []string{render.OperatorNamespace(), render.DexNamespace} {
 		for _, secretName := range []string{
 			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
@@ -140,6 +145,18 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
+	}
+
+	// Make sure authentication and managementclusterconnection are not present at the same time.
+	_, err = utils.GetManagementClusterConnection(ctx, r.client)
+	if err == nil {
+		log.Error(err, "Having Authentication CR and ManagementCluster CR at the same time is not supported")
+		r.status.SetDegraded("Having Authentication CR and ManagementCluster CR at the same time is not supported", err.Error())
+		return reconcile.Result{}, err
+	} else if !errors.IsNotFound(err) {
+		log.Error(err, "Error querying ManagementCluster")
+		r.status.SetDegraded("Error querying ManagementCluster", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex

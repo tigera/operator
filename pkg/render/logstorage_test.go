@@ -474,7 +474,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		It("Configures OIDC for Kibana when the OIDC configuration is provided", func() {
 
-			dexCfg, _ := render.NewDexConfig(&operatorv1.Authentication{
+			dexCfg := render.NewDexRelyingPartyConfig(&operatorv1.Authentication{
 				Spec: operatorv1.AuthenticationSpec{
 					ManagerDomain: "https://example.com",
 					OIDC: &operatorv1.AuthenticationOIDC{
@@ -484,10 +484,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						RequestedScopes: []string{"scope"},
 					},
 				},
-			}, []render.DexOption{
-				render.WithDexSecret(nil, true),
-				render.WithTLSSecret(nil, true),
-			})
+			}, render.CreateDexTLSSecret(), render.CreateDexClientSecret())
 
 			component := render.LogStorage(
 				logStorage,

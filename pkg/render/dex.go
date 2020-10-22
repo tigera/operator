@@ -359,14 +359,14 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
 		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
 	}
-	host := c.dexConfig.BaseURL()
+	host := c.dexConfig.ManagerURI()
 	if host != "" && !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", host))
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", host))
 	}
 
 	data := map[string]interface{}{
-		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.BaseURL()),
+		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.ManagerURI()),
 		"storage": map[string]interface{}{
 			"type": "kubernetes",
 			"config": map[string]bool{
@@ -428,7 +428,7 @@ func getConnector(dexConfig DexConfig) map[string]interface{} {
 		"issuer":       dexConfig.IssuerURL(),
 		"clientID":     fmt.Sprintf("$%s", ClientIDEnv),
 		"clientSecret": fmt.Sprintf("$%s", ClientSecretEnv),
-		"redirectURI":  fmt.Sprintf("%s/dex/callback", dexConfig.BaseURL()),
+		"redirectURI":  fmt.Sprintf("%s/dex/callback", dexConfig.ManagerURI()),
 
 		// OIDC (and google) specific.
 		"userNameKey": dexConfig.UsernameClaim(),

@@ -676,7 +676,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logStorageExists bool
-	var dexConfig render.DexConfig
+	var authentication *operator.Authentication
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -708,19 +708,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			return reconcile.Result{}, err
 		}
 
-		authentication, err := utils.GetAuthentication(ctx, r.client)
+		authentication, err = utils.GetAuthentication(ctx, r.client)
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err
-		}
-		if authentication != nil {
-			dexConfig, err = render.NewDexConfig(authentication, nil)
-			if err != nil {
-				log.Error(err, err.Error())
-				r.status.SetDegraded("An error occurred while creating dex configuration", err.Error())
-				return reconcile.Result{}, err
-			}
 		}
 	}
 
@@ -782,7 +774,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
-		dexConfig,
+		authentication,
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,

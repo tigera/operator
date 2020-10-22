@@ -147,7 +147,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = nil
+			tlsSecret = render.CreateDexTLSSecret()
 		} else {
 			log.Error(err, "Failed to read dex tls secret")
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
@@ -169,7 +169,8 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	dexSecret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
 		if errors.IsNotFound(err) {
-			dexSecret = nil
+			// We need to render a new one.
+			dexSecret = render.CreateDexClientSecret()
 		} else {
 			log.Error(err, "Failed to read dex secret")
 			r.status.SetDegraded("Failed to read dex secret", err.Error())
@@ -186,16 +187,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg, err := render.NewDexConfig(authentication, []render.DexOption{
-		render.WithDexSecret(dexSecret, true),
-		render.WithTLSSecret(tlsSecret, true),
-		render.WithIdpSecret(idpSecret),
-	})
-	if err != nil {
-		log.Error(err, "Failed to create dex config")
-		r.status.SetDegraded("Failed to create dex config", err.Error())
-		return reconcile.Result{}, err
-	}
+	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

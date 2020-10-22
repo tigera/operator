@@ -69,7 +69,7 @@ const (
 )
 
 func Manager(
-	dexCfg DexConfig,
+	dexCfg DexKeyValidatorConfig,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
@@ -132,7 +132,7 @@ func Manager(
 }
 
 type managerComponent struct {
-	dexCfg                     DexConfig
+	dexCfg                     DexKeyValidatorConfig
 	esSecrets                  []*corev1.Secret
 	kibanaSecrets              []*corev1.Secret
 	complianceServerCertSecret *corev1.Secret
@@ -420,7 +420,7 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.dexCfg.BaseURL())},
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.dexCfg.ManagerURI())},
 			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: DexClientId}}
 	}
 	return envs

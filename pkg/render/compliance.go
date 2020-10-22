@@ -62,7 +62,7 @@ func Compliance(
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
-	dexCfg DexConfig,
+	dexCfg DexKeyValidatorConfig,
 ) (Component, error) {
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
@@ -106,7 +106,7 @@ type complianceComponent struct {
 	openshift                   bool
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
-	dexCfg                      DexConfig
+	dexCfg                      DexKeyValidatorConfig
 }
 
 func (c *complianceComponent) SupportedOSType() OSType {

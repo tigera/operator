@@ -32,109 +32,77 @@ const (
 	connectorTypeGoogle    = "google"
 )
 
+// DexConfig is a config for DexIdP itself.
 type DexConfig interface {
-	// BaseURL returns the address where the Manager UI can be found. Ex: https://example.org
-	BaseURL() string
 	// UsernamePrefix returns the string to prepend to every username for RBAC.
 	UsernamePrefix() string
 	// GroupsPrefix returns the string to prepend to every group for RBAC.
 	GroupsPrefix() string
-	// UsernameClaim returns the part of the JWT that represents a unique username.
-	UsernameClaim() string
-	// GroupsClaim returns the part of the JWT that represents the list of user groups.
-	GroupsClaim() string
-	// ClientSecret returns the secret for Dex' auth endpoint
-	ClientSecret() []byte
-	TLSSecret() *corev1.Secret
+	// The issuer URL of the upstream IdP
+	IssuerURL() string
 	IdpSecret() *corev1.Secret
-	DexSecret() *corev1.Secret
 	GoogleServiceAccountSecret() []byte
 	OpenshiftRootCA() []byte
+	ConnectorType() string
+	DexRelyingPartyConfig
+}
 
+// DexKeyValidatorConfig is a config for (backend) servers that validate JWTs issued by Dex.
+type DexKeyValidatorConfig interface {
+	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
+	ManagerURI() string
 	// DexEnv returns env that is used to configure pods with dex options.
 	DexEnv(prefix string) []corev1.EnvVar
 	// DexVolumes returns volumes that are related to dex.
 	DexVolumes() []corev1.Volume
 	//DexVolumeMounts returns volume mounts that are related to dex.
 	DexVolumeMounts() []corev1.VolumeMount
+	TLSSecret() *corev1.Secret
+}
 
-	ConnectorType() string
-	IssuerURL() string
+// DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
+type DexRelyingPartyConfig interface {
+	// ClientSecret returns the secret for Dex' auth endpoint
+	ClientSecret() []byte
+	// UsernameClaim returns the part of the JWT that represents a unique username.
+	UsernameClaim() string
+	// GroupsClaim returns the part of the JWT that represents the list of user groups.
+	GroupsClaim() string
+	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
+	ManagerURI() string
 	RequestedScopes() []string
+	TLSSecret() *corev1.Secret
+	DexSecret() *corev1.Secret
 }
 
-// DexOption can be passed during the creation of a DexConfig.
-type DexOption func(*dexConfig) error
-
-// WithDexSecret creates a DexConfig for consumers that need the client secret of Dex. It can use an existing secret
-// or generate a new one.
-func WithDexSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
-	return func(d *dexConfig) error {
-		if secret == nil {
-			if createIfMissing {
-				secret = CreateDexClientSecret()
-			} else {
-				return fmt.Errorf("dexSecret is missing")
-			}
-		}
-		d.dexSecret = secret
-		return nil
-	}
+func NewDexRelyingPartyConfig(
+	authentication *oprv1.Authentication,
+	tlsSecret *corev1.Secret,
+	dexSecret *corev1.Secret) DexRelyingPartyConfig {
+	return newCfg(authentication, tlsSecret, dexSecret, nil)
 }
 
-// WithDexSecret creates a DexConfig for consumers that need to create a secure tls connection with Dex. It can use an
-// existing secret or generate a new one.
-func WithTLSSecret(secret *corev1.Secret, createIfMissing bool) DexOption {
-	return func(d *dexConfig) error {
-		if secret == nil {
-			if createIfMissing {
-				secret = CreateDexTLSSecret()
-			} else {
-				return fmt.Errorf("tlsSecret is missing")
-			}
-		}
-		d.tlsSecret = secret
-		return nil
-	}
-}
-
-// WithIdpSecret creates a DexConfig and pass in the config of the upstream IdP, such that Dex can connect to it.
-func WithIdpSecret(secret *corev1.Secret) DexOption {
-	return func(d *dexConfig) error {
-		if secret == nil {
-			return fmt.Errorf("idpSecret is missing")
-		}
-		d.idpSecret = secret
-		return nil
-	}
+func NewDexKeyValidatorConfig(
+	authentication *oprv1.Authentication,
+	tlsSecret *corev1.Secret) DexKeyValidatorConfig {
+	return newCfg(authentication, tlsSecret, nil, nil)
 }
 
 // Create a new DexConfig.
 func NewDexConfig(
 	authentication *oprv1.Authentication,
-	options []DexOption) (DexConfig, error) {
+	tlsSecret *corev1.Secret,
+	dexSecret *corev1.Secret,
+	idpSecret *corev1.Secret) DexConfig {
+	return newCfg(authentication, tlsSecret, dexSecret, idpSecret)
+}
 
-	if authentication == nil {
-		return nil, fmt.Errorf("authentication is missing")
-	}
-	if authentication.Spec.OIDC != nil && authentication.Spec.Openshift != nil {
-		return nil, fmt.Errorf("multiple IdP connectors were specified, but only 1 is allowed in the Authentication spec")
-	} else if authentication.Spec.OIDC == nil && authentication.Spec.Openshift == nil {
-		return nil, fmt.Errorf("no IdP connector was specified, please add a connector to the Authentication spec")
-	}
-
-	// Backwards compatibility settings.
-	userPrefix := authentication.Spec.UsernamePrefix
-	groupsPrefix := authentication.Spec.GroupsPrefix
-
-	if authentication.Spec.OIDC != nil {
-		if authentication.Spec.OIDC.UsernamePrefix != "" && userPrefix == "" {
-			userPrefix = authentication.Spec.OIDC.UsernamePrefix
-		}
-		if authentication.Spec.OIDC.GroupsPrefix != "" && groupsPrefix == "" {
-			groupsPrefix = authentication.Spec.OIDC.GroupsPrefix
-		}
-	}
+// Create a new dexConfig.
+func newCfg(
+	authentication *oprv1.Authentication,
+	tlsSecret *corev1.Secret,
+	dexSecret *corev1.Secret,
+	idpSecret *corev1.Secret) *dexConfig {
 
 	// If the manager domain is not a URL, prepend https://.
 	baseUrl := authentication.Spec.ManagerDomain
@@ -156,22 +124,15 @@ func NewDexConfig(
 		connType = connectorTypeOpenshift
 	}
 
-	dexConfig := &dexConfig{
+	return &dexConfig{
 		authentication: authentication,
+		tlsSecret:      tlsSecret,
+		idpSecret:      idpSecret,
+		dexSecret:      dexSecret,
 		connectorType:  connType,
 		issuer:         issuer,
-		baseUrl:        baseUrl,
-		usernamePrefix: userPrefix,
-		groupsPrefix:   groupsPrefix,
+		managerURI:     baseUrl,
 	}
-
-	for _, option := range options {
-		if err := option(dexConfig); err != nil {
-			return nil, err
-		}
-	}
-
-	return dexConfig, nil
 }
 
 type dexConfig struct {
@@ -179,23 +140,21 @@ type dexConfig struct {
 	tlsSecret      *corev1.Secret
 	idpSecret      *corev1.Secret
 	dexSecret      *corev1.Secret
-	baseUrl        string
+	managerURI     string
 	issuer         string
 	connectorType  connectorType
-	usernamePrefix string
-	groupsPrefix   string
 }
 
-func (d *dexConfig) BaseURL() string {
-	return d.baseUrl
+func (d *dexConfig) ManagerURI() string {
+	return d.managerURI
 }
 
 func (d *dexConfig) UsernamePrefix() string {
-	return d.usernamePrefix
+	return d.authentication.Spec.UsernamePrefix
 }
 
 func (d *dexConfig) GroupsPrefix() string {
-	return d.groupsPrefix
+	return d.authentication.Spec.GroupsPrefix
 }
 
 func (d *dexConfig) UsernameClaim() string {
@@ -248,7 +207,7 @@ func (d *dexConfig) OpenshiftRootCA() []byte {
 func (d *dexConfig) DexEnv(prefix string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.BaseURL())},
+		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
 		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
 		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},

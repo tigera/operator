@@ -141,7 +141,7 @@ func LogStorage(
 	kbService *corev1.Service,
 	clusterDNS string,
 	applyTrial bool,
-	dexCfg DexConfig) Component {
+	dexCfg DexRelyingPartyConfig) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -183,7 +183,7 @@ type elasticsearchComponent struct {
 	kbService                   *corev1.Service
 	clusterDNS                  string
 	applyTrial                  bool
-	dexCfg                      DexConfig
+	dexCfg                      DexRelyingPartyConfig
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -752,11 +752,11 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"order":                       1,
 			"rp.client_id":                DexClientId,
 			"rp.response_type":            "code",
-			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.BaseURL()),
+			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerURI()),
 			"rp.requested_scopes":         es.dexCfg.RequestedScopes(),
-			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.BaseURL()),
-			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.BaseURL()),
-			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.BaseURL()),
+			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
+			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
+			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
 			"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
 			"op.jwkset_path":              DexJWKSURI,
 			"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",

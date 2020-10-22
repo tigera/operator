@@ -375,7 +375,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	var dexCfg render.DexConfig
+	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
@@ -386,13 +386,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 				return reconcile.Result{}, err
 			}
 		}
-		dexCfg, err = render.NewDexConfig(authentication, []render.DexOption{
-			render.WithTLSSecret(dexTLSSecret, false),
-		})
-		if err != nil {
-			r.status.SetDegraded("Failed to create dex config", err.Error())
-			return reconcile.Result{}, err
-		}
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
 	}
 
 	// Create a component handler to manage the rendered component.

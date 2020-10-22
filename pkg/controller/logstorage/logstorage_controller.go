@@ -475,7 +475,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	var dexCfg render.DexConfig
+	var dexCfg render.DexRelyingPartyConfig
 	if authentication != nil {
 		var dexTLSSecret *corev1.Secret
 		dexTLSSecret = &corev1.Secret{}
@@ -499,14 +499,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 				}
 			}
 		}
-		dexCfg, err = render.NewDexConfig(authentication, []render.DexOption{
-			render.WithTLSSecret(dexTLSSecret, false),
-			render.WithDexSecret(dexSecret, false),
-		})
-		if err != nil {
-			r.status.SetDegraded("Failed to create dex config", err.Error())
-			return reconcile.Result{}, err
-		}
+		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret)
 	}
 
 	component := render.LogStorage(

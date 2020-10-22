@@ -446,8 +446,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           "gcr.io/tigera-dev/cnx/tigera/voltron:rene", //todo: revert
-		ImagePullPolicy: "Always",                                    //todo: revert
+		Image:           components.GetReference(components.ComponentManagerProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),

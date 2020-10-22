@@ -422,8 +422,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	var volumeMounts []corev1.VolumeMount
 	if es.dexCfg != nil {
-		volumeMounts = []corev1.VolumeMount{
-			{Name: DexTLSSecretName, MountPath: "/usr/share/elasticsearch/config/dex/"}}
+		volumeMounts = append(volumeMounts, es.dexCfg.RequiredVolumeMounts()...)
 	}
 
 	esContainer := corev1.Container{
@@ -498,6 +497,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		annotations = es.dexCfg.RequiredAnnotations()
 	}
 
+	var volumes []corev1.Volume
+
+	if es.dexCfg != nil {
+		volumes = es.dexCfg.RequiredVolumes()
+	}
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -508,19 +512,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
 			ServiceAccountName: "tigera-elasticsearch",
-			Volumes: []corev1.Volume{
-				{
-					Name: DexTLSSecretName,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: DexTLSSecretName,
-							Items: []corev1.KeyToPath{
-								{Key: "tls.crt", Path: "tls-dex.crt"},
-							},
-						},
-					},
-				},
-			},
+			Volumes:            volumes,
 		},
 	}
 
@@ -749,17 +741,17 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
 			"rp.client_id":                DexClientId,
+			"op.jwkset_path":              es.dexCfg.JWKSURI(),
+			"op.userinfo_endpoint":        es.dexCfg.UserInfoURI(),
+			"op.token_endpoint":           es.dexCfg.TokenURI(),
+			"claims.principal":            es.dexCfg.UsernameClaim(),
+			"claims.groups":               es.dexCfg.GroupsClaim(),
 			"rp.response_type":            "code",
-			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerURI()),
 			"rp.requested_scopes":         es.dexCfg.RequestedScopes(),
+			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerURI()),
 			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
 			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
-			"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
-			"op.jwkset_path":              DexJWKSURI,
-			"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",
-			"claims.principal":            es.dexCfg.UsernameClaim(),
-			"claims.groups":               es.dexCfg.GroupsClaim(),
 			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 		}
 	}

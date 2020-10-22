@@ -50,8 +50,6 @@ const (
 	// Constants related to Dex configurations
 	DexClientId = "tigera-manager"
 	DexCN       = "tigera-dex.tigera-dex.svc.cluster.local"
-
-	DexJWKSURI = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"
 )
 
 func Dex(
@@ -66,7 +64,7 @@ func Dex(
 		pullSecrets:  pullSecrets,
 		openshift:    openshift,
 		installation: installation,
-		connector:    getConnector(dexConfig),
+		connector:    dexConfig.Connector(),
 	}
 }
 
@@ -92,8 +90,8 @@ func (c *dexComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 	}
-	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
 	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(OperatorNamespace())...)...)
+	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
 	return objs, nil
 }
 
@@ -223,6 +221,7 @@ func (c *dexComponent) deployment() runtime.Object {
 
 func (c *dexComponent) service() runtime.Object {
 	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexObjectName,
 			Namespace: DexNamespace,
@@ -309,6 +308,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		panic(err)
 	}
 	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexObjectName,
 			Namespace: DexNamespace,
@@ -317,34 +317,4 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 			"config.yaml": string(bytes),
 		},
 	}
-}
-
-// This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
-func getConnector(dexConfig DexConfig) map[string]interface{} {
-	connectorType := dexConfig.ConnectorType()
-	config := map[string]interface{}{
-		"issuer":       dexConfig.IssuerURL(),
-		"clientID":     fmt.Sprintf("$%s", ClientIDEnv),
-		"clientSecret": fmt.Sprintf("$%s", ClientSecretEnv),
-		"redirectURI":  fmt.Sprintf("%s/dex/callback", dexConfig.ManagerURI()),
-
-		// OIDC (and google) specific.
-		"userNameKey": dexConfig.UsernameClaim(),
-		"userIDKey":   dexConfig.UsernameClaim(),
-
-		//Google specific.
-		"serviceAccountFilePath": ServiceAccountSecretLocation,
-		"adminEmail":             fmt.Sprintf("$%s", GoogleAdminEmailEnv),
-
-		//Openshift specific.
-		RootCASecretField: rootCASecretLocation,
-	}
-
-	c := map[string]interface{}{
-		"id":     connectorType,
-		"type":   connectorType,
-		"name":   connectorType,
-		"config": config,
-	}
-	return c
 }

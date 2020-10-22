@@ -24,8 +24,6 @@ import (
 	oprv1 "github.com/tigera/operator/api/v1"
 )
 
-type connectorType string
-
 const (
 	connectorTypeOIDC      = "oidc"
 	connectorTypeOpenshift = "openshift"
@@ -42,33 +40,37 @@ const (
 	ClientSecretSecretField   = "clientSecret"
 	adminEmailSecretField     = "adminEmail"
 	RootCASecretField         = "rootCA"
+
+	jwksURI     = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"
+	tokenURI    = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"
+	userInfoURI = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"
 )
 
 // DexConfig is a config for DexIdP itself.
 type DexConfig interface {
-	// UsernameClaim returns the part of the JWT that represents a unique username.
-	UsernameClaim() string
-	// GroupsClaim returns the part of the JWT that represents the list of user groups.
-	GroupsClaim() string
-	// The issuer URL of the upstream IdP
-	IssuerURL() string
-	ConnectorType() string
+	Connector() map[string]interface{}
 	DexKeyValidatorConfig
 }
 
 // DexKeyValidatorConfig is a config for (backend) servers that validate JWTs issued by Dex.
 type DexKeyValidatorConfig interface {
+	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
+	ManagerURI() string
 	// RequiredEnv returns env that is used to configure pods with dex options.
 	RequiredEnv(prefix string) []corev1.EnvVar
-	// RequiredVolumes returns volumes that are related to dex.
-	RequiredVolumes() []corev1.Volume
-	// RequiredVolumeMounts returns volume mounts that are related to dex.
-	RequiredVolumeMounts() []corev1.VolumeMount
-	baseConfig
+	K8sAttributes
 }
 
 // DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
 type DexRelyingPartyConfig interface {
+	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
+	ManagerURI() string
+	// JWKSURI returns the endpoint for public keys
+	JWKSURI() string
+	// TokenURI returns the endpoint for exchanging tokens
+	TokenURI() string
+	// UserInfoURI returns the endpoint for user info.
+	UserInfoURI() string
 	// ClientSecret returns the secret for Dex' auth endpoint
 	ClientSecret() []byte
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
@@ -77,16 +79,7 @@ type DexRelyingPartyConfig interface {
 	UsernameClaim() string
 	// GroupsClaim returns the part of the JWT that represents the list of user groups.
 	GroupsClaim() string
-	baseConfig
-}
-
-type baseConfig interface {
-	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
-	ManagerURI() string
-	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
-	RequiredAnnotations() map[string]string
-	// RequiredSecrets returns secrets that you need to render for dex.
-	RequiredSecrets(namespace string) []*corev1.Secret
+	K8sAttributes
 }
 
 func NewDexRelyingPartyConfig(
@@ -136,7 +129,7 @@ func baseCfg(
 		baseUrl = fmt.Sprintf("https://%s", baseUrl)
 	}
 
-	var connType connectorType
+	var connType string
 	var issuer string
 	if authentication.Spec.OIDC != nil {
 		issuer = authentication.Spec.OIDC.IssuerURL
@@ -168,7 +161,7 @@ type dexBaseCfg struct {
 	dexSecret      *corev1.Secret
 	managerURI     string
 	issuer         string
-	connectorType  connectorType
+	connectorType  string
 }
 
 func (d *dexBaseCfg) ManagerURI() string {
@@ -193,22 +186,6 @@ func (d *dexBaseCfg) GroupsClaim() string {
 
 func (d *dexBaseCfg) ClientSecret() []byte {
 	return d.dexSecret.Data[ClientSecretSecretField]
-}
-
-// connectorType returns the type of connector that is configured.
-func (d *dexBaseCfg) ConnectorType() string {
-	return string(d.connectorType)
-}
-
-// Issuer URL of the connector
-func (d *dexBaseCfg) IssuerURL() string {
-	if d.connectorType == connectorTypeOIDC {
-		return d.authentication.Spec.OIDC.IssuerURL
-	}
-	if d.connectorType == connectorTypeOpenshift {
-		return d.authentication.Spec.Openshift.IssuerURL
-	}
-	return ""
 }
 
 func (d *dexBaseCfg) RequestedScopes() []string {
@@ -251,7 +228,7 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
 		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
 		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
-		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: DexJWKSURI},
+		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: jwksURI},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
@@ -322,6 +299,23 @@ func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 	}
 }
 
+// Add volume for Dex TLS secret.
+func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: DexTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: DexTLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls-dex.crt"},
+					},
+				},
+			},
+		},
+	}
+}
+
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
 func (d *dexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"}}
@@ -356,4 +350,59 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 		})
 	}
 	return volumeMounts
+}
+
+// AppendDexVolumeMount adds mount for ubi base image trusted cert location
+func (d *dexRelyingPartyConfig) RequiredVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/usr/share/elasticsearch/config/dex/"}}
+}
+
+func (d *dexRelyingPartyConfig) DexIssuer() string {
+	return fmt.Sprintf("%s/dex", d.ManagerURI())
+}
+
+func (d *dexRelyingPartyConfig) AuthURI() string {
+	return fmt.Sprintf("%s/dex/auth", d.ManagerURI())
+}
+
+func (d *dexRelyingPartyConfig) JWKSURI() string {
+	return jwksURI
+}
+
+func (d *dexRelyingPartyConfig) TokenURI() string {
+	return tokenURI
+}
+
+func (d *dexRelyingPartyConfig) UserInfoURI() string {
+	return userInfoURI
+}
+
+// This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
+func (d *dexConfig) Connector() map[string]interface{} {
+	connectorType := d.connectorType
+	config := map[string]interface{}{
+		"issuer":       d.issuer,
+		"clientID":     fmt.Sprintf("$%s", ClientIDEnv),
+		"clientSecret": fmt.Sprintf("$%s", ClientSecretEnv),
+		"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+
+		// OIDC (and google) specific.
+		"userNameKey": d.UsernameClaim(),
+		"userIDKey":   d.UsernameClaim(),
+
+		//Google specific.
+		"serviceAccountFilePath": ServiceAccountSecretLocation,
+		"adminEmail":             fmt.Sprintf("$%s", GoogleAdminEmailEnv),
+
+		//Openshift specific.
+		RootCASecretField: rootCASecretLocation,
+	}
+
+	c := map[string]interface{}{
+		"id":     connectorType,
+		"type":   connectorType,
+		"name":   connectorType,
+		"config": config,
+	}
+	return c
 }

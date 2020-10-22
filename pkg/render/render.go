@@ -250,3 +250,14 @@ func appendNotNil(components []Component, c Component) []Component {
 	}
 	return components
 }
+
+type K8sAttributes interface {
+	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
+	RequiredAnnotations() map[string]string
+	// RequiredSecrets returns secrets that you need to render for dex.
+	RequiredSecrets(namespace string) []*corev1.Secret
+	// RequiredVolumeMounts returns volume mounts that are related to dex.
+	RequiredVolumeMounts() []corev1.VolumeMount
+	// RequiredVolumes returns volumes that are related to dex.
+	RequiredVolumes() []corev1.Volume
+}

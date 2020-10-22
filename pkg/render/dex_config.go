@@ -44,6 +44,16 @@ const (
 	jwksURI     = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"
 	tokenURI    = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"
 	userInfoURI = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"
+
+	OIDCSecretName               = "tigera-oidc-credentials"
+	OpenshiftSecretName          = "tigera-openshift-credentials"
+	serviceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
+	rootCASecretLocation         = "/etc/ssl/openshift.pem"
+	ClientIDSecretField          = "clientID"
+	googleAdminEmailEnv          = "ADMIN_EMAIL"
+	clientIDEnv                  = "CLIENT_ID"
+	clientSecretEnv              = "CLIENT_SECRET"
+	dexSecretEnv                 = "DEX_SECRET"
 )
 
 // DexConfig is a config for DexIdP itself.
@@ -243,12 +253,12 @@ func (d *dexRelyingPartyConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 // Append variables that are necessary for configuring dex.
 func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 	env := []corev1.EnvVar{
-		{Name: ClientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
-		{Name: ClientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
-		{Name: DexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
+		{Name: clientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
+		{Name: clientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
+		{Name: dexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
 	}
 	if d.idpSecret != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
-		env = append(env, corev1.EnvVar{Name: GoogleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: adminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+		env = append(env, corev1.EnvVar{Name: googleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: adminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
 	}
 	return env
 }
@@ -385,8 +395,8 @@ func (d *dexConfig) Connector() map[string]interface{} {
 	connectorType := d.connectorType
 	config := map[string]interface{}{
 		"issuer":       d.issuer,
-		"clientID":     fmt.Sprintf("$%s", ClientIDEnv),
-		"clientSecret": fmt.Sprintf("$%s", ClientSecretEnv),
+		"clientID":     fmt.Sprintf("$%s", clientIDEnv),
+		"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
 		"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
 
 		// OIDC (and google) specific.
@@ -394,8 +404,8 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		"userIDKey":   d.UsernameClaim(),
 
 		//Google specific.
-		"serviceAccountFilePath": ServiceAccountSecretLocation,
-		"adminEmail":             fmt.Sprintf("$%s", GoogleAdminEmailEnv),
+		"serviceAccountFilePath": serviceAccountSecretLocation,
+		"adminEmail":             fmt.Sprintf("$%s", googleAdminEmailEnv),
 
 		//Openshift specific.
 		RootCASecretField: rootCASecretLocation,

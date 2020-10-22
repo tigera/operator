@@ -37,16 +37,6 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 
-	OIDCSecretName               = "tigera-oidc-credentials"
-	OpenshiftSecretName          = "tigera-openshift-credentials"
-	ServiceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
-	rootCASecretLocation         = "/etc/ssl/openshift.pem"
-	ClientIDSecretField          = "clientID"
-	GoogleAdminEmailEnv          = "ADMIN_EMAIL"
-	ClientIDEnv                  = "CLIENT_ID"
-	ClientSecretEnv              = "CLIENT_SECRET"
-	DexSecretEnv                 = "DEX_SECRET"
-
 	// Constants related to Dex configurations
 	DexClientId = "tigera-manager"
 	DexCN       = "tigera-dex.tigera-dex.svc.cluster.local"
@@ -298,7 +288,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 				"id":           DexClientId,
 				"redirectURIs": redirectURIs,
 				"name":         "Calico Enterprise Manager",
-				"secretEnv":    DexSecretEnv,
+				"secretEnv":    dexSecretEnv,
 			},
 		},
 	}

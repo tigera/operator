@@ -234,7 +234,7 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 
 	secret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: render.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("")
+		return nil, fmt.Errorf("missing secret %s: %w", secretName, err)
 	}
 
 	if len(secret.Data[render.ClientIDSecretField]) == 0 {

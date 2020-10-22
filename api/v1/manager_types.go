@@ -28,10 +28,6 @@ type ManagerSpec struct {
 type ManagerStatus struct {
 }
 
-// AuthType represents the type of authentication to use. Valid
-// options are: Token, Basic, OIDC, OAuth
-type AuthType string
-
 const (
 	AuthTypeToken = "Token"
 	AuthTypeBasic = "Basic"

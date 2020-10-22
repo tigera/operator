@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -480,23 +479,15 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		var dexTLSSecret *corev1.Secret
 		dexTLSSecret = &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
-			if errors.IsNotFound(err) {
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			} else {
-				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-				return reconcile.Result{}, err
-			}
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
 		}
 		var dexSecret *corev1.Secret
 		if authentication != nil {
 			dexSecret = &corev1.Secret{}
 			if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
-				if errors.IsNotFound(err) {
-					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-				} else {
-					r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-					return reconcile.Result{}, err
-				}
+				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+				return reconcile.Result{}, err
 			}
 		}
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret)

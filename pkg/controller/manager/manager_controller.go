@@ -160,15 +160,6 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 	if err != nil {
 		return nil, err
 	}
-	//
-	//// Populate the instance with defaults for any fields not provided by the user.
-	//if instance.Spec.Auth == nil {
-	//	instance.Spec.Auth = &operatorv1.Auth{
-	//		Type:      operatorv1.AuthTypeToken,
-	//		Authority: "",
-	//		ClientID:  "",
-	//	}
-	//}
 	return instance, nil
 }
 
@@ -379,12 +370,8 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
-			if errors.IsNotFound(err) {
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			} else {
-				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-				return reconcile.Result{}, err
-			}
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
 		}
 		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
 	}

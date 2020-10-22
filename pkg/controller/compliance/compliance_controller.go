@@ -294,12 +294,8 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
-			if errors.IsNotFound(err) {
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			} else {
-				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-				return reconcile.Result{}, err
-			}
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
 		}
 		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
 	}

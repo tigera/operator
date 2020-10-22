@@ -604,7 +604,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			// todo: add again Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{

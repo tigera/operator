@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	// Types of dex connectors.
 	connectorTypeOIDC      = "oidc"
 	connectorTypeOpenshift = "openshift"
 	connectorTypeGoogle    = "google"
@@ -36,24 +37,30 @@ const (
 	dexTLSSecretAnnotation   = "hash.operator.tigera.io/tigera-dex-tls-secret"
 
 	// Constants related to secrets.
-	serviceAccountSecretField = "serviceAccountSecret"
-	ClientSecretSecretField   = "clientSecret"
-	adminEmailSecretField     = "adminEmail"
-	RootCASecretField         = "rootCA"
-
-	jwksURI     = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"
-	tokenURI    = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"
-	userInfoURI = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"
-
+	serviceAccountSecretField    = "serviceAccountSecret"
+	ClientSecretSecretField      = "clientSecret"
+	adminEmailSecretField        = "adminEmail"
+	RootCASecretField            = "rootCA"
 	OIDCSecretName               = "tigera-oidc-credentials"
 	OpenshiftSecretName          = "tigera-openshift-credentials"
 	serviceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
 	rootCASecretLocation         = "/etc/ssl/openshift.pem"
 	ClientIDSecretField          = "clientID"
-	googleAdminEmailEnv          = "ADMIN_EMAIL"
-	clientIDEnv                  = "CLIENT_ID"
-	clientSecretEnv              = "CLIENT_SECRET"
-	dexSecretEnv                 = "DEX_SECRET"
+
+	// OIDC well-known-config related constants.
+	jwksURI     = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"
+	tokenURI    = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"
+	userInfoURI = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"
+
+	// Env related constants.
+	googleAdminEmailEnv = "ADMIN_EMAIL"
+	clientIDEnv         = "CLIENT_ID"
+	clientSecretEnv     = "CLIENT_SECRET"
+	dexSecretEnv        = "DEX_SECRET"
+
+	// Default claims to use to data from a JWT.
+	defaultGroupsClaim   = "groups"
+	defaultUsernameClaim = "email"
 )
 
 // DexConfig is a config for DexIdP itself.
@@ -177,7 +184,7 @@ func (d *dexBaseCfg) ManagerURI() string {
 }
 
 func (d *dexBaseCfg) UsernameClaim() string {
-	claim := "email"
+	claim := defaultUsernameClaim
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
 		claim = d.authentication.Spec.OIDC.UsernameClaim
 	}
@@ -185,7 +192,7 @@ func (d *dexBaseCfg) UsernameClaim() string {
 }
 
 func (d *dexBaseCfg) GroupsClaim() string {
-	claim := "groups"
+	claim := defaultGroupsClaim
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
 		claim = d.authentication.Spec.OIDC.GroupsClaim
 	}

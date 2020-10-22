@@ -71,12 +71,12 @@ func newReconciler(mgr manager.Manager, provider oprv1.Provider) *ReconcileAuthe
 func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 	c, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("failed to create %s: %v", ControllerName, err)
+		return fmt.Errorf("failed to create %s: %w", ControllerName, err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &oprv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("%s failed to watch resource: %v", ControllerName, err)
+		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
 	}
 
 	for _, namespace := range []string{render.OperatorNamespace(), render.DexNamespace} {
@@ -84,7 +84,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %v", ControllerName, secretName, namespace, err)
+				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", ControllerName, secretName, namespace, err)
 			}
 		}
 	}

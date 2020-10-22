@@ -139,38 +139,38 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
 	}
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err = c.Watch(&source.Kind{
 		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{
 		ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %w", err)
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
@@ -198,33 +198,33 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
 		render.ECKWebhookSecretName, render.OIDCSecretName, render.DexObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
+			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	return nil

@@ -79,11 +79,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch Network resource: %w", err)
 	}
 
 	if err = utils.AddAPIServerWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
 	}
 
 	// Watch the given secrets in each both the compliance and operator namespaces
@@ -94,30 +94,30 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexTLSSecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
 	}
 
 	return nil

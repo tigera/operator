@@ -71,23 +71,23 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("failed to create manager-controller: %v", err)
+		return fmt.Errorf("failed to create manager-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Manager
 	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	err = utils.AddAPIServerWatch(c)
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch APIServer resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
 
 	err = utils.AddComplianceWatch(c)
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch compliance resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch compliance resource: %w", err)
 	}
 
 	// Watch the given secrets in each both the manager and operator namespaces
@@ -99,42 +99,42 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %v", render.ManagerOIDCConfig, err)
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", render.ManagerOIDCConfig, err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("manager-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %v", common.TigeraPrometheusNamespace, err)
+		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 
 	return nil

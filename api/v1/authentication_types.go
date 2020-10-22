@@ -57,7 +57,7 @@ type AuthenticationStatus struct {
 
 // AuthenticationOIDC is the configuration needed to setup OIDC.
 type AuthenticationOIDC struct {
-	// UpstreamIssuerURL is the URL to the OIDC provider.
+	// IssuerURL is the URL to the OIDC provider.
 	// +required
 	IssuerURL string `json:"issuerURL"`
 
@@ -83,9 +83,9 @@ type AuthenticationOIDC struct {
 	GroupsPrefix string `json:"groupsPrefix,omitempty"`
 }
 
-// AuthenticationOIDC is the configuration needed to setup Openshift.
+// AuthenticationOpenshift is the configuration needed to setup Openshift.
 type AuthenticationOpenshift struct {
-	// UpstreamIssuerURL is the URL to the Opensift OAuth provider. Ex.: https://api.my-ocp-domain.com:6443
+	// IssuerURL is the URL to the Openshift OAuth provider. Ex.: https://api.my-ocp-domain.com:6443
 	// +required
 	IssuerURL string `json:"issuerURL"`
 }

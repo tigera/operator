@@ -38,9 +38,55 @@ spec:
           spec:
             description: Specification of the desired state for the Calico Enterprise
               manager.
+            properties:
+              auth:
+                description: Auth defines the authentication strategy for the Calico
+                  Enterprise manager GUI.
+                properties:
+                  authority:
+                    description: Authority configures the OAuth2/OIDC authority/issuer
+                      when using OAuth2 or OIDC login.
+                    type: string
+                  clientID:
+                    description: ClientId configures the OAuth2/OIDC client ID to
+                      use for OAuth2 or OIDC login.
+                    type: string
+                  type:
+                    description: 'Type configures the type of authentication used
+                      by the manager. Default: Token'
+                    enum:
+                    - Token
+                    - Basic
+                    - OIDC
+                    - OAuth
+                    type: string
+                type: object
             type: object
           status:
             description: Most recently observed state for the Calico Enterprise manager.
+            properties:
+              auth:
+                description: Deprecated. Please use the Authentication CR for configuring
+                  authentication.
+                properties:
+                  authority:
+                    description: Authority configures the OAuth2/OIDC authority/issuer
+                      when using OAuth2 or OIDC login.
+                    type: string
+                  clientID:
+                    description: ClientId configures the OAuth2/OIDC client ID to
+                      use for OAuth2 or OIDC login.
+                    type: string
+                  type:
+                    description: 'Type configures the type of authentication used
+                      by the manager. Default: Token'
+                    enum:
+                    - Token
+                    - Basic
+                    - OIDC
+                    - OAuth
+                    type: string
+                type: object
             type: object
         type: object
     served: true

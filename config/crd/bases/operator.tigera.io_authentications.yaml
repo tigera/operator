@@ -58,7 +58,7 @@ spec:
                       instead.
                     type: string
                   issuerURL:
-                    description: UpstreamIssuerURL is the URL to the OIDC provider.
+                    description: IssuerURL is the URL to the OIDC provider.
                     type: string
                   requestedScopes:
                     description: 'RequestedScopes is a list of scopes to request from
@@ -84,7 +84,7 @@ spec:
                   Openshift OAuth authentication.
                 properties:
                   issuerURL:
-                    description: 'UpstreamIssuerURL is the URL to the Opensift OAuth provider.
+                    description: 'IssuerURL is the URL to the Openshift OAuth provider.
                       Ex.: https://api.my-ocp-domain.com:6443'
                     type: string
                 required:

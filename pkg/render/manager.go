@@ -544,7 +544,6 @@ func managerServiceAccount() *v1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-// This role can also be used in mcm for impersonation purposes only.
 func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -591,6 +590,9 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"serviceaccounts", "namespaces"},
 				Verbs:     []string{"list"},
 			},
+			// When a request is made to the UI, it is then redirected to Voltron. If the request is targeting a k8s api
+			// or when it is targeting a managed cluster, Voltron will authenticate the user based on the auth header
+			// and then impersonate this user.
 			{
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},

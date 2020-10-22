@@ -268,7 +268,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.IntrusionDetectionStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

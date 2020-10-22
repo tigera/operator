@@ -22,37 +22,11 @@ import (
 
 // ManagerSpec defines configuration for the Calico Enterprise manager GUI.
 type ManagerSpec struct {
-	// Auth defines the authentication strategy for the Calico Enterprise manager GUI.
-	// +optional
-	Auth *Auth `json:"auth,omitempty"`
 }
 
 // ManagerStatus defines the observed state of the Calico Enterprise manager GUI.
 type ManagerStatus struct {
-	// The last successfully applied authentication configuration.
-	// +optional
-	Auth *Auth `json:"auth,omitempty"`
 }
-
-// Auth defines authentication configuration.
-type Auth struct {
-	// Type configures the type of authentication used by the manager.
-	// Default: Token
-	// +kubebuilder:validation:Enum=Token;Basic;OIDC;OAuth
-	Type AuthType `json:"type,omitempty"`
-
-	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
-	// +optional
-	Authority string `json:"authority,omitempty"`
-
-	// ClientId configures the OAuth2/OIDC client ID to use for OAuth2 or OIDC login.
-	// +optional
-	ClientID string `json:"clientID,omitempty"`
-}
-
-// AuthType represents the type of authentication to use. Valid
-// options are: Token, Basic, OIDC, OAuth
-type AuthType string
 
 const (
 	AuthTypeToken = "Token"

@@ -268,7 +268,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.APIServerStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

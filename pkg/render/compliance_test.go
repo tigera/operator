@@ -31,7 +31,7 @@ var _ = Describe("compliance rendering tests", func() {
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
 				},
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -123,7 +123,7 @@ var _ = Describe("compliance rendering tests", func() {
 						KubernetesProvider: operatorv1.ProviderNone,
 						Registry:           "testregistry.com/",
 					},
-				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil)
+				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -238,7 +238,7 @@ var _ = Describe("compliance rendering tests", func() {
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
 				},
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{})
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 

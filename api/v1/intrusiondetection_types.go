@@ -20,10 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	IntrusionDetectionStatusReady = "Ready"
-)
-
 // IntrusionDetectionSpec defines the desired state of Tigera intrusion detection capabilities.
 type IntrusionDetectionSpec struct {
 }

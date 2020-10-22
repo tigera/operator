@@ -37,7 +37,7 @@ func KubeControllers(
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
-	authentication interface{},
+	authentication *operator.Authentication,
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
@@ -55,7 +55,7 @@ type kubeControllersComponent struct {
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
 	logStorageExists            bool
-	authentication              interface{}
+	authentication              *operator.Authentication
 }
 
 func (c *kubeControllersComponent) SupportedOSType() OSType {
@@ -265,11 +265,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.
-			switch c.authentication.(type) {
-			case OIDCAuthentication:
+			if c.authentication != nil {
 				env = append(env,
-					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.(OIDCAuthentication).UsernamePrefix},
-					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.(OIDCAuthentication).GroupPrefix},
+					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.Spec.UsernamePrefix},
+					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.Spec.GroupsPrefix},
 				)
 			}
 		}

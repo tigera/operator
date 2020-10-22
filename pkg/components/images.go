@@ -25,4 +25,5 @@ const (
 	InitRegistry   = "quay.io/"
 	K8sGcrRegistry = "gcr.io/"
 	ECKRegistry    = "docker.elastic.co/"
+	DexRegistry    = "quay.io/"
 )

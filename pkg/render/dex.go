@@ -390,7 +390,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 				"id":           DexClientId,
 				"redirectURIs": redirectURIs,
 				"name":         "Calico Enterprise Manager",
-				"secret":       fmt.Sprintf("$%s", DexSecretEnv),
+				"secretEnv":    DexSecretEnv,
 			},
 		},
 	}

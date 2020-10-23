@@ -78,7 +78,7 @@ var openshiftNetworkConfig = "cluster"
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	ri, err := newReconciler(mgr, opts)
 	if err != nil {
-		return fmt.Errorf("failed to create Core Reconciler: %v", err)
+		return fmt.Errorf("failed to create Core Reconciler: %w", err)
 	}
 	return add(mgr, ri)
 }
@@ -87,7 +87,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
+		return nil, fmt.Errorf("Failed to initialize Namespace migration: %w", err)
 	}
 
 	statusManager := status.New(mgr.GetClient(), "calico")
@@ -114,7 +114,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Create a new controller
 	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create tigera-installation-controller: %v", err)
+		return fmt.Errorf("Failed to create tigera-installation-controller: %w", err)
 	}
 
 	r.controller = c
@@ -122,7 +122,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for changes to primary resource Installation
 	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %w", err)
 	}
 
 	if r.autoDetectedProvider == operator.ProviderOpenShift {
@@ -131,7 +131,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %v", err)
+				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)
 			}
 		}
 	}
@@ -141,12 +141,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// may have been provided by the user with arbitrary names.
 	err = utils.AddSecretsWatch(c, "", render.OperatorNamespace())
 	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %v", err)
+		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	cm := render.BirdTemplatesConfigMapName
 	if err = utils.AddConfigMapWatch(c, cm, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %v", cm, err)
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
@@ -154,7 +154,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
+			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %w", err)
 		}
 	}
 
@@ -179,7 +179,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			OwnerType:    &operator.Installation{},
 		}, pred)
 		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch %s: %v", t, err)
+			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", t, err)
 		}
 	}
 
@@ -676,7 +676,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logStorageExists bool
-	var authentication interface{}
+	var authentication *operator.Authentication
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -709,7 +709,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 
 		authentication, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err

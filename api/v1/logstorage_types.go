@@ -21,11 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	LogStorageStatusDegraded = "Degraded"
-	LogStorageStatusReady    = "Ready"
-)
-
 // LogStorageSpec defines the desired state of Tigera flow and DNS log storage.
 type LogStorageSpec struct {
 	// Nodes defines the configuration for a set of identical Elasticsearch cluster nodes, each of type master, data, and ingest.

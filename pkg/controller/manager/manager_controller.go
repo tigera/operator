@@ -71,23 +71,23 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("failed to create manager-controller: %v", err)
+		return fmt.Errorf("failed to create manager-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Manager
 	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	err = utils.AddAPIServerWatch(c)
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch APIServer resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
 
 	err = utils.AddComplianceWatch(c)
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch compliance resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch compliance resource: %w", err)
 	}
 
 	// Watch the given secrets in each both the manager and operator namespaces
@@ -96,40 +96,45 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
-			render.ManagerInternalTLSSecretName,
+			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %v", render.ManagerOIDCConfig, err)
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", render.ManagerOIDCConfig, err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("manager-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %v", common.TigeraPrometheusNamespace, err)
+		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("manager-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
+	}
+
+	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 
 	return nil
@@ -155,14 +160,9 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 	if err != nil {
 		return nil, err
 	}
-
-	// Populate the instance with defaults for any fields not provided by the user.
-	if instance.Spec.Auth == nil {
-		instance.Spec.Auth = &operatorv1.Auth{
-			Type:      operatorv1.AuthTypeToken,
-			Authority: "",
-			ClientID:  "",
-		}
+	if instance.Spec.Auth != nil && instance.Spec.Auth.Type != operatorv1.AuthTypeToken {
+		return nil, fmt.Errorf("auth types other than 'Token' can no longer be configured using the Manager CR, " +
+			"please use the Authentication CR instead")
 	}
 	return instance, nil
 }
@@ -246,7 +246,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		r.status.SetDegraded("Error querying compliance", err.Error())
 		return reconcile.Result{}, err
 	}
-	if compliance.Status.State != operatorv1.ComplianceStatusReady {
+	if compliance.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
 		return reconcile.Result{}, nil
 	}
@@ -314,16 +314,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
-	oidcConfig, err := getOIDCConfig(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded("OIDC configuration not available, waiting to become available", err.Error())
-		return reconcile.Result{}, nil
-	}
-	if oidcConfig != nil && instance.Spec.Auth.Authority != "" {
-		r.status.SetDegraded("Both OIDC configuration and Authority cannot be set at the same time", "")
-		return reconcile.Result{}, nil
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading ManagementCluster")
@@ -367,10 +357,27 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error validating TLS secret %s", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
-		} else if internalTrafficSecret == nil {
+		} else {
 			r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s to be available", render.ManagerInternalTLSSecretName), "")
 			return reconcile.Result{}, nil
 		}
+	}
+
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	var dexCfg render.DexKeyValidatorConfig
+	if authentication != nil {
+		dexTLSSecret := &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -378,7 +385,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
-		instance,
+		dexCfg,
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
 		complianceServerCertSecret,
@@ -387,7 +394,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		installation,
-		oidcConfig,
 		managementCluster,
 		tunnelSecret,
 		internalTrafficSecret,
@@ -406,27 +412,10 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 	if r.status.IsAvailable() {
-		instance.Status.Auth = instance.Spec.Auth
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func getOIDCConfig(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
-	oidcConfig := &corev1.ConfigMap{}
-	err := cli.Get(ctx, types.NamespacedName{
-		Name:      render.ManagerOIDCConfig,
-		Namespace: render.OperatorNamespace(),
-	}, oidcConfig)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		log.Info("Error reading OIDC configuration %s", render.ManagerOIDCConfig)
-		return nil, err
-	}
-	return oidcConfig, nil
 }

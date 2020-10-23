@@ -271,10 +271,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add the OIDC prefix env variables", func() {
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, true, nil, nil, nil, render.OIDCAuthentication{
+		authentication := &operator.Authentication{Spec: operator.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
-			GroupPrefix:    "gOIDC:",
-		})
+			GroupsPrefix:   "gOIDC:",
+			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
+		}}
+
+		component := render.KubeControllers(instance, true, nil, nil, nil, authentication)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")

@@ -29,7 +29,7 @@ type ManagerSpec struct {
 
 // ManagerStatus defines the observed state of the Calico Enterprise manager GUI.
 type ManagerStatus struct {
-	// The last successfully applied authentication configuration.
+	// Deprecated. Please use the Authentication CR for configuring authentication.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 }

@@ -20,10 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	ComplianceStatusReady = "Ready"
-)
-
 // ComplianceSpec defines the desired state of Tigera compliance reporting capabilities.
 type ComplianceSpec struct {
 }

@@ -590,9 +590,9 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"serviceaccounts", "namespaces"},
 				Verbs:     []string{"list"},
 			},
-			// When a request is made to the UI, it is then redirected to Voltron. If the request is targeting a k8s api
-			// or when it is targeting a managed cluster, Voltron will authenticate the user based on the auth header
-			// and then impersonate this user.
+			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
+			// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
+			// user based on the auth header and then impersonate the user.
 			{
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},

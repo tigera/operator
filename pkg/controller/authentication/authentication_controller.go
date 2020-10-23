@@ -130,7 +130,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	reqLogger.V(2).Info("Loaded config", "config", authentication)
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client)
+	installationCR, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Error(err, "Installation not found")
@@ -141,21 +141,21 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if network.Status.Variant != oprv1.TigeraSecureEnterprise {
+	if installationCR.Status.Variant != oprv1.TigeraSecureEnterprise {
 		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	}
 
-	// Make sure authentication and managementclusterconnection are not present at the same time.
+	// Make sure Authentication and ManagementClusterConnection are not present at the same time.
 	_, err = utils.GetManagementClusterConnection(ctx, r.client)
 	if err == nil {
-		log.Error(err, "Having Authentication CR and ManagementCluster CR at the same time is not supported")
-		r.status.SetDegraded("Having Authentication CR and ManagementCluster CR at the same time is not supported", err.Error())
+		log.Error(err, "Only one of Authentication and ManagementClusterConnection may be specified")
+		r.status.SetDegraded("Only one of Authentication and ManagementClusterConnection may be specified", err.Error())
 		return reconcile.Result{}, err
 	} else if !errors.IsNotFound(err) {
-		log.Error(err, "Error querying ManagementCluster")
-		r.status.SetDegraded("Error querying ManagementCluster", err.Error())
+		log.Error(err, "Error querying ManagementClusterConnection")
+		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -166,8 +166,8 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 			// We need to render a new one.
 			tlsSecret = render.CreateDexTLSSecret()
 		} else {
-			log.Error(err, "Failed to read dex tls secret")
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
+			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -189,14 +189,13 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 			// We need to render a new one.
 			dexSecret = render.CreateDexClientSecret()
 		} else {
-			log.Error(err, "Failed to read dex secret")
-			r.status.SetDegraded("Failed to read dex secret", err.Error())
+			log.Error(err, "Failed to read tigera-operator/tigera-dex secret")
+			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex secret", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Extract the connector to be configured for Dex.
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -214,7 +213,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	component := render.Dex(
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
-		network,
+		installationCR,
 		dexCfg,
 	)
 
@@ -251,7 +250,7 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 
 	secret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: render.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("missing secret %s: %w", secretName, err)
+		return nil, fmt.Errorf("missing secret %s/%s: %w", render.OperatorNamespace(), secretName, err)
 	}
 
 	if len(secret.Data[render.ClientIDSecretField]) == 0 {

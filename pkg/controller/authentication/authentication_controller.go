@@ -148,12 +148,12 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// Make sure Authentication and ManagementClusterConnection are not present at the same time.
-	_, err = utils.GetManagementClusterConnection(ctx, r.client)
-	if err == nil {
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if managementClusterConnection != nil {
 		log.Error(err, "Only one of Authentication and ManagementClusterConnection may be specified")
 		r.status.SetDegraded("Only one of Authentication and ManagementClusterConnection may be specified", err.Error())
 		return reconcile.Result{}, err
-	} else if !errors.IsNotFound(err) {
+	} else if err != nil {
 		log.Error(err, "Error querying ManagementClusterConnection")
 		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
 		return reconcile.Result{}, err

@@ -75,3 +75,6 @@ components:
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master
+  dex:
+    image: dexidp/dex
+    version: v2.25.0

@@ -1,36 +1,36 @@
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: master
+    version: release-calient-v3.4
   voltron:
     image: tigera/voltron
-    version: master
+    version: release-calient-v3.4
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: master
+    version: release-calient-v3.4
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: master
+    version: release-calient-v3.4
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: master
+    version: release-calient-v3.4
   typha:
     image: tigera/typha
-    version: master
+    version: release-calient-v3.4
   cnx-node:
     image: tigera/cnx-node
-    version: master
+    version: release-calient-v3.4
   fluentd:
     image: tigera/fluentd
-    version: master
+    version: release-calient-v3.4
   es-proxy:
     image: tigera/es-proxy
-    version: master
+    version: release-calient-v3.4
   eck-kibana:
     version: 7.6.2
   kibana:
     image: tigera/kibana
-    version: master
+    version: release-calient-v3.4
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
@@ -39,39 +39,39 @@ components:
     version: 7.6.2
   elasticsearch:
     image: tigera/elasticsearch
-    version: master
+    version: release-calient-v3.4
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: master
+    version: release-calient-v3.4
   es-curator:
     image: tigera/es-curator
-    version: master
+    version: release-calient-v3.4
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: master
+    version: release-calient-v3.4
   compliance-controller:
     image: tigera/compliance-controller
-    version: master
+    version: release-calient-v3.4
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: master
+    version: release-calient-v3.4
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: master
+    version: release-calient-v3.4
   compliance-server:
     image: tigera/compliance-server
-    version: master
+    version: release-calient-v3.4
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: master
+    version: release-calient-v3.4
   # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
   # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
-    version: master
+    version: release-calient-v3.4
   tigera-cni:
     image: tigera/cni
-    version: master
+    version: release-calient-v3.4
   cloud-controllers:
     image: tigera/cloud-controllers
-    version: master
+    version: release-calient-v3.4

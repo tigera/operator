@@ -20,6 +20,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -78,11 +79,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch Network resource: %w", err)
 	}
 
 	if err = utils.AddAPIServerWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
 	}
 
 	// Watch the given secrets in each both the compliance and operator namespaces
@@ -91,27 +92,32 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexTLSSecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %v", secretName, namespace, err)
+				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
+	}
+
+	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
 	}
 
 	return nil
@@ -274,13 +280,30 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error querying Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+	var dexCfg render.DexKeyValidatorConfig
+	if authentication != nil {
+		dexTLSSecret := &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
+	}
 
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())
@@ -302,7 +325,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.ComplianceStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

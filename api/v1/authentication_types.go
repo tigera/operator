@@ -22,26 +22,31 @@ import (
 
 type AuthMethod string
 
-const (
-	AuthMethodOIDC AuthMethod = "OIDC"
-)
-
 // AuthenticationSpec defines the desired state of Authentication
 type AuthenticationSpec struct {
-	// Method configures the method of authentication used by Kibana.
-	// Default: Basic
-	// +kubebuilder:validation:Enum=Basic;OIDC
-	// +required
-	Method AuthMethod `json:"method,omitempty"`
-
 	// ManagerDomain is the domain name of the Manager
 	// +required
 	ManagerDomain string `json:"managerDomain,omitempty"`
 
-	// OIDC contains the configuration needed to setup OIDC authentication. If the method is OIDC then this is required, if
-	// the method is not OIDC then this must not be specified.
+	// If specified, UsernamePrefix is prepended to each user obtained from the identity provider. Note that
+	// Kibana does not support a user prefix, so this prefix is removed from Kubernetes User when translating log access
+	// ClusterRoleBindings into Elastic.
 	// +optional
-	OIDC *AuthenticationOIDC `json:"oidc"`
+	UsernamePrefix string `json:"usernamePrefix,omitempty"`
+
+	// If specified, GroupsPrefix is prepended to each group obtained from the identity provider. Note that
+	// Kibana does not support a groups prefix, so this prefix is removed from Kubernetes Groups when translating log access
+	// ClusterRoleBindings into Elastic.
+	// +optional
+	GroupsPrefix string `json:"groupsPrefix,omitempty"`
+
+	// OIDC contains the configuration needed to setup OIDC authentication.
+	// +optional
+	OIDC *AuthenticationOIDC `json:"oidc,omitempty"`
+
+	// Openshift contains the configuration needed to setup Openshift OAuth authentication.
+	// +optional
+	Openshift *AuthenticationOpenshift `json:"openshift,omitempty"`
 }
 
 // AuthenticationStatus defines the observed state of Authentication
@@ -60,14 +65,12 @@ type AuthenticationOIDC struct {
 	// +required
 	UsernameClaim string `json:"usernameClaim"`
 
-	// RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, all the available scopes
-	// are requested.
+	// RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, the following scopes are
+	// requested: ["openid", "email", "profile", "groups", "offline_access"].
 	// + optional
 	RequestedScopes []string `json:"requestedScopes,omitempty"`
 
-	// If specified, UsernamePrefix is prepended to each user obtained from the claims specified by UsernameClaim. Note that
-	// Kibana does not support a user prefix, so this prefix is removed from Kubernetes User when translating log access
-	// ClusterRoleBindings into Elastic.
+	// Deprecated. Please use Authentication.Spec.UsernamePrefix instead.
 	// +optional
 	UsernamePrefix string `json:"usernamePrefix,omitempty"`
 
@@ -75,11 +78,16 @@ type AuthenticationOIDC struct {
 	// +optional
 	GroupsClaim string `json:"groupsClaim,omitempty"`
 
-	// If specified, GroupsPrefix is prepended to each group obtained from the claims specified by GroupsClaim. Note that
-	// Kibana does not support a groups prefix, so this prefix is removed from Kubernetes Groups when translating log access
-	// ClusterRoleBindings into Elastic.
+	// Deprecated. Please use Authentication.Spec.GroupsPrefix instead.
 	// +optional
 	GroupsPrefix string `json:"groupsPrefix,omitempty"`
+}
+
+// AuthenticationOpenshift is the configuration needed to setup Openshift.
+type AuthenticationOpenshift struct {
+	// IssuerURL is the URL to the Openshift OAuth provider. Ex.: https://api.my-ocp-domain.com:6443
+	// +required
+	IssuerURL string `json:"issuerURL"`
 }
 
 // +kubebuilder:object:root=true

@@ -412,12 +412,13 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		"userNameKey": d.UsernameClaim(),
 		"userIDKey":   d.UsernameClaim(),
 
-		//Google specific.
-		"serviceAccountFilePath": serviceAccountSecretLocation,
-		"adminEmail":             fmt.Sprintf("$%s", googleAdminEmailEnv),
-
 		//Openshift specific.
 		RootCASecretField: rootCASecretLocation,
+	}
+	//Google specific.
+	if d.idpSecret.Data[serviceAccountSecretField] != nil || d.idpSecret.Data[adminEmailSecretField] == nil {
+		config["serviceAccountFilePath"] = serviceAccountSecretLocation
+		config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
 	}
 
 	c := map[string]interface{}{

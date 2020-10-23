@@ -661,10 +661,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
-					Name:            ComplianceServerName,
-					Image:           components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
-					ImagePullPolicy: "Always",
-					Env:             envVars,
+					Name:  ComplianceServerName,
+					Image: components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -745,11 +744,13 @@ func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
 }
 
 func (c *complianceComponent) complianceVolumes() []corev1.Volume {
+	defaultMode := int32(420)
 	var volumes = []corev1.Volume{{
 		Name: "cert",
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: ComplianceServerCertSecret,
+				DefaultMode: &defaultMode,
+				SecretName:  ComplianceServerCertSecret,
 				Items: []corev1.KeyToPath{
 					{
 						Key:  "tls.crt",
@@ -769,7 +770,8 @@ func (c *complianceComponent) complianceVolumes() []corev1.Volume {
 				Name: ManagerInternalTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: ManagerInternalTLSSecretName,
+						DefaultMode: &defaultMode,
+						SecretName:  ManagerInternalTLSSecretName,
 						Items: []corev1.KeyToPath{
 							{
 								Key:  "cert",

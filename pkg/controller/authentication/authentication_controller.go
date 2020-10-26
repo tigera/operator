@@ -79,6 +79,10 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
 	}
 
+	if err = utils.AddNetworkWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch installation resource: %w", ControllerName, err)
+	}
+
 	err = c.Watch(&source.Kind{Type: &oprv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)

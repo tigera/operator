@@ -411,6 +411,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if r.status.IsAvailable() {
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, err

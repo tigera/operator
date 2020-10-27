@@ -73,13 +73,20 @@ type DexConfig interface {
 type DexKeyValidatorConfig interface {
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
 	ManagerURI() string
-	K8sAttributes
+	// RequiredEnv returns env that is used to configure pods with dex options.
+	RequiredEnv(prefix string) []corev1.EnvVar
+	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
+	RequiredAnnotations() map[string]string
+	// RequiredSecrets returns secrets that you need to render for dex.
+	RequiredSecrets(namespace string) []*corev1.Secret
+	// RequiredVolumeMounts returns volume mounts that are related to dex.
+	RequiredVolumeMounts() []corev1.VolumeMount
+	// RequiredVolumes returns volumes that are related to dex.
+	RequiredVolumes() []corev1.Volume
 }
 
 // DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
 type DexRelyingPartyConfig interface {
-	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
-	ManagerURI() string
 	// JWKSURI returns the endpoint for public keys
 	JWKSURI() string
 	// TokenURI returns the endpoint for exchanging tokens
@@ -94,7 +101,7 @@ type DexRelyingPartyConfig interface {
 	UsernameClaim() string
 	// GroupsClaim returns the part of the JWT that represents the list of user groups.
 	GroupsClaim() string
-	K8sAttributes
+	DexKeyValidatorConfig
 }
 
 func NewDexRelyingPartyConfig(

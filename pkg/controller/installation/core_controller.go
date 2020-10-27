@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -846,6 +848,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		} else if instance.Spec.CalicoNetwork != nil {
 			// If not specified, then use the value for Calico VXLAN networking. This is the smallest
 			// value, so might not perform the best but will work everywhere.
+			// TODO: Populate this wih the value Calico has chosen.
 			openshiftConfig.Status.ClusterNetworkMTU = 1410
 		}
 
@@ -883,6 +886,18 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Everything is available - update the CRD status.
+	mtu, err := readMTUFile()
+	if err != nil {
+		r.SetDegraded("error reading network MTU", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if mtu == 0 {
+		// Wait for an MTU to be populated by calico/node.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Write updated status.
+	instance.Status.MTU = mtu
 	instance.Status.Variant = instance.Spec.Variant
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
@@ -891,6 +906,20 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Created successfully - don't requeue
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	return reconcile.Result{}, nil
+}
+
+func readMTUFile() (int32, error) {
+	filename := "/var/lib/calico/mtu"
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, return zero.
+			return 0, nil
+		}
+		return 0, err
+	}
+	res, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	return int32(res), err
 }
 
 func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {

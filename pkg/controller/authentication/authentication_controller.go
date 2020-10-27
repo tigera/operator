@@ -118,16 +118,30 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 
 	ctx := context.Background()
 
-	// Fetch the Authentication spec. If present, we deploy dex in the cluster
+	// Fetch the Authentication spec. If present, we deploy dex in the cluster.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", authentication)
+
+	// Set defaults for backwards compatibility.
+	updateAuthenticationWithDefaults(authentication)
+
+	// Validate the configuration
+	err = validateAuthentication(authentication)
+
+	// Write the authentication back to the datastore, so the controllers depending on this can reconcile.
+	if err := r.client.Update(ctx, authentication); err != nil {
+		log.Error(err, "Failed to write defaults")
+		r.status.SetDegraded("Failed to write defaults", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Query for the installation object.
 	installationCR, err := installation.GetInstallation(context.Background(), r.client)
@@ -175,8 +189,8 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
 	idpSecret, err := getIdpSecret(ctx, r.client, authentication)
 	if err != nil {
-		log.Error(err, "Invalid or missing idp secret")
-		r.status.SetDegraded("Invalid or missing idp secret", err.Error())
+		log.Error(err, "Invalid or missing identity provider secret")
+		r.status.SetDegraded("Invalid or missing identity provider secret", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -254,15 +268,50 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 	}
 
 	if len(secret.Data[render.ClientIDSecretField]) == 0 {
-		return nil, fmt.Errorf("clientID is a required field for secret %v", secret.Name)
+		return nil, fmt.Errorf("clientID is a required field for secret %s/%s", secret.Namespace, secret.Name)
 	}
 
 	if len(secret.Data[render.ClientSecretSecretField]) == 0 {
-		return nil, fmt.Errorf("clientSecret is a required field for secret %v", secret.Name)
+		return nil, fmt.Errorf("clientSecret is a required field for secret %s/%s", secret.Namespace, secret.Name)
 	}
 
 	if authentication.Spec.Openshift != nil && len(secret.Data[render.RootCASecretField]) == 0 {
-		return nil, fmt.Errorf("rootCA is a required field for secret %v", secret.Name)
+		return nil, fmt.Errorf("rootCA is a required field for secret %s/%s", secret.Namespace, secret.Name)
 	}
 	return secret, nil
+}
+
+// updateAuthenticationWithDefaults sets values for backwards compatibility.
+func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
+	if authentication.Spec.OIDC != nil {
+		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix == "" {
+			authentication.Spec.UsernamePrefix = authentication.Spec.OIDC.UsernamePrefix
+		}
+		if authentication.Spec.OIDC.GroupsPrefix != "" && authentication.Spec.GroupsPrefix == "" {
+			authentication.Spec.GroupsPrefix = authentication.Spec.OIDC.GroupsPrefix
+		}
+	}
+}
+
+// validateAuthentication makes sure that the authentication spec is ready for use.
+func validateAuthentication(authentication *oprv1.Authentication) error {
+	// We support using only one connector at once.
+	if authentication.Spec.OIDC != nil && authentication.Spec.Openshift != nil {
+		return fmt.Errorf("multiple identity provider connectors were specified, but only 1 is allowed in the Authentication spec")
+	} else if authentication.Spec.OIDC == nil && authentication.Spec.Openshift == nil {
+		return fmt.Errorf("no identity provider connector was specified, please add a connector to the Authentication spec")
+	}
+
+	// If the user has specified the deprecated and the new prefix field, but with different values, we cannot proceed.
+	if authentication.Spec.OIDC != nil {
+		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix != "" && authentication.Spec.OIDC.UsernamePrefix != authentication.Spec.UsernamePrefix {
+			return fmt.Errorf("you set username prefix twice, but with different values, please remove Authentication.Spec.OIDC.UsernamePrefix")
+		}
+
+		if authentication.Spec.OIDC.GroupsPrefix != "" && authentication.Spec.GroupsPrefix != "" && authentication.Spec.OIDC.GroupsPrefix != authentication.Spec.GroupsPrefix {
+			return fmt.Errorf("you set groups prefix twice, but with different values, please remove Authentication.Spec.OIDC.GroupsPrefix")
+		}
+
+	}
+	return nil
 }

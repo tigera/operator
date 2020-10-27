@@ -355,11 +355,12 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			Namespace: render.OperatorNamespace(),
 		}, internalTrafficSecret)
 		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error validating TLS secret %s", render.ManagerInternalTLSSecretName), err.Error())
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, render.OperatorNamespace()), "")
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, render.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, err
-		} else {
-			r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s to be available", render.ManagerInternalTLSSecretName), "")
-			return reconcile.Result{}, nil
 		}
 	}
 

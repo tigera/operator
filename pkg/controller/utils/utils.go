@@ -278,21 +278,6 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	if err != nil {
 		return nil, err
 	}
-	if authentication.Spec.OIDC != nil && authentication.Spec.Openshift != nil {
-		return nil, fmt.Errorf("multiple IdP connectors were specified, but only 1 is allowed in the Authentication spec")
-	} else if authentication.Spec.OIDC == nil && authentication.Spec.Openshift == nil {
-		return nil, fmt.Errorf("no IdP connector was specified, please add a connector to the Authentication spec")
-	}
-
-	// Backwards compatibility settings.
-	if authentication.Spec.OIDC != nil {
-		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix == "" {
-			authentication.Spec.UsernamePrefix = authentication.Spec.OIDC.UsernamePrefix
-		}
-		if authentication.Spec.OIDC.GroupsPrefix != "" && authentication.Spec.GroupsPrefix == "" {
-			authentication.Spec.GroupsPrefix = authentication.Spec.OIDC.GroupsPrefix
-		}
-	}
 
 	return authentication, nil
 }

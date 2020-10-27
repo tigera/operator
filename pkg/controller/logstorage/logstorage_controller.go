@@ -473,6 +473,10 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
+	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+		return reconcile.Result{}, nil
+	}
 
 	var dexCfg render.DexRelyingPartyConfig
 	if authentication != nil {

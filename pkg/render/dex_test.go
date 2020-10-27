@@ -3,6 +3,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 
@@ -14,7 +15,10 @@ var _ = Describe("dex rendering tests", func() {
 	Context("dex is configured for oidc", func() {
 		It("should render all resources for a OIDC setup", func() {
 
-			const rbac = "rbac.authorization.k8s.io"
+			const (
+				rbac           = "rbac.authorization.k8s.io"
+				pullSecretName = "tigera-pull-secret"
+			)
 
 			installation := &operatorv1.Installation{
 				Spec: operatorv1.InstallationSpec{
@@ -37,7 +41,14 @@ var _ = Describe("dex rendering tests", func() {
 					"clientSecret":         []byte("my-secret"),
 					"serviceAccountSecret": []byte("my-secret2"),
 				}}
-
+			pullSecrets := []*corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      pullSecretName,
+						Namespace: render.OperatorNamespace(),
+					},
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				}}
 			dexCfg := render.NewDexConfig(&operatorv1.Authentication{
 				Spec: operatorv1.AuthenticationSpec{
 					ManagerDomain: "https://example.com",
@@ -50,7 +61,7 @@ var _ = Describe("dex rendering tests", func() {
 				},
 			}, tlsSecret, dexSecret, idpSecret)
 
-			component := render.Dex(nil, false, installation, dexCfg)
+			component := render.Dex(pullSecrets, false, installation, dexCfg)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -73,6 +84,7 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 

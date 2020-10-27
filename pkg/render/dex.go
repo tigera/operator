@@ -82,6 +82,7 @@ func (c *dexComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	}
 	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(OperatorNamespace())...)...)
 	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
+	objs = append(objs, copyImagePullSecrets(c.pullSecrets, DexNamespace)...)
 	return objs, nil
 }
 

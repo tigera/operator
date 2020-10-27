@@ -545,10 +545,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil && apierrors.IsNotFound(err) {
-		reqLogger.Info("Installation config not found")
-		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			reqLogger.Info("Installation config not found")
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
+		}
+		reqLogger.Error(err, "An error occurred when querying the Installation resource")
+		return reconcile.Result{}, err
 	}
 	status := instance.Status
 
@@ -713,6 +717,10 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err
+		}
+		if authentication != nil && authentication.Status.State != operator.TigeraStatusReady {
+			r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+			return reconcile.Result{}, nil
 		}
 	}
 

@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -788,7 +789,16 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	}
 
 	if c.birdTemplates != nil {
+		// create a volume mount for each bird template, but sort them alphabetically first,
+		// otherwise, since map iteration is random, they'll be added to the list of volumes in a random order,
+		// which will cause another reconciliation event when calico-node is updated.
+		sortedKeys := []string{}
 		for k := range c.birdTemplates {
+			sortedKeys = append(sortedKeys, k)
+		}
+		sort.Strings(sortedKeys)
+
+		for _, k := range sortedKeys {
 			nodeVolumeMounts = append(nodeVolumeMounts,
 				v1.VolumeMount{
 					Name:      "bird-templates",

@@ -31,10 +31,6 @@ components:
   kibana:
     image: tigera/kibana
     version: master
-  elasticsearch-operator:
-    registry: docker.elastic.co
-    image: eck/eck-operator
-    version: 1.0.1
   eck-elasticsearch:
     version: 7.6.2
   elasticsearch:
@@ -64,8 +60,6 @@ components:
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
     version: master
-  # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
-  # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
     version: master
@@ -75,6 +69,13 @@ components:
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master
+  # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
+  # to the docs & manifest tooling not to default to the tigera registry.
+  elasticsearch-operator:
+    registry: docker.elastic.co
+    image: eck/eck-operator
+    version: 1.0.1
   dex:
+    registry: quay.io
     image: dexidp/dex
     version: v2.25.0

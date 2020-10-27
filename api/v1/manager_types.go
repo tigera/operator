@@ -22,7 +22,7 @@ import (
 
 // ManagerSpec defines configuration for the Calico Enterprise manager GUI.
 type ManagerSpec struct {
-	// Auth defines the authentication strategy for the Calico Enterprise manager GUI.
+	// Deprecated. Please use the Authentication CR for configuring authentication.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 }
@@ -32,6 +32,9 @@ type ManagerStatus struct {
 	// Deprecated. Please use the Authentication CR for configuring authentication.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
+
+	// State provides user-readable status.
+	State string `json:"state,omitempty"`
 }
 
 // Auth defines authentication configuration.

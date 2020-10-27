@@ -134,7 +134,10 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	updateAuthenticationWithDefaults(authentication)
 
 	// Validate the configuration
-	err = validateAuthentication(authentication)
+	if err := validateAuthentication(authentication); err != nil {
+		r.status.SetDegraded("Invalid Authentication provided", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Write the authentication back to the datastore, so the controllers depending on this can reconcile.
 	if err := r.client.Update(ctx, authentication); err != nil {

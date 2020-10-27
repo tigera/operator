@@ -286,6 +286,10 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.SetDegraded("Error querying Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
+	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+		return reconcile.Result{}, nil
+	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)

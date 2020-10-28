@@ -28,7 +28,6 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -227,10 +226,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &v3.ManagedCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagedCluster resource: %v", err)
 	}
 
 	return nil
@@ -725,10 +720,5 @@ func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.L
 		}
 	}
 
-	managedClusterList := v3.ManagedClusterList{}
-	if err := r.client.List(ctx, &managedClusterList); err != nil {
-		return err
-	}
-
-	return r.esClient.SetElasticsearchIndices(ctx, ls, totalEsStorage, managedClusterList)
+	return r.esClient.SetElasticsearchIndices(ctx, ls, totalEsStorage)
 }

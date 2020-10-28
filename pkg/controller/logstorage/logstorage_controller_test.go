@@ -17,7 +17,6 @@ package logstorage_test
 import (
 	"context"
 	"github.com/olivere/elastic/v7"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"os"
 
 	. "github.com/onsi/ginkgo"
@@ -548,7 +547,7 @@ func (*mockESClient) NewElasticsearchClient(client.Client, context.Context) erro
 	return nil
 }
 
-func (*mockESClient) SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64, v3.ManagedClusterList) error {
+func (*mockESClient) SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64) error {
 	return nil
 }
 

@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"time"
 )
 
 const (
@@ -40,7 +41,8 @@ const (
 	diskDistribution             = 0.1 / NumOfIndexNotFlowsDnsBgp
 	ElasticsearchRetentionFactor = 4
 	DefaultMaxIndexSizeGi        = 30
-	TemplateFilePath             = "/usr/local/bin/"
+	ElasticConnRetries           = 10
+	ElasticConnRetryInterval     = "500ms"
 )
 
 type IndexDiskAllocation struct {
@@ -64,11 +66,11 @@ type Policy struct {
 	}
 }
 
-// indexDiskMapping gives disk allocation for each log type.
+// IndexDiskMapping gives disk allocation for each log type.
 // Allocate 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
 // Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs
 // Equally distribute 10% ES disk space among all the other logs
-var indexDiskMapping = []IndexDiskAllocation{
+var IndexDiskMapping = []IndexDiskAllocation{
 	{
 		TotalDiskPercentage: 0.7,
 		IndexNameSize: map[string]float64{
@@ -129,7 +131,7 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 	return render.NewElasticsearchClusterConfigFromConfigMap(configMap)
 }
 
-type IEsClient interface {
+type ElasticClient interface {
 	NewElasticsearchClient(client.Client, context.Context) error
 	SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64) error
 	GetElasticsearchClient() *elastic.Client
@@ -149,18 +151,8 @@ func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Con
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
 	}
 
-	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(render.ElasticsearchHTTPSEndpoint),
-		elastic.SetHttpClient(h),
-		elastic.SetErrorLog(logrus.StandardLogger()),
-		elastic.SetSniff(false),
-		//elastic.SetTraceLog(logrus.StandardLogger()),
-		elastic.SetBasicAuth(user, password),
-	}
-
-	esClient, err := elastic.NewClient(options...)
+	esClient, err := NewElastic(user, password, render.ElasticsearchHTTPSEndpoint, h)
 	if err != nil {
-		log.Error(err, "Elastic connect failed, retrying")
 		return err
 	}
 	es.client = esClient
@@ -169,7 +161,7 @@ func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Con
 
 func (es *EsClient) SetElasticsearchIndices(ctx context.Context, ls *operatorv1.LogStorage, totalEsStorage int64) error {
 
-	for _, v := range indexDiskMapping {
+	for _, v := range IndexDiskMapping {
 		for indexName, p := range v.IndexNameSize {
 			var retention int
 			switch indexName {
@@ -187,10 +179,10 @@ func (es *EsClient) SetElasticsearchIndices(ctx context.Context, ls *operatorv1.
 				retention = 8
 			}
 
-			rolloverSize := calculateRolloverSize(totalEsStorage, v.TotalDiskPercentage, p)
-			rolloverAge := calculateRolloverAge(retention)
+			rolloverSize := CalculateRolloverSize(totalEsStorage, v.TotalDiskPercentage, p)
+			rolloverAge := CalculateRolloverAge(retention)
 
-			if err := buildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName); err != nil {
+			if err := BuildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName); err != nil {
 				return err
 			}
 		}
@@ -202,7 +194,37 @@ func (es *EsClient) GetElasticsearchClient() *elastic.Client {
 	return es.client
 }
 
-func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
+func NewElastic(user, password, url string, h *http.Client) (*elastic.Client, error) {
+
+	options := []elastic.ClientOptionFunc{
+		elastic.SetURL(url),
+		elastic.SetHttpClient(h),
+		elastic.SetErrorLog(logrus.StandardLogger()),
+		elastic.SetSniff(false),
+		//elastic.SetTraceLog(logrus.StandardLogger()),
+		elastic.SetBasicAuth(user, password),
+	}
+
+	retryInterval, err := time.ParseDuration(ElasticConnRetryInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	var eserr error
+	var esClient *elastic.Client
+	for i := 0; i < ElasticConnRetries; i++ {
+
+		esClient, eserr = elastic.NewClient(options...)
+		if eserr == nil {
+			return esClient, nil
+		}
+		log.Error(err, "Elastic connect failed, retrying")
+		time.Sleep(retryInterval)
+	}
+	return nil, eserr
+}
+
+func CalculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
 	rolloverSize := int64((float64(totalEsStorage) * diskPercentage * diskForLogType) / ElasticsearchRetentionFactor)
 	rolloverMax := resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
 	maxRolloverSize := rolloverMax.Value()
@@ -214,9 +236,9 @@ func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskFor
 	return fmt.Sprintf("%db", rolloverSize)
 }
 
-func calculateRolloverAge(retention int) string {
+func CalculateRolloverAge(retention int) string {
 	var age string
-	// if retention(say 3d) is < ElasticsearchRetentionFactor, rollover age to 1 day
+	// if retention(say 3d) is < ElasticsearchRetentionFactor, set rollover age to 1 day
 	// if retention is 0 days, rollover every 1 hr - we dont want to rollover index every few ms/s set it to 1hr similar to es-curator cronjob interval
 	if retention <= 0 {
 		age = "1h"
@@ -262,7 +284,7 @@ func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
 	return roots, nil
 }
 
-func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string) error {
+func BuildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string) error {
 	policyName := name + "_policy"
 
 	rollover := map[string]interface{}{

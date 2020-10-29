@@ -19,19 +19,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 )
 
-func Namespaces(openshift bool, pullSecrets []*corev1.Secret) Component {
+func Namespaces(installation *operatorv1.Installation, pullSecrets []*corev1.Secret) Component {
 	return &namespaceComponent{
-		openshift:   openshift,
-		pullSecrets: pullSecrets,
+		installation: installation,
+		pullSecrets:  pullSecrets,
 	}
 }
 
 type namespaceComponent struct {
-	openshift   bool
-	pullSecrets []*corev1.Secret
+	installation *operatorv1.Installation
+	pullSecrets  []*corev1.Secret
 }
 
 func (c *namespaceComponent) SupportedOSType() OSType {
@@ -40,7 +41,11 @@ func (c *namespaceComponent) SupportedOSType() OSType {
 
 func (c *namespaceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	ns := []runtime.Object{
-		createNamespace(common.CalicoNamespace, c.openshift),
+		createNamespace(common.CalicoNamespace, c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift),
+	}
+	if c.installation.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
+		ns = append(ns, createNamespace(DexObjectName, c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift))
 	}
 	if len(c.pullSecrets) > 0 {
 		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)

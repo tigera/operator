@@ -71,7 +71,6 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{render.DexObjectName, "", "", "v1", "Namespace"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
 				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},

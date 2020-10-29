@@ -31,16 +31,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"time"
 )
 
 const (
-	// NumOfIndexNotFlowsDnsBgp is the number of index created that are not flows, dns or bgp.
+	// NumOfIndexNotFlowsDnsBgp is the number of time series indices created that are not flows, dns or bgp related.
+	// i.e., audit_ee, audit_kube, compliance_reports, benchmark_results, events, snapshots
 	NumOfIndexNotFlowsDnsBgp = 6
-	// diskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
-	diskDistribution             = 0.1 / NumOfIndexNotFlowsDnsBgp
+	// DiskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
+	DiskDistribution             = 0.1 / NumOfIndexNotFlowsDnsBgp
 	ElasticsearchRetentionFactor = 4
 	DefaultMaxIndexSizeGi        = 30
-	TemplateFilePath             = "/usr/local/bin/"
+	ElasticConnRetries           = 10
+	ElasticConnRetryInterval     = "500ms"
 )
 
 type IndexDiskAllocation struct {
@@ -64,11 +67,11 @@ type Policy struct {
 	}
 }
 
-// indexDiskMapping gives disk allocation for each log type.
-// Allocate 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
-// Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs
-// Equally distribute 10% ES disk space among all the other logs
-var indexDiskMapping = []IndexDiskAllocation{
+// IndexDiskMapping gives disk allocation for each log type.
+// Allocates 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
+// Allocates 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs.
+// Equally distribute 10% of the ES disk space among all the other logs
+var IndexDiskMapping = []IndexDiskAllocation{
 	{
 		TotalDiskPercentage: 0.7,
 		IndexNameSize: map[string]float64{
@@ -80,12 +83,12 @@ var indexDiskMapping = []IndexDiskAllocation{
 	{
 		TotalDiskPercentage: 0.1,
 		IndexNameSize: map[string]float64{
-			"tigera_secure_ee_audit_ee":           diskDistribution,
-			"tigera_secure_ee_audit_kube":         diskDistribution,
-			"tigera_secure_ee_snapshots":          diskDistribution,
-			"tigera_secure_ee_benchmark_results":  diskDistribution,
-			"tigera_secure_ee_compliance_reports": diskDistribution,
-			"tigera_secure_ee_events":             diskDistribution,
+			"tigera_secure_ee_audit_ee":           DiskDistribution,
+			"tigera_secure_ee_audit_kube":         DiskDistribution,
+			"tigera_secure_ee_snapshots":          DiskDistribution,
+			"tigera_secure_ee_benchmark_results":  DiskDistribution,
+			"tigera_secure_ee_compliance_reports": DiskDistribution,
+			"tigera_secure_ee_events":             DiskDistribution,
 		},
 	},
 }
@@ -129,9 +132,9 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 	return render.NewElasticsearchClusterConfigFromConfigMap(configMap)
 }
 
-type IEsClient interface {
+type ElasticClient interface {
 	NewElasticsearchClient(client.Client, context.Context) error
-	SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64) error
+	SetElasticsearchIlmPolicies(context.Context, *operatorv1.LogStorage, int64) error
 	GetElasticsearchClient() *elastic.Client
 }
 
@@ -149,27 +152,18 @@ func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Con
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
 	}
 
-	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(render.ElasticsearchHTTPSEndpoint),
-		elastic.SetHttpClient(h),
-		elastic.SetErrorLog(logrus.StandardLogger()),
-		elastic.SetSniff(false),
-		//elastic.SetTraceLog(logrus.StandardLogger()),
-		elastic.SetBasicAuth(user, password),
-	}
-
-	esClient, err := elastic.NewClient(options...)
+	esClient, err := NewElastic(user, password, render.ElasticsearchHTTPSEndpoint, h)
 	if err != nil {
-		log.Error(err, "Elastic connect failed, retrying")
 		return err
 	}
+
 	es.client = esClient
 	return nil
 }
 
-func (es *EsClient) SetElasticsearchIndices(ctx context.Context, ls *operatorv1.LogStorage, totalEsStorage int64) error {
-
-	for _, v := range indexDiskMapping {
+// SetElasticsearchIlmPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
+func (es *EsClient) SetElasticsearchIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, totalEsStorage int64) error {
+	for _, v := range IndexDiskMapping {
 		for indexName, p := range v.IndexNameSize {
 			var retention int
 			switch indexName {
@@ -182,15 +176,17 @@ func (es *EsClient) SetElasticsearchIndices(ctx context.Context, ls *operatorv1.
 			case "tigera_secure_ee_compliance_reports":
 				retention = int(*ls.Spec.Retention.ComplianceReports)
 			case "tigera_secure_ee_benchmark_results", "tigera_secure_ee_events":
+				// There is no option to set retention for benchmark and events log in LogStorage, set default values used by curator
 				retention = 91
 			case "tigera_secure_ee_dns", "tigera_secure_ee_bgp":
+				// There is no option to set retention for dns and bgp log in LogStorage, set default values used by curator
 				retention = 8
 			}
 
-			rolloverSize := calculateRolloverSize(totalEsStorage, v.TotalDiskPercentage, p)
-			rolloverAge := calculateRolloverAge(retention)
+			rolloverSize := CalculateRolloverSize(totalEsStorage, v.TotalDiskPercentage, p)
+			rolloverAge := CalculateRolloverAge(retention)
 
-			if err := buildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName); err != nil {
+			if err := BuildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName); err != nil {
 				return err
 			}
 		}
@@ -202,7 +198,40 @@ func (es *EsClient) GetElasticsearchClient() *elastic.Client {
 	return es.client
 }
 
-func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
+func NewElastic(user, password, url string, h *http.Client) (*elastic.Client, error) {
+
+	options := []elastic.ClientOptionFunc{
+		elastic.SetURL(url),
+		elastic.SetHttpClient(h),
+		elastic.SetErrorLog(logrus.StandardLogger()),
+		elastic.SetSniff(false),
+		//elastic.SetTraceLog(logrus.StandardLogger()),
+		elastic.SetBasicAuth(user, password),
+	}
+
+	retryInterval, err := time.ParseDuration(ElasticConnRetryInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	var eserr error
+	var esClient *elastic.Client
+	for i := 0; i < ElasticConnRetries; i++ {
+
+		esClient, eserr = elastic.NewClient(options...)
+		if eserr == nil {
+			return esClient, nil
+		}
+		log.Error(err, "Elastic connect failed, retrying")
+		time.Sleep(retryInterval)
+	}
+	return nil, eserr
+}
+
+// CalculateRolloverSize returns max_size to rollover
+// max_size is based on the disk space allocated for the log type divided by ElasticsearchRetentionFactor
+// If calculated max_size is greater than ES recommended shard size (DefaultMaxIndexSizeGi), set it to DefaultMaxIndexSizeGi
+func CalculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
 	rolloverSize := int64((float64(totalEsStorage) * diskPercentage * diskForLogType) / ElasticsearchRetentionFactor)
 	rolloverMax := resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
 	maxRolloverSize := rolloverMax.Value()
@@ -214,10 +243,12 @@ func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskFor
 	return fmt.Sprintf("%db", rolloverSize)
 }
 
-func calculateRolloverAge(retention int) string {
+// CalculateRolloverAge returns max_age to rollover
+// max_age to rollover an index is retention period set in LogStorage divided by ElasticsearchRetentionFactor
+// If retention is < ElasticsearchRetentionFactor, set rollover age to 1 day
+// if retention is 0 days, rollover every 1 hr - we dont want to rollover index every few ms/s set it to 1hr similar to curator cronjob interval
+func CalculateRolloverAge(retention int) string {
 	var age string
-	// if retention(say 3d) is < ElasticsearchRetentionFactor, rollover age to 1 day
-	// if retention is 0 days, rollover every 1 hr - we dont want to rollover index every few ms/s set it to 1hr similar to es-curator cronjob interval
 	if retention <= 0 {
 		age = "1h"
 	} else if retention < ElasticsearchRetentionFactor {
@@ -227,6 +258,41 @@ func calculateRolloverAge(retention int) string {
 		age = fmt.Sprintf("%dd", rolloverAge)
 	}
 	return age
+}
+
+func BuildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string) error {
+	policyName := name + "_policy"
+
+	rollover := map[string]interface{}{
+		"max_size": rolloverSize,
+		"max_age":  rolloverAge,
+	}
+	minRetentionAge := fmt.Sprintf("%dd", retention)
+
+	newIlmPolicy := buildIlmPolicy(rollover, minRetentionAge)
+
+	res, err := esClient.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
+	if err != nil {
+		if eerr, ok := err.(*elastic.Error); ok && eerr.Status == 404 {
+			// If policy doesn't exist, create one
+			return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
+		}
+		return err
+	}
+
+	// If policy exists, check if needs to be updated
+	currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
+	if err != nil {
+		return err
+	}
+	if currentMaxAge != rollover["max_age"] ||
+		currentMaxSize != rollover["max_size"] ||
+		currentMinAge != minRetentionAge {
+		return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
+	}
+
+	// If there is an existing policy with latest retention, do nothing
+	return nil
 }
 
 func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
@@ -260,38 +326,6 @@ func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
 	}
 
 	return roots, nil
-}
-
-func buildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string) error {
-	policyName := name + "_policy"
-
-	rollover := map[string]interface{}{
-		"max_size": rolloverSize,
-		"max_age":  rolloverAge,
-	}
-	minRetentionAge := fmt.Sprintf("%dd", retention)
-
-	newIlmPolicy := buildIlmPolicy(rollover, minRetentionAge)
-
-	res, err := esClient.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
-	if err != nil {
-		if eerr, ok := err.(*elastic.Error); ok && eerr.Status == 404 {
-			// If policy doesn't exist, create one
-			return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
-		}
-		return err
-	}
-
-	// If policy exists, check if needs to be updated
-	currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
-	if err != nil {
-		return err
-	}
-	if currentMaxAge != rollover["max_age"] || currentMaxSize != rollover["max_size"] || currentMinAge != minRetentionAge {
-		return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
-	}
-	// if there is an existing policy with latest retention, do nothing
-	return nil
 }
 
 func buildIlmPolicy(rollover map[string]interface{}, minRetentionAge string) map[string]interface{} {
@@ -331,14 +365,12 @@ func buildIlmPolicy(rollover map[string]interface{}, minRetentionAge string) map
 }
 
 func applyIlmPolicy(ctx context.Context, esClient *elastic.Client, indexName string, policy map[string]interface{}) error {
-
 	policyName := indexName + "_policy"
 	_, err := esClient.XPackIlmPutLifecycle().Policy(policyName).BodyJson(policy).Do(ctx)
 	if err != nil {
 		log.Error(err, "Error applying Ilm Policy")
 		return err
 	}
-
 	return nil
 }
 
@@ -356,5 +388,4 @@ func extractPolicyDetails(policy map[string]interface{}) (string, string, string
 	currentMaxSize := existingPolicy.Phases.Hot.Actions.Rollover.MaxSize
 	currentMinAge := existingPolicy.Phases.Delete.MinAge
 	return currentMaxAge, currentMaxSize, currentMinAge, nil
-
 }

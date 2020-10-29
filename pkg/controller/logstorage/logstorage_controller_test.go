@@ -338,9 +338,7 @@ var _ = Describe("LogStorage controller", func() {
 					kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 					Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
-					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esPublicCertObjMeta, Data: map[string][]byte{
-						"tls.cert": nil,
-					}})).ShouldNot(HaveOccurred())
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esPublicCertObjMeta})).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: kbPublicCertObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
@@ -547,7 +545,7 @@ func (*mockESClient) NewElasticsearchClient(client.Client, context.Context) erro
 	return nil
 }
 
-func (*mockESClient) SetElasticsearchIndices(context.Context, *operatorv1.LogStorage, int64) error {
+func (*mockESClient) SetElasticsearchIlmPolicies(context.Context, *operatorv1.LogStorage, int64) error {
 	return nil
 }
 

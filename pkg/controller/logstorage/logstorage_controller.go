@@ -18,17 +18,16 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	apps "k8s.io/api/apps/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"regexp"
-
-	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -76,7 +75,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.IEsClient) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
 	localDNS, err := getLocalDNSName(resolvConfPath)
 	if err != nil {
 		localDNS = defaultLocalDNS
@@ -243,7 +242,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
-	esClient utils.IEsClient
+	esClient utils.ElasticClient
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -527,7 +526,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if managementClusterConnection == nil {
-
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
@@ -544,8 +542,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, nil
 		}
 
-		// Wait for ES to be in ready phase before applying ILM polices and creating indices
-		if err = r.setupESIndex(ctx, ls); err != nil {
+		// ES should be in ready phase when execution reaches here, apply ILM polices
+		if err = r.setupESIndexLifecyclePolicies(ctx, ls); err != nil {
 			log.Info("Waiting for ES ILM policies and templates to get created")
 			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
 			return reconcile.Result{}, err
@@ -700,18 +698,18 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	return int(nodes) * shardPerNode
 }
 
-func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.LogStorage) error {
-
+func (r *ReconcileLogStorage) setupESIndexLifecyclePolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
 	if r.esClient.GetElasticsearchClient() == nil {
-		// TODO: wait and retry ?
-		var err error
-		err = r.esClient.NewElasticsearchClient(r.client, ctx)
+		err := r.esClient.NewElasticsearchClient(r.client, ctx)
 		if err != nil {
-			log.Error(err, "failed to create ES client")
+			log.Error(err, "Failed to create ES client")
 			return err
 		}
 	}
+	return r.esClient.SetElasticsearchIlmPolicies(ctx, ls, getTotalEsDisk(ls))
+}
 
+func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {
 	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
 	var totalEsStorage = defaultStorage.Value()
 	if ls.Spec.Nodes.ResourceRequirements != nil {
@@ -719,6 +717,5 @@ func (r *ReconcileLogStorage) setupESIndex(ctx context.Context, ls *operatorv1.L
 			totalEsStorage = val.Value()
 		}
 	}
-
-	return r.esClient.SetElasticsearchIndices(ctx, ls, totalEsStorage)
+	return totalEsStorage
 }

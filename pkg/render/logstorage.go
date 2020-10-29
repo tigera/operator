@@ -1148,6 +1148,11 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"k8s-app": EsCuratorName,
+							},
+						},
 						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{

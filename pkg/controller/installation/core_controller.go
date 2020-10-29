@@ -718,10 +718,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err
 		}
-		if authentication != nil && authentication.Status.State != operator.TigeraStatusReady {
-			r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
-			return reconcile.Result{}, nil
-		}
 	}
 
 	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()

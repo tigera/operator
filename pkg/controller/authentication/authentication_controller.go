@@ -128,46 +128,15 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	installationCR, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Error(err, "Installation not found")
-			r.status.SetDegraded("Installation not found", err.Error())
-			return reconcile.Result{}, err
+			// We delay returning an error until we have made sure a dex namespace will be present in the cluster.
+			installationCR = nil
 		}
 		log.Error(err, "Error querying installation")
-		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if installationCR.Status.Variant != oprv1.TigeraSecureEnterprise {
+	if installationCR != nil && installationCR.Status.Variant != oprv1.TigeraSecureEnterprise {
 		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
-	}
-
-	// Make sure that the dex namespace exists before policies are applied.
-	dexNs := &corev1.Namespace{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: render.DexObjectName}, dexNs); err != nil {
-		if errors.IsNotFound(err) {
-			// We need to create the namespace and attach it to the installation resource.
-			dexNs = &corev1.Namespace{
-				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        render.DexObjectName,
-					Labels:      map[string]string{"name": render.DexObjectName},
-					Annotations: map[string]string{},
-				},
-			}
-			// We add installation as an ownerRef so garbage collection will take place when our product is deleted.
-			if err := controllerutil.SetControllerReference(installationCR, dexNs, r.scheme); err != nil {
-				r.status.SetDegraded("Error creating namespace tigera-dex", err.Error())
-				return reconcile.Result{}, err
-			}
-			if err := r.client.Create(ctx, dexNs); err != nil {
-				r.status.SetDegraded("Error creating namespace tigera-dex", err.Error())
-				return reconcile.Result{}, err
-			}
-		} else {
-			r.status.SetDegraded("Error querying namespace tigera-dex", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	// Fetch the Authentication spec. If present, we deploy dex in the cluster.
@@ -175,12 +144,47 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
+			if installationCR != nil {
+				// Make sure that the dex namespace exists before policies are applied.
+				dexNs := &corev1.Namespace{}
+				if err := r.client.Get(ctx, client.ObjectKey{Name: render.DexObjectName}, dexNs); err != nil {
+					if errors.IsNotFound(err) {
+						// We need to create the namespace and attach it to the installation resource.
+						dexNs = &corev1.Namespace{
+							TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:        render.DexObjectName,
+								Labels:      map[string]string{"name": render.DexObjectName},
+								Annotations: map[string]string{},
+							},
+						}
+						// We add installation as an ownerRef so garbage collection will take place when our product is deleted.
+						if err := controllerutil.SetControllerReference(installationCR, dexNs, r.scheme); err != nil {
+							log.Error(err, "Error creating namespace tigera-dex")
+							return reconcile.Result{}, err
+						}
+						if err := r.client.Create(ctx, dexNs); err != nil {
+							log.Error(err, "Error creating namespace tigera-dex")
+							return reconcile.Result{}, err
+						}
+					} else {
+						log.Error(err, "Error querying namespace tigera-dex")
+						return reconcile.Result{}, err
+					}
+				}
+			}
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", authentication)
+
+	if installationCR == nil {
+		log.Error(err, "Installation not found")
+		r.status.SetDegraded("Installation not found", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Set defaults for backwards compatibility.
 	updateAuthenticationWithDefaults(authentication)

@@ -168,6 +168,19 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, nil
 	}
 
+	// Make sure the tigera-dex namespace exists, before rendering any objects there.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: render.DexObjectName}, &corev1.Namespace{}); err != nil {
+		if errors.IsNotFound(err) {
+			log.Error(err, "Waiting for namespace tigera-dex to be created")
+			r.status.SetDegraded("Waiting for namespace tigera-dex to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying tigera-dex namespace")
+			r.status.SetDegraded("Error querying tigera-dex namespace", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Make sure Authentication and ManagementClusterConnection are not present at the same time.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if managementClusterConnection != nil {

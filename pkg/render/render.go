@@ -235,7 +235,7 @@ type calicoRenderer struct {
 func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, PriorityClassDefinitions())
-	components = appendNotNil(components, Namespaces(r.installation.Spec.KubernetesProvider == operator.ProviderOpenShift, r.pullSecrets))
+	components = appendNotNil(components, Namespaces(r.installation, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))

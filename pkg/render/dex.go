@@ -72,7 +72,6 @@ func (*dexComponent) SupportedOSType() OSType {
 
 func (c *dexComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
-		createNamespace(DexNamespace, c.openshift),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),

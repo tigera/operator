@@ -29,7 +29,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	zap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -95,20 +95,18 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
-		// - 1 ns (tigera-prometheus)
+		// - 1 ns (tigera-dex)
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(((6 + 4 + 2 + 7 + 5 + 1) + 1 + 1)))
+		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
-		// - X Same as default config
-		// - 1 Service to expose calico/node metrics.
-		// - 1 ns (tigera-prometheus)
+		// - X Same as default config for EE
 		// - pass in internalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
@@ -126,6 +124,7 @@ var _ = Describe("Rendering tests", func() {
 		}{
 			{render.PriorityClassName, "", "scheduling.k8s.io", "v1beta1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
+			{render.DexObjectName, "", "", "v1", "Namespace"},
 			{render.TyphaCAConfigMapName, render.OperatorNamespace(), "", "v1", "ConfigMap"},
 			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{render.TyphaTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},

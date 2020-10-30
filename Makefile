@@ -268,6 +268,7 @@ cluster-create: kubectl
 	$(MAKE) deploy-crds
 	$(MAKE) create-tigera-operator-namespace
 
+## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		./kubectl apply -f config/crd/bases/ && \

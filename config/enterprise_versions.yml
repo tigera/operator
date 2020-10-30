@@ -34,7 +34,7 @@ components:
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
-    version: 1.0.1
+    version: 1.2.1
   eck-elasticsearch:
     version: 7.6.2
   elasticsearch:

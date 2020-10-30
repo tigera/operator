@@ -428,6 +428,10 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
 	}
 
+	if connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.InsecureSkipEmailVerified != nil {
+		config["insecureSkipEmailVerified"] = *d.authentication.Spec.OIDC.InsecureSkipEmailVerified
+	}
+
 	c := map[string]interface{}{
 		"id":     connectorType,
 		"type":   connectorType,

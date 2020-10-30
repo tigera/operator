@@ -57,6 +57,13 @@ spec:
                     description: Deprecated. Please use Authentication.Spec.GroupsPrefix
                       instead.
                     type: string
+                  insecureSkipEmailVerified:
+                    description: Some providers do not include the claim "email_verified"
+                      when there is no verification in the user enrollment process
+                      or if they are acting as a proxy for another IdP. By default
+                      those tokens are deemed invalid. To skip this check, set the
+                      value to true.
+                    type: boolean
                   issuerURL:
                     description: IssuerURL is the URL to the OIDC provider.
                     type: string

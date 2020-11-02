@@ -66,7 +66,7 @@ var (
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "1.0.1",
+		Version: "1.2.1",
 		Image:   "eck/eck-operator",
 	}
 

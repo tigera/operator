@@ -49,6 +49,7 @@ const (
 	ECKOperatorNamespace    = "tigera-eck-operator"
 	ECKWebhookSecretName    = "elastic-webhook-server-cert"
 	ECKWebhookName          = "elastic-webhook-server"
+	ECKWebhookPortName      = "https"
 	ECKEnterpriseTrial      = "eck-trial-license"
 	ECKWebhookConfiguration = "elastic-webhook.k8s.elastic.co"
 
@@ -797,13 +798,18 @@ func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
 func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
+			APIGroups: []string{"authorization.k8s.io"},
+			Resources: []string{"subjectaccessreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
 			APIGroups: []string{""},
-			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
+			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
 			APIGroups: []string{"apps"},
-			Resources: []string{"deployments", "statefulsets"},
+			Resources: []string{"deployments", "statefulsets", "daemonsets"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
@@ -829,6 +835,16 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"apm.k8s.elastic.co"},
 			Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
+			Resources: []string{"enterprisesearchs", "enterprisesearchs/status", "enterprisesearchs/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"beat.k8s.elastic.co"},
+			Resources: []string{"beats", "beats/status", "beats/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
@@ -962,6 +978,11 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						"control-plane": "elastic-operator",
 						"k8s-app":       "elastic-operator",
 					},
+					Annotations: map[string]string{
+						// Rename the fields "error" to "error.message" and "source" to "event.source"
+						// This is to avoid a conflict with the ECS "error" and "source" documents.
+						"co.elastic.logs/raw": "[{\"type\":\"container\",\"json.keys_under_root\":true,\"paths\":[\"/var/log/containers/*${data.kubernetes.container.id}.log\"],\"processors\":[{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"error\",\"to\":\"_error\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"_error\",\"to\":\"error.message\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"source\",\"to\":\"_source\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"_source\",\"to\":\"event.source\"}]}}]}]",
+					},
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
@@ -972,7 +993,18 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
-						Args: []string{"manager", "--operator-roles", "all", "--log-verbosity=0"},
+						Args: []string{
+							"manager",
+							"--log-verbosity=0",
+							"--metrics-port=0",
+							"--container-registry=" + es.installation.Spec.Registry,
+							"--max-concurrent-reconciles=3",
+							"--ca-cert-validity=8760h",
+							"--ca-cert-rotate-before=24h",
+							"--cert-validity=8760h",
+							"--cert-rotate-before=24h",
+							"--enable-webhook",
+						},
 						Env: []corev1.EnvVar{
 							{
 								Name: "OPERATOR_NAMESPACE",
@@ -983,7 +1015,6 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 								},
 							},
 							{Name: "WEBHOOK_SECRET", Value: ECKWebhookSecretName},
-							{Name: "WEBHOOK_PODS_LABEL", Value: "elastic-operator"},
 							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath)},
 						},
 						Resources: corev1.ResourceRequirements{
@@ -1242,7 +1273,7 @@ func (es elasticsearchComponent) webhookService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       ECKWebhookName,
+					Name:       ECKWebhookPortName,
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(9443),
@@ -1271,12 +1302,16 @@ func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
 
 // A ValidatingWebhookConfiguration is used in order to validate changes made to the Kibana and ES CR's
 func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1.ValidatingWebhookConfiguration {
-	path := "/validate-elasticsearch-k8s-elastic-co-v1-elasticsearch"
+	pathES := "/validate-elasticsearch-k8s-elastic-co-v1-elasticsearch"
+	pathKibana := "/validate-kibana-k8s-elastic-co-v1-kibana"
+	pathAPMServer := "/validate-apm-k8s-elastic-co-v1-apmserver"
+	pathBeat := "/validate-beat-k8s-elastic-co-v1beta1-beat"
 	failure := admissionv1beta1.Ignore
 	return &admissionv1beta1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ECKWebhookConfiguration,
 		},
+		// Note that we have only included the latest version of each webhook from the ECK manifests.
 		Webhooks: []admissionv1beta1.ValidatingWebhook{
 			{
 				ClientConfig: admissionv1beta1.WebhookClientConfig{
@@ -1284,7 +1319,100 @@ func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1
 					Service: &admissionv1beta1.ServiceReference{
 						Name:      ECKWebhookName,
 						Namespace: ECKOperatorNamespace,
-						Path:      &path,
+						Path:      &pathAPMServer,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-apm-validation-v1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1",
+							},
+							Resources: []string{
+								"apmservers",
+							},
+							APIGroups: []string{
+								"apm.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &pathBeat,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-beat-validation-v1beta1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1beta1",
+							},
+							Resources: []string{
+								"beats",
+							},
+							APIGroups: []string{
+								"beat.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &pathKibana,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-kb-validation-v1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1",
+							},
+							Resources: []string{
+								"kibanas",
+							},
+							APIGroups: []string{
+								"kibana.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &pathES,
 					},
 				},
 				FailurePolicy: &failure,

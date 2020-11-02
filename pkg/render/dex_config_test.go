@@ -1,29 +1,45 @@
 package render_test
 
 import (
+	"reflect"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("dex config tests", func() {
-	t := true
-	dexCfg := render.NewDexConfig(&operatorv1.Authentication{
+	verify := operatorv1.EmailVerificationTypeSkip
+
+	// Create two different authentication objects
+	authentication := &operatorv1.Authentication{
 		Spec: operatorv1.AuthenticationSpec{
 			ManagerDomain: "https://example.com",
 			OIDC: &operatorv1.AuthenticationOIDC{
-				IssuerURL:                 "https://example.com",
-				UsernameClaim:             "email",
-				GroupsClaim:               "group",
-				RequestedScopes:           []string{"scope"},
-				InsecureSkipEmailVerified: &t,
+				IssuerURL:         "https://example.com",
+				UsernameClaim:     "email",
+				GroupsClaim:       "group",
+				RequestedScopes:   []string{"scope"},
+				EmailVerification: &verify,
 			},
 		},
-	}, nil, nil, &corev1.Secret{
+	}
+	authenticationDiff := &operatorv1.Authentication{
+		Spec: operatorv1.AuthenticationSpec{
+			ManagerDomain: "https://example.com",
+			OIDC: &operatorv1.AuthenticationOIDC{
+				IssuerURL:     "https://example.com",
+				UsernameClaim: "email",
+			},
+		},
+	}
+	// Create the necessary secrets.
+	idpSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.OIDCSecretName,
 			Namespace: render.OperatorNamespace(),
@@ -34,13 +50,51 @@ var _ = Describe("dex config tests", func() {
 			"clientID":             []byte("a.b.com"),
 			"clientSecret":         []byte("my-secret"),
 			"serviceAccountSecret": []byte("my-secret2"),
-		}})
+		},
+	}
+	dexSecret := render.CreateDexClientSecret()
+	tlsSecret := render.CreateDexTLSSecret()
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {
-			connector := dexCfg.Connector()
+			connector := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
+		})
+	})
+
+	Context("Hashes should be consistent and not be affected by fields with pointers", func() {
+		It("should produce consistent hashes for dex config", func() {
+			hashes1 := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret).RequiredAnnotations()
+			hashes2 := render.NewDexConfig(authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret).RequiredAnnotations()
+			hashes3 := render.NewDexConfig(authenticationDiff, tlsSecret, dexSecret, idpSecret).RequiredAnnotations()
+			Expect(hashes1).To(HaveLen(4))
+			Expect(hashes2).To(HaveLen(4))
+			Expect(hashes3).To(HaveLen(4))
+			Expect(reflect.DeepEqual(hashes1, hashes2)).To(BeTrue())
+			Expect(reflect.DeepEqual(hashes1, hashes3)).To(BeFalse())
+		})
+
+		It("should produce consistent hashes for rp's", func() {
+			hashes1 := render.NewDexRelyingPartyConfig(authentication, tlsSecret, idpSecret).RequiredAnnotations()
+			hashes2 := render.NewDexRelyingPartyConfig(authentication.DeepCopy(), tlsSecret, idpSecret).RequiredAnnotations()
+			hashes3 := render.NewDexRelyingPartyConfig(authenticationDiff, tlsSecret, idpSecret).RequiredAnnotations()
+			Expect(hashes1).To(HaveLen(3))
+			Expect(hashes2).To(HaveLen(3))
+			Expect(hashes3).To(HaveLen(3))
+			Expect(reflect.DeepEqual(hashes1, hashes2)).To(BeTrue())
+			Expect(reflect.DeepEqual(hashes1, hashes3)).To(BeFalse())
+		})
+
+		It("should produce consistent hashes for verifiers", func() {
+			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret).RequiredAnnotations()
+			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret).RequiredAnnotations()
+			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret).RequiredAnnotations()
+			Expect(hashes1).To(HaveLen(2))
+			Expect(hashes2).To(HaveLen(2))
+			Expect(hashes3).To(HaveLen(2))
+			Expect(reflect.DeepEqual(hashes1, hashes2)).To(BeTrue())
+			Expect(reflect.DeepEqual(hashes1, hashes3)).To(BeFalse())
 		})
 	})
 })

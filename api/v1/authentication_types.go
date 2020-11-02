@@ -22,6 +22,13 @@ import (
 
 type AuthMethod string
 
+type EmailVerificationType string
+
+const (
+	EmailVerificationTypeVerify EmailVerificationType = "Verify"
+	EmailVerificationTypeSkip   EmailVerificationType = "InsecureSkip"
+)
+
 // AuthenticationSpec defines the desired state of Authentication
 type AuthenticationSpec struct {
 	// ManagerDomain is the domain name of the Manager
@@ -84,9 +91,11 @@ type AuthenticationOIDC struct {
 
 	// Some providers do not include the claim "email_verified" when there is no verification in the user enrollment
 	// process or if they are acting as a proxy for another IdP. By default those tokens are deemed invalid.
-	// To skip this check, set the value to true.
+	// To skip this check, set the value to "InsecureSkip".
+	// Default: Verify
 	// +optional
-	InsecureSkipEmailVerified *bool `json:"insecureSkipEmailVerified,omitempty"`
+	// +kubebuilder:validation:Enum=Verify;InsecureSkip
+	EmailVerification *EmailVerificationType `json:"emailVerification,omitempty"`
 }
 
 // AuthenticationOpenshift is the configuration needed to setup Openshift.

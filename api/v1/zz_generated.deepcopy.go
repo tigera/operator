@@ -345,9 +345,9 @@ func (in *AuthenticationOIDC) DeepCopyInto(out *AuthenticationOIDC) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.InsecureSkipEmailVerified != nil {
-		in, out := &in.InsecureSkipEmailVerified, &out.InsecureSkipEmailVerified
-		*out = new(bool)
+	if in.EmailVerification != nil {
+		in, out := &in.EmailVerification, &out.EmailVerification
+		*out = new(EmailVerificationType)
 		**out = **in
 	}
 }

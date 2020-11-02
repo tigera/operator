@@ -83,6 +83,7 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
 
 			// Apply an authentication spec that triggers all the logic in the updateAuthenticationWithDefaults() func.
 			Expect(cli.Create(ctx, &operatorv1.Authentication{

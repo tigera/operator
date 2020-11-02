@@ -32,6 +32,7 @@ const (
 
 	// Various annotations to keep the pod up-to-date
 	authenticationAnnotation = "hash.operator.tigera.io/tigera-dex-auth"
+	dexConfigMapAnnotation   = "hash.operator.tigera.io/tigera-dex-config"
 	dexIdpSecretAnnotation   = "hash.operator.tigera.io/tigera-idp-secret"
 	dexSecretAnnotation      = "hash.operator.tigera.io/tigera-dex-secret"
 	dexTLSSecretAnnotation   = "hash.operator.tigera.io/tigera-dex-tls-secret"
@@ -230,16 +231,38 @@ func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	return secrets
 }
 
-func (d *dexBaseCfg) RequiredAnnotations() map[string]string {
+// RequiredAnnotations returns the annotations that are relevant for a Dex deployment.
+func (d *dexConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
-		authenticationAnnotation: AnnotationHash(d.authentication.Spec),
+		dexConfigMapAnnotation: AnnotationHash(d.Connector()),
+		dexTLSSecretAnnotation: AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.idpSecret != nil {
 		annotations[dexIdpSecretAnnotation] = AnnotationHash(d.idpSecret.Data)
 	}
 	if d.dexSecret != nil {
 		annotations[dexSecretAnnotation] = AnnotationHash(d.dexSecret.Data)
+	}
+	return annotations
+}
+
+// RequiredAnnotations returns the annotations that are relevant for a relying party config.
+func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
+	var annotations = map[string]string{
+		authenticationAnnotation: AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
+	}
+	if d.dexSecret != nil {
+		annotations[dexSecretAnnotation] = AnnotationHash(d.dexSecret.Data)
+	}
+	return annotations
+}
+
+// RequiredAnnotations returns the annotations that are relevant for a validator config.
+func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
+	var annotations = map[string]string{
+		authenticationAnnotation: AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
+		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations
 }
@@ -428,8 +451,10 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
 	}
 
-	if connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.InsecureSkipEmailVerified != nil {
-		config["insecureSkipEmailVerified"] = *d.authentication.Spec.OIDC.InsecureSkipEmailVerified
+	if connectorType == connectorTypeOIDC &&
+		d.authentication.Spec.OIDC.EmailVerification != nil &&
+		*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip {
+		config["insecureSkipEmailVerified"] = true
 	}
 
 	c := map[string]interface{}{

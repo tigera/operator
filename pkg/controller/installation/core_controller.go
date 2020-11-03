@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -842,6 +844,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		} else if instance.Spec.CalicoNetwork != nil {
 			// If not specified, then use the value for Calico VXLAN networking. This is the smallest
 			// value, so might not perform the best but will work everywhere.
+			// TODO: Populate this wih the value Calico has chosen.
 			openshiftConfig.Status.ClusterNetworkMTU = 1410
 		}
 
@@ -872,21 +875,50 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
 
-	if !r.status.IsAvailable() {
+	if !r.status.IsAvailable() || r.status.IsProgressing() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// Everything is available - update the CRD status.
+	mtu, err := readMTUFile()
+	if err != nil {
+		r.SetDegraded("error reading network MTU", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if mtu == 0 {
+		// Wait for an MTU to be populated by calico/node.
+		reqLogger.V(1).Info("Waiting for /var/lib/calico/mtu file")
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Write updated status.
+	instance.Status.MTU = mtu
 	instance.Status.Variant = instance.Spec.Variant
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Created successfully - don't requeue
+	// Created successfully. Requeue anyway so that we perform periodic reconciliation.
+	// This acts as a backstop to catch reconcile issues, and also makes sure we spot when
+	// things change that might not trigger a reconciliation.
 	reqLogger.V(1).Info("Finished reconciling network installation")
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+func readMTUFile() (int32, error) {
+	filename := "/var/lib/calico/mtu"
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, return zero.
+			return 0, nil
+		}
+		return 0, err
+	}
+	res, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	return int32(res), err
 }
 
 func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {

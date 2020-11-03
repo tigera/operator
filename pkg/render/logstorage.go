@@ -839,7 +839,7 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
-			Resources: []string{"enterprisesearchs", "enterprisesearchs/status", "enterprisesearchs/finalizers"},
+			Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{

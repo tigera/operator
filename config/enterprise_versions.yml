@@ -28,6 +28,9 @@ components:
     version: master
   eck-kibana:
     version: 7.6.2
+  dex:
+    image: tigera/dex
+    version: master
   kibana:
     image: tigera/kibana
     version: master
@@ -75,6 +78,3 @@ components:
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master
-  dex:
-    image: dexidp/dex
-    version: v2.25.0

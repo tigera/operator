@@ -841,10 +841,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 			// If specified in the spec, then use the value provided by the user.
 			// This is what the rendering code will have populated into the created resources.
 			openshiftConfig.Status.ClusterNetworkMTU = int(*instance.Spec.CalicoNetwork.MTU)
+		} else if instance.Status.MTU != 0 {
+			// Status reports the MTU chosen by Calico.
+			openshiftConfig.Status.ClusterNetworkMTU = int(instance.Status.MTU)
 		} else if instance.Spec.CalicoNetwork != nil {
 			// If not specified, then use the value for Calico VXLAN networking. This is the smallest
 			// value, so might not perform the best but will work everywhere.
-			// TODO: Populate this wih the value Calico has chosen.
 			openshiftConfig.Status.ClusterNetworkMTU = 1410
 		}
 
@@ -889,6 +891,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	if mtu == 0 {
 		// Wait for an MTU to be populated by calico/node.
+		reqLogger.V(1).Info("Waiting for /var/lib/calico/mtu file")
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -899,9 +902,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Created successfully - don't requeue
+	// Created successfully. Requeue anyway so that we perform periodic reconciliation.
+	// This acts as a backstop to catch reconcile issues, and also makes sure we spot when
+	// things change that might not trigger a reconciliation.
 	reqLogger.V(1).Info("Finished reconciling network installation")
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 func readMTUFile() (int32, error) {

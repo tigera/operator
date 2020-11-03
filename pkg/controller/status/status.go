@@ -28,7 +28,6 @@ import (
 	batch "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -441,7 +440,7 @@ func (m *statusManager) removeTigeraStatus() bool {
 	if m.enabled != nil && !*m.enabled {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
-		if err != nil && !apierrs.IsNotFound(err) {
+		if err != nil && !errors.IsNotFound(err) {
 			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
 		}
 		return true
@@ -541,8 +540,7 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 		if err = m.client.Create(context.TODO(), ts); err != nil {
 			log.WithValues("error", err).Info("Failed to create tigera status")
 		}
-	}
-	if err = m.client.Status().Update(context.TODO(), ts); err != nil {
+	} else if err = m.client.Status().Update(context.TODO(), ts); err != nil {
 		log.WithValues("error", err).Info("Failed to update tigera status")
 	}
 }

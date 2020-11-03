@@ -310,6 +310,10 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 		if authentication.Spec.OIDC.GroupsPrefix != "" && authentication.Spec.GroupsPrefix == "" {
 			authentication.Spec.GroupsPrefix = authentication.Spec.OIDC.GroupsPrefix
 		}
+		if authentication.Spec.OIDC.EmailVerification == nil {
+			defaultVerification := oprv1.EmailVerificationTypeVerify
+			authentication.Spec.OIDC.EmailVerification = &defaultVerification
+		}
 	}
 }
 

@@ -871,7 +871,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
 
-	if !r.status.IsAvailable() {
+	if !r.status.IsAvailable() || r.status.IsProgressing() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
@@ -885,6 +885,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	if mtu == 0 {
 		// Wait for an MTU to be populated by calico/node.
+		reqLogger.V(1).Info("Waiting for /var/lib/calico/mtu file")
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -895,9 +896,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Created successfully - don't requeue
+	// Created successfully. Requeue anyway so that we perform periodic reconciliation.
+	// This acts as a backstop to catch reconcile issues, and also makes sure we spot when
+	// things change that might not trigger a reconciliation.
 	reqLogger.V(1).Info("Finished reconciling network installation")
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 func readMTUFile() (int32, error) {

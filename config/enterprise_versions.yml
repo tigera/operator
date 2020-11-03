@@ -28,6 +28,9 @@ components:
     version: release-calient-v3.4
   eck-kibana:
     version: 7.6.2
+  dex:
+    image: tigera/dex
+    version: release-calient-v3.4
   kibana:
     image: tigera/kibana
     version: release-calient-v3.4
@@ -75,6 +78,3 @@ components:
   cloud-controllers:
     image: tigera/cloud-controllers
     version: release-calient-v3.4
-  dex:
-    image: dexidp/dex
-    version: v2.25.0

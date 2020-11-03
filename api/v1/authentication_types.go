@@ -90,7 +90,7 @@ type AuthenticationOIDC struct {
 	GroupsPrefix string `json:"groupsPrefix,omitempty"`
 
 	// Some providers do not include the claim "email_verified" when there is no verification in the user enrollment
-	// process or if they are acting as a proxy for another IdP. By default those tokens are deemed invalid.
+	// process or if they are acting as a proxy for another identity provider. By default those tokens are deemed invalid.
 	// To skip this check, set the value to "InsecureSkip".
 	// Default: Verify
 	// +optional

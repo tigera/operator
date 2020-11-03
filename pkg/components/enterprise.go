@@ -106,8 +106,8 @@ var (
 	}
 
 	ComponentDex = component{
-		Version: "v2.25.0",
-		Image:   "dexidp/dex",
+		Version: "release-calient-v3.4",
+		Image:   "tigera/dex",
 	}
 
 	ComponentManagerProxy = component{

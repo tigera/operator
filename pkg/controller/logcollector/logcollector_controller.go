@@ -258,8 +258,8 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 
 			// Try to grab the ManagementClusterConnection CR because we need it for some
 			// validation with respect to Syslog.logTypes.
-			managementClusterConnection, mccErr := utils.GetManagementClusterConnection(ctx, r.client)
-			if mccErr != nil {
+			managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+			if err != nil {
 				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
 				// have this CR available, but we should communicate any other kind of error that we encounter.
 				if !errors.IsNotFound(err) {
@@ -276,13 +276,13 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 			// ManagementClusterConnection CR is present). This is because IDS events
 			// are only forwarded within a non-managed cluster (where LogStorage is present).
 			if syslog.LogTypes != nil {
-				if mccErr == nil && managementClusterConnection != nil {
+				if err == nil && managementClusterConnection != nil {
 					for _, l := range syslog.LogTypes {
 						// Set status to degraded to warn user and let them fix the issue themselves.
 						if l == v1.SyslogLogIDSEvents {
 							r.status.SetDegraded(
 								"IDSEvents option is not supported for Syslog config in a managed cluster",
-								err.Error(),
+								"",
 							)
 							return reconcile.Result{}, err
 						}

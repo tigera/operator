@@ -498,12 +498,17 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 		return
 	}
 
-	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, ts)
+	var ts operator.TigeraStatus
+	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, &ts)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
 		log.WithValues("error", err).Info("Failed to get TigeraStatus %q: %v", m.component, err)
 		return
+	}
+
+	if isNotFound {
+		// Make a new one.
+		ts = operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 	}
 
 	// Make a copy for comparing later.
@@ -537,10 +542,10 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 
 	// Update the object in the API, creating it if necessary.
 	if isNotFound {
-		if err = m.client.Create(context.TODO(), ts); err != nil {
+		if err = m.client.Create(context.TODO(), &ts); err != nil {
 			log.WithValues("error", err).Info("Failed to create tigera status")
 		}
-	} else if err = m.client.Status().Update(context.TODO(), ts); err != nil {
+	} else if err = m.client.Status().Update(context.TODO(), &ts); err != nil {
 		log.WithValues("error", err).Info("Failed to update tigera status")
 	}
 }

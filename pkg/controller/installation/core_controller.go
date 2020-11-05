@@ -846,8 +846,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		// If set explicitly in the spec, then use that.
 		statusMTU = int(*instance.Spec.CalicoNetwork.MTU)
 	} else if calicoDirectoryExists() {
-		// Otherwise, if the /var/lib/calico directory is present, wait for the mtu file
-		// to be written by Calico.
+		// Otherwise, if the /var/lib/calico directory is present, see if we can read
+		// a value from there.
 		statusMTU, err = readMTUFile()
 		if err != nil {
 			r.SetDegraded("error reading network MTU", err, reqLogger)

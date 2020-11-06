@@ -641,6 +641,50 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
 				Threshold:   0,
 			},
 		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "dns.servfail",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts when SERVFAIL response code is detected",
+				Summary:     "[dns] SERVFAIL response detected for ${client_namespace}/${client_name_aggr}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "dns",
+				Query:       "rcode='SERVFAIL'",
+				AggregateBy: []string{"client_namespace", "client_name_aggr", "qname"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "dns.dos",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Description: "Alerts when DNS DOS attempt is detected",
+				Summary:     "[dns] DOS attempt detected by ${client_namespace}/${client_name_aggr}",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: 10 * time.Minute},
+				Lookback:    &metav1.Duration{Duration: 10 * time.Minute},
+				DataSet:     "dns",
+				Query:       "",
+				AggregateBy: []string{"client_namespace", "client_name_aggr"},
+				Metric:      "count",
+				Condition:   "gt",
+				Threshold:   50000,
+			},
+		},
 	}
 }
 

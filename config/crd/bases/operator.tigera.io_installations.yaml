@@ -109,8 +109,9 @@ spec:
                       type: object
                     type: array
                   mtu:
-                    description: 'MTU specifies the maximum transmission unit to use
-                      on the pod network. Default: 1410'
+                    description: MTU specifies the maximum transmission unit to use
+                      on the pod network. If not specified, Calico will perform MTU
+                      auto-detection based on the cluster network.
                     format: int32
                     type: integer
                   multiInterfaceMode:
@@ -395,6 +396,12 @@ spec:
             description: Most recently observed state for the Calico or Calico Enterprise
               installation.
             properties:
+              mtu:
+                description: MTU is the most recently observed value for pod network
+                  MTU. This may be an explicitly configured value, or based on Calico's
+                  native auto-detetion.
+                format: int32
+                type: integer
               variant:
                 description: Variant is the most recently observed installed variant
                   - one of Calico or TigeraSecureEnterprise

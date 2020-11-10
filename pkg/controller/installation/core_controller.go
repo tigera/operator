@@ -590,6 +590,22 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// save off the base install before merging overrides, so we can write it back later.
+	base := instance
+
+	// update Installation with 'overrides'
+	overrides := operator.Installation{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: "overrides"}, &overrides); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the override Installation resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("no override installation found")
+	} else {
+		reqLogger.V(5).Info("merging overrides")
+		instance.Spec = overrideInstallationSpec(instance.Spec, overrides.Spec)
+	}
+
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.
@@ -600,7 +616,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	if err := r.client.Update(ctx, instance); err != nil {
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overrides', as those should only
+	// be stored in the 'overrides' resource.
+	if err := r.client.Update(ctx, base); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}

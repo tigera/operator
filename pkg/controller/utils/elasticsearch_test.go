@@ -39,7 +39,6 @@ var _ = Describe("Elasticsearch tests", func() {
 	Context("ILM", func() {
 		var (
 			esClient    EsClient
-			ctx         context.Context
 			rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
 		)
 		BeforeEach(func() {
@@ -48,20 +47,18 @@ var _ = Describe("Elasticsearch tests", func() {
 			}
 			e, err := NewElastic("", "", baseURI, client)
 			Expect(err).To(BeNil())
-			esClient = EsClient{client: e}
-			ctx = context.Background()
+			esClient = EsClient{Client: e, Ctx: context.Background()}
 		})
 
 		It("max rollover size should be set if ES disk is large", func() {
-			fmt.Printf("%#v", esClient)
 			Expect(nil).Should(BeNil())
 			defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", 800))
 			expectedRolloverSize := rolloverMax.Value()
 
 			totalEsStorage := defaultStorage.Value()
-			indexDiskAllocation := IndexDiskMapping[0]
-			diskPercentage := indexDiskAllocation.TotalDiskPercentage
-			diskForLogType := indexDiskAllocation.IndexNameSize["tigera_secure_ee_flows"]
+			// using flow logs disk allocation value
+			diskPercentage := 0.7
+			diskForLogType := 0.9
 
 			rolloverSize := CalculateRolloverSize(totalEsStorage, diskPercentage, diskForLogType)
 			Expect(rolloverSize).To(Equal(fmt.Sprintf("%db", expectedRolloverSize)))
@@ -75,18 +72,21 @@ var _ = Describe("Elasticsearch tests", func() {
 		})
 		It("apply new lifecycle policy", func() {
 			newPolicies = true
-			retention := 10
-			rolloverSize := fmt.Sprintf("%db", rolloverMax.Value())
-			rolloverAge := "1d"
-			err := BuildAndApplyIlmPolicy(ctx, esClient.client, retention, rolloverSize, rolloverAge, indexName)
+			totalDiskSize := resource.MustParse("100Gi")
+			pd := BuildIlmPolicy(totalDiskSize.Value(), 0.7, .9, 10)
+
+			err := esClient.CreateOrUpdatePolicies(map[string]PolicyDetail{
+				indexName: pd,
+			})
 			Expect(err).To(BeNil())
 		})
 		It("update existing lifecycle policy", func() {
 			newPolicies = false
-			retention := 5
-			rolloverSize := fmt.Sprintf("%db", rolloverMax.Value())
-			rolloverAge := CalculateRolloverAge(retention)
-			err := BuildAndApplyIlmPolicy(ctx, esClient.client, retention, rolloverSize, rolloverAge, indexName)
+			totalDiskSize := resource.MustParse("100Gi")
+			pd := BuildIlmPolicy(totalDiskSize.Value(), 0.7, .9, 5)
+			err := esClient.CreateOrUpdatePolicies(map[string]PolicyDetail{
+				indexName: pd,
+			})
 			Expect(err).To(BeNil())
 		})
 	})
@@ -98,7 +98,6 @@ type testRoundTripper struct {
 }
 
 func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	fmt.Printf("\n===ROUNDTRIPPER: %#v %#v", req.Method, req.URL.String())
 	if t.e != nil {
 		return nil, t.e
 	}

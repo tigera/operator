@@ -10,8 +10,8 @@
       "hot" : {
         "actions" : {
           "rollover" : {
-            "max_age" : "1d",
-            "max_size" : "32212254720b"
+            "max_age" : "2d",
+            "max_size" : "16911433728b"
           },
           "set_priority" : {
             "priority" : 100

@@ -590,17 +590,17 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// save off the base install before merging overrides, so we can write it back later.
+	// save off the base install before merging overrides, so we can write it back to the 'default' installation later.
 	base := instance
 
 	// update Installation with 'overrides'
 	overrides := operator.Installation{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: "overrides"}, &overrides); err != nil {
+	if err := r.client.Get(ctx, utils.OverridesInstanceKey, &overrides); err != nil {
 		if !apierrors.IsNotFound(err) {
-			reqLogger.Error(err, "An error occurred when querying the override Installation resource")
+			reqLogger.Error(err, "An error occurred when querying the 'overrides' Installation resource")
 			return reconcile.Result{}, err
 		}
-		reqLogger.V(5).Info("no override installation found")
+		reqLogger.V(5).Info("no 'overrides' installation found")
 	} else {
 		reqLogger.V(5).Info("merging overrides")
 		instance.Spec = overrideInstallationSpec(instance.Spec, overrides.Spec)

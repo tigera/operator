@@ -80,7 +80,7 @@ func Calico(
 	up bool,
 ) (Renderer, error) {
 	// check for variant override in the status field
-	if cr.Status.Variant == operator.TigeraSecureEnterprise {
+	if cr.Status.Computed.Variant == operator.TigeraSecureEnterprise {
 		cr.Spec.Variant = operator.TigeraSecureEnterprise
 	}
 
@@ -123,7 +123,7 @@ func Calico(
 	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
-	if managerInternalTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
+	if managerInternalTLSSecret == nil && cr.Status.Computed.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
 		// The certificate will be issued for ManagerServiceDNS and localhost
 		log.Info("Creating secret for internal manager credentials")

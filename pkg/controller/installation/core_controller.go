@@ -590,20 +590,38 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// update Installation with 'overrides'
+	overrides := operator.Installation{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: "overrides"}, &overrides); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the override Installation resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("no override installation found")
+		// overrides is going to be
+		overrides = *instance
+	} else {
+		reqLogger.V(5).Info("merging overrides")
+		overrides.Spec = overrideInstallationSpec(instance.Spec, overrides.Spec)
+	}
+
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Validate the configuration.
-	if err := validateCustomResource(instance); err != nil {
+	if err := validateCustomResource(&overrides); err != nil {
 		r.SetDegraded("Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'default' installation back. We don't want to write the changes from 'overrides' back.
 	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	instance.Spec = overrides.Spec
 
 	// now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.

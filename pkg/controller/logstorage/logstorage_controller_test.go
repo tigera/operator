@@ -16,6 +16,7 @@ package logstorage_test
 
 import (
 	"context"
+	"github.com/olivere/elastic/v7"
 	"os"
 
 	. "github.com/onsi/ginkgo"
@@ -56,11 +57,15 @@ var (
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
 
-	esPublicCertObjMeta     = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	kbPublicCertObjMeta     = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	curatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
-	storageClassName        = "test-storage-class"
+	esPublicCertObjMeta      = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
+	kbPublicCertObjMeta      = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
+	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
+	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}
+	storageClassName         = "test-storage-class"
 )
+
+type mockESClient struct {
+}
 
 var _ = Describe("LogStorage controller", func() {
 	Context("Reconcile", func() {
@@ -154,10 +159,9 @@ var _ = Describe("LogStorage controller", func() {
 					It("tests that the ExternalService is setup with the default service name", func() {
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
-
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
-
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						svc := &corev1.Service{}
 						Expect(
 							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
@@ -176,6 +180,7 @@ var _ = Describe("LogStorage controller", func() {
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath)
 						Expect(err).ShouldNot(HaveOccurred())
 
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
 
@@ -199,6 +204,7 @@ var _ = Describe("LogStorage controller", func() {
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						result, err := r.Reconcile(reconcile.Request{})
 						Expect(result).Should(Equal(reconcile.Result{}))
 						Expect(err).ShouldNot(HaveOccurred())
@@ -224,6 +230,7 @@ var _ = Describe("LogStorage controller", func() {
 						ls.SetFinalizers([]string{"tigera.io/eck-cleanup"})
 						Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
 
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						result, err := r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(result).Should(Equal(reconcile.Result{}))
@@ -308,6 +315,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
+					logstorage.SetElasticSearchClient(r, &mockESClient{})
 					result, err := r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -395,6 +403,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
+					logstorage.SetElasticSearchClient(r, &mockESClient{})
 					result, err := r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
@@ -534,4 +543,12 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			ObjectMeta: curatorUsrSecretObjMeta,
 		}),
 	).ShouldNot(HaveOccurred())
+}
+
+func (*mockESClient) SetILMPolicies(ls *operatorv1.LogStorage) error {
+	return nil
+}
+
+func (*mockESClient) GetClient() *elastic.Client {
+	return &elastic.Client{}
 }

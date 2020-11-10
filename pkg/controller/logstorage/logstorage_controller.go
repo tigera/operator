@@ -18,26 +18,27 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"regexp"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	apps "k8s.io/api/apps/v1"
-	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/types"
-	"os"
-	"regexp"
 
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+
+	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -66,7 +67,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, &utils.EsClient{})
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
 	if err != nil {
 		return err
 	}
@@ -543,9 +544,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		// ES should be in ready phase when execution reaches here, apply ILM polices
-		if err = r.setupESIndexLifecyclePolicies(ctx, ls); err != nil {
-			log.Info("Waiting for ES ILM policies and templates to get created")
-			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+		if err = r.esClient.SetILMPolicies(r.client, ctx, ls); err != nil {
+			log.Error(err, "failed to create or update Elasticsearch lifecycle policies")
+			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -696,26 +697,4 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	}
 
 	return int(nodes) * shardPerNode
-}
-
-func (r *ReconcileLogStorage) setupESIndexLifecyclePolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
-	if r.esClient.GetElasticsearchClient() == nil {
-		err := r.esClient.NewElasticsearchClient(r.client, ctx)
-		if err != nil {
-			log.Error(err, "Failed to create ES client")
-			return err
-		}
-	}
-	return r.esClient.SetElasticsearchIlmPolicies(ctx, ls, getTotalEsDisk(ls))
-}
-
-func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {
-	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
-	var totalEsStorage = defaultStorage.Value()
-	if ls.Spec.Nodes.ResourceRequirements != nil {
-		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
-			totalEsStorage = val.Value()
-		}
-	}
-	return totalEsStorage
 }

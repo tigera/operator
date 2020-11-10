@@ -25,13 +25,11 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
-
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -242,6 +240,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
+	esClient utils.ElasticClient
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -540,6 +539,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
 		}
+
+		// ES should be in ready phase when execution reaches here, apply ILM polices
+		if err = r.setupESIndexLifecyclePolicies(ctx, ls); err != nil {
+			log.Info("Waiting for ES ILM policies and templates to get created")
+			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ClearDegraded()
@@ -688,4 +694,21 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 	}
 
 	return int(nodes) * shardPerNode
+}
+
+func (r *ReconcileLogStorage) setupESIndexLifecyclePolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
+	if r.esClient == nil || r.esClient.GetClient() == nil {
+		es, err := utils.GetElasticClient(r.client, ctx)
+		if err != nil {
+			log.Error(err, "Failed to create ES client")
+			return err
+		}
+		r.esClient = es
+	}
+	return r.esClient.SetILMPolicies(ls)
+}
+
+// SetElasticSearchClient used by tests to set mock ES client
+func SetElasticSearchClient(r *ReconcileLogStorage, esClient utils.ElasticClient) {
+	r.esClient = esClient
 }

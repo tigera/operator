@@ -16,7 +16,6 @@ package logstorage_test
 
 import (
 	"context"
-	"github.com/olivere/elastic/v7"
 	"os"
 
 	. "github.com/onsi/ginkgo"
@@ -159,10 +158,8 @@ var _ = Describe("LogStorage controller", func() {
 					It("tests that the ExternalService is setup with the default service name", func() {
 						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
 						Expect(err).ShouldNot(HaveOccurred())
-
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
-
 						svc := &corev1.Service{}
 						Expect(
 							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
@@ -541,14 +538,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	).ShouldNot(HaveOccurred())
 }
 
-func (*mockESClient) NewElasticsearchClient(client.Client, context.Context) error {
+func (*mockESClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage) error {
 	return nil
-}
-
-func (*mockESClient) SetElasticsearchIlmPolicies(context.Context, *operatorv1.LogStorage, int64) error {
-	return nil
-}
-
-func (*mockESClient) GetElasticsearchClient() *elastic.Client {
-	return &elastic.Client{}
 }

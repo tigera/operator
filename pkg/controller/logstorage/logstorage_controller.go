@@ -25,13 +25,11 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
-
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -67,7 +65,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, &utils.EsClient{})
 	if err != nil {
 		return err
 	}
@@ -76,7 +74,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
 	localDNS, err := getLocalDNSName(resolvConfPath)
 	if err != nil {
 		localDNS = defaultLocalDNS
@@ -89,6 +87,7 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 		status:   statusMgr,
 		provider: provider,
 		localDNS: localDNS,
+		esClient: esClient,
 	}
 
 	c.status.Run()
@@ -242,6 +241,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
+	esClient utils.ElasticClient
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -539,6 +539,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
+		}
+
+		// ES should be in ready phase when execution reaches here, apply ILM polices
+		if err = r.esClient.SetILMPolicies(r.client, ctx, ls); err != nil {
+			log.Info("Waiting for ES ILM policies and templates to get created")
+			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 

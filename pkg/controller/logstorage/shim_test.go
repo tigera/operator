@@ -19,6 +19,7 @@ package logstorage
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -28,7 +29,8 @@ func NewReconcilerWithShims(
 	schema *runtime.Scheme,
 	status status.StatusManager,
 	provider operatorv1.Provider,
-	resolvConfPath string) (*ReconcileLogStorage, error) {
+	resolvConfPath string,
+	esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
 
-	return newReconciler(cli, schema, status, resolvConfPath, provider)
+	return newReconciler(cli, schema, status, resolvConfPath, provider, esClient)
 }

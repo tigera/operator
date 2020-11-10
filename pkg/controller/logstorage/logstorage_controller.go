@@ -24,7 +24,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	apps "k8s.io/api/apps/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"regexp"
@@ -66,7 +65,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, &utils.EsClient{})
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider)
 	if err != nil {
 		return err
 	}
@@ -75,7 +74,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider) (*ReconcileLogStorage, error) {
 	localDNS, err := getLocalDNSName(resolvConfPath)
 	if err != nil {
 		localDNS = defaultLocalDNS
@@ -88,7 +87,6 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 		status:   statusMgr,
 		provider: provider,
 		localDNS: localDNS,
-		esClient: esClient,
 	}
 
 	c.status.Run()
@@ -699,23 +697,18 @@ func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards in
 }
 
 func (r *ReconcileLogStorage) setupESIndexLifecyclePolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
-	if r.esClient.GetElasticsearchClient() == nil {
-		err := r.esClient.NewElasticsearchClient(r.client, ctx)
+	if r.esClient == nil || r.esClient.GetClient() == nil {
+		es, err := utils.GetElasticClient(r.client, ctx)
 		if err != nil {
 			log.Error(err, "Failed to create ES client")
 			return err
 		}
+		r.esClient = es
 	}
-	return r.esClient.SetElasticsearchIlmPolicies(ctx, ls, getTotalEsDisk(ls))
+	return r.esClient.SetILMPolicies(ls)
 }
 
-func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {
-	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
-	var totalEsStorage = defaultStorage.Value()
-	if ls.Spec.Nodes.ResourceRequirements != nil {
-		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
-			totalEsStorage = val.Value()
-		}
-	}
-	return totalEsStorage
+// SetElasticSearchClient used by tests to set mock ES client
+func SetElasticSearchClient(r *ReconcileLogStorage, esClient utils.ElasticClient) {
+	r.esClient = esClient
 }

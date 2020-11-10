@@ -35,21 +35,11 @@ import (
 )
 
 const (
-	// NumOfIndexNotFlowsDnsBgp is the number of time series indices created that are not flows, dns or bgp related.
-	// i.e., audit_ee, audit_kube, compliance_reports, benchmark_results, events, snapshots
-	NumOfIndexNotFlowsDnsBgp = 6
-	// DiskDistribution is % of disk to be allocated for log types other than flows, dns and bgp.
-	DiskDistribution             = 0.1 / NumOfIndexNotFlowsDnsBgp
 	ElasticsearchRetentionFactor = 4
 	DefaultMaxIndexSizeGi        = 30
 	ElasticConnRetries           = 10
 	ElasticConnRetryInterval     = "500ms"
 )
-
-type IndexDiskAllocation struct {
-	TotalDiskPercentage float64
-	IndexNameSize       map[string]float64
-}
 
 type Policy struct {
 	Phases struct {
@@ -67,30 +57,11 @@ type Policy struct {
 	}
 }
 
-// IndexDiskMapping gives disk allocation for each log type.
-// Allocates 70% of ES disk space to flows, dns and bgp logs and 10% disk space to remaining log types.
-// Allocates 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs.
-// Equally distribute 10% of the ES disk space among all the other logs
-var IndexDiskMapping = []IndexDiskAllocation{
-	{
-		TotalDiskPercentage: 0.7,
-		IndexNameSize: map[string]float64{
-			"tigera_secure_ee_flows": 0.9,
-			"tigera_secure_ee_dns":   0.05,
-			"tigera_secure_ee_bgp":   0.05,
-		},
-	},
-	{
-		TotalDiskPercentage: 0.1,
-		IndexNameSize: map[string]float64{
-			"tigera_secure_ee_audit_ee":           DiskDistribution,
-			"tigera_secure_ee_audit_kube":         DiskDistribution,
-			"tigera_secure_ee_snapshots":          DiskDistribution,
-			"tigera_secure_ee_benchmark_results":  DiskDistribution,
-			"tigera_secure_ee_compliance_reports": DiskDistribution,
-			"tigera_secure_ee_events":             DiskDistribution,
-		},
-	},
+type PolicyDetail struct {
+	rolloverAge  string
+	rolloverSize string
+	deleteAge    string
+	policy       map[string]interface{}
 }
 
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
@@ -133,19 +104,75 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 }
 
 type ElasticClient interface {
-	NewElasticsearchClient(client.Client, context.Context) error
-	SetElasticsearchIlmPolicies(context.Context, *operatorv1.LogStorage, int64) error
-	GetElasticsearchClient() *elastic.Client
+	SetILMPolicies(*operatorv1.LogStorage) error
+	GetClient() *elastic.Client
 }
 
 type EsClient struct {
-	client *elastic.Client
+	Ctx    context.Context
+	Client *elastic.Client
 }
 
-func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Context) error {
+// GetElasticClient creates new Elastic client and returns ElasticClient interface
+func GetElasticClient(client client.Client, ctx context.Context) (ElasticClient, error) {
+	esClnt, err := NewClient(client, ctx)
+	if err != nil {
+		return nil, err
+	}
+	es := EsClient{ctx, esClnt}
+	return &es, nil
+}
+
+// SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
+func (es *EsClient) SetILMPolicies(ls *operatorv1.LogStorage) error {
+	policyList := es.ListILMPolicies(ls)
+	return es.CreateOrUpdatePolicies(policyList)
+}
+
+func (es *EsClient) ListILMPolicies(ls *operatorv1.LogStorage) map[string]PolicyDetail {
+	totalEsStorage := getTotalEsDisk(ls)
+
+	listPolicy := make(map[string]PolicyDetail)
+	listPolicy = policiesForIndicesWithMajorSpace(listPolicy, totalEsStorage, ls)
+	listPolicy = policiesForIndicesWithMinorSpace(listPolicy, totalEsStorage, ls)
+	return listPolicy
+}
+
+func (es *EsClient) CreateOrUpdatePolicies(listPolicy map[string]PolicyDetail) error {
+	for indexName, pd := range listPolicy {
+		policyName := indexName + "_policy"
+
+		res, err := es.Client.XPackIlmGetLifecycle().Policy(policyName).Do(es.Ctx)
+		if err != nil {
+			if eerr, ok := err.(*elastic.Error); ok && eerr.Status == 404 {
+				// If policy doesn't exist, create one
+				return ApplyIlmPolicy(es.Ctx, es.Client, indexName, pd.policy)
+			}
+			return err
+		}
+
+		// If policy exists, check if it needs to be updated
+		currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
+		if err != nil {
+			return err
+		}
+		if currentMaxAge != pd.rolloverAge ||
+			currentMaxSize != pd.rolloverSize ||
+			currentMinAge != pd.deleteAge {
+			return ApplyIlmPolicy(es.Ctx, es.Client, indexName, pd.policy)
+		}
+	}
+	return nil
+}
+
+func (es *EsClient) GetClient() *elastic.Client {
+	return es.Client
+}
+
+func NewClient(client client.Client, ctx context.Context) (*elastic.Client, error) {
 	user, password, root, err := getClientCredentials(client, ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	h := &http.Client{
@@ -154,48 +181,124 @@ func (es *EsClient) NewElasticsearchClient(client client.Client, ctx context.Con
 
 	esClient, err := NewElastic(user, password, render.ElasticsearchHTTPSEndpoint, h)
 	if err != nil {
+		return nil, err
+	}
+
+	return esClient, nil
+}
+
+// policiesForIndicesWithMajorSpace returns PolicyDetail for ES index that consumes majority of disk
+// 70% of ES disk space is allocated to flows, dns and bgp logs
+// Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs.
+func policiesForIndicesWithMajorSpace(listPolicy map[string]PolicyDetail, totalEsStorage int64, ls *operatorv1.LogStorage) map[string]PolicyDetail {
+	pctOfTotalDisk := 0.7
+	diskAllocation := map[string]float64{
+		"tigera_secure_ee_flows": 0.9,
+		"tigera_secure_ee_dns":   0.05,
+		"tigera_secure_ee_bgp":   0.05,
+	}
+
+	for indexName, pct := range diskAllocation {
+		var retention int
+		switch indexName {
+		case "tigera_secure_ee_flows":
+			retention = int(*ls.Spec.Retention.Flows)
+		case "tigera_secure_ee_dns", "tigera_secure_ee_bgp":
+			// There is no option to set retention for dns and bgp log in LogStorage, set default values used by curator
+			retention = 8
+		}
+
+		pd := BuildIlmPolicy(totalEsStorage, pctOfTotalDisk, pct, retention)
+		listPolicy[indexName] = pd
+	}
+	return listPolicy
+}
+
+// policiesForIndicesWithMinorSpace returns PolicyDetail for ES index that does not consumes majority of disk
+// 10% of ES disk space is allocated to logs that are NOT flows, dns or bgp
+// Equally distribute 10% of the ES disk space among other log types
+func policiesForIndicesWithMinorSpace(listPolicy map[string]PolicyDetail, totalEsStorage int64, ls *operatorv1.LogStorage) map[string]PolicyDetail {
+	// numOfIndicesWithMinorSpace is the number of time series indices created that are not flows, dns or bgp related.
+	// i.e., audit_ee, audit_kube, compliance_reports, benchmark_results, events, snapshots
+	numOfIndicesWithMinorSpace := 6
+	pctOfTotalDisk := 0.1
+	pctOfDisk := pctOfTotalDisk / float64(numOfIndicesWithMinorSpace)
+	diskAllocationMinorLog := map[string]float64{
+		"tigera_secure_ee_audit_ee":           pctOfDisk,
+		"tigera_secure_ee_audit_kube":         pctOfDisk,
+		"tigera_secure_ee_snapshots":          pctOfDisk,
+		"tigera_secure_ee_benchmark_results":  pctOfDisk,
+		"tigera_secure_ee_compliance_reports": pctOfDisk,
+		"tigera_secure_ee_events":             pctOfDisk,
+	}
+
+	for indexName, pct := range diskAllocationMinorLog {
+		var retention int
+		switch indexName {
+		case "tigera_secure_ee_audit_ee", "tigera_secure_ee_audit_kube":
+			retention = int(*ls.Spec.Retention.AuditReports)
+		case "tigera_secure_ee_snapshots":
+			retention = int(*ls.Spec.Retention.Snapshots)
+		case "tigera_secure_ee_compliance_reports":
+			retention = int(*ls.Spec.Retention.ComplianceReports)
+		case "tigera_secure_ee_benchmark_results", "tigera_secure_ee_events":
+			// There is no option to set retention for benchmark and events log in LogStorage, set default values used by curator
+			retention = 91
+		}
+		pd := BuildIlmPolicy(totalEsStorage, pctOfTotalDisk, pct, retention)
+		listPolicy[indexName] = pd
+	}
+	return listPolicy
+}
+
+func BuildIlmPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOfDiskForLogType float64, retention int) PolicyDetail {
+	pd := PolicyDetail{}
+	pd.rolloverSize = CalculateRolloverSize(totalEsStorage, totalDiskPercentage, percentOfDiskForLogType)
+	pd.rolloverAge = CalculateRolloverAge(retention)
+	pd.deleteAge = fmt.Sprintf("%dd", retention)
+
+	pd.policy = map[string]interface{}{
+		"policy": map[string]interface{}{
+			"phases": map[string]interface{}{
+				"hot": map[string]interface{}{
+					"actions": map[string]interface{}{
+						"rollover": map[string]interface{}{
+							"max_size": pd.rolloverSize,
+							"max_age":  pd.rolloverAge,
+						},
+						"set_priority": map[string]interface{}{
+							"priority": 100,
+						},
+					},
+				},
+				"warm": map[string]interface{}{
+					"actions": map[string]interface{}{
+						"readonly": map[string]interface{}{},
+						"set_priority": map[string]interface{}{
+							"priority": 50,
+						},
+					},
+				},
+				"delete": map[string]interface{}{
+					"min_age": pd.deleteAge,
+					"actions": map[string]interface{}{
+						"delete": map[string]interface{}{},
+					},
+				},
+			},
+		},
+	}
+	return pd
+}
+
+func ApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, indexName string, policy map[string]interface{}) error {
+	policyName := indexName + "_policy"
+	_, err := esClient.XPackIlmPutLifecycle().Policy(policyName).BodyJson(policy).Do(ctx)
+	if err != nil {
+		log.Error(err, "Error applying Ilm Policy")
 		return err
 	}
-
-	es.client = esClient
 	return nil
-}
-
-// SetElasticsearchIlmPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
-func (es *EsClient) SetElasticsearchIlmPolicies(ctx context.Context, ls *operatorv1.LogStorage, totalEsStorage int64) error {
-	for _, v := range IndexDiskMapping {
-		for indexName, p := range v.IndexNameSize {
-			var retention int
-			switch indexName {
-			case "tigera_secure_ee_flows":
-				retention = int(*ls.Spec.Retention.Flows)
-			case "tigera_secure_ee_audit_ee", "tigera_secure_ee_audit_kube":
-				retention = int(*ls.Spec.Retention.AuditReports)
-			case "tigera_secure_ee_snapshots":
-				retention = int(*ls.Spec.Retention.Snapshots)
-			case "tigera_secure_ee_compliance_reports":
-				retention = int(*ls.Spec.Retention.ComplianceReports)
-			case "tigera_secure_ee_benchmark_results", "tigera_secure_ee_events":
-				// There is no option to set retention for benchmark and events log in LogStorage, set default values used by curator
-				retention = 91
-			case "tigera_secure_ee_dns", "tigera_secure_ee_bgp":
-				// There is no option to set retention for dns and bgp log in LogStorage, set default values used by curator
-				retention = 8
-			}
-
-			rolloverSize := CalculateRolloverSize(totalEsStorage, v.TotalDiskPercentage, p)
-			rolloverAge := CalculateRolloverAge(retention)
-
-			if err := BuildAndApplyIlmPolicy(ctx, es.client, retention, rolloverSize, rolloverAge, indexName); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (es *EsClient) GetElasticsearchClient() *elastic.Client {
-	return es.client
 }
 
 func NewElastic(user, password, url string, h *http.Client) (*elastic.Client, error) {
@@ -260,41 +363,6 @@ func CalculateRolloverAge(retention int) string {
 	return age
 }
 
-func BuildAndApplyIlmPolicy(ctx context.Context, esClient *elastic.Client, retention int, rolloverSize string, rolloverAge string, name string) error {
-	policyName := name + "_policy"
-
-	rollover := map[string]interface{}{
-		"max_size": rolloverSize,
-		"max_age":  rolloverAge,
-	}
-	minRetentionAge := fmt.Sprintf("%dd", retention)
-
-	newIlmPolicy := buildIlmPolicy(rollover, minRetentionAge)
-
-	res, err := esClient.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
-	if err != nil {
-		if eerr, ok := err.(*elastic.Error); ok && eerr.Status == 404 {
-			// If policy doesn't exist, create one
-			return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
-		}
-		return err
-	}
-
-	// If policy exists, check if needs to be updated
-	currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
-	if err != nil {
-		return err
-	}
-	if currentMaxAge != rollover["max_age"] ||
-		currentMaxSize != rollover["max_size"] ||
-		currentMinAge != minRetentionAge {
-		return applyIlmPolicy(ctx, esClient, name, newIlmPolicy)
-	}
-
-	// If there is an existing policy with latest retention, do nothing
-	return nil
-}
-
 func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}, esSecret); err != nil {
@@ -328,52 +396,6 @@ func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
 	return roots, nil
 }
 
-func buildIlmPolicy(rollover map[string]interface{}, minRetentionAge string) map[string]interface{} {
-	hotPriority := map[string]interface{}{
-		"priority": 100,
-	}
-	hotAction := make(map[string]interface{})
-	hotAction["rollover"] = rollover
-	hotAction["set_priority"] = hotPriority
-
-	warmPriority := map[string]interface{}{
-		"priority": 50,
-	}
-	warmAction := make(map[string]interface{})
-	warmAction["readonly"] = make(map[string]interface{})
-	warmAction["set_priority"] = warmPriority
-
-	deleteAction := make(map[string]interface{})
-	deleteAction["delete"] = make(map[string]interface{})
-
-	newPolicy := make(map[string]interface{})
-	newPolicy["policy"] = map[string]interface{}{
-		"phases": map[string]interface{}{
-			"hot": map[string]interface{}{
-				"actions": hotAction,
-			},
-			"warm": map[string]interface{}{
-				"actions": warmAction,
-			},
-			"delete": map[string]interface{}{
-				"min_age": minRetentionAge,
-				"actions": deleteAction,
-			},
-		},
-	}
-	return newPolicy
-}
-
-func applyIlmPolicy(ctx context.Context, esClient *elastic.Client, indexName string, policy map[string]interface{}) error {
-	policyName := indexName + "_policy"
-	_, err := esClient.XPackIlmPutLifecycle().Policy(policyName).BodyJson(policy).Do(ctx)
-	if err != nil {
-		log.Error(err, "Error applying Ilm Policy")
-		return err
-	}
-	return nil
-}
-
 func extractPolicyDetails(policy map[string]interface{}) (string, string, string, error) {
 	jsonPolicy, err := json.Marshal(policy)
 	if err != nil {
@@ -388,4 +410,15 @@ func extractPolicyDetails(policy map[string]interface{}) (string, string, string
 	currentMaxSize := existingPolicy.Phases.Hot.Actions.Rollover.MaxSize
 	currentMinAge := existingPolicy.Phases.Delete.MinAge
 	return currentMaxAge, currentMaxSize, currentMinAge, nil
+}
+
+func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {
+	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
+	var totalEsStorage = defaultStorage.Value()
+	if ls.Spec.Nodes.ResourceRequirements != nil {
+		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
+			totalEsStorage = val.Value()
+		}
+	}
+	return totalEsStorage
 }

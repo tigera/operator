@@ -157,12 +157,11 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("ClearDegraded")
 					})
 					It("tests that the ExternalService is setup with the default service name", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
-
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
-
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						svc := &corev1.Service{}
 						Expect(
 							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
@@ -178,9 +177,10 @@ var _ = Describe("LogStorage controller", func() {
 						}
 						resolvConfPath := dir + "/testdata/resolv.conf"
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath, &mockESClient{})
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath)
 						Expect(err).ShouldNot(HaveOccurred())
 
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
 
@@ -201,9 +201,10 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						result, err := r.Reconcile(reconcile.Request{})
 						Expect(result).Should(Equal(reconcile.Result{}))
 						Expect(err).ShouldNot(HaveOccurred())
@@ -218,7 +219,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
@@ -229,6 +230,7 @@ var _ = Describe("LogStorage controller", func() {
 						ls.SetFinalizers([]string{"tigera.io/eck-cleanup"})
 						Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
 
+						logstorage.SetElasticSearchClient(r, &mockESClient{})
 						result, err := r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(result).Should(Equal(reconcile.Result{}))
@@ -309,10 +311,11 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
+					logstorage.SetElasticSearchClient(r, &mockESClient{})
 					result, err := r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -396,10 +399,11 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
+					logstorage.SetElasticSearchClient(r, &mockESClient{})
 					result, err := r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
@@ -541,14 +545,10 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	).ShouldNot(HaveOccurred())
 }
 
-func (*mockESClient) NewElasticsearchClient(client.Client, context.Context) error {
+func (*mockESClient) SetILMPolicies(ls *operatorv1.LogStorage) error {
 	return nil
 }
 
-func (*mockESClient) SetElasticsearchIlmPolicies(context.Context, *operatorv1.LogStorage, int64) error {
-	return nil
-}
-
-func (*mockESClient) GetElasticsearchClient() *elastic.Client {
+func (*mockESClient) GetClient() *elastic.Client {
 	return &elastic.Client{}
 }

@@ -118,7 +118,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -180,9 +180,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -310,6 +307,67 @@ var _ = Describe("Node rendering tests", func() {
 		verifyProbes(ds, false, false)
 	})
 
+	It("should properly render an explicitly configured MTU", func() {
+		mtu := int32(1450)
+		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.Spec.CalicoNetwork.MTU = &mtu
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		resources, _ := component.Objects()
+
+		// Make sure the configmap is populated correctly with the MTU.
+		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*v1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 1450,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+          "type": "calico-ipam",
+          "assign_ipv4" : "true",
+          "assign_ipv6" : "false"
+      },
+      "container_settings": {
+          "allow_ip_forwarding": false
+      },
+      "policy": {
+          "type": "k8s"
+      },
+      "kubernetes": {
+          "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
+    },
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+
+		// Make sure daemonset has the MTU set as well.
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+
+		// Verify env
+		expectedNodeEnv := []v1.EnvVar{
+			{Name: "FELIX_IPINIPMTU", Value: "1450"},
+			{Name: "FELIX_VXLANMTU", Value: "1450"},
+			{Name: "FELIX_WIREGUARDMTU", Value: "1450"},
+		}
+		for _, e := range expectedNodeEnv {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(e))
+		}
+	})
+
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		expectedResources := []struct {
 			name    string
@@ -357,9 +415,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -458,7 +513,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -520,8 +575,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -701,8 +754,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -908,7 +959,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -970,8 +1021,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1150,8 +1199,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1338,9 +1385,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1437,9 +1481,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1894,7 +1935,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -1975,7 +2016,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2020,7 +2061,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2159,7 +2200,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2220,8 +2261,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},

@@ -337,7 +337,8 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 	}
 
 	// Determine MTU to use for veth interfaces.
-	var mtu int32 = 1410
+	// Zero means to use auto-detection.
+	var mtu int32 = 0
 	if m := getMTU(c.cr); m != nil {
 		mtu = *m
 	}
@@ -928,16 +929,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
 	// MTU of 1460.
-	ipipMtu := "1440"
-	vxlanMtu := "1410"
-	wireguardMtu := "1400"
-	if m := getMTU(c.cr); m != nil {
-		ipipMtu = strconv.Itoa(int(*m))
-		vxlanMtu = strconv.Itoa(int(*m))
-		wireguardMtu = strconv.Itoa(int(*m))
+	mtu := getMTU(c.cr)
+	if mtu != nil {
+		vxlanMtu := strconv.Itoa(int(*mtu))
+		wireguardMtu := strconv.Itoa(int(*mtu))
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 	}
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cr) {
@@ -959,7 +957,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	} else {
 		// BGP is enabled.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		if mtu != nil {
+			ipipMtu := strconv.Itoa(int(*mtu))
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		}
 	}
 
 	// IPv4 auto-detection configuration.

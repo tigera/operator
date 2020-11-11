@@ -337,9 +337,17 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 	}
 
 	// Determine MTU to use for veth interfaces.
-	var mtu int32 = 1410
+	// Zero means to use auto-detection.
+	var mtu int32 = 0
 	if m := getMTU(c.cr); m != nil {
 		mtu = *m
+	}
+
+	// Calico Enterprise doesn't do auto-MTU detection yet.
+	// If not specified, default it to the smallest value (wireguard) so that
+	// it will work in the most environments.
+	if c.cr.Spec.Variant == operatorv1.TigeraSecureEnterprise && mtu == 0 {
+		mtu = 1400
 	}
 
 	// Determine per-provider settings.
@@ -928,16 +936,19 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
 	// MTU of 1460.
-	ipipMtu := "1440"
-	vxlanMtu := "1410"
-	wireguardMtu := "1400"
-	if m := getMTU(c.cr); m != nil {
-		ipipMtu = strconv.Itoa(int(*m))
-		vxlanMtu = strconv.Itoa(int(*m))
-		wireguardMtu = strconv.Itoa(int(*m))
+	mtu := getMTU(c.cr)
+	if mtu != nil {
+		vxlanMtu := strconv.Itoa(int(*mtu))
+		wireguardMtu := strconv.Itoa(int(*mtu))
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+	} else if c.cr.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+		// Calico Enterprise does not yet support auto-MTU in this release.
+		v := int32(1440)
+		mtu = &v
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: "1410"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: "1400"})
 	}
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cr) {
@@ -959,7 +970,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	} else {
 		// BGP is enabled.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		if mtu != nil {
+			ipipMtu := strconv.Itoa(int(*mtu))
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		}
 	}
 
 	// IPv4 auto-detection configuration.

@@ -343,6 +343,13 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		mtu = *m
 	}
 
+	// Calico Enterprise doesn't do auto-MTU detection yet.
+	// If not specified, default it to the smallest value (wireguard) so that
+	// it will work in the most environments.
+	if c.cr.Spec.Variant == operatorv1.TigeraSecureEnterprise && mtu == 0 {
+		mtu = 1400
+	}
+
 	// Determine per-provider settings.
 	nodenameFileOptional := false
 	switch c.cr.Spec.KubernetesProvider {
@@ -935,6 +942,12 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		wireguardMtu := strconv.Itoa(int(*mtu))
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+	} else if c.cr.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+		// Calico Enterprise does not yet support auto-MTU in this release.
+		v := int32(1440)
+		mtu = &v
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: "1410"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: "1400"})
 	}
 
 	// Configure whether or not BGP should be enabled.

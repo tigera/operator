@@ -464,7 +464,13 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
+
+			// For enterprise, we also expect MTU vars.
+			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
+			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 		}
+
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
@@ -1528,6 +1534,11 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+
+			// For enterprise, we also expect MTU vars.
+			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
+			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},

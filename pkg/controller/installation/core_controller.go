@@ -877,7 +877,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
 		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
 		openshiftConfig.Status.NetworkType = "Calico"
-		openshiftConfig.Status.ClusterNetworkMTU = statusMTU
+
+		if statusMTU != 0 {
+			openshiftConfig.Status.ClusterNetworkMTU = statusMTU
+		} else if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+			// Enterprise doesn't support auto-MTU yet, so default this to a reasonable value that should
+			// work everywhere. Can be overridden by the user specifying an explicit MTU.
+			openshiftConfig.Status.ClusterNetworkMTU = 1400
+		}
 
 		if err = r.client.Patch(ctx, openshiftConfig, patchFrom); err != nil {
 			r.SetDegraded("Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))

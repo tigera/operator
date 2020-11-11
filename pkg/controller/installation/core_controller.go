@@ -590,8 +590,20 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// save off the base install before merging overrides, so we can write it back to the 'default' installation later.
-	base := instance
+	// Validate the configuration.
+	if err := validateCustomResource(instance); err != nil {
+		r.SetDegraded("Invalid Installation provided", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overrides', as those should only
+	// be stored in the 'overrides' resource.
+	if err := r.client.Update(ctx, instance); err != nil {
+		r.SetDegraded("Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	// update Installation with 'overrides'
 	overrides := operator.Installation{}
@@ -611,15 +623,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
 		r.SetDegraded("Invalid Installation provided", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overrides', as those should only
-	// be stored in the 'overrides' resource.
-	if err := r.client.Update(ctx, base); err != nil {
-		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -913,8 +916,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Write updated status.
-	instance.Status.MTU = int32(statusMTU)
-	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.InstallationSpec = instance.Spec
+	m := int32(statusMTU)
+	instance.Status.CalicoNetwork.MTU = &m
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

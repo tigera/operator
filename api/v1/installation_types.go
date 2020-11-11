@@ -450,13 +450,8 @@ type CNISpec struct {
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {
-	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
-	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
-	Variant ProductVariant `json:"variant,omitempty"`
-
-	// MTU is the most recently observed value for pod network MTU. This may be an explicitly
-	// configured value, or based on Calico's native auto-detetion.
-	MTU int32 `json:"mtu,omitempty"`
+	// +optional
+	InstallationSpec `json:"status"`
 }
 
 // +kubebuilder:object:root=true

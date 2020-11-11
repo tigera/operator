@@ -67,7 +67,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
 	localDNS, err := getLocalDNSName(resolvConfPath)
 	if err != nil {
 		localDNS = defaultLocalDNS
@@ -89,6 +89,7 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 		status:   statusMgr,
 		provider: provider,
 		localDNS: localDNS,
+		esClient: esClient,
 	}
 
 	c.status.Run()
@@ -242,6 +243,7 @@ type ReconcileLogStorage struct {
 	status   status.StatusManager
 	provider operatorv1.Provider
 	localDNS string
+	esClient utils.ElasticClient
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -539,6 +541,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
+		}
+
+		// ES should be in ready phase when execution reaches here, apply ILM polices
+		if err = r.esClient.SetILMPolicies(r.client, ctx, ls); err != nil {
+			log.Error(err, "Waiting for ES ILM policies and templates to get created")
+			r.status.SetDegraded("Waiting for ES ILM policies and templates to get created", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 

@@ -916,9 +916,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Write updated status.
-	instance.Status.InstallationSpec = instance.Spec
-	m := int32(statusMTU)
-	instance.Status.CalicoNetwork.MTU = &m
+	instance.Status = operator.InstallationStatus{
+		Variant:          instance.Spec.Variant,
+		ImagePath:        instance.Spec.ImagePath,
+		ImagePullSecrets: instance.Spec.ImagePullSecrets,
+		MTU:              int32(statusMTU),
+		Registry:         instance.Spec.Registry,
+	}
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

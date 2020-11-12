@@ -396,12 +396,42 @@ spec:
             description: Most recently observed state for the Calico or Calico Enterprise
               installation.
             properties:
+              imagePath:
+                description: "ImagePath allows for the path part of an image to be
+                  specified. If specified then the specified value will be used as
+                  the image path for each image. If not specified or empty, the default
+                  for each image will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                  \n This option allows configuring the `<imagePath>` portion of the
+                  above format."
+                type: string
+              imagePullSecrets:
+                description: ImagePullSecrets is an array of references to container
+                  registry pull secrets to use. These are applied to all images to
+                  be pulled.
+                items:
+                  description: LocalObjectReference contains enough information to
+                    let you locate the referenced object inside the same namespace.
+                  properties:
+                    name:
+                      description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        TODO: Add other useful fields. apiVersion, kind, uid?'
+                      type: string
+                  type: object
+                type: array
               mtu:
                 description: MTU is the most recently observed value for pod network
                   MTU. This may be an explicitly configured value, or based on Calico's
                   native auto-detetion.
                 format: int32
                 type: integer
+              registry:
+                description: "Registry is the default Docker registry used for component
+                  Docker images. If specified, all images will be pulled from this
+                  registry. If not specified then the default registries will be used.
+                  \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                  \n This option allows configuring the `<registry>` portion of the
+                  above format."
+                type: string
               variant:
                 description: Variant is the most recently observed installed variant
                   - one of Calico or TigeraSecureEnterprise

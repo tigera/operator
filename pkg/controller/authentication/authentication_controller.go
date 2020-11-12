@@ -162,7 +162,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if installationCR.Status.Variant != oprv1.TigeraSecureEnterprise {
+	if installationCR.Status.Computed.Variant != oprv1.TigeraSecureEnterprise {
 		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil

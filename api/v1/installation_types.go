@@ -450,40 +450,8 @@ type CNISpec struct {
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {
-	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
-	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
-	Variant ProductVariant `json:"variant,omitempty"`
-
-	// Registry is the default Docker registry used for component Docker images. If specified,
-	// all images will be pulled from this registry. If not specified then the default registries
-	// will be used.
-	//
-	// Image format:
-	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
-	//
-	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
-	Registry string `json:"registry,omitempty"`
-
-	// ImagePath allows for the path part of an image to be specified. If specified
-	// then the specified value will be used as the image path for each image. If not specified
-	// or empty, the default for each image will be used.
-	//
-	// Image format:
-	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
-	//
-	// This option allows configuring the `<imagePath>` portion of the above format.
-	// +optional
-	ImagePath string `json:"imagePath,omitempty"`
-
-	// ImagePullSecrets is an array of references to container registry pull secrets to use. These are
-	// applied to all images to be pulled.
-	// +optional
-	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-
-	// MTU is the most recently observed value for pod network MTU. This may be an explicitly
-	// configured value, or based on Calico's native auto-detetion.
-	MTU int32 `json:"mtu,omitempty"`
+	Computed *InstallationSpec `json:"computed,omitempty"`
 }
 
 // +kubebuilder:object:root=true

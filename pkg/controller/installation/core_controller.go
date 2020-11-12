@@ -246,7 +246,10 @@ func GetInstallation(ctx context.Context, client client.Client) (*operator.Insta
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	return instance, err
+	// TODO: have this function _just_ return a spec, not the full installation.
+	return &operator.Installation{
+		Spec: *instance.Status.Computed,
+	}, err
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -631,7 +634,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.migrationChecked = true
 
 	// A status is needed at this point for operator scorecard tests.
-	// status.variant is written later but for some tests the reconciliation
+	// status.computedSpec.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
 		instance.Status = operator.InstallationStatus{}
@@ -916,13 +919,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Write updated status.
-	instance.Status = operator.InstallationStatus{
-		Variant:          instance.Spec.Variant,
-		ImagePath:        instance.Spec.ImagePath,
-		ImagePullSecrets: instance.Spec.ImagePullSecrets,
-		MTU:              int32(statusMTU),
-		Registry:         instance.Spec.Registry,
-	}
+	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

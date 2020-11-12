@@ -503,10 +503,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
-			InitContainers:   initContainers,
-			Containers:       []corev1.Container{esContainer},
-			ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
-			NodeSelector:     es.logStorage.Spec.DataNodeSelector,
+			InitContainers:     initContainers,
+			Containers:         []corev1.Container{esContainer},
+			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
+			ServiceAccountName: "tigera-elasticsearch",
 		},
 	}
 
@@ -606,8 +607,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 					},
 				},
 			},
-			NodeSets:           es.nodeSets(),
-			ServiceAccountName: "tigera-elasticsearch",
+			NodeSets: es.nodeSets(),
 		},
 	}
 
@@ -988,11 +988,11 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("1"),
-								"memory": resource.MustParse("150Mi"),
+								"memory": resource.MustParse("512Mi"),
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),
-								"memory": resource.MustParse("50Mi"),
+								"memory": resource.MustParse("512Mi"),
 							},
 						},
 						Ports: []corev1.ContainerPort{{
@@ -1065,9 +1065,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			},
 		},
 		Spec: kbv1.KibanaSpec{
-			Version:            components.ComponentEckKibana.Version,
-			Image:              components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
-			ServiceAccountName: "tigera-kibana",
+			Version: components.ComponentEckKibana.Version,
+			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 			Config: &cmnv1.Config{
 				Data: config,
 			},
@@ -1092,7 +1091,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					},
 				},
 				Spec: corev1.PodSpec{
-					ImagePullSecrets: getImagePullSecretReferenceList(es.pullSecrets),
+					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					ServiceAccountName: "tigera-kibana",
 					Containers: []corev1.Container{{
 						Name: "kibana",
 						ReadinessProbe: &corev1.Probe{

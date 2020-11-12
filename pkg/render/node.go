@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -183,12 +184,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Used to discover Typha endpoints and service IPs for advertisement.
 				APIGroups: []string{""},
 				Resources: []string{"endpoints", "services"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
-				// Used when configuring bgp password in bgppeer
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
@@ -788,7 +783,16 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	}
 
 	if c.birdTemplates != nil {
+		// create a volume mount for each bird template, but sort them alphabetically first,
+		// otherwise, since map iteration is random, they'll be added to the list of volumes in a random order,
+		// which will cause another reconciliation event when calico-node is updated.
+		sortedKeys := []string{}
 		for k := range c.birdTemplates {
+			sortedKeys = append(sortedKeys, k)
+		}
+		sort.Strings(sortedKeys)
+
+		for _, k := range sortedKeys {
 			nodeVolumeMounts = append(nodeVolumeMounts,
 				v1.VolumeMount{
 					Name:      "bird-templates",
@@ -1086,18 +1090,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 
+	// For Openshift, we need a different port since our default port is already in use.
 	if c.cr.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		// For Openshift, we need special configuration since our default port is already in use.
-		// Additionally, since the node readiness probe doesn't yet support
-		// custom ports, we need to disable felix readiness for now.
 		livenessPort = intstr.FromInt(9199)
-
-		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-			readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-bgp-metrics-ready"}
-		} else {
-			readinessCmd = []string{"/bin/calico-node", "-bird-ready"}
-		}
 	}
+
 	lp := &v1.Probe{
 		Handler: v1.Handler{
 			HTTPGet: &v1.HTTPGetAction{

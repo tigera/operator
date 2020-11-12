@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is here so that we can export a constructor to be used by the tests in the logstorage_test package, but since
+// This file is here so that we can set a dummy elastic client to be used by the tests, since
 // this is an _test file it will only be available for when running tests.
-package logstorage
+package utils
 
 import (
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"net/http"
+
+	"github.com/olivere/elastic/v7"
+	. "github.com/onsi/gomega"
 )
 
-func NewReconcilerWithShims(
-	cli client.Client,
-	schema *runtime.Scheme,
-	status status.StatusManager,
-	provider operatorv1.Provider,
-	resolvConfPath string,
-	esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
+func NewElasticClientShims(h *http.Client, url string) esClient {
+	options := []elastic.ClientOptionFunc{
+		elastic.SetHttpClient(h),
+		elastic.SetURL(url),
+		elastic.SetSniff(false),
+	}
+	client, err := elastic.NewClient(options...)
+	Expect(err).To(BeNil())
 
-	return newReconciler(cli, schema, status, resolvConfPath, provider, esClient)
+	ecl := esClient{}
+	ecl.client = client
+	return ecl
 }

@@ -44,7 +44,7 @@ func IntrusionDetection(
 	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
-	installation *operator.Installation,
+	installation *operator.InstallationSpec,
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,

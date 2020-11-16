@@ -242,14 +242,18 @@ type ReconcileInstallation struct {
 }
 
 // GetInstallation returns the current installation resource.
-func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
+func GetInstallation(ctx context.Context, client client.Client) (*operator.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
-	instance := &operator.Installation{}
-	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	// TODO: have this function _just_ return a spec, not the full installation.
-	return &operator.Installation{
-		Spec: *instance.Status.Computed,
-	}, err
+	instance := operator.Installation{}
+	if err := client.Get(ctx, utils.DefaultInstanceKey, &instance); err != nil {
+		return nil, err
+	}
+	if instance.Status.Computed != nil {
+		return instance.Status.Computed, nil
+	}
+
+	return &instance.Spec, nil
+	// TODO: have this function _just_ return a spec, not the full installation?
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -690,7 +694,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err

@@ -126,7 +126,7 @@ echo "Keystore initialization successful."
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,

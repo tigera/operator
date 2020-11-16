@@ -45,7 +45,7 @@ func Guardian(
 	url string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 	tunnelSecret *corev1.Secret,
 ) Component {
 	return &GuardianComponent{

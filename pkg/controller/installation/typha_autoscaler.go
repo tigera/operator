@@ -17,20 +17,18 @@ package installation
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/tigera/operator/pkg/controller/status"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
-	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"time"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 var typhaLog = logf.Log.WithName("typha_autoscaler")
@@ -83,29 +81,6 @@ func newTyphaAutoscaler(client client.Client, statusManager status.StatusManager
 		option(ta)
 	}
 	return ta
-}
-
-// getExpectedReplicas gets the number of replicas expected for a given node number.
-func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
-	switch {
-	case nodes <= 1:
-		return 1
-	case nodes <= 2:
-		return 2
-	case nodes <= 3:
-		return 3
-	case nodes <= 250:
-		return 4
-	case nodes <= 500:
-		return 5
-	case nodes <= 1000:
-		return 6
-	case nodes <= 1500:
-		return 7
-	case nodes <= 2000:
-		return 8
-	}
-	return 10
 }
 
 // start starts the Typha autoscaler, updating the Typha deployment's replica count every sync period. The triggerRunChan
@@ -179,7 +154,7 @@ func (t *typhaAutoscaler) autoscaleReplicas() error {
 	if err != nil {
 		return fmt.Errorf("could not get number of nodes: %w", err)
 	}
-	expectedReplicas := t.getExpectedReplicas(allSchedulableNodes)
+	expectedReplicas := utils.GetExpectedTyphaScale(allSchedulableNodes)
 	if linuxNodes < expectedReplicas {
 		return fmt.Errorf("not enough linux nodes to schedule typha pods on, require %d and have %d", expectedReplicas, linuxNodes)
 	}

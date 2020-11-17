@@ -459,12 +459,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
-	// create the ComponentHandler from the installationCR
+	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
 	if ls != nil {
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	} else {
-		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
+		hdler = utils.NewComponentHandler(log, r.client, r.scheme, managementClusterConnection)
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.

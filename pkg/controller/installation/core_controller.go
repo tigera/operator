@@ -242,11 +242,18 @@ type ReconcileInstallation struct {
 }
 
 // GetInstallation returns the current installation resource.
-func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
+func GetInstallation(ctx context.Context, client client.Client) (*operator.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	return instance, err
+
+	// merge status in
+	instance.Spec.Variant = instance.Status.Variant
+	if instance.Spec.CalicoNetwork != nil && instance.Status.MTU != 0 {
+		instance.Spec.CalicoNetwork.MTU = &instance.Status.MTU
+	}
+
+	return &instance.Spec, err
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -666,7 +673,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -799,7 +806,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
-		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance)
+		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance.Spec)
 		if err != nil {
 			// If there is a problem rendering this do not degrade or stop rendering
 			// anything else.

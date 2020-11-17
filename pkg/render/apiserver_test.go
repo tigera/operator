@@ -36,13 +36,11 @@ import (
 )
 
 var _ = Describe("API server rendering tests", func() {
-	var instance *operator.Installation
+	var instance *operator.InstallationSpec
 	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Address: "example.com:1234"}}
 	BeforeEach(func() {
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				Registry: "testregistry.com/",
-			},
+		instance = &operator.InstallationSpec{
+			Registry: "testregistry.com/",
 		}
 	})
 
@@ -358,7 +356,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()

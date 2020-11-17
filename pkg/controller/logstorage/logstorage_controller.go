@@ -26,7 +26,6 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -316,8 +315,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.OnCRFound()
 	}
 
-	installationCR, err := installation.GetInstallation(context.Background(), r.client)
-	if err != nil {
+	// Get the Installation. Unlike most of the other controllers, we explicitly get the full installation resource
+	// so that we can use it as an ownerref on our created resources in MCM mode since a logstorage CR will not exist
+	// in those cases.
+	installationCR := &operatorv1.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, installationCR); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, err
@@ -362,7 +364,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR.Status.Computed, r.client)
 	if err != nil {
 		log.Error(err, "error retrieving pull secrets")
 		r.status.SetDegraded("An error occurring while retrieving the pull secrets", err.Error())
@@ -499,7 +501,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	component := render.LogStorage(
 		ls,
-		installationCR,
+		installationCR.Status.Computed,
 		managementCluster,
 		managementClusterConnection,
 		elasticsearch,

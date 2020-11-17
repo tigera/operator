@@ -158,7 +158,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if network.Status.Computed.Variant != operatorv1.TigeraSecureEnterprise {
+	if network.Variant != operatorv1.TigeraSecureEnterprise {
 		r.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), fmt.Errorf(""), reqLogger)
 		return reconcile.Result{}, nil
 	}

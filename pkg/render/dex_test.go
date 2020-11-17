@@ -20,11 +20,9 @@ var _ = Describe("dex rendering tests", func() {
 				pullSecretName = "tigera-pull-secret"
 			)
 
-			installation := &operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderNone,
-					Registry:           "testregistry.com/",
-				},
+			installation := &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
 			}
 
 			tlsSecret := render.CreateDexTLSSecret()

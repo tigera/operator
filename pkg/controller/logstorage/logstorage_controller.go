@@ -316,6 +316,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.OnCRFound()
 	}
 
+	// Get the Installation. Unlike most of the other controllers, we explicitly get the full installation resource
+	// so that we can use it as an ownerref on our created resources in MCM mode since a logstorage CR will not exist
+	// in those cases.
 	installationCR, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -348,7 +351,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
-	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	if installationCR.Variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	} else if ls == nil && managementClusterConnection == nil {
@@ -499,7 +502,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	component := render.LogStorage(
 		ls,
-		installationCR,
+		*installationCR,
 		managementCluster,
 		managementClusterConnection,
 		elasticsearch,

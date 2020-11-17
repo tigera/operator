@@ -139,6 +139,12 @@ func Calico(
 		tss = append(tss, managerInternalTLSSecret)
 	}
 
+	nodeAppArmorProfile := ""
+	a := cr.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
+		nodeAppArmorProfile = val
+	}
+
 	return calicoRenderer{
 		k8sServiceEp:                k8sServiceEp,
 		installation:                cr,
@@ -155,6 +161,7 @@ func Calico(
 		amazonCloudInt:              aci,
 		upgrade:                     up,
 		authentication:              authentication,
+		nodeAppArmorProfile:         nodeAppArmorProfile,
 	}, nil
 }
 
@@ -230,6 +237,7 @@ type calicoRenderer struct {
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
 	authentication              *operator.Authentication
+	nodeAppArmorProfile         string
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -239,7 +247,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile))
 	components = appendNotNil(components, KubeControllers(r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }

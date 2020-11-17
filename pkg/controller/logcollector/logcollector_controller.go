@@ -319,7 +319,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	if installation.Spec.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {

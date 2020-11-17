@@ -45,7 +45,7 @@ const (
 func Dex(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *oprv1.Installation,
+	installation *oprv1.InstallationSpec,
 	dexConfig DexConfig,
 ) Component {
 
@@ -62,7 +62,7 @@ type dexComponent struct {
 	dexConfig    DexConfig
 	pullSecrets  []*corev1.Secret
 	openshift    bool
-	installation *oprv1.Installation
+	installation *oprv1.InstallationSpec
 	connector    map[string]interface{}
 }
 
@@ -170,7 +170,7 @@ func (c *dexComponent) deployment() runtime.Object {
 					Annotations: c.dexConfig.RequiredAnnotations(),
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       c.installation.Spec.ControlPlaneNodeSelector,
+					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
 					Tolerations: []corev1.Toleration{
 						{
@@ -185,7 +185,7 @@ func (c *dexComponent) deployment() runtime.Object {
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,
-							Image:           components.GetReference(components.ComponentDex, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+							Image:           components.GetReference(components.ComponentDex, c.installation.Registry, c.installation.ImagePath),
 							Env:             c.dexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
 							SecurityContext: securityContext(),

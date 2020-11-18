@@ -144,9 +144,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				resultES := GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 
-				// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
+				// There are no node selectors in the LogStorage CR, so we expect only the automatically added linux nodeselector.
 				nodeSet := resultES.Spec.NodeSets[0]
-				Expect(nodeSet.PodTemplate.Spec.NodeSelector).To(BeEmpty())
+				Expect(nodeSet.PodTemplate.Spec.NodeSelector).To(Equal(map[string]string{"kubernetes.io/os": "linux"}))
 
 				// Verify that an initContainer is added
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
@@ -434,8 +434,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			// Verify that the node selectors are passed into the Elasticsearch pod spec.
 			createResources, _ := component.Objects()
 			nodeSelectors := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
-			Expect(nodeSelectors["k1"]).To(Equal("v1"))
-			Expect(nodeSelectors["k2"]).To(Equal("v2"))
+			Expect(nodeSelectors).To(Equal(map[string]string{
+				"k1":               "v1",
+				"k2":               "v2",
+				"kubernetes.io/os": "linux",
+			}))
 		})
 
 		It("should run as host network on EKS with Calico CNI", func() {

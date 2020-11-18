@@ -63,6 +63,8 @@ import (
 
 var k8sEndpoint render.K8sServiceEndpoint
 
+const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
+
 func init() {
 	// We read whatever is in the variable. We would read "" if they were not set.
 	// We decide at the point of usage what to do with the values.
@@ -769,6 +771,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	nodeAppArmorProfile := ""
+	a := instance.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
+		nodeAppArmorProfile = val
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -788,6 +796,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
+		nodeAppArmorProfile,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

@@ -503,6 +503,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.dexCfg != nil {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
+
+	// add linux nodeSelector
+	nodeSel := map[string]string{}
+	if es.logStorage.Spec.DataNodeSelector != nil {
+		nodeSel = es.logStorage.Spec.DataNodeSelector
+	}
+	nodeSel["kubernetes.io/os"] = "linux"
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -511,7 +519,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
 			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
-			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
+			NodeSelector:       nodeSel,
 			ServiceAccountName: "tigera-elasticsearch",
 			Volumes:            volumes,
 		},
@@ -989,6 +997,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					HostNetwork:        hostNetwork,
+					NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
 						Name:  "manager",
@@ -1123,6 +1132,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 					ServiceAccountName: "tigera-kibana",
 					Containers: []corev1.Container{{
 						Name: "kibana",
@@ -1200,6 +1210,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
 							ServiceAccountName: EsCuratorServiceAccount,
+							NodeSelector:       map[string]string{"kubernetes.io/os": "linux"},
 						}),
 					},
 				},

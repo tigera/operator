@@ -165,6 +165,17 @@ var _ = Describe("Rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
+
+	It("should render calico with a seccomp if annotation is present in installation", func() {
+		seccompProf := "foobar"
+		instance.ObjectMeta.Annotations = map[string]string{
+			"tech-preview.operator.tigera.io/node-apparmor-profile": seccompProf,
+		}
+
+		_, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		// TODO: get the rendered calico-node resource and assert it's seccomp is set correctly
+	})
 })
 
 func componentCount(components []render.Component) int {

@@ -165,6 +165,28 @@ var _ = Describe("Rendering tests", func() {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
+
+	It("should render calico with a apparmor profile if annotation is present in installation", func() {
+		apparmorProf := "foobar"
+		instance.ObjectMeta.Annotations = map[string]string{
+			"tech-preview.operator.tigera.io/node-apparmor-profile": apparmorProf,
+		}
+
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		comps := r.Render()
+		var cn *appsv1.DaemonSet
+		for _, comp := range comps {
+			resources, _ := comp.Objects()
+			r := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			if r != nil {
+				cn = r.(*appsv1.DaemonSet)
+				break
+			}
+		}
+		Expect(cn).ToNot(BeNil())
+		Expect(cn.Spec.Template.ObjectMeta.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(apparmorProf))
+	})
 })
 
 func componentCount(components []render.Component) int {

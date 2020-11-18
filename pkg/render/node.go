@@ -62,24 +62,27 @@ func Node(
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
+	nodeAppArmorProfile string,
 ) Component {
 	return &nodeComponent{
-		k8sServiceEp:    k8sServiceEp,
-		cr:              cr,
-		birdTemplates:   bt,
-		typhaNodeTLS:    tnTLS,
-		amazonCloudInt:  aci,
-		migrationNeeded: migrate,
+		k8sServiceEp:        k8sServiceEp,
+		cr:                  cr,
+		birdTemplates:       bt,
+		typhaNodeTLS:        tnTLS,
+		amazonCloudInt:      aci,
+		migrationNeeded:     migrate,
+		nodeAppArmorProfile: nodeAppArmorProfile,
 	}
 }
 
 type nodeComponent struct {
-	k8sServiceEp    K8sServiceEndpoint
-	cr              *operator.Installation
-	birdTemplates   map[string]string
-	typhaNodeTLS    *TyphaNodeTLS
-	amazonCloudInt  *operator.AmazonCloudIntegration
-	migrationNeeded bool
+	k8sServiceEp        K8sServiceEndpoint
+	cr                  *operator.Installation
+	birdTemplates       map[string]string
+	typhaNodeTLS        *TyphaNodeTLS
+	amazonCloudInt      *operator.AmazonCloudIntegration
+	migrationNeeded     bool
+	nodeAppArmorProfile string
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {
@@ -500,10 +503,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	}
 
 	// check tech preview annotation for calico-node apparmor profile
-	a := c.cr.GetObjectMeta().GetAnnotations()
-	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
-		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = val
-
+	if c.nodeAppArmorProfile != "" {
+		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
 	initContainers := []v1.Container{}

@@ -80,7 +80,7 @@ func Calico(
 	up bool,
 ) (Renderer, error) {
 	// check for variant override in the status field
-	if cr.Status.Variant == operator.TigeraSecureEnterprise {
+	if cr.Status.Computed != nil && cr.Status.Computed.Variant == operator.TigeraSecureEnterprise {
 		cr.Spec.Variant = operator.TigeraSecureEnterprise
 	}
 

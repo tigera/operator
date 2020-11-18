@@ -44,6 +44,7 @@ const (
 )
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
+var OverridesInstanceKey = client.ObjectKey{Name: "overrides"}
 var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.

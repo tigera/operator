@@ -255,7 +255,12 @@ func GetInstallation(ctx context.Context, client client.Client) (*operator.Insta
 	// in the status resource.
 	// Note that we don't need to merge data from the spec field because it basically already is for our purposes, since
 	// spec.computed isn't written until Installation has made it to that point.
-	return instance.Status.Computed, nil
+	// However we do run a nil check on Computed only because historically, this function never should return nil
+	// TODO: change to return reference instead of pointer
+	if instance.Status.Computed != nil {
+		return instance.Status.Computed, nil
+	}
+	return &operator.InstallationSpec{}, nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -645,7 +650,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// status.computedSpec.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
-		instance.Status = operator.InstallationStatus{}
+		instance.Status = operator.InstallationStatus{
+			Computed: &operator.InstallationSpec{},
+		}
 		if err := r.client.Status().Update(ctx, instance); err != nil {
 			r.SetDegraded("Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err

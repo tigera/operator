@@ -44,7 +44,7 @@ func IntrusionDetection(
 	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
-	installation *operator.Installation,
+	installation *operator.InstallationSpec,
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -64,7 +64,7 @@ type intrusionDetectionComponent struct {
 	lc               *operatorv1.LogCollector
 	esSecrets        []*corev1.Secret
 	kibanaCertSecret *corev1.Secret
-	installation     *operator.Installation
+	installation     *operator.InstallationSpec
 	esClusterConfig  *ElasticsearchClusterConfig
 	pullSecrets      []*corev1.Secret
 	openshift        bool
@@ -151,7 +151,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.installation.Registry, c.installation.ImagePath),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -401,7 +401,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 
 	return corev1.Container{
 		Name:  "controller",
-		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.installation.Registry, c.installation.ImagePath),
 		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{

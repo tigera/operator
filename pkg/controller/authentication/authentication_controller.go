@@ -247,7 +247,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	component := render.Dex(
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
-		&installationCR.Spec,
+		installationCR.Status.Computed,
 		dexCfg,
 	)
 

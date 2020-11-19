@@ -78,8 +78,8 @@ func Calico(
 	p operator.Provider,
 	aci *operator.AmazonCloudIntegration,
 	up bool,
+	nodeAppArmorProfile string,
 ) (Renderer, error) {
-
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
 
@@ -141,7 +141,7 @@ func Calico(
 
 	return calicoRenderer{
 		k8sServiceEp:                k8sServiceEp,
-		installation:                cr,
+		installation:                cr.Spec,
 		logStorageExists:            logStorageExists,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
@@ -155,6 +155,7 @@ func Calico(
 		amazonCloudInt:              aci,
 		upgrade:                     up,
 		authentication:              authentication,
+		nodeAppArmorProfile:         nodeAppArmorProfile,
 	}, nil
 }
 
@@ -216,7 +217,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	k8sServiceEp                K8sServiceEndpoint
-	installation                *operator.Installation
+	installation                operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
@@ -230,6 +231,7 @@ type calicoRenderer struct {
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
 	authentication              *operator.Authentication
+	nodeAppArmorProfile         string
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -239,7 +241,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile))
 	components = appendNotNil(components, KubeControllers(r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }

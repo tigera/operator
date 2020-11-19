@@ -255,7 +255,10 @@ func GetInstallation(ctx context.Context, client client.Client) (*operator.Insta
 	// in the status resource.
 	// Note that we don't need to merge data from the spec field because it basically already is for our purposes, since
 	// spec.computed isn't written until Installation has made it to that point.
-	return instance.Status.Computed, nil
+	if instance.Status.Computed != nil {
+		return instance.Status.Computed, nil
+	}
+	return &operator.InstallationSpec{}, nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.

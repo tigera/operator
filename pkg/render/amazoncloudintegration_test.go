@@ -35,7 +35,7 @@ const (
 var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	var instance *operator.AmazonCloudIntegration
 	var credential *render.AmazonCredential
-	var installation *operator.Installation
+	var installation *operator.InstallationSpec
 
 	BeforeEach(func() {
 		instance = &operator.AmazonCloudIntegration{
@@ -56,7 +56,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			KeySecret: []byte("KeySecret"),
 		}
 
-		installation = &operator.Installation{Spec: operator.InstallationSpec{}}
+		installation = &operator.InstallationSpec{}
 	})
 
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {

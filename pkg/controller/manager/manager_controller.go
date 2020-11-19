@@ -398,7 +398,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		tlsSecret,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
-		installation,
+		&installation.Spec,
 		managementCluster,
 		tunnelSecret,
 		internalTrafficSecret,

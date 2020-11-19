@@ -24,9 +24,9 @@ import (
 )
 
 var _ = Describe("Namespace rendering tests", func() {
-	var installation *v1.Installation
+	var installation *v1.InstallationSpec
 	BeforeEach(func() {
-		installation = &v1.Installation{Spec: v1.InstallationSpec{Variant: v1.Calico, KubernetesProvider: v1.ProviderNone}}
+		installation = &v1.InstallationSpec{Variant: v1.Calico, KubernetesProvider: v1.ProviderNone}
 	})
 
 	It("should render a namespace", func() {
@@ -41,7 +41,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for openshift", func() {
-		installation.Spec.KubernetesProvider = v1.ProviderOpenShift
+		installation.KubernetesProvider = v1.ProviderOpenShift
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
@@ -52,7 +52,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for tigera-dex on EE", func() {
-		installation.Spec.Variant = v1.TigeraSecureEnterprise
+		installation.Variant = v1.TigeraSecureEnterprise
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
@@ -64,8 +64,8 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for tigera-dex for openshift on EE", func() {
-		installation.Spec.Variant = v1.TigeraSecureEnterprise
-		installation.Spec.KubernetesProvider = v1.ProviderOpenShift
+		installation.Variant = v1.TigeraSecureEnterprise
+		installation.KubernetesProvider = v1.ProviderOpenShift
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))

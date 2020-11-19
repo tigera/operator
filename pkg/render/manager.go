@@ -77,7 +77,7 @@ func Manager(
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *operator.Installation,
+	installation *operator.InstallationSpec,
 	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
@@ -142,7 +142,7 @@ type managerComponent struct {
 	tlsAnnotations             map[string]string
 	pullSecrets                []*corev1.Secret
 	openshift                  bool
-	installation               *operator.Installation
+	installation               *operator.InstallationSpec
 	managementCluster          *operator.ManagementCluster
 }
 
@@ -403,7 +403,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
-		Image:           components.GetReference(components.ComponentManager, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image:           components.GetReference(components.ComponentManager, c.installation.Registry, c.installation.ImagePath),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
@@ -446,7 +446,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           components.GetReference(components.ComponentManagerProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image:           components.GetReference(components.ComponentManagerProxy, c.installation.Registry, c.installation.ImagePath),
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
@@ -488,7 +488,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "tigera-es-proxy",
-		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Registry, c.installation.ImagePath),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 		Env:             env,

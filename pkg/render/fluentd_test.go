@@ -28,17 +28,15 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var s3Creds *render.S3Credential
 	var filters *render.FluentdFilters
 	var eksConfig *render.EksCloudwatchLogConfig
-	var installation *operatorv1.Installation
+	var installation *operatorv1.InstallationSpec
 	var esConfigMap *render.ElasticsearchClusterConfig
 	var splkCreds *render.SplunkCredential
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		instance = &operatorv1.LogCollector{}
-		installation = &operatorv1.Installation{
-			Spec: operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-			},
+		installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderNone,
 		}
 		s3Creds = nil
 		filters = nil
@@ -480,10 +478,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
 			FetchInterval: fetchInterval,
 		}
-		installation = &operatorv1.Installation{
-			Spec: operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderEKS,
-			},
+		installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderEKS,
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()

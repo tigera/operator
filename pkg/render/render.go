@@ -79,6 +79,10 @@ func Calico(
 	aci *operator.AmazonCloudIntegration,
 	up bool,
 ) (Renderer, error) {
+	// check for variant override in the status field
+	if cr.Status.Variant == operator.TigeraSecureEnterprise {
+		cr.Spec.Variant = operator.TigeraSecureEnterprise
+	}
 
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
@@ -147,7 +151,7 @@ func Calico(
 
 	return calicoRenderer{
 		k8sServiceEp:                k8sServiceEp,
-		installation:                cr,
+		installation:                cr.Spec,
 		logStorageExists:            logStorageExists,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
@@ -223,7 +227,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	k8sServiceEp                K8sServiceEndpoint
-	installation                *operator.Installation
+	installation                operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection

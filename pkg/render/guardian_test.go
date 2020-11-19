@@ -54,7 +54,7 @@ var _ = Describe("Rendering tests", func() {
 				},
 			}},
 			false,
-			&operator.Installation{Spec: operator.InstallationSpec{Registry: "my-reg/"}},
+			&operator.InstallationSpec{Registry: "my-reg/"},
 			secret,
 		)
 		resources, _ = g.Objects()

@@ -36,7 +36,7 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
+func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 	return &amazonCloudIntegrationComponent{
 		amazonCloudIntegration: aci,
 		installation:           installation,
@@ -48,7 +48,7 @@ func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *
 
 type amazonCloudIntegrationComponent struct {
 	amazonCloudIntegration *operator.AmazonCloudIntegration
-	installation           *operator.Installation
+	installation           *operator.InstallationSpec
 	credentials            *AmazonCredential
 	pullSecrets            []*corev1.Secret
 	openshift              bool
@@ -286,7 +286,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 
 	return corev1.Container{
 		Name:  AmazonCloudIntegrationComponentName,
-		Image: components.GetReference(components.ComponentCloudControllers, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image: components.GetReference(components.ComponentCloudControllers, c.installation.Registry, c.installation.ImagePath),
 		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{

@@ -31,21 +31,19 @@ import (
 )
 
 var _ = Describe("kube-controllers rendering tests", func() {
-	var instance *operator.Installation
+	var instance *operator.InstallationSpec
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 
 		miMode := operator.MultiInterfaceModeNone
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
-					MultiInterfaceMode: &miMode,
-				},
-				Registry: "test-reg/",
+		instance = &operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+				MultiInterfaceMode: &miMode,
 			},
+			Registry: "test-reg/",
 		}
 
 	})
@@ -114,7 +112,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(instance, true, nil, nil, nil, nil)
 		resources, _ := component.Objects()
@@ -156,7 +154,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil)
 		resources, _ := component.Objects()
@@ -215,8 +213,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		instance.Variant = operator.TigeraSecureEnterprise
 		component := render.KubeControllers(instance, true, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -244,7 +242,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		instance.Spec.ComponentResources = []operator.ComponentResource{
+		instance.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameKubeControllers,
 				ResourceRequirements: rr,
@@ -269,7 +267,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the OIDC prefix env variables", func() {
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operator.TigeraSecureEnterprise
 
 		authentication := &operator.Authentication{Spec: operator.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",

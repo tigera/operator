@@ -174,7 +174,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		managementClusterConnection.Spec.ManagementClusterAddr,
 		pullSecrets,
 		r.Provider == operatorv1.ProviderOpenShift,
-		instl,
+		&instl.Spec,
 		tunnelSecret,
 	)
 

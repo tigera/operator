@@ -499,7 +499,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	component := render.LogStorage(
 		ls,
-		installationCR,
+		&installationCR.Spec,
 		managementCluster,
 		managementClusterConnection,
 		elasticsearch,

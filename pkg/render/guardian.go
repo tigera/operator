@@ -45,7 +45,7 @@ func Guardian(
 	url string,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 	tunnelSecret *corev1.Secret,
 ) Component {
 	return &GuardianComponent{
@@ -61,7 +61,7 @@ type GuardianComponent struct {
 	url          string
 	pullSecrets  []*v1.Secret
 	openshift    bool
-	installation *operatorv1.Installation
+	installation *operatorv1.InstallationSpec
 	tunnelSecret *corev1.Secret
 }
 
@@ -248,7 +248,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
-			Image: components.GetReference(components.ComponentGuardian, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+			Image: components.GetReference(components.ComponentGuardian, c.installation.Registry, c.installation.ImagePath),
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

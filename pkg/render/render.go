@@ -66,7 +66,7 @@ type TyphaNodeTLS struct {
 
 func Calico(
 	k8sServiceEp K8sServiceEndpoint,
-	cr *operator.Installation,
+	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
@@ -80,7 +80,6 @@ func Calico(
 	up bool,
 	nodeAppArmorProfile string,
 ) (Renderer, error) {
-
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
 
@@ -120,7 +119,7 @@ func Calico(
 	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
-	if managerInternalTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
+	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
 		// The certificate will be issued for ManagerServiceDNS and localhost
 		log.Info("Creating secret for internal manager credentials")
@@ -218,7 +217,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	k8sServiceEp                K8sServiceEndpoint
-	installation                *operator.Installation
+	installation                *operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection

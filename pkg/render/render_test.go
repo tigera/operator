@@ -33,7 +33,7 @@ import (
 )
 
 var _ = Describe("Rendering tests", func() {
-	var instance *operator.Installation
+	var instance *operator.InstallationSpec
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -44,23 +44,21 @@ var _ = Describe("Rendering tests", func() {
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{
-					Type: operator.PluginCalico,
-					IPAM: &operator.IPAMSpec{
-						Type: operator.IPAMPluginCalico,
-					},
+		instance = &operator.InstallationSpec{
+			CNI: &operator.CNISpec{
+				Type: operator.PluginCalico,
+				IPAM: &operator.IPAMSpec{
+					Type: operator.IPAMPluginCalico,
 				},
-				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
-					MultiInterfaceMode: &miMode,
-				},
-				Registry: "test-reg/",
-				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-						MaxUnavailable: &one,
-					},
+			},
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+				MultiInterfaceMode: &miMode,
+			},
+			Registry: "test-reg/",
+			NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxUnavailable: &one,
 				},
 			},
 		}
@@ -97,8 +95,8 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 Service to expose calico/node metrics.
 		// - 1 ns (tigera-dex)
 		var nodeMetricsPort int32 = 9081
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.NodeMetricsPort = &nodeMetricsPort
+		instance.Variant = operator.TigeraSecureEnterprise
+		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "")
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1))
@@ -109,8 +107,8 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config for EE
 		// - pass in internalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.NodeMetricsPort = &nodeMetricsPort
+		instance.Variant = operator.TigeraSecureEnterprise
+		instance.NodeMetricsPort = &nodeMetricsPort
 
 		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "")
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)

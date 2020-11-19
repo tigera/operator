@@ -248,7 +248,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
-		&network.Spec,
+		network.Status.Computed,
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,

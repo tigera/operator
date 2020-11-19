@@ -79,11 +79,6 @@ func Calico(
 	aci *operator.AmazonCloudIntegration,
 	up bool,
 ) (Renderer, error) {
-	// check for variant override in the status field
-	if cr.Status.Computed != nil && cr.Status.Computed.Variant == operator.TigeraSecureEnterprise {
-		cr.Spec.Variant = operator.TigeraSecureEnterprise
-	}
-
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
 

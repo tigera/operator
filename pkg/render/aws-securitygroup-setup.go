@@ -25,13 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr operator.InstallationSpec) (Component, error) {
+func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.InstallationSpec) (Component, error) {
 	return &awsSGSetupComponent{pullSecrets: ps, installcr: installcr}, nil
 }
 
 type awsSGSetupComponent struct {
 	pullSecrets []corev1.LocalObjectReference
-	installcr   operator.InstallationSpec
+	installcr   *operator.InstallationSpec
 }
 
 func (c *awsSGSetupComponent) SupportedOSType() OSType {

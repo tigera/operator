@@ -216,9 +216,9 @@ func ValidateCertPair(client client.Client, certPairSecretName, keyName, certNam
 	return secret, nil
 }
 
-func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {
+func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*corev1.Secret, error) {
 	secrets := []*corev1.Secret{}
-	for _, ps := range i.ImagePullSecrets {
+	for _, ps := range i.Status.Computed.ImagePullSecrets {
 		s := &corev1.Secret{}
 		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: render.OperatorNamespace()}, s)
 		if err != nil {

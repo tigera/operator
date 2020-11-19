@@ -636,7 +636,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// status.computedSpec.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
-		instance.Status = operator.InstallationStatus{}
+		instance.Status = operator.InstallationStatus{
+			Computed: &operator.InstallationSpec{},
+		}
 		if err := r.client.Status().Update(ctx, instance); err != nil {
 			r.SetDegraded("Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err

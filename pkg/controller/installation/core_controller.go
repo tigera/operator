@@ -918,6 +918,8 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Write updated status.
+	instance.Status.MTU = int32(statusMTU)
+	instance.Status.Variant = instance.Spec.Variant
 	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

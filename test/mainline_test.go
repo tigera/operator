@@ -133,7 +133,7 @@ var _ = Describe("Mainline component function tests", func() {
 				if err != nil {
 					return err
 				}
-				if instance.Status.Variant != operator.Calico {
+				if instance.Status.Computed.Variant != operator.Calico {
 					return fmt.Errorf("installation status not Calico yet")
 				}
 				return nil
@@ -148,7 +148,7 @@ var _ = Describe("Mainline component function tests", func() {
 				if reflect.DeepEqual(instance.Status, operator.InstallationStatus{}) {
 					return fmt.Errorf("installation status is empty")
 				}
-				if instance.Status.Variant != operator.Calico {
+				if instance.Status.Computed.Variant != operator.Calico {
 					return fmt.Errorf("installation status was %v, expected: %v", instance.Status, operator.Calico)
 				}
 				return nil

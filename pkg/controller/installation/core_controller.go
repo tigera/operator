@@ -241,18 +241,21 @@ type ReconcileInstallation struct {
 	migrationChecked     bool
 }
 
-// GetInstallation returns the current installation resource.
+// GetInstallation returns an installation spec for use by other controllers.
 func GetInstallation(ctx context.Context, client client.Client) (*operator.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := operator.Installation{}
 	if err := client.Get(ctx, utils.DefaultInstanceKey, &instance); err != nil {
 		return nil, err
 	}
-	if instance.Status.Computed != nil {
-		return instance.Status.Computed, nil
-	}
 
-	return &instance.Spec, nil
+	// Return the computed spec in status as it both includes the 'overlay' installation details, but
+	// also represents the actual live installation details. This is important as other Enterprise controllers shouldn't
+	// launch pods until the core controller has completed it's transition to enterprise, which is indicated via the variant field
+	// in the status resource.
+	// Note that we don't need to merge data from the spec field because it basically already is for our purposes, since
+	// spec.computed isn't written until Installation has made it to that point.
+	return instance.Status.Computed, nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.

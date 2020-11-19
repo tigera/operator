@@ -12,6 +12,7 @@ import operatorv1 "github.com/tigera/operator/api/v1"
 type handler func(*components, *operatorv1.Installation) error
 
 var handlers = []handler{
+	checkTypha,
 	handleAddonManager,
 	handleNetwork,
 	handleIPv6,

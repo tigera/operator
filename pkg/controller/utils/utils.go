@@ -45,6 +45,7 @@ const (
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
 var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
+var OverlayInstanceKey = client.ObjectKey{Name: "overlay"}
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj runtime.Object) logr.Logger {

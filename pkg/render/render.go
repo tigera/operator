@@ -80,7 +80,6 @@ func Calico(
 	up bool,
 	nodeAppArmorProfile string,
 ) (Renderer, error) {
-
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
 
@@ -142,7 +141,7 @@ func Calico(
 
 	return calicoRenderer{
 		k8sServiceEp:                k8sServiceEp,
-		installation:                cr,
+		installation:                cr.Spec,
 		logStorageExists:            logStorageExists,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
@@ -218,7 +217,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	k8sServiceEp                K8sServiceEndpoint
-	installation                *operator.Installation
+	installation                operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection

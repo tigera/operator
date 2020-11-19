@@ -364,7 +364,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		filters,
 		eksConfig,
 		pullSecrets,
-		installation,
+		&installation.Spec,
 	)
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {

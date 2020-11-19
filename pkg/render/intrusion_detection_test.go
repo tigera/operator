@@ -32,7 +32,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.Installation{Spec: operatorv1.InstallationSpec{Registry: "testregistry.com/"}},
+			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift,
 		)
 		resources, _ := component.Objects()
@@ -95,7 +95,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			lc,
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.Installation{Spec: operatorv1.InstallationSpec{Registry: "testregistry.com/"}},
+			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift,
 		)
 		resources, _ := component.Objects()

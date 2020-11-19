@@ -106,12 +106,14 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		err = c.Create(
 			ctx,
 			&operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					Registry: "my-reg",
-					// The test is provider agnostic.
-					KubernetesProvider: operatorv1.ProviderNone,
-				},
+				Spec:       operatorv1.InstallationSpec{},
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Status: operatorv1.InstallationStatus{
+					Computed: &operatorv1.InstallationSpec{
+						Registry:           "my-reg",
+						KubernetesProvider: operatorv1.ProviderNone,
+					},
+				},
 			})
 		Expect(err).NotTo(HaveOccurred())
 		By("reconciling with the required prerequisites")

@@ -600,8 +600,31 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overrides', as those should only
+	// be stored in the 'overrides' resource.
 	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// update Installation with 'overrides'
+	overrides := operator.Installation{}
+	if err := r.client.Get(ctx, utils.OverridesInstanceKey, &overrides); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the 'overrides' Installation resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("no 'overrides' installation found")
+	} else {
+		reqLogger.V(5).Info("merging overrides")
+		instance.Spec = overrideInstallationSpec(instance.Spec, overrides.Spec)
+	}
+
+	reqLogger.V(2).Info("Loaded config", "config", instance)
+
+	// Validate the configuration.
+	if err := validateCustomResource(instance); err != nil {
+		r.SetDegraded("Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -610,10 +633,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.migrationChecked = true
 
 	// A status is needed at this point for operator scorecard tests.
-	// status.variant is written later but for some tests the reconciliation
+	// status.computedSpec.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(status, operator.InstallationStatus{}) {
-		instance.Status = operator.InstallationStatus{}
+		instance.Status = operator.InstallationStatus{
+			Computed: &operator.InstallationSpec{},
+		}
 		if err := r.client.Status().Update(ctx, instance); err != nil {
 			r.SetDegraded("Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err
@@ -799,7 +824,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
-		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance)
+		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance.Status.Computed)
 		if err != nil {
 			// If there is a problem rendering this do not degrade or stop rendering
 			// anything else.
@@ -897,6 +922,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Write updated status.
 	instance.Status.MTU = int32(statusMTU)
 	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

@@ -44,6 +44,7 @@ const (
 )
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
+var OverridesInstanceKey = client.ObjectKey{Name: "overrides"}
 var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
@@ -217,7 +218,7 @@ func ValidateCertPair(client client.Client, certPairSecretName, keyName, certNam
 
 func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*corev1.Secret, error) {
 	secrets := []*corev1.Secret{}
-	for _, ps := range i.Spec.ImagePullSecrets {
+	for _, ps := range i.Status.Computed.ImagePullSecrets {
 		s := &corev1.Secret{}
 		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: render.OperatorNamespace()}, s)
 		if err != nil {

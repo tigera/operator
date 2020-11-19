@@ -70,12 +70,10 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(
 			ctx,
 			&operatorv1.Installation{
-				Status: operatorv1.InstallationStatus{
-					Computed: &operatorv1.InstallationSpec{
-						Registry: "my-reg",
-						// The test is provider agnostic.
-						KubernetesProvider: operatorv1.ProviderNone,
-					},
+				Spec: operatorv1.InstallationSpec{
+					Registry: "my-reg",
+					// The test is provider agnostic.
+					KubernetesProvider: operatorv1.ProviderNone,
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			})).NotTo(HaveOccurred())

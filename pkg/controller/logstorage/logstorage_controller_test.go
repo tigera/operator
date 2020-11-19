@@ -126,9 +126,8 @@ var _ = Describe("LogStorage controller", func() {
 							Name: "default",
 						},
 						Status: operatorv1.InstallationStatus{
-							Computed: &operatorv1.InstallationSpec{
-								Variant: operatorv1.TigeraSecureEnterprise,
-							},
+							Variant:  operatorv1.TigeraSecureEnterprise,
+							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
 							Variant: operatorv1.TigeraSecureEnterprise,
@@ -266,9 +265,8 @@ var _ = Describe("LogStorage controller", func() {
 							Name: "default",
 						},
 						Status: operatorv1.InstallationStatus{
-							Computed: &operatorv1.InstallationSpec{
-								Variant: operatorv1.TigeraSecureEnterprise,
-							},
+							Variant:  operatorv1.TigeraSecureEnterprise,
+							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
 							Variant: operatorv1.TigeraSecureEnterprise,
@@ -369,9 +367,8 @@ var _ = Describe("LogStorage controller", func() {
 							Name: "default",
 						},
 						Status: operatorv1.InstallationStatus{
-							Computed: &operatorv1.InstallationSpec{
-								Variant: operatorv1.TigeraSecureEnterprise,
-							},
+							Variant:  operatorv1.TigeraSecureEnterprise,
+							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
 							Variant: operatorv1.TigeraSecureEnterprise,

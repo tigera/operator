@@ -609,16 +609,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// update Installation with 'overrides'
-	overrides := operator.Installation{}
-	if err := r.client.Get(ctx, utils.OverridesInstanceKey, &overrides); err != nil {
+	// update Installation with 'overlay'
+	overlay := operator.Installation{}
+	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
 		if !apierrors.IsNotFound(err) {
-			reqLogger.Error(err, "An error occurred when querying the 'overrides' Installation resource")
+			reqLogger.Error(err, "An error occurred when querying the 'overlay' Installation resource")
 			return reconcile.Result{}, err
 		}
-		reqLogger.V(5).Info("no 'overrides' installation found")
+		reqLogger.V(5).Info("no 'overlay' installation found")
 	} else {
-		instance.Spec = overrideInstallationSpec(instance.Spec, overrides.Spec)
+		instance.Spec = overrideInstallationSpec(instance.Spec, overlay.Spec)
 		reqLogger.V(2).Info("loaded final override config", "config", instance)
 
 		// Validate the configuration.

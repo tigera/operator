@@ -457,6 +457,10 @@ type InstallationStatus struct {
 	// MTU is the most recently observed value for pod network MTU. This may be an explicitly
 	// configured value, or based on Calico's native auto-detetion.
 	MTU int32 `json:"mtu,omitempty"`
+
+	// Computed is the final installation including overlaid resources.
+	// +optional
+	Computed *InstallationSpec `json:"computed,omitempty"`
 }
 
 // +kubebuilder:object:root=true

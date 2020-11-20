@@ -63,6 +63,8 @@ import (
 
 var k8sEndpoint render.K8sServiceEndpoint
 
+const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
+
 func init() {
 	// We read whatever is in the variable. We would read "" if they were not set.
 	// We decide at the point of usage what to do with the values.
@@ -600,9 +602,30 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overrides', as those should only
+	// be stored in the 'overrides' resource.
 	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// update Installation with 'overrides'
+	overrides := operator.Installation{}
+	if err := r.client.Get(ctx, utils.OverridesInstanceKey, &overrides); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the 'overrides' Installation resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("no 'overrides' installation found")
+	} else {
+		instance.Spec = overrideInstallationSpec(instance.Spec, overrides.Spec)
+		reqLogger.V(2).Info("loaded final override config", "config", instance)
+
+		// Validate the configuration.
+		if err := validateCustomResource(instance); err != nil {
+			r.SetDegraded("Invalid override config", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// now that migrated config is stored in the installation resource, we no longer need
@@ -769,6 +792,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	nodeAppArmorProfile := ""
+	a := instance.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
+		nodeAppArmorProfile = val
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -788,6 +817,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
+		nodeAppArmorProfile,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -799,7 +829,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
-		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance)
+		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, &instance.Spec)
 		if err != nil {
 			// If there is a problem rendering this do not degrade or stop rendering
 			// anything else.

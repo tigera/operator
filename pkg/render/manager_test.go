@@ -372,7 +372,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		tlsSecret,
 		nil,
 		false,
-		&operator.Installation{Spec: operator.InstallationSpec{}},
+		&operator.InstallationSpec{},
 		managementCluster,
 		tunnelSecret,
 		internalTraffic)

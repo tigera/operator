@@ -26,11 +26,9 @@ import (
 var _ = Describe("compliance rendering tests", func() {
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, nil, &operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderNone,
-					Registry:           "testregistry.com/",
-				},
+			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -118,11 +116,9 @@ var _ = Describe("compliance rendering tests", func() {
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(nil, &internalManagerTLSSecret,
-				&operatorv1.Installation{
-					Spec: operatorv1.InstallationSpec{
-						KubernetesProvider: operatorv1.ProviderNone,
-						Registry:           "testregistry.com/",
-					},
+				&operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
 				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -233,11 +229,9 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("ManagedCluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, nil, &operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderNone,
-					Registry:           "testregistry.com/",
-				},
+			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()

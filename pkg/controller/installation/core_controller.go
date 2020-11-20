@@ -805,7 +805,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// create or update them.
 	calico, err := render.Calico(
 		k8sEndpoint,
-		instance,
+		instance.Status.Computed,
 		logStorageExists,
 		managementCluster,
 		managementClusterConnection,

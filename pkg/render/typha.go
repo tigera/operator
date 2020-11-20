@@ -46,7 +46,7 @@ const (
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(
 	k8sServiceEp K8sServiceEndpoint,
-	installation operator.InstallationSpec,
+	installation *operator.InstallationSpec,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
@@ -62,7 +62,7 @@ func Typha(
 
 type typhaComponent struct {
 	k8sServiceEp       K8sServiceEndpoint
-	installation       operator.InstallationSpec
+	installation       *operator.InstallationSpec
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool

@@ -31,14 +31,14 @@ import (
 )
 
 var _ = Describe("kube-controllers rendering tests", func() {
-	var instance operator.InstallationSpec
+	var instance *operator.InstallationSpec
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 
 		miMode := operator.MultiInterfaceModeNone
-		instance = operator.InstallationSpec{
+		instance = &operator.InstallationSpec{
 			CalicoNetwork: &operator.CalicoNetworkSpec{
 				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
 				MultiInterfaceMode: &miMode,

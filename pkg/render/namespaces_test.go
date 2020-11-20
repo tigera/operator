@@ -24,9 +24,9 @@ import (
 )
 
 var _ = Describe("Namespace rendering tests", func() {
-	var installation v1.InstallationSpec
+	var installation *v1.InstallationSpec
 	BeforeEach(func() {
-		installation = v1.InstallationSpec{Variant: v1.Calico, KubernetesProvider: v1.ProviderNone}
+		installation = &v1.InstallationSpec{Variant: v1.Calico, KubernetesProvider: v1.ProviderNone}
 	})
 
 	It("should render a namespace", func() {

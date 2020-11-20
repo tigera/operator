@@ -23,7 +23,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 )
 
-func Namespaces(installation operatorv1.InstallationSpec, pullSecrets []*corev1.Secret) Component {
+func Namespaces(installation *operatorv1.InstallationSpec, pullSecrets []*corev1.Secret) Component {
 	return &namespaceComponent{
 		installation: installation,
 		pullSecrets:  pullSecrets,
@@ -31,7 +31,7 @@ func Namespaces(installation operatorv1.InstallationSpec, pullSecrets []*corev1.
 }
 
 type namespaceComponent struct {
-	installation operatorv1.InstallationSpec
+	installation *operatorv1.InstallationSpec
 	pullSecrets  []*corev1.Secret
 }
 

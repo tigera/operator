@@ -42,7 +42,7 @@ var (
 )
 
 var _ = Describe("Node rendering tests", func() {
-	var defaultInstance operator.InstallationSpec
+	var defaultInstance *operator.InstallationSpec
 	var typhaNodeTLS *render.TyphaNodeTLS
 	one := intstr.FromInt(1)
 	defaultNumExpectedResources := 6
@@ -53,7 +53,7 @@ var _ = Describe("Node rendering tests", func() {
 		ff := true
 		hp := operator.HostPortsEnabled
 		miMode := operator.MultiInterfaceModeNone
-		defaultInstance = operator.InstallationSpec{
+		defaultInstance = &operator.InstallationSpec{
 			CNI: &operator.CNISpec{
 				Type: "Calico",
 				IPAM: &operator.IPAMSpec{Type: "Calico"},
@@ -703,7 +703,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := operator.InstallationSpec{
+		amazonVPCInstalllation := &operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
 			CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
 			FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
@@ -856,7 +856,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	DescribeTable("should properly render configuration using non-Calico CNI plugin",
 		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType, expectedEnvs []v1.EnvVar) {
-			installlation := operator.InstallationSpec{
+			installlation := &operator.InstallationSpec{
 				CNI: &operator.CNISpec{
 					Type: cni,
 					IPAM: &operator.IPAMSpec{Type: ipam},
@@ -1144,7 +1144,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := operator.InstallationSpec{
+		amazonVPCInstalllation := &operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
 			CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
 			FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",

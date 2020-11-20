@@ -55,7 +55,7 @@ var (
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
 	k8sServiceEp K8sServiceEndpoint,
-	cr operator.InstallationSpec,
+	cr *operator.InstallationSpec,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
@@ -75,7 +75,7 @@ func Node(
 
 type nodeComponent struct {
 	k8sServiceEp        K8sServiceEndpoint
-	cr                  operator.InstallationSpec
+	cr                  *operator.InstallationSpec
 	birdTemplates       map[string]string
 	typhaNodeTLS        *TyphaNodeTLS
 	amazonCloudInt      *operator.AmazonCloudIntegration
@@ -1206,14 +1206,14 @@ func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
 }
 
 // bgpEnabled returns true if the given Installation enables BGP, false otherwise.
-func bgpEnabled(instance operator.InstallationSpec) bool {
+func bgpEnabled(instance *operator.InstallationSpec) bool {
 	return instance.CalicoNetwork != nil &&
 		instance.CalicoNetwork.BGP != nil &&
 		*instance.CalicoNetwork.BGP == operatorv1.BGPEnabled
 }
 
 // getMTU returns the MTU configured in the Installation if there is one, nil otherwise.
-func getMTU(instance operator.InstallationSpec) *int32 {
+func getMTU(instance *operator.InstallationSpec) *int32 {
 	var mtu *int32
 	if instance.CalicoNetwork != nil && instance.CalicoNetwork.MTU != nil {
 		mtu = instance.CalicoNetwork.MTU

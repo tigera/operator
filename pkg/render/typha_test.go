@@ -28,7 +28,7 @@ import (
 )
 
 var _ = Describe("Typha rendering tests", func() {
-	var installation operator.InstallationSpec
+	var installation *operator.InstallationSpec
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
 	k8sServiceEp := render.K8sServiceEndpoint{}
@@ -36,7 +36,7 @@ var _ = Describe("Typha rendering tests", func() {
 		registry = "test.registry.com/org"
 		// Initialize a default installation to use. Each test can override this to its
 		// desired configuration.
-		installation = operator.InstallationSpec{
+		installation = &operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderNone,
 			//Variant ProductVariant `json:"variant,omitempty"`
 			Registry: registry,

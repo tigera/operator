@@ -32,7 +32,7 @@ import (
 var replicas int32 = 1
 
 func KubeControllers(
-	cr operator.InstallationSpec,
+	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
@@ -50,7 +50,7 @@ func KubeControllers(
 }
 
 type kubeControllersComponent struct {
-	cr                          operator.InstallationSpec
+	cr                          *operator.InstallationSpec
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret

@@ -268,7 +268,7 @@ func AnnotationHash(i interface{}) string {
 
 // GetResourceRequirements retrieves the component ResourcesRequirements from the installation
 // If it doesn't exist, it returns an empty ResourceRequirements struct
-func GetResourceRequirements(i operatorv1.InstallationSpec, name operatorv1.ComponentName) v1.ResourceRequirements {
+func GetResourceRequirements(i *operatorv1.InstallationSpec, name operatorv1.ComponentName) v1.ResourceRequirements {
 	if i.ComponentResources != nil {
 		for _, cr := range i.ComponentResources {
 			if cr.ComponentName == name && cr.ResourceRequirements != nil {

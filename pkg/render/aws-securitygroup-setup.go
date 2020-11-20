@@ -25,13 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.Installation) (Component, error) {
+func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.InstallationSpec) (Component, error) {
 	return &awsSGSetupComponent{pullSecrets: ps, installcr: installcr}, nil
 }
 
 type awsSGSetupComponent struct {
 	pullSecrets []corev1.LocalObjectReference
-	installcr   *operator.Installation
+	installcr   *operator.InstallationSpec
 }
 
 func (c *awsSGSetupComponent) SupportedOSType() OSType {
@@ -80,7 +80,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					},
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
-						Image: components.GetOperatorInitReference(c.installcr.Spec.Registry, c.installcr.Spec.ImagePath),
+						Image: components.GetOperatorInitReference(c.installcr.Registry, c.installcr.ImagePath),
 						Args:  []string{"--aws-sg-setup"},
 						Env: []corev1.EnvVar{
 							{

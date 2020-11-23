@@ -174,7 +174,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client)
+	_, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -248,7 +248,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
-		network.Status.Computed,
+		network,
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,

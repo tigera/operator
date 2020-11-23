@@ -318,7 +318,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.OnCRFound()
 	}
 
-	installationCR, err := installation.GetInstallation(context.Background(), r.client)
+	variant, installationCR, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -350,7 +350,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
-	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	if variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	} else if ls == nil && managementClusterConnection == nil {
@@ -466,7 +466,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	if ls != nil {
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	} else {
-		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
+		hdler = utils.NewComponentHandler(log, r.client, r.scheme, managementClusterConnection)
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
@@ -501,7 +501,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	component := render.LogStorage(
 		ls,
-		installationCR.Status.Computed,
+		installationCR,
 		managementCluster,
 		managementClusterConnection,
 		elasticsearch,

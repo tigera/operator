@@ -209,7 +209,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	installation, err := installation.GetInstallation(ctx, r.client)
+	_, installation, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -398,7 +398,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		tlsSecret,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
-		installation.Status.Computed,
+		installation,
 		managementCluster,
 		tunnelSecret,
 		internalTrafficSecret,

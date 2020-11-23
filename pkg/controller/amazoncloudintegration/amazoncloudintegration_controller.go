@@ -149,7 +149,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client)
+	variant, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.SetDegraded("Installation not found", err, reqLogger)
@@ -158,7 +158,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 		r.SetDegraded("Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	if variant != operatorv1.TigeraSecureEnterprise {
 		r.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), fmt.Errorf(""), reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -180,7 +180,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.AmazonCloudIntegration(instance, network.Status.Computed, awsCredential, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
+	component, err := render.AmazonCloudIntegration(instance, network, awsCredential, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
 		r.SetDegraded("Error rendering AmazonCloudIntegration", err, reqLogger)
 		return reconcile.Result{}, err

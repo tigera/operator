@@ -464,7 +464,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	if ls != nil {
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	} else {
-		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
+		hdler = utils.NewComponentHandler(log, r.client, r.scheme, managementClusterConnection)
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.

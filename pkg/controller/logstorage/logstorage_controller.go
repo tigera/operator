@@ -318,7 +318,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.OnCRFound()
 	}
 
-	installationCR, err := installation.GetInstallation(context.Background(), r.client)
+	variant, install, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -350,7 +350,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
-	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	if variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	} else if ls == nil && managementClusterConnection == nil {
@@ -364,7 +364,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		log.Error(err, "error retrieving pull secrets")
 		r.status.SetDegraded("An error occurring while retrieving the pull secrets", err.Error())
@@ -461,7 +461,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
-	// create the ComponentHandler from the installationCR
+	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
 	if ls != nil {
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
@@ -501,7 +501,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	component := render.LogStorage(
 		ls,
-		installationCR.Status.Computed,
+		install,
 		managementCluster,
 		managementClusterConnection,
 		elasticsearch,

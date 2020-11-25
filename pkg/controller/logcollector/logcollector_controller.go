@@ -178,7 +178,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	installation, err := installation.GetInstallation(ctx, r.client)
+	_, installation, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -319,7 +319,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	if installation.Spec.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
@@ -364,7 +364,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		filters,
 		eksConfig,
 		pullSecrets,
-		installation.Status.Computed,
+		installation,
 	)
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {

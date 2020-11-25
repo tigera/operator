@@ -243,12 +243,29 @@ type ReconcileInstallation struct {
 	migrationChecked     bool
 }
 
-// GetInstallation returns the current installation resource.
-func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
+// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
+// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
+// launch enterprise-dependent components.
+func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *operator.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
-	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	return instance, err
+	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		return instance.Status.Variant, nil, err
+	}
+
+	spec := instance.Spec
+
+	// update Installation with 'overlay'
+	overlay := operator.Installation{}
+	if err := client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return instance.Status.Variant, nil, err
+		}
+	} else {
+		spec = overrideInstallationSpec(spec, overlay.Spec)
+	}
+
+	return instance.Status.Variant, &spec, nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -689,7 +706,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err

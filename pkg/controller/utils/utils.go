@@ -333,3 +333,20 @@ func GetAuthentication(ctx context.Context, client client.Client) (interface{}, 
 
 	return authenticationConfig, nil
 }
+
+// GetTyphaScaleCount will return the number of Typhas needed for the number of nodes.
+func GetExpectedTyphaScale(nodes int) int {
+	var maxNodesPerTypha int = 200
+	// This gives a count of how many 200s so we need 1+ this number to get at least
+	// 1 typha for every 200 nodes.
+	typhas := (nodes / maxNodesPerTypha) + 1
+	// We add one more to ensure there is always 1 extra for high availability purposes.
+	typhas += 1
+	// If we don't have enough nodes to have 3 typhs then make sure there is one typha for each node.
+	if nodes <= 3 {
+		typhas = nodes
+	} else if typhas < 3 { // If typhas is less than 3 always make sure we have 3
+		typhas = 3
+	}
+	return typhas
+}

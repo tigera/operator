@@ -159,7 +159,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client)
+	variant, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -168,7 +168,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if network.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	if variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	}

@@ -119,7 +119,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 	result := reconcile.Result{}
 
-	instl, err := installation.GetInstallation(ctx, r.Client)
+	_, instl, err := installation.GetInstallation(ctx, r.Client)
 	if err != nil {
 		return result, err
 	}

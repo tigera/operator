@@ -151,7 +151,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// Query for the installation object.
-	installationCR, err := installation.GetInstallation(context.Background(), r.client)
+	variant, install, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Error(err, "Installation not found")
@@ -162,7 +162,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if installationCR.Status.Variant != oprv1.TigeraSecureEnterprise {
+	if variant != oprv1.TigeraSecureEnterprise {
 		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
@@ -229,7 +229,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		}
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -247,7 +247,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	component := render.Dex(
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
-		installationCR,
+		install,
 		dexCfg,
 	)
 

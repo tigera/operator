@@ -126,7 +126,7 @@ echo "Keystore initialization successful."
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,
@@ -168,7 +168,7 @@ func LogStorage(
 
 type elasticsearchComponent struct {
 	logStorage                  *operatorv1.LogStorage
-	installation                *operatorv1.Installation
+	installation                *operatorv1.InstallationSpec
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
 	elasticsearch               *esv1.Elasticsearch
@@ -468,7 +468,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: Bool(true),
 			RunAsUser:  Int64(0),
 		},
-		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
 		Command: []string{
 			"/bin/sh",
 		},
@@ -483,7 +483,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.dexCfg != nil {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
-			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: Bool(false),
 			},
@@ -605,7 +605,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -943,8 +943,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 
 	hostNetwork := false
 	dnsPolicy := corev1.DNSClusterFirst
-	if es.installation.Spec.KubernetesProvider == operatorv1.ProviderEKS &&
-		es.installation.Spec.CNI.Type == operatorv1.PluginCalico {
+	if es.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		es.installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
 		// Calico.
@@ -990,14 +990,14 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					HostNetwork:        hostNetwork,
 					Containers: []corev1.Container{{
-						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath),
 						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",
 							"--log-verbosity=0",
 							"--metrics-port=0",
-							"--container-registry=" + es.installation.Spec.Registry,
+							"--container-registry=" + es.installation.Registry,
 							"--max-concurrent-reconciles=3",
 							"--ca-cert-validity=8760h",
 							"--ca-cert-rotate-before=24h",
@@ -1015,7 +1015,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 								},
 							},
 							{Name: "WEBHOOK_SECRET", Value: ECKWebhookSecretName},
-							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath)},
+							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath)},
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -1097,7 +1097,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		},
 		Spec: kbv1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image:   components.GetReference(components.ComponentKibana, es.installation.Registry, es.installation.ImagePath),
 			Config: &cmnv1.Config{
 				Data: config,
 			},
@@ -1188,7 +1188,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Registry, es.installation.ImagePath),
 									Env:           es.curatorEnvVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{

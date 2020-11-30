@@ -32,7 +32,7 @@ import (
 var replicas int32 = 1
 
 func KubeControllers(
-	cr *operator.Installation,
+	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
@@ -50,7 +50,7 @@ func KubeControllers(
 }
 
 type kubeControllersComponent struct {
-	cr                          *operator.Installation
+	cr                          *operator.InstallationSpec
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
@@ -73,7 +73,7 @@ func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object
 		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
 	}
 
-	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		kubeControllerObjects = append(kubeControllerObjects, c.controllersPodSecurityPolicy())
 	}
 
@@ -148,7 +148,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
@@ -209,7 +209,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		}
 	}
 
-	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -255,7 +255,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	}
 
 	enabledControllers := []string{"node"}
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
 		if c.logStorageExists {
@@ -277,17 +277,17 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
 
-		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
+			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
 
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	// Pick which image to use based on variant.
-	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Registry, c.cr.ImagePath)
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Registry, c.cr.ImagePath)
 	}
 
 	defaultMode := int32(420)
@@ -321,9 +321,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 				Spec: v1.PodSpec{
-					NodeSelector:       c.cr.Spec.ControlPlaneNodeSelector,
+					NodeSelector:       c.cr.ControlPlaneNodeSelector,
 					Tolerations:        tolerations,
-					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:   c.cr.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{

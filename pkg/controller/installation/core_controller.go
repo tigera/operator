@@ -63,6 +63,8 @@ import (
 
 var k8sEndpoint render.K8sServiceEndpoint
 
+const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
+
 func init() {
 	// We read whatever is in the variable. We would read "" if they were not set.
 	// We decide at the point of usage what to do with the values.
@@ -241,12 +243,29 @@ type ReconcileInstallation struct {
 	migrationChecked     bool
 }
 
-// GetInstallation returns the current installation resource.
-func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
+// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
+// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
+// launch enterprise-dependent components.
+func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *operator.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
-	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	return instance, err
+	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		return instance.Status.Variant, nil, err
+	}
+
+	spec := instance.Spec
+
+	// update Installation with 'overlay'
+	overlay := operator.Installation{}
+	if err := client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return instance.Status.Variant, nil, err
+		}
+	} else {
+		spec = overrideInstallationSpec(spec, overlay.Spec)
+	}
+
+	return instance.Status.Variant, &spec, nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -600,9 +619,30 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
+	// be stored in the 'overlay' resource.
 	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// update Installation with 'overlay'
+	overlay := operator.Installation{}
+	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the 'overlay' Installation resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("no 'overlay' installation found")
+	} else {
+		instance.Spec = overrideInstallationSpec(instance.Spec, overlay.Spec)
+		reqLogger.V(2).Info("loaded final computed config", "config", instance)
+
+		// Validate the configuration.
+		if err := validateCustomResource(instance); err != nil {
+			r.SetDegraded("Invalid computed config", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// now that migrated config is stored in the installation resource, we no longer need
@@ -666,7 +706,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -769,6 +809,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	nodeAppArmorProfile := ""
+	a := instance.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
+		nodeAppArmorProfile = val
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -776,7 +822,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// create or update them.
 	calico, err := render.Calico(
 		k8sEndpoint,
-		instance,
+		&instance.Spec,
 		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
@@ -788,6 +834,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
+		nodeAppArmorProfile,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -799,7 +846,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
-		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance)
+		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, &instance.Spec)
 		if err != nil {
 			// If there is a problem rendering this do not degrade or stop rendering
 			// anything else.
@@ -904,6 +951,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Write updated status.
 	instance.Status.MTU = int32(statusMTU)
 	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

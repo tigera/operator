@@ -73,6 +73,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					ImagePullSecrets:   c.pullSecrets,
 					ServiceAccountName: TigeraAWSSGSetupName,
 					HostNetwork:        true,
+					NodeSelector:       NodeSelector(nil),
 					Tolerations: []corev1.Toleration{
 						{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
 						{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoExecute},

@@ -170,7 +170,7 @@ func (c *dexComponent) deployment() runtime.Object {
 					Annotations: c.dexConfig.RequiredAnnotations(),
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       c.installation.ControlPlaneNodeSelector,
+					NodeSelector:       NodeSelector(c.installation.ControlPlaneNodeSelector),
 					ServiceAccountName: DexObjectName,
 					Tolerations: []corev1.Toleration{
 						{

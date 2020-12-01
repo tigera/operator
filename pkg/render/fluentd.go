@@ -269,7 +269,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Annotations: annots,
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
-			NodeSelector:                  map[string]string{},
+			NodeSelector:                  NodeSelector(nil),
 			Tolerations:                   c.tolerations(),
 			ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -706,6 +706,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					NodeSelector:       NodeSelector(nil),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName + "-startup",
 						Image:        components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath),

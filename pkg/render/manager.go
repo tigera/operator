@@ -222,6 +222,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: ManagerServiceAccount,
+			NodeSelector:       NodeSelector(nil),
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{

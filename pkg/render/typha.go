@@ -343,6 +343,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Tolerations:                   c.tolerations(),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
+					NodeSelector:                  NodeSelector(nil),
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					Containers:                    []v1.Container{c.typhaContainer()},

@@ -45,7 +45,7 @@ const (
 	OIDCSecretName               = "tigera-oidc-credentials"
 	OpenshiftSecretName          = "tigera-openshift-credentials"
 	serviceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
-	rootCASecretLocation         = "/etc/ssl/openshift.pem"
+	rootCASecretLocation         = "/etc/ssl/certs/idp.pem"
 	ClientIDSecretField          = "clientID"
 
 	// OIDC well-known-config related constants.
@@ -327,7 +327,7 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "openshift.pem"}}}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "idp.pem"}}}},
 			},
 		)
 	}
@@ -397,7 +397,7 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	if d.idpSecret.Data[RootCASecretField] != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
-			MountPath: "/etc/ssl/",
+			MountPath: "/etc/ssl/certs/",
 			ReadOnly:  true,
 		})
 	}

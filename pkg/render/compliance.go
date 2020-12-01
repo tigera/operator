@@ -355,6 +355,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
+			NodeSelector:       NodeSelector(nil),
 			Tolerations: []corev1.Toleration{
 				{
 					Key:    "node-role.kubernetes.io/master",
@@ -481,6 +482,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			},
 			Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 				ServiceAccountName: "tigera-compliance-reporter",
+				NodeSelector:       NodeSelector(nil),
 				Tolerations: []corev1.Toleration{
 					{
 						Key:    "node-role.kubernetes.io/master",
@@ -652,6 +654,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-server",
+			NodeSelector:       NodeSelector(nil),
 			Tolerations: []corev1.Toleration{
 				{
 					Key:    "node-role.kubernetes.io/master",
@@ -881,6 +884,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:       NodeSelector(nil),
 			ServiceAccountName: "tigera-compliance-snapshotter",
 			Tolerations: []corev1.Toleration{
 				{

@@ -207,6 +207,7 @@ func (c *GuardianComponent) deployment() runtime.Object {
 				Spec: corev1.PodSpec{
 					ServiceAccountName: GuardianServiceAccountName,
 					Tolerations:        c.tolerations(),
+					NodeSelector:       NodeSelector(nil),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),

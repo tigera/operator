@@ -505,6 +505,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.dexCfg != nil {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -513,7 +514,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
 			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
-			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
+			NodeSelector:       NodeSelector(es.logStorage.Spec.DataNodeSelector),
 			ServiceAccountName: "tigera-elasticsearch",
 			Volumes:            volumes,
 		},
@@ -991,6 +992,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					HostNetwork:        hostNetwork,
+					NodeSelector:       NodeSelector(nil),
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath),
 						Name:  "manager",
@@ -1125,6 +1127,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					NodeSelector:       NodeSelector(nil),
 					ServiceAccountName: "tigera-kibana",
 					Containers: []corev1.Container{{
 						Name: "kibana",
@@ -1202,6 +1205,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
 							ServiceAccountName: EsCuratorServiceAccount,
+							NodeSelector:       NodeSelector(nil),
 						}),
 					},
 				},

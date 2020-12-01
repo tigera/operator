@@ -242,6 +242,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						c.container(),
 					},
+					NodeSelector: NodeSelector(nil),
 				},
 			},
 		},

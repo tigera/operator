@@ -506,12 +506,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
 
-	// add linux nodeSelector
-	nodeSel := map[string]string{}
-	if es.logStorage.Spec.DataNodeSelector != nil {
-		nodeSel = es.logStorage.Spec.DataNodeSelector
-	}
-	nodeSel["kubernetes.io/os"] = "linux"
+	nodeSel := NodeSelector(es.logStorage.Spec.DataNodeSelector)
 
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

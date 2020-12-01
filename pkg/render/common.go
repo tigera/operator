@@ -395,3 +395,16 @@ func (k8s K8sServiceEndpoint) EnvVars() []v1.EnvVar {
 		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
 	}
 }
+
+// NodeSelector joins a nodeSelector with the basic linux node selector.
+func NodeSelector(nodeSel map[string]string) map[string]string {
+	ns := map[string]string{}
+	if nodeSel != nil {
+		ns = nodeSel
+	}
+
+	// add linux nodeSelector
+	ns["kubernetes.io/os"] = "linux"
+
+	return ns
+}

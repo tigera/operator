@@ -76,6 +76,7 @@ const (
 	SyslogLogAudit     SyslogLogType = "Audit"
 	SyslogLogDNS       SyslogLogType = "DNS"
 	SyslogLogFlows     SyslogLogType = "Flows"
+	SyslogLogL7        SyslogLogType = "L7"
 	SyslogLogIDSEvents SyslogLogType = "IDSEvents"
 )
 
@@ -83,6 +84,7 @@ var SyslogLogTypes []SyslogLogType = []SyslogLogType{
 	SyslogLogAudit,
 	SyslogLogDNS,
 	SyslogLogFlows,
+	SyslogLogL7,
 	SyslogLogIDSEvents,
 }
 
@@ -90,6 +92,7 @@ var SyslogLogTypesString []string = []string{
 	SyslogLogAudit.String(),
 	SyslogLogDNS.String(),
 	SyslogLogFlows.String(),
+	SyslogLogL7.String(),
 	SyslogLogIDSEvents.String(),
 }
 

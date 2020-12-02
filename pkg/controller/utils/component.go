@@ -301,6 +301,21 @@ func ensureOSSchedulingRestrictions(obj runtime.Object, osType render.OSType) {
 		podSpec = &obj.(*apps.StatefulSet).Spec.Template.Spec
 	case *batchv1beta.CronJob:
 		podSpec = &obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec
+	case *batchv1.Job:
+		podSpec = &obj.(*batchv1.Job).Spec.Template.Spec
+	case *kbv1.Kibana:
+		podSpec = &obj.(*kbv1.Kibana).Spec.PodTemplate.Spec
+	case *esv1.Elasticsearch:
+		// elasticsearch resource describes multiple nodeSets which each have a nodeSelector.
+		nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
+		for _, ns := range nodeSets {
+			if ns.PodTemplate.Spec.NodeSelector == nil {
+				ns.PodTemplate.Spec.NodeSelector = make(map[string]string)
+			}
+			ns.PodTemplate.Spec.NodeSelector["kubernetes.io/os"] = string(osType)
+		}
+		return
+
 	default:
 		return
 	}

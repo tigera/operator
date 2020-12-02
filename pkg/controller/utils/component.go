@@ -291,40 +291,36 @@ func ensureOSSchedulingRestrictions(obj runtime.Object, osType render.OSType) {
 		return
 	}
 
-	var podSpec *v1.PodSpec
+	var podSpecs []*v1.PodSpec
 	switch obj.(type) {
 	case *apps.Deployment:
-		podSpec = &obj.(*apps.Deployment).Spec.Template.Spec
+		podSpecs = []*v1.PodSpec{&obj.(*apps.Deployment).Spec.Template.Spec}
 	case *apps.DaemonSet:
-		podSpec = &obj.(*apps.DaemonSet).Spec.Template.Spec
+		podSpecs = []*v1.PodSpec{&obj.(*apps.DaemonSet).Spec.Template.Spec}
 	case *apps.StatefulSet:
-		podSpec = &obj.(*apps.StatefulSet).Spec.Template.Spec
+		podSpecs = []*v1.PodSpec{&obj.(*apps.StatefulSet).Spec.Template.Spec}
 	case *batchv1beta.CronJob:
-		podSpec = &obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec
+		podSpecs = []*v1.PodSpec{&obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec}
 	case *batchv1.Job:
-		podSpec = &obj.(*batchv1.Job).Spec.Template.Spec
+		podSpecs = []*v1.PodSpec{&obj.(*batchv1.Job).Spec.Template.Spec}
 	case *kbv1.Kibana:
-		podSpec = &obj.(*kbv1.Kibana).Spec.PodTemplate.Spec
+		podSpecs = []*v1.PodSpec{&obj.(*kbv1.Kibana).Spec.PodTemplate.Spec}
 	case *esv1.Elasticsearch:
 		// elasticsearch resource describes multiple nodeSets which each have a nodeSelector.
 		nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
-		for i, ns := range nodeSets {
-			if ns.PodTemplate.Spec.NodeSelector == nil {
-				nodeSets[i].PodTemplate.Spec.NodeSelector = make(map[string]string)
-			}
-			nodeSets[i].PodTemplate.Spec.NodeSelector["kubernetes.io/os"] = string(osType)
+		for i := range nodeSets {
+			podSpecs = append(podSpecs, &nodeSets[i].PodTemplate.Spec)
 		}
-		return
-
 	default:
 		return
 	}
 
-	if podSpec.NodeSelector == nil {
-		podSpec.NodeSelector = make(map[string]string)
+	for _, podSpec := range podSpecs {
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
+		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
-
-	podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 }
 
 // mergeAnnotations merges current and desired annotations. If both current and desired annotations contain the same key, the

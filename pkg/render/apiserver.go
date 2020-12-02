@@ -603,7 +603,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
-					NodeSelector:       c.installation.ControlPlaneNodeSelector,
+					NodeSelector:       NodeSelector(c.installation.ControlPlaneNodeSelector),
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),

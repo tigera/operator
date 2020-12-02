@@ -105,7 +105,6 @@ var _ = Describe("Mainline component function tests", func() {
 	})
 
 	Describe("Installing CRD", func() {
-
 		AfterEach(func() {
 			// Delete any CRD that might have been created by the test.
 			instance := &operator.Installation{

@@ -63,11 +63,12 @@ You can create a local k3d cluster with the Makefile:
 
 Then, run the operator against the local cluster:
 
-	KUBECONFIG=./kubeconfig.yaml go run ./cmd/manager
+	# enable-leader-election is necessary since you'll be running the operator outside of a cluster
+	KUBECONFIG=./kubeconfig.yaml go run ./ --enable-leader-election=false
 
 To launch Calico, install the default custom resource:
 
-	kubectl create -f ./deploy/crds/operator_v1_installation_cr.yaml
+	kubectl create -f ./config/samples/operator_v1_installation.yaml
 
 To tear down the cluster:
 

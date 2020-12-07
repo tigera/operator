@@ -106,9 +106,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
 
-			createResources, deleteResources := component.Objects()
-			Expect(createResources).To(HaveLen(0))
-			Expect(deleteResources).To(HaveLen(0))
+			// Render the objects and make sure we don't panic!
+			_, _ = component.Objects()
 		})
 
 		Context("Initial creation", func() {

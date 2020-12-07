@@ -126,6 +126,7 @@ var _ = Describe("LogStorage controller", func() {
 
 			It("should default the spec.nodes structure", func() {
 				Expect(ls.Spec.Nodes).NotTo(BeNil())
+				Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
 			})
 		})
 
@@ -139,8 +140,8 @@ var _ = Describe("LogStorage controller", func() {
 			ls, err := logstorage.GetLogStorage(ctx, cli)
 			Expect(err).To(BeNil())
 
-			// this field is not currently defaulted.
-			Expect(ls.Spec.Nodes).To(BeNil())
+			Expect(ls.Spec.Nodes).NotTo(BeNil())
+			Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
 		})
 
 		Context("Managed Cluster", func() {

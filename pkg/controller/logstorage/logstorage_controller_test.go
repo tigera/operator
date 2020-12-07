@@ -105,6 +105,7 @@ var _ = Describe("LogStorage controller", func() {
 				ls, err = logstorage.GetLogStorage(ctx, cli)
 				Expect(err).To(BeNil())
 			})
+
 			It("should set the replica values to the default settings", func() {
 				retain8 := int32(8)
 				retain91 := int32(91)
@@ -113,13 +114,34 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))
 			})
+
 			It("should set the retention values to the default settings", func() {
 				var replicas int32 = render.DefaultElasticsearchReplicas
 				Expect(ls.Spec.Indices.Replicas).To(Equal(&replicas))
 			})
+
 			It("should set the storage class to the default settings", func() {
 				Expect(ls.Spec.StorageClassName).To(Equal(logstorage.DefaultElasticsearchStorageClass))
 			})
+
+			It("should default the spec.nodes structure", func() {
+				Expect(ls.Spec.Nodes).NotTo(BeNil())
+				Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
+			})
+		})
+
+		It("should not panic if an empty log storage is provided", func() {
+			Expect(cli.Create(ctx, &operatorv1.LogStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operatorv1.LogStorageSpec{},
+			})).To(BeNil())
+			ls, err := logstorage.GetLogStorage(ctx, cli)
+			Expect(err).To(BeNil())
+
+			Expect(ls.Spec.Nodes).NotTo(BeNil())
+			Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
 		})
 
 		Context("Managed Cluster", func() {

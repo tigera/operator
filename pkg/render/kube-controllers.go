@@ -32,6 +32,7 @@ import (
 var replicas int32 = 1
 
 func KubeControllers(
+	k8sServiceEp K8sServiceEndpoint,
 	cr *operator.Installation,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
@@ -46,6 +47,7 @@ func KubeControllers(
 		managerInternalSecret:       managerInternalSecret,
 		logStorageExists:            logStorageExists,
 		authentication:              authentication,
+		k8sServiceEp:                k8sServiceEp,
 	}
 }
 
@@ -56,6 +58,7 @@ type kubeControllersComponent struct {
 	managerInternalSecret       *v1.Secret
 	logStorageExists            bool
 	authentication              *operator.Authentication
+	k8sServiceEp                K8sServiceEndpoint
 }
 
 func (c *kubeControllersComponent) SupportedOSType() OSType {
@@ -253,6 +256,8 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	env := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
+
+	env = append(env, c.k8sServiceEp.EnvVars()...)
 
 	enabledControllers := []string{"node"}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {

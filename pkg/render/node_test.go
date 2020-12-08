@@ -46,10 +46,9 @@ var (
 var _ = Describe("Node rendering tests", func() {
 	var defaultInstance *operator.InstallationSpec
 	var typhaNodeTLS *render.TyphaNodeTLS
+	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
 	defaultNumExpectedResources := 6
-
-	k8sServiceEp := k8sapi.ServiceEndpoint{}
 
 	BeforeEach(func() {
 		ff := true
@@ -78,6 +77,7 @@ var _ = Describe("Node rendering tests", func() {
 			TyphaSecret: &v1.Secret{},
 			NodeSecret:  &v1.Secret{},
 		}
+		k8sServiceEp =  k8sapi.ServiceEndpoint{}
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -2080,6 +2080,61 @@ var _ = Describe("Node rendering tests", func() {
     },
     {"type": "bandwidth", "capabilities": {"bandwidth": true}},
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+	})
+
+	It("should render cni config with k8s endpoint", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+		// Should render the correct resources.
+		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*v1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+        "type": "calico-ipam",
+        "assign_ipv4": "true",
+        "assign_ipv6": "false"
+      },
+      "container_settings": {
+        "allow_ip_forwarding": false
+      },
+      "policy": {
+        "type": "k8s"
+      },
+      "kubernetes": {
+        "k8s_api_root": "https://k8shost:1234",
+        "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {
+        "bandwidth": true
+      }
+    },
+    {
+      "type": "portmap",
+      "snat": true,
+      "capabilities": {
+        "portMappings": true
+      }
+    }
   ]
 }`))
 	})

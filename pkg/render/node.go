@@ -377,6 +377,12 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		ipam = buildHostLocalIPAM(c.cr.CalicoNetwork)
 	}
 
+	var k8sAPIRoot string
+	apiRoot := c.k8sServiceEp.CNIAPIRoot()
+	if apiRoot != "" {
+		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
+	}
+
 	// Build the CNI configuration json.
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
@@ -396,7 +402,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "policy": {
           "type": "k8s"
       },
-      "kubernetes": {
+      "kubernetes": {%s
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
     },
@@ -405,7 +411,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},

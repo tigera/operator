@@ -15,7 +15,9 @@
 package k8sapi
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 )
@@ -50,4 +52,15 @@ func (k8s ServiceEndpoint) EnvVars() []v1.EnvVar {
 		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
 		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
 	}
+}
+
+func (k8s ServiceEndpoint) CNIAPIRoot() string {
+	if k8s.Host == "" || k8s.Port == "" {
+		return ""
+	}
+	host := k8s.Host
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return fmt.Sprintf("https://%s:%s", host, k8s.Port)
 }

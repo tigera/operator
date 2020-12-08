@@ -18,13 +18,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/olivere/elastic/v7"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/olivere/elastic/v7"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

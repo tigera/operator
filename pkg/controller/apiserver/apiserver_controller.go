@@ -44,12 +44,12 @@ var log = logf.Log.WithName("controller_apiserver")
 
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(k8sServiceEp k8sapi.ServiceEndpoint, mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(k8sServiceEp, mgr, opts.DetectedProvider, opts.AmazonCRDExists))
+	return add(mgr, newReconciler(k8sapi.Endpoint, mgr, opts.DetectedProvider, opts.AmazonCRDExists))
 }
 
 // newReconciler returns a new reconcile.Reconciler

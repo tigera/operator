@@ -26,6 +26,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 var (
@@ -65,7 +66,7 @@ type TyphaNodeTLS struct {
 }
 
 func Calico(
-	k8sServiceEp K8sServiceEndpoint,
+	k8sServiceEp k8sapi.ServiceEndpoint,
 	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
@@ -216,7 +217,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	k8sServiceEp                K8sServiceEndpoint
+	k8sServiceEp                k8sapi.ServiceEndpoint
 	installation                *operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster

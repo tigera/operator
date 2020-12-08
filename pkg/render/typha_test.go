@@ -22,16 +22,18 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Typha rendering tests", func() {
 	var installation *operator.InstallationSpec
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
-	k8sServiceEp := render.K8sServiceEndpoint{}
+	k8sServiceEp := k8sapi.ServiceEndpoint{}
 	BeforeEach(func() {
 		registry = "test.registry.com/org"
 		// Initialize a default installation to use. Each test can override this to its

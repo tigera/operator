@@ -21,10 +21,11 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"github.com/go-logr/logr"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	"github.com/olivere/elastic/v7"
 	operatorv1 "github.com/tigera/operator/api/v1"

@@ -21,12 +21,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/installation"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +30,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var log = logf.Log.WithName("controller_apiserver")
@@ -47,17 +49,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists))
+	return add(mgr, newReconciler(k8sapi.Endpoint, mgr, opts.DetectedProvider, opts.AmazonCRDExists))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool) *ReconcileAPIServer {
+func newReconciler(k8sServiceEp k8sapi.ServiceEndpoint, mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		provider:        provider,
 		amazonCRDExists: amazonCRDExists,
 		status:          status.New(mgr.GetClient(), "apiserver"),
+		k8sServiceEp:    k8sServiceEp,
 	}
 	r.status.Run()
 	return r
@@ -129,6 +132,7 @@ type ReconcileAPIServer struct {
 	provider        operatorv1.Provider
 	amazonCRDExists bool
 	status          status.StatusManager
+	k8sServiceEp    k8sapi.ServiceEndpoint
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -245,7 +249,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(r.k8sServiceEp, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

@@ -197,9 +197,9 @@ sub-tag-images-%:
 
 # Get version from git.
 ifeq ($(LOCAL_BUILD),true)
-  GIT_VERSION?=$(shell git describe --tags --dirty --always)-dev-build
+  GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)-dev-build
 else
-  GIT_VERSION?=$(shell git describe --tags --dirty --always)
+  GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
 build: $(BINDIR)/operator-$(ARCH)
@@ -349,7 +349,7 @@ ifndef BRANCH_NAME
 	$(error BRANCH_NAME is undefined - run using make <target> BRANCH_NAME=var or set an environment variable)
 endif
 	$(MAKE) tag-images-all push-all push-manifests push-non-manifests IMAGETAG=${BRANCH_NAME} EXCLUDEARCH="$(EXCLUDEARCH)"
-	$(MAKE) tag-images-all push-all push-manifests push-non-manifests IMAGETAG=$(shell git describe --tags --dirty --always --long) EXCLUDEARCH="$(EXCLUDEARCH)"
+	$(MAKE) tag-images-all push-all push-manifests push-non-manifests IMAGETAG=$(shell git describe --tags --dirty --always --long --abbrev=12) EXCLUDEARCH="$(EXCLUDEARCH)"
 
 ###############################################################################
 # Release

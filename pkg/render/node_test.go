@@ -25,14 +25,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var (
@@ -47,7 +49,7 @@ var _ = Describe("Node rendering tests", func() {
 	one := intstr.FromInt(1)
 	defaultNumExpectedResources := 6
 
-	k8sServiceEp := render.K8sServiceEndpoint{}
+	k8sServiceEp := k8sapi.ServiceEndpoint{}
 
 	BeforeEach(func() {
 		ff := true
@@ -2349,7 +2351,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	Context("with k8s overrides set", func() {
 		It("should override k8s endpoints", func() {
-			k8sServiceEp := render.K8sServiceEndpoint{
+			k8sServiceEp := k8sapi.ServiceEndpoint{
 				Host: "k8shost",
 				Port: "1234",
 			}

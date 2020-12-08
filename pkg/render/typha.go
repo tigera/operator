@@ -29,6 +29,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 )
 
@@ -45,7 +46,7 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(
-	k8sServiceEp K8sServiceEndpoint,
+	k8sServiceEp k8sapi.ServiceEndpoint,
 	installation *operator.InstallationSpec,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
@@ -61,7 +62,7 @@ func Typha(
 }
 
 type typhaComponent struct {
-	k8sServiceEp       K8sServiceEndpoint
+	k8sServiceEp       k8sapi.ServiceEndpoint
 	installation       *operator.InstallationSpec
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration

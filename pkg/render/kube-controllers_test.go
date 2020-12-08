@@ -20,10 +20,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -32,7 +34,7 @@ import (
 
 var _ = Describe("kube-controllers rendering tests", func() {
 	var instance *operator.InstallationSpec
-	var k8sServiceEp render.K8sServiceEndpoint
+	var k8sServiceEp k8sapi.ServiceEndpoint
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -46,7 +48,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 			Registry: "test-reg/",
 		}
-		k8sServiceEp = render.K8sServiceEndpoint{}
+		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
 
 	It("should render all resources for a custom configuration", func() {
@@ -310,21 +312,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*apps.Deployment)
-
-		var host, port string
-		for _, container := range deployment.Spec.Template.Spec.Containers {
-			if container.Name == "calico-kube-controllers" {
-				for _, env := range container.Env {
-					if env.Name == "KUBERNETES_SERVICE_HOST" {
-						host = env.Value
-					} else if env.Name == "KUBERNETES_SERVICE_PORT" {
-						port = env.Value
-					}
-				}
-			}
-		}
-
-		Expect(host).To(Equal("k8shost"))
-		Expect(port).To(Equal("1234"))
+		expectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 })

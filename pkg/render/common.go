@@ -26,7 +26,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openshift/library-go/pkg/crypto"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -34,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 const (
@@ -373,25 +374,5 @@ func basePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 			},
 			ReadOnlyRootFilesystem: false,
 		},
-	}
-}
-
-// K8sServiceEndpoint is the Host/Port of the K8s endpoint.
-type K8sServiceEndpoint struct {
-	Host string
-	Port string
-}
-
-// EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
-// of the K8sServiceEndpoint were set. It returns a nil slice if either was empty as both
-// need to be set.
-func (k8s K8sServiceEndpoint) EnvVars() []v1.EnvVar {
-	if k8s.Host == "" || k8s.Port == "" {
-		return nil
-	}
-
-	return []v1.EnvVar{
-		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
-		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
 	}
 }

@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 
 	apps "k8s.io/api/apps/v1"
@@ -56,7 +57,7 @@ var (
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
-	k8sServiceEp K8sServiceEndpoint,
+	k8sServiceEp k8sapi.ServiceEndpoint,
 	cr *operator.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
@@ -74,7 +75,7 @@ func Node(
 }
 
 type nodeComponent struct {
-	k8sServiceEp    K8sServiceEndpoint
+	k8sServiceEp    k8sapi.ServiceEndpoint
 	cr              *operator.Installation
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS

@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiserver "github.com/tigera/operator/pkg/controller/apiserver"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
@@ -41,7 +42,7 @@ type APIServerReconciler struct {
 //}
 
 func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return apiserver.Add(mgr, opts)
+	return apiserver.Add(k8sapi.Endpoint, mgr, opts)
 	//	return ctrl.NewControllerManagedBy(mgr).
 	//		For(&operatorv1.APIServer{}).
 	//		Complete(r)

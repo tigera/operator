@@ -164,6 +164,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
@@ -339,7 +340,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 
 	// Update the LogCollector instance with any changes that have occurred.
 	if isModified {
-		if err = r.client.Update(ctx, instance); err != nil {
+		if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
 			r.status.SetDegraded(
 				fmt.Sprintf(
 					"Failed to set defaults for LogCollector fields: [%s]",

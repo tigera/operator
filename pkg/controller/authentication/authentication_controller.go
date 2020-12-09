@@ -133,6 +133,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", authentication)
+	preDefaultPatchFrom := client.MergeFrom(authentication.DeepCopy())
 
 	// Set defaults for backwards compatibility.
 	updateAuthenticationWithDefaults(authentication)
@@ -144,7 +145,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// Write the authentication back to the datastore, so the controllers depending on this can reconcile.
-	if err := r.client.Update(ctx, authentication); err != nil {
+	if err = r.client.Patch(ctx, authentication, preDefaultPatchFrom); err != nil {
 		log.Error(err, "Failed to write defaults")
 		r.status.SetDegraded("Failed to write defaults", err.Error())
 		return reconcile.Result{}, err

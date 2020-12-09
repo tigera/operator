@@ -134,6 +134,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	// Validate the configuration.
 	if err = validateCustomResource(instance); err != nil {
@@ -143,7 +144,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	if err = r.client.Update(ctx, instance); err != nil {
+	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}

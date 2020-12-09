@@ -29,19 +29,23 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
+	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
 
 var _ = Describe("API server rendering tests", func() {
 	var instance *operator.InstallationSpec
 	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Address: "example.com:1234"}}
+	var k8sServiceEp k8sapi.ServiceEndpoint
 	BeforeEach(func() {
 		instance = &operator.InstallationSpec{
 			Registry: "testregistry.com/",
 		}
+		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
 
 	It("should render an API server with default configuration", func() {
@@ -76,8 +80,8 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		//APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
+		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -255,7 +259,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -302,7 +306,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -357,7 +361,7 @@ var _ = Describe("API server rendering tests", func() {
 		}
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -399,7 +403,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(instance, nil, nil, nil, nil, nil, openshift, nil)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -432,7 +436,7 @@ var _ = Describe("API server rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component, err := render.APIServer(instance, nil, nil, aci, nil, nil, openshift, nil)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, aci, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -454,8 +458,23 @@ var _ = Describe("API server rendering tests", func() {
 		}
 	})
 
+	It("should set KUBERENETES_SERVICE_... variables", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploymentResource := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		deployment := deploymentResource.(*v1.Deployment)
+		expectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		component, err := render.APIServer(instance, managementCluster, nil, nil, nil, nil, openshift, nil)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, nil)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -537,7 +556,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()

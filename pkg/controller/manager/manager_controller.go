@@ -154,7 +154,7 @@ type ReconcileManager struct {
 
 // GetManager returns the default manager instance with defaults populated.
 func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, error) {
-	// Fetch the manager instance. We only support a single instance named "default".
+	// Fetch the manager instance. We only support a single instance named "tigera-secure".
 	instance := &operatorv1.Manager{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
@@ -189,12 +189,6 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
-
-	// Write the manager back to the datastore.
-	if err = r.client.Update(ctx, instance); err != nil {
-		r.status.SetDegraded("Failed to write defaults", err.Error())
-		return reconcile.Result{}, err
-	}
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")

@@ -566,6 +566,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 	status := instance.Status
+	preDefaulted := instance.DeepCopy()
 
 	// mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
@@ -611,7 +612,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
 	// be stored in the 'overlay' resource.
-	if err := r.client.Update(ctx, instance); err != nil {
+	patch, err := utils.CreatePatch(preDefaulted, instance)
+	if err != nil {
+		r.SetDegraded("Failed to create patch to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err := r.client.Patch(ctx, instance, patch); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}

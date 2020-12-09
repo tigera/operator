@@ -20,6 +20,8 @@ import (
 	"fmt"
 
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+
 	"k8s.io/apimachinery/pkg/runtime"
 
 	. "github.com/onsi/ginkgo"
@@ -27,9 +29,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -39,7 +42,7 @@ var _ = Describe("Rendering tests", func() {
 	var typhaNodeTLS *render.TyphaNodeTLS
 	one := intstr.FromInt(1)
 	miMode := operator.MultiInterfaceModeNone
-	k8sServiceEp := render.K8sServiceEndpoint{}
+	k8sServiceEp := k8sapi.ServiceEndpoint{}
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its

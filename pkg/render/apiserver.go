@@ -17,8 +17,6 @@ package render
 import (
 	"fmt"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -27,6 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 const (
@@ -41,7 +43,7 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
@@ -87,10 +89,12 @@ func APIServer(installation *operator.InstallationSpec, managementCluster *opera
 		tlsAnnotations:              tlsHashAnnotations,
 		pullSecrets:                 pullSecrets,
 		openshift:                   openshift,
+		k8sServiceEp:                k8sServiceEndpoint,
 	}, nil
 }
 
 type apiServerComponent struct {
+	k8sServiceEp                k8sapi.ServiceEndpoint
 	installation                *operator.InstallationSpec
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
@@ -639,7 +643,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	//On OpenShift apiserver needs privileged access to write audit logs to host path volume
+	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
 	isPrivileged := false
 	if c.openshift {
 		isPrivileged = true
@@ -648,6 +652,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
+
+	env = append(env, c.k8sServiceEp.EnvVars()...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -713,7 +719,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
-
+	env = append(env, c.k8sServiceEp.EnvVars()...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {

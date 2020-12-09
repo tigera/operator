@@ -30,6 +30,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -61,18 +62,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var k8sEndpoint render.K8sServiceEndpoint
-
 const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
-
-func init() {
-	// We read whatever is in the variable. We would read "" if they were not set.
-	// We decide at the point of usage what to do with the values.
-	k8sEndpoint = render.K8sServiceEndpoint{
-		Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
-		Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
-	}
-}
 
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
@@ -821,7 +811,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
-		k8sEndpoint,
+		k8sapi.Endpoint,
 		&instance.Spec,
 		logStorageExists,
 		managementCluster,

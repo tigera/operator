@@ -26,6 +26,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 var (
@@ -65,7 +66,7 @@ type TyphaNodeTLS struct {
 }
 
 func Calico(
-	k8sServiceEp K8sServiceEndpoint,
+	k8sServiceEp k8sapi.ServiceEndpoint,
 	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
@@ -216,7 +217,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	k8sServiceEp                K8sServiceEndpoint
+	k8sServiceEp                k8sapi.ServiceEndpoint
 	installation                *operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
@@ -242,7 +243,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile))
-	components = appendNotNil(components, KubeControllers(r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }
 

@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 
 	apps "k8s.io/api/apps/v1"
@@ -56,7 +57,7 @@ var (
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
-	k8sServiceEp K8sServiceEndpoint,
+	k8sServiceEp k8sapi.ServiceEndpoint,
 	cr *operator.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
@@ -74,7 +75,7 @@ func Node(
 }
 
 type nodeComponent struct {
-	k8sServiceEp    K8sServiceEndpoint
+	k8sServiceEp    k8sapi.ServiceEndpoint
 	cr              *operator.Installation
 	birdTemplates   map[string]string
 	typhaNodeTLS    *TyphaNodeTLS
@@ -367,6 +368,12 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 		ipam = buildHostLocalIPAM(c.cr.Spec.CalicoNetwork)
 	}
 
+	var k8sAPIRoot string
+	apiRoot := c.k8sServiceEp.CNIAPIRoot()
+	if apiRoot != "" {
+		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
+	}
+
 	// Build the CNI configuration json.
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
@@ -386,7 +393,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "policy": {
           "type": "k8s"
       },
-      "kubernetes": {
+      "kubernetes": {%s
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
     },
@@ -395,7 +402,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},

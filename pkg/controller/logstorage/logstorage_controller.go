@@ -292,6 +292,10 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.StorageClassName == "" {
 		opr.Spec.StorageClassName = DefaultElasticsearchStorageClass
 	}
+
+	if opr.Spec.Nodes == nil {
+		opr.Spec.Nodes = &operatorv1.Nodes{Count: 1}
+	}
 }
 
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read

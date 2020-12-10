@@ -651,6 +651,14 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	nodeConfig := es.logStorage.Spec.Nodes
 	pvcTemplate := es.pvcTemplate()
 
+	if nodeConfig == nil {
+		// If we return a nil nodesets, this means the generated ElasticSearch CR will not be valid
+		// and thus will fail validation on create. It will result in a degraded state visible to the user.
+		// Note that we default spec.Nodes on create, so we shouldn't ever hit this branch in practice!
+		log.Info("missing required field: logStorage.Spec.Nodes")
+		return nil
+	}
+
 	var nodeSets []esv1.NodeSet
 	if nodeConfig.NodeSets == nil || len(nodeConfig.NodeSets) < 1 {
 		nodeSet := es.nodeSetTemplate(pvcTemplate)

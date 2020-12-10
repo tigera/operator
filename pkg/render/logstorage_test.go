@@ -81,6 +81,35 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
 		})
 
+		It("should not panic if an empty spec is provided", func() {
+			// Override with an instance that has no spec.
+			logStorage = &operatorv1.LogStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operatorv1.LogStorageSpec{},
+			}
+
+			component := render.LogStorage(
+				logStorage,
+				installation, nil, nil, nil, nil,
+				esConfig,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+				}, true,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
+
+			// Render the objects and make sure we don't panic!
+			_, _ = component.Objects()
+		})
+
 		Context("Initial creation", func() {
 			It("should render an elasticsearchComponent", func() {
 				expectedCreateResources := []resourceTestObj{

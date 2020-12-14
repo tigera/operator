@@ -198,11 +198,7 @@ func (c *managerComponent) Ready() bool {
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	annotations := map[string]string{
-		// Mark this pod as a critical add-on; when enabled, the critical add-on scheduler
-		// reserves resources for critical add-on pods so that they can be rescheduled after
-		// a failure.  This annotation works in tandem with the toleration below.
-		"scheduler.alpha.kubernetes.io/critical-pod": "",
-		complianceServerTLSHashAnnotation:            AnnotationHash(c.complianceServerCertSecret.Data),
+		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecret.Data),
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be

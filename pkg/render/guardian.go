@@ -200,9 +200,6 @@ func (c *GuardianComponent) deployment() runtime.Object {
 					Labels: map[string]string{
 						"k8s-app": GuardianName,
 					},
-					Annotations: map[string]string{
-						"scheduler.alpha.kubernetes.io/critical-pod": "",
-					},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,

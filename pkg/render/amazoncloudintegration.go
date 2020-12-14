@@ -236,6 +236,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),

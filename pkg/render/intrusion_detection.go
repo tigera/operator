@@ -113,6 +113,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
 		Spec: ElasticsearchPodSpecDecorate(v1.PodSpec{
+			NodeSelector:     c.installation.ControlPlaneNodeSelector,
 			RestartPolicy:    v1.RestartPolicyOnFailure,
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []v1.Container{
@@ -366,6 +367,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			},
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:       c.installation.ControlPlaneNodeSelector,
 			ServiceAccountName: "intrusion-detection-controller",
 			ImagePullSecrets:   ps,
 			Containers: []corev1.Container{

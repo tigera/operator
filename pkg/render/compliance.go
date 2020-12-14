@@ -361,14 +361,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
-			Tolerations: []corev1.Toleration{
-				{
-					Key:    "node-role.kubernetes.io/master",
-					Effect: corev1.TaintEffectNoSchedule,
-				},
-			},
-			NodeSelector:     c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster),
+			NodeSelector:       c.installation.ControlPlaneNodeSelector,
+			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:          ComplianceControllerName,
@@ -488,14 +483,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			},
 			Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 				ServiceAccountName: "tigera-compliance-reporter",
-				Tolerations: []corev1.Toleration{
-					{
-						Key:    "node-role.kubernetes.io/master",
-						Effect: corev1.TaintEffectNoSchedule,
-					},
-				},
-				NodeSelector:     c.installation.ControlPlaneNodeSelector,
-				ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+				Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster),
+				NodeSelector:       c.installation.ControlPlaneNodeSelector,
+				ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 				Containers: []corev1.Container{
 					ElasticsearchContainerDecorateIndexCreator(
 						ElasticsearchContainerDecorate(corev1.Container{
@@ -660,14 +650,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-server",
-			Tolerations: []corev1.Toleration{
-				{
-					Key:    "node-role.kubernetes.io/master",
-					Effect: corev1.TaintEffectNoSchedule,
-				},
-			},
-			NodeSelector:     c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster),
+			NodeSelector:       c.installation.ControlPlaneNodeSelector,
+			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
@@ -891,14 +876,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-snapshotter",
-			Tolerations: []corev1.Toleration{
-				{
-					Key:    "node-role.kubernetes.io/master",
-					Effect: corev1.TaintEffectNoSchedule,
-				},
-			},
-			NodeSelector:     c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster),
+			NodeSelector:       c.installation.ControlPlaneNodeSelector,
+			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
@@ -1041,21 +1021,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
-			Tolerations: []corev1.Toleration{
-				{
-					Effect:   corev1.TaintEffectNoSchedule,
-					Operator: corev1.TolerationOpExists,
-				},
-				{
-					Key:      "CriticalAddonsOnly",
-					Operator: corev1.TolerationOpExists,
-				},
-				{
-					Effect:   corev1.TaintEffectNoExecute,
-					Operator: corev1.TolerationOpExists,
-				},
-			},
-			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			Tolerations:        tolerateAll(),
+			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{

@@ -77,7 +77,7 @@ var _ = Describe("Node rendering tests", func() {
 			TyphaSecret: &v1.Secret{},
 			NodeSecret:  &v1.Secret{},
 		}
-		k8sServiceEp =  k8sapi.ServiceEndpoint{}
+		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
 
 	It("should render all resources for a default configuration", func() {

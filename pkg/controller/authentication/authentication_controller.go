@@ -45,7 +45,8 @@ var log = logf.Log.WithName("controller_authentication")
 const (
 	ControllerName = "authentication-controller"
 
-	DexCN = "tigera-dex.tigera-dex.%s"
+	// Common name to add to the Dex TLS secret.
+	dexCN = "tigera-dex.tigera-dex.%s"
 )
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -209,7 +210,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(DexCN, r.localDNS))
+			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.localDNS))
 		} else {
 			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
 			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())

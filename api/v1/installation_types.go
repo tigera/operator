@@ -80,6 +80,11 @@ type InstallationSpec struct {
 	// +optional
 	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
 
+	// ControlPlaneTolerations specify tolerations which are then globally applied to all resources
+	// created by the operator.
+	// +optional
+	ControlPlaneTolerations []v1.Toleration `json:"controlPlaneTolerations,omitempty"`
+
 	// NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
 	// If specified, this overrides any FelixConfiguration resources which may exist. If omitted, then
 	// prometheus metrics may still be configured through FelixConfiguration.

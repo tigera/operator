@@ -487,8 +487,14 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
 			FetchInterval: fetchInterval,
 		}
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
 		installation = &operatorv1.InstallationSpec{
-			KubernetesProvider: operatorv1.ProviderEKS,
+			KubernetesProvider:      operatorv1.ProviderEKS,
+			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
@@ -505,6 +511,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElement(t))
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))

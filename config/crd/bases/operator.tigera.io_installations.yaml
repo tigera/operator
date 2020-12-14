@@ -285,8 +285,8 @@ spec:
                 additionalProperties:
                   type: string
                 description: ControlPlaneNodeSelector is used to select control plane
-                  nodes on which to run specific Calico components. This currently
-                  only applies to kube-controllers and the apiserver.
+                  nodes on which to run Calico components. This is globally applied
+                  to all resources created by the operator excluding daemonsets.
                 type: object
               flexVolumePath:
                 description: FlexVolumePath optionally specifies a custom path for
@@ -651,8 +651,8 @@ spec:
                     additionalProperties:
                       type: string
                     description: ControlPlaneNodeSelector is used to select control
-                      plane nodes on which to run specific Calico components. This
-                      currently only applies to kube-controllers and the apiserver.
+                      plane nodes on which to run Calico components. This is globally
+                      applied to all resources created by the operator excluding daemonsets.
                     type: object
                   flexVolumePath:
                     description: FlexVolumePath optionally specifies a custom path

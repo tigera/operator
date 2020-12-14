@@ -205,6 +205,7 @@ func (c *GuardianComponent) deployment() runtime.Object {
 					},
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),

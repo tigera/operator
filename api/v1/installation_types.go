@@ -75,8 +75,8 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
-	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
-	// components. This currently only applies to kube-controllers and the apiserver.
+	// ControlPlaneNodeSelector is used to select control plane nodes on which to run Calico
+	// components. This is globally applied to all resources created by the operator excluding daemonsets.
 	// +optional
 	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
 

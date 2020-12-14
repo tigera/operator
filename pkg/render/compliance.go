@@ -367,6 +367,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					Effect: corev1.TaintEffectNoSchedule,
 				},
 			},
+			NodeSelector:     c.installation.ControlPlaneNodeSelector,
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
@@ -493,6 +494,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						Effect: corev1.TaintEffectNoSchedule,
 					},
 				},
+				NodeSelector:     c.installation.ControlPlaneNodeSelector,
 				ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 				Containers: []corev1.Container{
 					ElasticsearchContainerDecorateIndexCreator(
@@ -664,6 +666,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					Effect: corev1.TaintEffectNoSchedule,
 				},
 			},
+			NodeSelector:     c.installation.ControlPlaneNodeSelector,
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
@@ -894,6 +897,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					Effect: corev1.TaintEffectNoSchedule,
 				},
 			},
+			NodeSelector:     c.installation.ControlPlaneNodeSelector,
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorateIndexCreator(

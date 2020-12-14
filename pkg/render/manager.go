@@ -498,18 +498,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
 func (c *managerComponent) managerTolerations() []v1.Toleration {
-	return []v1.Toleration{
-		{
-			Key:    "node-role.kubernetes.io/master",
-			Effect: v1.TaintEffectNoSchedule,
-		},
-		// Allow this pod to be rescheduled while the node is in "critical add-ons only" mode.
-		// This, along with the annotation above marks this pod as a critical add-on.
-		{
-			Key:      "CriticalAddonsOnly",
-			Operator: v1.TolerationOpExists,
-		},
-	}
+	return append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly)
 }
 
 // managerService returns the service exposing the Tigera Secure web app.

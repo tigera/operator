@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 
 	oprv1 "github.com/tigera/operator/api/v1"
@@ -49,9 +50,9 @@ const (
 	ClientIDSecretField          = "clientID"
 
 	// OIDC well-known-config related constants.
-	jwksURI     = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"
-	tokenURI    = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"
-	userInfoURI = "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"
+	jwksURI     = "https://tigera-dex.tigera-dex.%s:5556/dex/keys"
+	tokenURI    = "https://tigera-dex.tigera-dex.%s:5556/dex/token"
+	userInfoURI = "https://tigera-dex.tigera-dex.%s:5556/dex/userinfo"
 
 	// Env related constants.
 	googleAdminEmailEnv = "ADMIN_EMAIL"
@@ -166,6 +167,11 @@ func baseCfg(
 		connType = connectorTypeOpenshift
 	}
 
+	localDNS, err := common.GetLocalDNSName(common.DefaultResolveConfPath)
+	if err != nil {
+		localDNS = common.DefaultLocalDNS
+	}
+
 	return &dexBaseCfg{
 		authentication: authentication,
 		tlsSecret:      tlsSecret,
@@ -174,6 +180,7 @@ func baseCfg(
 		connectorType:  connType,
 		issuer:         issuer,
 		managerURI:     baseUrl,
+		localDNS:       localDNS,
 	}
 }
 
@@ -185,6 +192,7 @@ type dexBaseCfg struct {
 	managerURI     string
 	issuer         string
 	connectorType  string
+	localDNS       string
 }
 
 func (d *dexBaseCfg) ManagerURI() string {
@@ -272,8 +280,8 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
 		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
-		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/"},
-		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: jwksURI},
+		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.%s:5556/", d.localDNS)},
+		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.localDNS)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
@@ -418,15 +426,15 @@ func (d *dexRelyingPartyConfig) AuthURI() string {
 }
 
 func (d *dexRelyingPartyConfig) JWKSURI() string {
-	return jwksURI
+	return fmt.Sprintf(jwksURI, d.localDNS)
 }
 
 func (d *dexRelyingPartyConfig) TokenURI() string {
-	return tokenURI
+	return fmt.Sprintf(tokenURI, d.localDNS)
 }
 
 func (d *dexRelyingPartyConfig) UserInfoURI() string {
-	return userInfoURI
+	return fmt.Sprintf(userInfoURI, d.localDNS)
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.

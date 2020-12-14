@@ -67,7 +67,7 @@ var _ = Describe("dex config tests", func() {
 		},
 	}
 	dexSecret := render.CreateDexClientSecret()
-	tlsSecret := render.CreateDexTLSSecret()
+	tlsSecret := render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {

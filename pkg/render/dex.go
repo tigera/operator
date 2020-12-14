@@ -39,7 +39,6 @@ const (
 
 	// Constants related to Dex configurations
 	DexClientId = "tigera-manager"
-	DexCN       = "tigera-dex.tigera-dex.svc.cluster.local"
 )
 
 func Dex(

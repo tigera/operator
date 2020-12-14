@@ -20,6 +20,7 @@ import (
 	"time"
 
 	oprv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -43,6 +44,9 @@ var log = logf.Log.WithName("controller_authentication")
 
 const (
 	ControllerName = "authentication-controller"
+
+	// Common name to add to the Dex TLS secret.
+	dexCN = "tigera-dex.tigera-dex.%s"
 )
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -52,16 +56,22 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, common.DefaultResolveConfPath))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider oprv1.Provider) *ReconcileAuthentication {
+func newReconciler(mgr manager.Manager, provider oprv1.Provider, resolvConfPath string) *ReconcileAuthentication {
+	localDNS, err := common.GetLocalDNSName(resolvConfPath)
+	if err != nil {
+		localDNS = common.DefaultLocalDNS
+		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
+	}
 	r := &ReconcileAuthentication{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: provider,
 		status:   status.New(mgr.GetClient(), "authentication"),
+		localDNS: localDNS,
 	}
 	r.status.Run()
 	return r
@@ -110,6 +120,7 @@ type ReconcileAuthentication struct {
 	scheme   *runtime.Scheme
 	provider oprv1.Provider
 	status   status.StatusManager
+	localDNS string
 }
 
 // Reconciles the cluster state with the Authentication object that is found in the cluster.
@@ -199,7 +210,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret()
+			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.localDNS))
 		} else {
 			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
 			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())

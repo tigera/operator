@@ -38,11 +38,13 @@ func NewReconciler(
 	client client.Client,
 	scheme *runtime.Scheme,
 	provider oprv1.Provider,
-	status status.StatusManager) *ReconcileAuthentication {
+	status status.StatusManager,
+	localDNS string) *ReconcileAuthentication {
 	return &ReconcileAuthentication{
 		client:   client,
 		scheme:   scheme,
 		provider: provider,
 		status:   status,
+		localDNS: localDNS,
 	}
 }

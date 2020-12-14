@@ -116,7 +116,7 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus)
+			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
 			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)

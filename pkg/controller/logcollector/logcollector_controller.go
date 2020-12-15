@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -50,15 +51,22 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, dns.DefaultResolveConfPath))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, resolvConfPath string) reconcile.Reconciler {
+	localDNS, err := dns.GetLocalDNSName(resolvConfPath)
+	if err != nil {
+		localDNS = dns.DefaultLocalDNS
+		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
+	}
+
 	c := &ReconcileLogCollector{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: provider,
+		localDNS: localDNS,
 		status:   status.New(mgr.GetClient(), "log-collector"),
 	}
 	c.status.Run()
@@ -112,6 +120,7 @@ type ReconcileLogCollector struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
+	localDNS string
 	status   status.StatusManager
 }
 
@@ -366,6 +375,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		eksConfig,
 		pullSecrets,
 		installation,
+		r.localDNS,
 	)
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {

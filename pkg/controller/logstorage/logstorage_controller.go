@@ -584,7 +584,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		if errors.IsNotFound(err) {
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraKibanaCertSecret, "tls.key", "tls.crt",
-				render.DefaultCertificateDuration, nil, render.KibanaHTTPURL,
+				render.DefaultCertificateDuration, nil, fmt.Sprintf(render.KibanaHTTPURL, r.localDNS),
 			)
 		} else {
 			return nil, err

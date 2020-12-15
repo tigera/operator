@@ -15,21 +15,19 @@
 package logstorage
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"regexp"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	apps "k8s.io/api/apps/v1"
@@ -53,8 +51,6 @@ import (
 var log = logf.Log.WithName("controller_logstorage")
 
 const (
-	defaultResolveConfPath             = "/etc/resolv.conf"
-	defaultLocalDNS                    = "svc.cluster.local"
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
@@ -67,7 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), defaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), dns.DefaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
 	if err != nil {
 		return err
 	}
@@ -77,10 +73,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
-	localDNS, err := getLocalDNSName(resolvConfPath)
+	localDNS, err := dns.GetLocalDNSName(resolvConfPath)
 	if err != nil {
-		localDNS = defaultLocalDNS
-		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", defaultLocalDNS))
+		localDNS = dns.DefaultLocalDNS
+		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
 	}
 
 	c := &ReconcileLogStorage{
@@ -94,36 +90,6 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 
 	c.status.Run()
 	return c, nil
-}
-
-// getLocalDNSName parses the path to resolv.conf to find the local DNS name.
-func getLocalDNSName(resolvConfPath string) (string, error) {
-	var localDNSName string
-	file, err := os.Open(resolvConfPath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	reg := regexp.MustCompile(`^search.*?\s(svc\.[^\s]*)`)
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		match := reg.FindStringSubmatch(scanner.Text())
-		if len(match) > 0 {
-			localDNSName = match[1]
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-
-	if localDNSName == "" {
-		return "", fmt.Errorf("failed to find local DNS name in resolv.conf")
-	}
-
-	return localDNSName, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -618,7 +584,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		if errors.IsNotFound(err) {
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraKibanaCertSecret, "tls.key", "tls.crt",
-				render.DefaultCertificateDuration, nil, render.KibanaHTTPURL,
+				render.DefaultCertificateDuration, nil, fmt.Sprintf(render.KibanaHTTPURL, r.localDNS),
 			)
 		} else {
 			return nil, err

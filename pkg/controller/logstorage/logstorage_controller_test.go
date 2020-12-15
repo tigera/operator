@@ -16,7 +16,6 @@ package logstorage_test
 
 import (
 	"context"
-	"os"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -189,27 +188,6 @@ var _ = Describe("LogStorage controller", func() {
 						).ShouldNot(HaveOccurred())
 
 						Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.cluster.local"))
-						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-					})
-					It("tests that the ExternalService is setup with the url parsed from the given resolv.conf", func() {
-						dir, err := os.Getwd()
-						if err != nil {
-							panic(err)
-						}
-						resolvConfPath := dir + "/testdata/resolv.conf"
-
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, resolvConfPath, &mockESClient{})
-						Expect(err).ShouldNot(HaveOccurred())
-
-						_, err = r.Reconcile(reconcile.Request{})
-						Expect(err).ShouldNot(HaveOccurred())
-
-						svc := &corev1.Service{}
-						Expect(
-							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
-						).ShouldNot(HaveOccurred())
-
-						Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.othername.local"))
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 					})
 				})

@@ -106,7 +106,7 @@ var _ = Describe("dex rendering tests", func() {
 			}
 		})
 
-		It("should render the cluster dns properly", func() {
+		It("should render the cluster name properly in the validator and rp configs", func() {
 			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret)
 			validatorEnv := validatorConfig.RequiredEnv("")
 			Expect(validatorEnv[2].Value).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/"))

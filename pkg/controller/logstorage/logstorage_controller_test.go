@@ -18,6 +18,7 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/tigera/operator/pkg/apis"
@@ -61,6 +62,8 @@ var (
 	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}
 	storageClassName         = "test-storage-class"
 )
+
+const defaultLocalDNS = "svc.cluster.local"
 
 type mockESClient struct {
 }
@@ -177,8 +180,9 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("OnCRNotFound").Return()
 						mockStatus.On("ClearDegraded")
 					})
-					It("tests that the ExternalService is setup with the default service name", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+
+					DescribeTable("tests that the ExternalService is setup with the default service name", func(localDNS, expectedSvcName string) {
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, localDNS)
 						Expect(err).ShouldNot(HaveOccurred())
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
@@ -187,9 +191,12 @@ var _ = Describe("LogStorage controller", func() {
 							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
 						).ShouldNot(HaveOccurred())
 
-						Expect(svc.Spec.ExternalName).Should(Equal("tigera-guardian.tigera-guardian.svc.cluster.local"))
+						Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-					})
+					},
+						Entry("default local DNS", defaultLocalDNS, "tigera-guardian.tigera-guardian.svc.cluster.local"),
+						Entry("custom local DNS", "svc.custom-domain.internal", "tigera-guardian.tigera-guardian.svc.custom-domain.internal"),
+					)
 				})
 
 				Context("LogStorage exists", func() {
@@ -199,7 +206,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
 						result, err := r.Reconcile(reconcile.Request{})
@@ -216,7 +223,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
@@ -308,7 +315,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -396,7 +403,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, "", &mockESClient{})
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")

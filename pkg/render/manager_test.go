@@ -375,7 +375,8 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		&operator.InstallationSpec{},
 		managementCluster,
 		tunnelSecret,
-		internalTraffic)
+		internalTraffic,
+		"svc.cluster.local")
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources, _ := component.Objects()
 	return resources

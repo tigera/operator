@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common_test
+package dns_test
 
 import (
 	"os"
@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/dns"
 )
 
 var _ = Describe("Common Tests", func() {
@@ -32,13 +32,13 @@ var _ = Describe("Common Tests", func() {
 				panic(err)
 			}
 			resolvConfPath := dir + "/testdata/resolv.conf"
-			localDNS, err := common.GetLocalDNSName(resolvConfPath)
+			localDNS, err := dns.GetLocalDNSName(resolvConfPath)
 			Expect(localDNS).To(Equal("svc.othername.local"))
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("Should throw an error for a nonexisting file", func() {
-			_, err := common.GetLocalDNSName("does-not.exist")
+			_, err := dns.GetLocalDNSName("does-not.exist")
 			Expect(err).To(HaveOccurred())
 		})
 	})

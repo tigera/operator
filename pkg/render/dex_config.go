@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/dns"
 	corev1 "k8s.io/api/core/v1"
 
 	oprv1 "github.com/tigera/operator/api/v1"
@@ -167,9 +167,9 @@ func baseCfg(
 		connType = connectorTypeOpenshift
 	}
 
-	localDNS, err := common.GetLocalDNSName(common.DefaultResolveConfPath)
+	localDNS, err := dns.GetLocalDNSName(dns.DefaultResolveConfPath)
 	if err != nil {
-		localDNS = common.DefaultLocalDNS
+		localDNS = dns.DefaultLocalDNS
 	}
 
 	return &dexBaseCfg{

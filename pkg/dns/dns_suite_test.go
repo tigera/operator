@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common_test
+package dns_test
 
 import (
 	"testing"
@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../report/common_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/common/Common Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../report/dns_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/common/DNS Suite", []Reporter{junitReporter})
 }

@@ -21,13 +21,13 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
 
-	"github.com/tigera/operator/pkg/common"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	apps "k8s.io/api/apps/v1"
@@ -63,7 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), common.DefaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), dns.DefaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
 	if err != nil {
 		return err
 	}
@@ -73,9 +73,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
-	localDNS, err := common.GetLocalDNSName(resolvConfPath)
+	localDNS, err := dns.GetLocalDNSName(resolvConfPath)
 	if err != nil {
-		localDNS = common.DefaultLocalDNS
+		localDNS = dns.DefaultLocalDNS
 		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
 	}
 

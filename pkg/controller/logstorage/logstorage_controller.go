@@ -459,7 +459,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret)
+		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.localDNS)
 	}
 
 	component := render.LogStorage(

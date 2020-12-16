@@ -24,7 +24,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -56,16 +55,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, dns.DefaultResolveConfPath))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider oprv1.Provider, resolvConfPath string) *ReconcileAuthentication {
-	localDNS, err := dns.GetLocalDNSName(resolvConfPath)
-	if err != nil {
-		localDNS = dns.DefaultLocalDNS
-		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
-	}
+func newReconciler(mgr manager.Manager, provider oprv1.Provider, localDNS string) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
@@ -249,7 +243,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret)
+	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.localDNS)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

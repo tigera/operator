@@ -19,9 +19,12 @@ import (
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	v1 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
+
+const defaultLocalDNS = "svc.cluster.local"
 
 var _ = Describe("compliance rendering tests", func() {
 	Context("Standalone cluster", func() {
@@ -29,7 +32,7 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, defaultLocalDNS)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -110,6 +113,17 @@ var _ = Describe("compliance rendering tests", func() {
 					ResourceNames: []string{"compliance-server"},
 				},
 			}))
+
+			d := GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+
+			expectedEnvs := []corev1.EnvVar{
+				{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"},
+				{Name: "ELASTIC_PORT", Value: "9200"},
+			}
+			for _, expected := range expectedEnvs {
+				Expect(envs).To(ContainElement(expected))
+			}
 		})
 	})
 
@@ -119,7 +133,7 @@ var _ = Describe("compliance rendering tests", func() {
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
-				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil)
+				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, defaultLocalDNS)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -182,7 +196,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
 			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			var dpComplianceServer = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*v1.Deployment)
+			var dpComplianceServer = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
@@ -232,7 +246,7 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, defaultLocalDNS)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 

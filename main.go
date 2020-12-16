@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -196,10 +197,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	localDNS, err := dns.GetLocalDNSName(dns.DefaultResolveConfPath)
+	if err != nil {
+		localDNS = dns.DefaultLocalDNS
+		log.Error(err, fmt.Sprintf("Couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
+	}
+
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		AmazonCRDExists:     amazonCRDExists,
+		LocalDNS:            localDNS,
 	}
 
 	err = controllers.AddToManager(mgr, options)

@@ -511,7 +511,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						RequestedScopes: []string{"scope"},
 					},
 				},
-			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret())
+			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret(), "svc.cluster.local")
 
 			component := render.LogStorage(
 				logStorage,

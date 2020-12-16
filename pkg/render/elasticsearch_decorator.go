@@ -15,6 +15,7 @@
 package render
 
 import (
+	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -46,8 +47,8 @@ func ElasticsearchDecorateAnnotations(obj Annotatable, config *ElasticsearchClus
 	return obj
 }
 
-func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret string) corev1.Container {
-	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret))
+func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, localDNS string) corev1.Container {
+	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret, localDNS))
 }
 
 func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
@@ -60,8 +61,8 @@ func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, sh
 	return c
 }
 
-func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName string) corev1.Container {
-	esScheme, esHost, esPort, _ := ParseEndpoint(ElasticsearchHTTPSEndpoint)
+func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, localDNS string) corev1.Container {
+	esScheme, esHost, esPort, _ := ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, localDNS))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},

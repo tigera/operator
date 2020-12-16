@@ -15,6 +15,7 @@
 package render
 
 import (
+	"fmt"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -48,6 +49,7 @@ func IntrusionDetection(
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
+	localDNS string,
 ) Component {
 	return &intrusionDetectionComponent{
 		lc:               lc,
@@ -57,6 +59,7 @@ func IntrusionDetection(
 		esClusterConfig:  esClusterConfig,
 		pullSecrets:      pullSecrets,
 		openshift:        openshift,
+		localDNS:         localDNS,
 	}
 }
 
@@ -68,6 +71,7 @@ type intrusionDetectionComponent struct {
 	esClusterConfig  *ElasticsearchClusterConfig
 	pullSecrets      []*corev1.Secret
 	openshift        bool
+	localDNS         string
 }
 
 func (c *intrusionDetectionComponent) SupportedOSType() OSType {
@@ -112,7 +116,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			RestartPolicy:    v1.RestartPolicyOnFailure,
 			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []v1.Container{
-				ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionJobUserSecret),
+				ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionJobUserSecret, c.localDNS),
 			},
 			Volumes: []corev1.Volume{{
 				Name: "kibana-ca-cert-volume",
@@ -147,7 +151,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTPSEndpoint)
+	kScheme, kHost, kPort, _ := ParseEndpoint(fmt.Sprintf(KibanaHTTPSEndpoint, c.localDNS))
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
@@ -366,7 +370,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			ImagePullSecrets:   ps,
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorateIndexCreator(
-					ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret),
+					ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret, c.localDNS),
 					c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
 			},
 			Volumes: volumes,

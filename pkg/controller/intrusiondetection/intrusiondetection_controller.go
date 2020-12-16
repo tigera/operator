@@ -51,16 +51,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, p operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, p operatorv1.Provider, localDNS string) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: p,
 		status:   status.New(mgr.GetClient(), "intrusion-detection"),
+		localDNS: localDNS,
 	}
 	r.status.Run()
 	return r
@@ -130,6 +131,7 @@ type ReconcileIntrusionDetection struct {
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
 	status   status.StatusManager
+	localDNS string
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -252,6 +254,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
+		r.localDNS,
 	)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

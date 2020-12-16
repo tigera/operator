@@ -50,16 +50,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, localDNS string) reconcile.Reconciler {
 	c := &ReconcileManager{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: provider,
 		status:   status.New(mgr.GetClient(), "manager"),
+		localDNS: localDNS,
 	}
 	c.status.Run()
 	return c
@@ -150,6 +151,7 @@ type ReconcileManager struct {
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
 	status   status.StatusManager
+	localDNS string
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -376,7 +378,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.localDNS)
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -396,6 +398,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		managementCluster,
 		tunnelSecret,
 		internalTrafficSecret,
+		r.localDNS,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

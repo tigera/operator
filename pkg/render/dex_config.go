@@ -19,10 +19,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/dns"
-	corev1 "k8s.io/api/core/v1"
-
 	oprv1 "github.com/tigera/operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -109,14 +107,16 @@ type DexRelyingPartyConfig interface {
 func NewDexRelyingPartyConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
-	dexSecret *corev1.Secret) DexRelyingPartyConfig {
-	return &dexRelyingPartyConfig{baseCfg(authentication, tlsSecret, dexSecret, nil)}
+	dexSecret *corev1.Secret,
+	localDNS string) DexRelyingPartyConfig {
+	return &dexRelyingPartyConfig{baseCfg(authentication, tlsSecret, dexSecret, nil, localDNS)}
 }
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
-	tlsSecret *corev1.Secret) DexKeyValidatorConfig {
-	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil)}
+	tlsSecret *corev1.Secret,
+	localDNS string) DexKeyValidatorConfig {
+	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil, localDNS)}
 }
 
 // Create a new DexConfig.
@@ -124,8 +124,9 @@ func NewDexConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
-	idpSecret *corev1.Secret) DexConfig {
-	return &dexConfig{baseCfg(authentication, tlsSecret, dexSecret, idpSecret)}
+	idpSecret *corev1.Secret,
+	localDNS string) DexConfig {
+	return &dexConfig{baseCfg(authentication, tlsSecret, dexSecret, idpSecret, localDNS)}
 }
 
 type dexKeyValidatorConfig struct {
@@ -145,7 +146,8 @@ func baseCfg(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
-	idpSecret *corev1.Secret) *dexBaseCfg {
+	idpSecret *corev1.Secret,
+	localDNS string) *dexBaseCfg {
 
 	// If the manager domain is not a URL, prepend https://.
 	baseUrl := authentication.Spec.ManagerDomain
@@ -165,11 +167,6 @@ func baseCfg(
 	} else if authentication.Spec.Openshift != nil {
 		issuer = authentication.Spec.Openshift.IssuerURL
 		connType = connectorTypeOpenshift
-	}
-
-	localDNS, err := dns.GetLocalDNSName(dns.DefaultResolveConfPath)
-	if err != nil {
-		localDNS = dns.DefaultLocalDNS
 	}
 
 	return &dexBaseCfg{

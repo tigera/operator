@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,11 +42,11 @@ const (
 	apiServiceName          = "tigera-api"
 )
 
-var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
-
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, localDNS string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
+
+	apiServiceHostname := strings.Join([]string{apiServiceName, APIServerNamespace, localDNS}, ".")
 
 	if tlsKeyPair == nil {
 		var err error

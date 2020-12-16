@@ -50,16 +50,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, localDNS string) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
 		provider: provider,
 		status:   status.New(mgr.GetClient(), "log-collector"),
+		localDNS: localDNS,
 	}
 	c.status.Run()
 	return c
@@ -113,6 +114,7 @@ type ReconcileLogCollector struct {
 	scheme   *runtime.Scheme
 	provider operatorv1.Provider
 	status   status.StatusManager
+	localDNS string
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -366,6 +368,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		eksConfig,
 		pullSecrets,
 		installation,
+		r.localDNS,
 	)
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {

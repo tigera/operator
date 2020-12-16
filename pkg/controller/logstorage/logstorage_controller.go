@@ -27,7 +27,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	apps "k8s.io/api/apps/v1"
@@ -63,7 +62,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), dns.DefaultResolveConfPath, opts.DetectedProvider, utils.NewElasticClient())
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient(), opts.LocalDNS)
 	if err != nil {
 		return err
 	}
@@ -72,20 +71,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, resolvConfPath string, provider operatorv1.Provider, esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
-	localDNS, err := dns.GetLocalDNSName(resolvConfPath)
-	if err != nil {
-		localDNS = dns.DefaultLocalDNS
-		log.Error(err, fmt.Sprintf("couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
-	}
-
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esClient utils.ElasticClient, localDNS string) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
 		client:   cli,
 		scheme:   schema,
 		status:   statusMgr,
 		provider: provider,
-		localDNS: localDNS,
 		esClient: esClient,
+		localDNS: localDNS,
 	}
 
 	c.status.Run()
@@ -208,8 +201,8 @@ type ReconcileLogStorage struct {
 	scheme   *runtime.Scheme
 	status   status.StatusManager
 	provider operatorv1.Provider
-	localDNS string
 	esClient utils.ElasticClient
+	localDNS string
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -466,7 +459,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret)
+		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.localDNS)
 	}
 
 	component := render.LogStorage(
@@ -542,7 +535,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 		if errors.IsNotFound(err) {
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt",
-				render.DefaultCertificateDuration, nil, render.ElasticsearchHTTPURL,
+				render.DefaultCertificateDuration, nil, fmt.Sprintf(render.ElasticsearchHTTPURL, r.localDNS),
 			)
 		} else {
 			return nil, err
@@ -584,7 +577,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		if errors.IsNotFound(err) {
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraKibanaCertSecret, "tls.key", "tls.crt",
-				render.DefaultCertificateDuration, nil, render.KibanaHTTPURL,
+				render.DefaultCertificateDuration, nil, fmt.Sprintf(render.KibanaHTTPURL, r.localDNS),
 			)
 		} else {
 			return nil, err

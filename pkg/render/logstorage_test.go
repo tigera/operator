@@ -343,7 +343,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 					},
-					nil, nil, "cluster.local", true, nil)
+					nil, nil, "svc.cluster.local", true, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -511,7 +511,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						RequestedScopes: []string{"scope"},
 					},
 				},
-			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret())
+			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret(), "svc.cluster.local")
 
 			component := render.LogStorage(
 				logStorage,

@@ -29,8 +29,8 @@ func NewReconcilerWithShims(
 	schema *runtime.Scheme,
 	status status.StatusManager,
 	provider operatorv1.Provider,
-	resolvConfPath string,
-	esClient utils.ElasticClient) (*ReconcileLogStorage, error) {
+	esClient utils.ElasticClient,
+	localDNS string) (*ReconcileLogStorage, error) {
 
-	return newReconciler(cli, schema, status, resolvConfPath, provider, esClient)
+	return newReconciler(cli, schema, status, provider, esClient, localDNS)
 }

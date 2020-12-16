@@ -243,7 +243,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret)
+	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.localDNS)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

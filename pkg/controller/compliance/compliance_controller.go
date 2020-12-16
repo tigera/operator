@@ -303,7 +303,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.localDNS)
 	}
 
 	reqLogger.V(3).Info("rendering components")

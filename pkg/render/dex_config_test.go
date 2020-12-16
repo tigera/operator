@@ -68,10 +68,11 @@ var _ = Describe("dex config tests", func() {
 	}
 	dexSecret := render.CreateDexClientSecret()
 	tlsSecret := render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
+	const defaultLocalDNS = "svc.cluster.local"
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {
-			connector := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret).Connector()
+			connector := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, defaultLocalDNS).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
 		})
@@ -79,9 +80,9 @@ var _ = Describe("dex config tests", func() {
 
 	Context("Hashes should be consistent and not be affected by fields with pointers", func() {
 		It("should produce consistent hashes for dex config", func() {
-			hashes1 := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret).RequiredAnnotations()
-			hashes2 := render.NewDexConfig(authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret).RequiredAnnotations()
-			hashes3 := render.NewDexConfig(authenticationDiff, tlsSecret, dexSecret, idpSecret).RequiredAnnotations()
+			hashes1 := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, defaultLocalDNS).RequiredAnnotations()
+			hashes2 := render.NewDexConfig(authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret, defaultLocalDNS).RequiredAnnotations()
+			hashes3 := render.NewDexConfig(authenticationDiff, tlsSecret, dexSecret, idpSecret, defaultLocalDNS).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(4))
 			Expect(hashes2).To(HaveLen(4))
 			Expect(hashes3).To(HaveLen(4))
@@ -90,9 +91,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for rp's", func() {
-			hashes1 := render.NewDexRelyingPartyConfig(authentication, tlsSecret, idpSecret).RequiredAnnotations()
-			hashes2 := render.NewDexRelyingPartyConfig(authentication.DeepCopy(), tlsSecret, idpSecret).RequiredAnnotations()
-			hashes3 := render.NewDexRelyingPartyConfig(authenticationDiff, tlsSecret, idpSecret).RequiredAnnotations()
+			hashes1 := render.NewDexRelyingPartyConfig(authentication, tlsSecret, idpSecret, defaultLocalDNS).RequiredAnnotations()
+			hashes2 := render.NewDexRelyingPartyConfig(authentication.DeepCopy(), tlsSecret, idpSecret, defaultLocalDNS).RequiredAnnotations()
+			hashes3 := render.NewDexRelyingPartyConfig(authenticationDiff, tlsSecret, idpSecret, defaultLocalDNS).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(3))
 			Expect(hashes2).To(HaveLen(3))
 			Expect(hashes3).To(HaveLen(3))
@@ -101,9 +102,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for verifiers", func() {
-			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret).RequiredAnnotations()
-			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret).RequiredAnnotations()
-			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret).RequiredAnnotations()
+			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret, defaultLocalDNS).RequiredAnnotations()
+			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, defaultLocalDNS).RequiredAnnotations()
+			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret, defaultLocalDNS).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(2))
 			Expect(hashes2).To(HaveLen(2))
 			Expect(hashes3).To(HaveLen(2))

@@ -345,7 +345,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"))
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"), "svc.cluster.local")
 	}
 
 	var tunnelSecret *corev1.Secret

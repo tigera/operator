@@ -83,7 +83,9 @@ LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.45
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
-SRC_FILES+=$(shell find ./cmd -name '*.go')
+SRC_FILES+=$(shell find ./api -name '*.go')
+SRC_FILES+=$(shell find ./controllers -name '*.go')
+SRC_FILES+=main.go
 
 EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
 ifeq ($(GIT_USE_SSH),true)
@@ -303,6 +305,22 @@ static-checks:
 fix:
 	goimports -w $(SRC_FILES)
 
+.PHONY: format-check
+format-check:
+	@$(CONTAINERIZED) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	files=$$(gofmt -l ./pkg ./controllers ./api ./test); \
+	[ "$$files" = "" ] && exit 0; \
+	echo The following files need a format update:; \
+	echo $$files; \
+	echo Try running \"make fmt\" and committing any changes; \
+	exit 1'
+
+.PHONY: dirty-check
+dirty-check:
+	@if [ "$$(git diff --stat)" = "" ]; then exit 0; fi; \
+	echo "The following files are dirty"; git diff --stat
+
 foss-checks:
 	@echo Running $@...
 	docker run --rm \
@@ -317,7 +335,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean images test $(BINDIR)/gen-versions validate-gen-versions
+ci: clean format-check images test $(BINDIR)/gen-versions validate-gen-versions dirty-check
 
 validate-gen-versions:
 	./hack/gen-versions/validate.sh

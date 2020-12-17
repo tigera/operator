@@ -643,12 +643,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
-	isPrivileged := false
-	if c.openshift {
-		isPrivileged = true
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
@@ -659,14 +653,18 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
+	isPrivileged := true
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
 		Image: components.GetReference(components.ComponentAPIServer, c.installation.Registry, c.installation.ImagePath),
 		Args:  c.startUpArgs(),
 		Env:   env,
 		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
-		VolumeMounts:    volumeMounts,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &isPrivileged,
+			RunAsUser:  Int64(0),
+		},
+		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{

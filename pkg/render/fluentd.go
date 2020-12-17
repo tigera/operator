@@ -85,6 +85,7 @@ func Fluentd(
 	eksConfig *EksCloudwatchLogConfig,
 	pullSecrets []*corev1.Secret,
 	installation *operatorv1.InstallationSpec,
+	localDNS string,
 ) Component {
 	return &fluentdComponent{
 		lc:              lc,
@@ -96,6 +97,7 @@ func Fluentd(
 		eksConfig:       eksConfig,
 		pullSecrets:     pullSecrets,
 		installation:    installation,
+		localDNS:        localDNS,
 	}
 }
 
@@ -118,6 +120,7 @@ type fluentdComponent struct {
 	eksConfig       *EksCloudwatchLogConfig
 	pullSecrets     []*corev1.Secret
 	installation    *operatorv1.InstallationSpec
+	localDNS        string
 }
 
 func (c *fluentdComponent) SupportedOSType() OSType {
@@ -359,7 +362,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		VolumeMounts:    volumeMounts,
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
-	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret)
+	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.localDNS)
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
@@ -714,13 +717,13 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						Command:      []string{"/bin/eks-log-forwarder-startup"},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
-					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},
+					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.localDNS)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName,
 						Image:        components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath),
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
-					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},
+					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.localDNS)},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},

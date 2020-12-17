@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,8 +34,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var installation *operatorv1.InstallationSpec
 	var esConfigMap *render.ElasticsearchClusterConfig
 	var splkCreds *render.SplunkCredential
-
-	const defaultLocalDNS = "svc.cluster.local"
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -99,7 +98,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Expect(envs).To(ContainElement(expected))
 		}
 	},
-		Entry("default cluster DNS", defaultLocalDNS, "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
+		Entry("default cluster DNS", dns.DefaultLocalDNS, "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
 		Entry("custom cluster DNS", "svc.acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal"),
 	)
 
@@ -133,7 +132,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, defaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -206,7 +205,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, defaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -289,7 +288,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, defaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -370,7 +369,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, defaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -439,7 +438,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, defaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -491,7 +490,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderEKS,
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, defaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 

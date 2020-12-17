@@ -18,13 +18,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
-
-const defaultLocalDNS = "svc.cluster.local"
 
 var _ = Describe("compliance rendering tests", func() {
 	Context("Standalone cluster", func() {
@@ -32,7 +31,7 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, defaultLocalDNS)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, dns.DefaultLocalDNS)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -133,7 +132,7 @@ var _ = Describe("compliance rendering tests", func() {
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
-				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, defaultLocalDNS)
+				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, dns.DefaultLocalDNS)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -246,7 +245,7 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, defaultLocalDNS)
+			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, dns.DefaultLocalDNS)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 

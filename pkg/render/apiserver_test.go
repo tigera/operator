@@ -36,6 +36,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -43,7 +44,6 @@ var _ = Describe("API server rendering tests", func() {
 	var instance *operator.InstallationSpec
 	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Address: "example.com:1234"}}
 	var k8sServiceEp k8sapi.ServiceEndpoint
-	const defaultLocalDNS = "svc.cluster.local"
 
 	BeforeEach(func() {
 		instance = &operator.InstallationSpec{
@@ -229,7 +229,7 @@ var _ = Describe("API server rendering tests", func() {
 		clusterRole = GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
 	},
-		Entry("default local DNS", defaultLocalDNS),
+		Entry("default local DNS", dns.DefaultLocalDNS),
 		Entry("custom local DNS", ".svc.custom-domain.internal"),
 	)
 
@@ -265,7 +265,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -312,7 +312,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -367,7 +367,7 @@ var _ = Describe("API server rendering tests", func() {
 		}
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -409,7 +409,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -442,7 +442,7 @@ var _ = Describe("API server rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, aci, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, aci, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -468,7 +468,7 @@ var _ = Describe("API server rendering tests", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -480,7 +480,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, nil, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -562,7 +562,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, defaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, dns.DefaultLocalDNS)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()

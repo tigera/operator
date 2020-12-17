@@ -25,6 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/logstorage"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	"github.com/stretchr/testify/mock"
@@ -62,8 +63,6 @@ var (
 	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}
 	storageClassName         = "test-storage-class"
 )
-
-const defaultLocalDNS = "svc.cluster.local"
 
 type mockESClient struct {
 }
@@ -194,7 +193,7 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 					},
-						Entry("default local DNS", defaultLocalDNS, "tigera-guardian.tigera-guardian.svc.cluster.local"),
+						Entry("default local DNS", dns.DefaultLocalDNS, "tigera-guardian.tigera-guardian.svc.cluster.local"),
 						Entry("custom local DNS", "svc.custom-domain.internal", "tigera-guardian.tigera-guardian.svc.custom-domain.internal"),
 					)
 				})
@@ -206,7 +205,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultLocalDNS)
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
 						result, err := r.Reconcile(reconcile.Request{})
@@ -223,7 +222,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
+						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultLocalDNS)
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
@@ -315,7 +314,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultLocalDNS)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -403,7 +402,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, defaultLocalDNS)
+					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultLocalDNS)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")

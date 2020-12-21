@@ -395,7 +395,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client); err != nil {
-			r.status.SetDegraded("Failed to get elastic license details", err.Error())
+			r.status.SetDegraded("Failed to get elastic license", err.Error())
 			return reconcile.Result{}, err
 		}
 

@@ -96,10 +96,9 @@ const (
 	// +optional
 	maxLogsStoragePercent int32 = 70
 
-	ElasticLicenseTypeBasic           ElasticLicenseType = "basic"
-	ElasticLicenseTypeEnterprise      ElasticLicenseType = "enterprise"
-	ElasticLicenseTypeEnterpriseTrial ElasticLicenseType = "enterprise_trial"
-	ElasticLicenseTypeLegacyTrial     ElasticLicenseType = "enterprise-trial"
+	ElasticLicenseTypeBasic      ElasticLicenseType = "basic"
+	ElasticLicenseTypeEnterprise ElasticLicenseType = "enterprise"
+	ElasticLicenseTypeUnknown    ElasticLicenseType = ""
 )
 
 const (

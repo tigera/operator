@@ -301,8 +301,8 @@ func GetExpectedTyphaScale(nodes int) int {
 	return typhas
 }
 
-// GetElasticLicenseType returns the Elasticsearch license type from elastic-licensing configmap that ECK operator keeps updated
-// If elastic-licensing configmap doesn't exists, it must be a fresh install, return "basic" license
+// GetElasticLicenseType returns the Elasticsearch license type from elastic-licensing configmap that ECK operator keeps updated.
+// If elastic-licensing configmap doesn't exists, it must be a fresh install, return "basic" license.
 func GetElasticLicenseType(ctx context.Context, cli client.Client) (render.ElasticLicenseType, error) {
 	cm := &corev1.ConfigMap{}
 	err := cli.Get(ctx, client.ObjectKey{Name: render.ECKLicenseConfigMapName, Namespace: render.ECKOperatorNamespace}, cm)
@@ -310,11 +310,11 @@ func GetElasticLicenseType(ctx context.Context, cli client.Client) (render.Elast
 		if errors.IsNotFound(err) {
 			return render.ElasticLicenseTypeBasic, nil
 		}
-		return "", err
+		return render.ElasticLicenseTypeUnknown, err
 	}
 	license, ok := cm.Data["eck_license_level"]
 	if !ok {
-		return "", fmt.Errorf("eck_license_level not available")
+		return render.ElasticLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
 	}
 
 	return render.ElasticLicenseType(license), nil

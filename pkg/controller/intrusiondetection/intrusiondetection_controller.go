@@ -245,7 +245,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	var elasticLicenseType render.ElasticLicenseType = ""
+	var elasticLicenseType render.ElasticLicenseType
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading ManagementClusterConnection")
@@ -253,9 +253,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 	if managementClusterConnection == nil {
-
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client); err != nil {
-			r.status.SetDegraded("Failed to get elastic license details", err.Error())
+			r.status.SetDegraded("Failed to get elastic license", err.Error())
 			return reconcile.Result{}, err
 		}
 	}

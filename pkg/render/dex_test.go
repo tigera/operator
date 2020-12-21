@@ -2,11 +2,13 @@ package render_test
 
 import (
 	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -108,20 +110,20 @@ var _ = Describe("dex rendering tests", func() {
 			}
 		})
 
-		DescribeTable("should render the cluster name properly in the validator and rp configs", func(localDNS string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret, localDNS)
+		DescribeTable("should render the cluster name properly in the validator and rp configs", func(clusterDomain string) {
+			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
-			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.%s:5556", localDNS)
+			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)
 			Expect(validatorEnv[2].Value).To(Equal(expectedUrl + "/"))
 			Expect(validatorEnv[3].Value).To(Equal(expectedUrl + "/dex/keys"))
 
-			rpConfig := render.NewDexRelyingPartyConfig(authentication, tlsSecret, dexSecret, localDNS)
+			rpConfig := render.NewDexRelyingPartyConfig(authentication, tlsSecret, dexSecret, clusterDomain)
 			Expect(rpConfig.UserInfoURI()).To(Equal(expectedUrl + "/dex/userinfo"))
 			Expect(rpConfig.TokenURI()).To(Equal(expectedUrl + "/dex/token"))
 		},
-			Entry("default local DNS", "svc.cluster.local"),
-			Entry("custom local DNS", "svc.custom.internal"),
+			Entry("default cluster domain", dns.DefaultClusterDomain),
+			Entry("custom cluster domain", "custom.internal"),
 		)
 	})
 })

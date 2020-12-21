@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -345,7 +346,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"), "svc.cluster.local")
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
 	}
 
 	var tunnelSecret *corev1.Secret
@@ -376,7 +377,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		managementCluster,
 		tunnelSecret,
 		internalTraffic,
-		"svc.cluster.local")
+		dns.DefaultClusterDomain)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources, _ := component.Objects()
 	return resources

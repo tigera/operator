@@ -10,5 +10,5 @@ type AddOptions struct {
 	DetectedProvider    v1.Provider
 	EnterpriseCRDExists bool
 	AmazonCRDExists     bool
-	LocalDNS            string
+	ClusterDomain       string
 }

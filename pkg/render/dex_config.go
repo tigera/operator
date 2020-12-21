@@ -48,9 +48,9 @@ const (
 	ClientIDSecretField          = "clientID"
 
 	// OIDC well-known-config related constants.
-	jwksURI     = "https://tigera-dex.tigera-dex.%s:5556/dex/keys"
-	tokenURI    = "https://tigera-dex.tigera-dex.%s:5556/dex/token"
-	userInfoURI = "https://tigera-dex.tigera-dex.%s:5556/dex/userinfo"
+	jwksURI     = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/keys"
+	tokenURI    = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/token"
+	userInfoURI = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/userinfo"
 
 	// Env related constants.
 	googleAdminEmailEnv = "ADMIN_EMAIL"
@@ -108,15 +108,15 @@ func NewDexRelyingPartyConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
-	localDNS string) DexRelyingPartyConfig {
-	return &dexRelyingPartyConfig{baseCfg(authentication, tlsSecret, dexSecret, nil, localDNS)}
+	clusterDomain string) DexRelyingPartyConfig {
+	return &dexRelyingPartyConfig{baseCfg(authentication, tlsSecret, dexSecret, nil, clusterDomain)}
 }
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
-	localDNS string) DexKeyValidatorConfig {
-	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil, localDNS)}
+	clusterDomain string) DexKeyValidatorConfig {
+	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil, clusterDomain)}
 }
 
 // Create a new DexConfig.
@@ -125,8 +125,8 @@ func NewDexConfig(
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
-	localDNS string) DexConfig {
-	return &dexConfig{baseCfg(authentication, tlsSecret, dexSecret, idpSecret, localDNS)}
+	clusterDomain string) DexConfig {
+	return &dexConfig{baseCfg(authentication, tlsSecret, dexSecret, idpSecret, clusterDomain)}
 }
 
 type dexKeyValidatorConfig struct {
@@ -147,7 +147,7 @@ func baseCfg(
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
-	localDNS string) *dexBaseCfg {
+	clusterDomain string) *dexBaseCfg {
 
 	// If the manager domain is not a URL, prepend https://.
 	baseUrl := authentication.Spec.ManagerDomain
@@ -177,7 +177,7 @@ func baseCfg(
 		connectorType:  connType,
 		issuer:         issuer,
 		managerURI:     baseUrl,
-		localDNS:       localDNS,
+		clusterDomain:  clusterDomain,
 	}
 }
 
@@ -189,7 +189,7 @@ type dexBaseCfg struct {
 	managerURI     string
 	issuer         string
 	connectorType  string
-	localDNS       string
+	clusterDomain  string
 }
 
 func (d *dexBaseCfg) ManagerURI() string {
@@ -277,8 +277,8 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
 		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
-		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.%s:5556/", d.localDNS)},
-		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.localDNS)},
+		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556/", d.clusterDomain)},
+		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
@@ -423,15 +423,15 @@ func (d *dexRelyingPartyConfig) AuthURI() string {
 }
 
 func (d *dexRelyingPartyConfig) JWKSURI() string {
-	return fmt.Sprintf(jwksURI, d.localDNS)
+	return fmt.Sprintf(jwksURI, d.clusterDomain)
 }
 
 func (d *dexRelyingPartyConfig) TokenURI() string {
-	return fmt.Sprintf(tokenURI, d.localDNS)
+	return fmt.Sprintf(tokenURI, d.clusterDomain)
 }
 
 func (d *dexRelyingPartyConfig) UserInfoURI() string {
-	return fmt.Sprintf(userInfoURI, d.localDNS)
+	return fmt.Sprintf(userInfoURI, d.clusterDomain)
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.

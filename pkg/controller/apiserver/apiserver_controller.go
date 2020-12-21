@@ -49,18 +49,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists, opts.LocalDNS))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists, opts.ClusterDomain))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool, localDNS string) *ReconcileAPIServer {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool, clusterDomain string) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		provider:        provider,
 		amazonCRDExists: amazonCRDExists,
 		status:          status.New(mgr.GetClient(), "apiserver"),
-		localDNS:        localDNS,
+		clusterDomain:   clusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -132,7 +132,7 @@ type ReconcileAPIServer struct {
 	provider        operatorv1.Provider
 	amazonCRDExists bool
 	status          status.StatusManager
-	localDNS        string
+	clusterDomain   string
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -250,7 +250,7 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 	component, err := render.APIServer(k8sapi.Endpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
-		tunnelCASecret, r.localDNS)
+		tunnelCASecret, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

@@ -21,6 +21,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -63,17 +64,22 @@ func Compliance(
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	dexCfg DexKeyValidatorConfig,
-	localDNS string,
+	clusterDomain string,
 ) (Component, error) {
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
 		var err error
+		svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf("compliance.tigera-compliance.svc.%s", clusterDomain), clusterDomain)
+		if err != nil {
+			return nil, err
+		}
+
 		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
 			ComplianceServerCertSecret,
 			"tls.key",
 			"tls.crt",
 			DefaultCertificateDuration,
-			nil, fmt.Sprintf("compliance.tigera-compliance.%s", localDNS),
+			nil, svcDNSNames...,
 		)
 		if err != nil {
 			return nil, err
@@ -91,7 +97,7 @@ func Compliance(
 		pullSecrets:                 pullSecrets,
 		complianceServerCertSecrets: complianceServerCertSecrets,
 		openshift:                   openshift,
-		localDNS:                    localDNS,
+		clusterDomain:               clusterDomain,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		dexCfg:                      dexCfg,
@@ -106,7 +112,7 @@ type complianceComponent struct {
 	pullSecrets                 []*corev1.Secret
 	complianceServerCertSecrets []*corev1.Secret
 	openshift                   bool
-	localDNS                    string
+	clusterDomain               string
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
 	dexCfg                      DexKeyValidatorConfig
@@ -371,7 +377,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					Image:         components.GetReference(components.ComponentComplianceController, c.installation.Registry, c.installation.ImagePath),
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
-				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.localDNS),
+				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.clusterDomain),
 			},
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
@@ -504,7 +510,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
 							},
-						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.localDNS), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.clusterDomain), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 					),
 				},
 				Volumes: []corev1.Volume{
@@ -692,7 +698,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						FailureThreshold:    5,
 					},
 					VolumeMounts: c.complianceVolumeMounts(),
-				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.localDNS),
+				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.clusterDomain),
 			},
 			Volumes: c.complianceVolumes(),
 		}),
@@ -899,7 +905,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 						Image:         components.GetReference(components.ComponentComplianceSnapshotter, c.installation.Registry, c.installation.ImagePath),
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
-					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.localDNS), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.clusterDomain), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 				),
 			},
 		}),
@@ -1057,7 +1063,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 						Env:           envVars,
 						VolumeMounts:  volMounts,
 						LivenessProbe: complianceLivenessProbe,
-					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.localDNS), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.clusterDomain), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
 				),
 			},
 			Volumes: vols,

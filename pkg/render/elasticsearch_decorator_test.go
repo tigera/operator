@@ -53,8 +53,8 @@ var _ = Describe("Elasticsearch decorator tests", func() {
 				Expect(c.Env).To(ContainElement(expected))
 			}
 		},
-			Entry("default cluster DNS", "svc.cluster.local", "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
-			Entry("custom cluster DNS", "svc.acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal"),
+			Entry("default cluster domain", "cluster.local", "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
+			Entry("custom cluster domain", "acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal"),
 		)
 	})
 })

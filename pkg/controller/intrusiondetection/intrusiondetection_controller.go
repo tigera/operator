@@ -245,7 +245,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	var elasticLicenseType render.ElasticLicenseType
+	var elasticLicenseType render.ElasticsearchLicenseType
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Failed to read ManagementClusterConnection")

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,13 +67,13 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		})).ShouldNot(HaveOccurred())
 		license, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(license).Should(Equal(render.ElasticLicenseTypeEnterprise))
+		Expect(license).Should(Equal(render.ElasticsearchLicenseTypeEnterprise))
 	})
 
 	It("Return error if elastic-licensing not found", func() {
 		license, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
-		Expect(license).Should(Equal(render.ElasticLicenseTypeUnknown))
+		Expect(license).Should(Equal(render.ElasticsearchLicenseTypeUnknown))
 	})
 
 	It("Return error if license type if missing", func() {

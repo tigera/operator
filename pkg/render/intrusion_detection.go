@@ -50,7 +50,7 @@ func IntrusionDetection(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	clusterDomain string,
-	elasticLicenseType ElasticLicenseType,
+	elasticLicenseType ElasticsearchLicenseType,
 ) Component {
 	return &intrusionDetectionComponent{
 		lc:                 lc,
@@ -74,7 +74,7 @@ type intrusionDetectionComponent struct {
 	pullSecrets        []*corev1.Secret
 	openshift          bool
 	clusterDomain      string
-	elasticLicenseType ElasticLicenseType
+	elasticLicenseType ElasticsearchLicenseType
 }
 
 func (c *intrusionDetectionComponent) SupportedOSType() OSType {
@@ -371,7 +371,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain, OSTypeLinux),
 		c.esClusterConfig.Replicas(), c.esClusterConfig.Shards())
 
-	if c.elasticLicenseType == ElasticLicenseTypeBasic {
+	if c.elasticLicenseType == ElasticsearchLicenseTypeBasic {
 		envVars := []corev1.EnvVar{
 			{Name: "DISABLE_ANOMALY", Value: "yes"},
 			{Name: "DISABLE_ALERTS", Value: "yes"},

@@ -173,6 +173,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.OIDCUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{render.OIDCUsersSecreteName},
+				Verbs:         []string{"get", "list"},
+			},
 		}))
 	})
 
@@ -333,6 +345,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.OIDCUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{render.OIDCUsersSecreteName},
+				Verbs:         []string{"get", "list"},
+			},
 		}))
 	})
 
@@ -353,7 +377,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&render.ElasticsearchClusterConfig{},
 			nil, nil, false,
 			i,
-			nil, nil, nil, "")
+			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
 		return GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
@@ -421,7 +445,8 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		managementCluster,
 		tunnelSecret,
 		internalTraffic,
-		dns.DefaultClusterDomain)
+		dns.DefaultClusterDomain,
+		render.ElasticsearchLicenseTypeEnterpriseTrial)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	resources, _ := component.Objects()
 	return resources

@@ -197,6 +197,18 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"clusterroles", "clusterrolebindings"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{OIDCUsersConfigMapName},
+				Verbs:         []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{OIDCUsersSecreteName},
+				Verbs:         []string{"update", "get", "list"},
+			},
 		}
 
 		role.Rules = append(role.Rules, extraRules...)

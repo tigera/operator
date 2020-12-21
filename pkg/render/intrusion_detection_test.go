@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +34,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, "svc.cluster.local",
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain,
 		)
 		resources, _ := component.Objects()
 
@@ -98,7 +99,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, "svc.cluster.local",
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain,
 		)
 		resources, _ := component.Objects()
 

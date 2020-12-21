@@ -38,7 +38,7 @@ const (
 	managerPort                      = 9443
 	managerTargetPort                = 9443
 	ManagerNamespace                 = "tigera-manager"
-	ManagerServiceDNS                = "tigera-manager.tigera-manager.%s"
+	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc.%s"
 	ManagerServiceIP                 = "localhost"
 	ManagerServiceAccount            = "tigera-manager"
 	ManagerClusterRole               = "tigera-manager-role"
@@ -81,7 +81,7 @@ func Manager(
 	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
-	localDNS string,
+	clusterDomain string,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 
@@ -128,7 +128,7 @@ func Manager(
 		tlsAnnotations:             tlsAnnotations,
 		pullSecrets:                pullSecrets,
 		openshift:                  openshift,
-		localDNS:                   localDNS,
+		clusterDomain:              clusterDomain,
 		installation:               installation,
 		managementCluster:          managementCluster,
 	}, nil
@@ -144,7 +144,7 @@ type managerComponent struct {
 	tlsAnnotations             map[string]string
 	pullSecrets                []*corev1.Secret
 	openshift                  bool
-	localDNS                   string
+	clusterDomain              string
 	installation               *operator.InstallationSpec
 	managementCluster          *operator.ManagementCluster
 }
@@ -228,8 +228,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.localDNS),
-				ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.localDNS),
+				ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain),
+				ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain),
 				c.managerProxyContainer(),
 			},
 			Volumes: c.managerVolumes(),
@@ -434,9 +434,9 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
-		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.%s", ComplianceNamespace, c.localDNS)},
+		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.clusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "info"},
-		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: fmt.Sprintf(KibanaHTTPSEndpoint, c.localDNS)},
+		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},

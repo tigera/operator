@@ -55,17 +55,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider oprv1.Provider, localDNS string) *ReconcileAuthentication {
+func newReconciler(mgr manager.Manager, provider oprv1.Provider, clusterDomain string) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: provider,
-		status:   status.New(mgr.GetClient(), "authentication"),
-		localDNS: localDNS,
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		provider:      provider,
+		status:        status.New(mgr.GetClient(), "authentication"),
+		clusterDomain: clusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -110,11 +110,11 @@ var _ reconcile.Reconciler = &ReconcileAuthentication{}
 
 // ReconcileAuthentication reconciles an Authentication object
 type ReconcileAuthentication struct {
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider oprv1.Provider
-	status   status.StatusManager
-	localDNS string
+	client        client.Client
+	scheme        *runtime.Scheme
+	provider      oprv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconciles the cluster state with the Authentication object that is found in the cluster.
@@ -204,7 +204,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.localDNS))
+			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.clusterDomain))
 		} else {
 			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
 			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
@@ -243,7 +243,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.localDNS)
+	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

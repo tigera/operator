@@ -52,7 +52,7 @@ var _ = Describe("API server rendering tests", func() {
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
 
-	DescribeTable("should render an API server with default configuration", func(localDNS string) {
+	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -85,7 +85,7 @@ var _ = Describe("API server rendering tests", func() {
 		}
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, localDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, clusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -121,15 +121,15 @@ var _ = Describe("API server rendering tests", func() {
 
 		operatorCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		verifyCert(operatorCert, localDNS)
+		verifyCert(operatorCert, clusterDomain)
 
 		tigeraCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		verifyCert(tigeraCert, localDNS)
+		verifyCert(tigeraCert, clusterDomain)
 
 		apiService, ok := GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
-		verifyAPIService(apiService, localDNS)
+		verifyAPIService(apiService, clusterDomain)
 
 		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
 
@@ -229,8 +229,8 @@ var _ = Describe("API server rendering tests", func() {
 		clusterRole = GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
 	},
-		Entry("default local DNS", dns.DefaultLocalDNS),
-		Entry("custom local DNS", ".svc.custom-domain.internal"),
+		Entry("default cluster domain", dns.DefaultClusterDomain),
+		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
 	It("should render an API server with custom configuration", func() {
@@ -265,7 +265,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -312,7 +312,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -367,7 +367,7 @@ var _ = Describe("API server rendering tests", func() {
 		}
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -409,7 +409,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -442,7 +442,7 @@ var _ = Describe("API server rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, aci, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, aci, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -468,7 +468,7 @@ var _ = Describe("API server rendering tests", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
 
-		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -480,7 +480,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, nil, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -562,7 +562,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, dns.DefaultLocalDNS)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
 		resources, _ := component.Objects()
@@ -636,7 +636,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 })
 
-func verifyAPIService(service *v1beta1.APIService, localDNS string) {
+func verifyAPIService(service *v1beta1.APIService, clusterDomain string) {
 	Expect(service.Name).To(Equal("v3.projectcalico.org"))
 	Expect(service.Spec.Group).To(Equal("projectcalico.org"))
 	Expect(service.Spec.Version).To(Equal("v3"))
@@ -645,21 +645,26 @@ func verifyAPIService(service *v1beta1.APIService, localDNS string) {
 	Expect(service.Spec.InsecureSkipTLSVerify).To(BeFalse())
 
 	ca := service.Spec.CABundle
-	verifyCertSANs(ca, localDNS)
+	verifyCertSANs(ca, clusterDomain)
 }
 
-func verifyCert(secret *corev1.Secret, localDNS string) {
+func verifyCert(secret *corev1.Secret, clusterDomain string) {
 	Expect(secret.Data).To(HaveKey("apiserver.crt"))
 	Expect(secret.Data).To(HaveKey("apiserver.key"))
 
-	verifyCertSANs(secret.Data["apiserver.crt"], localDNS)
+	verifyCertSANs(secret.Data["apiserver.crt"], clusterDomain)
 }
 
-func verifyCertSANs(certBytes []byte, localDNS string) {
+func verifyCertSANs(certBytes []byte, clusterDomain string) {
 	pemBlock, _ := pem.Decode(certBytes)
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
-	Expect(cert.DNSNames).To(ConsistOf([]string{"tigera-api.tigera-system." + localDNS}), "Expect cert SAN's to match extension API server service DNS name")
+	expectedDNSNames := []string{
+		"tigera-api.tigera-system",
+		"tigera-api.tigera-system.svc",
+		"tigera-api.tigera-system.svc." + clusterDomain,
+	}
+	Expect(cert.DNSNames).To(ConsistOf(expectedDNSNames), "Expect cert SAN's to match extension API server service DNS names")
 }
 
 func validateTunnelSecret(voltronSecret *corev1.Secret) {

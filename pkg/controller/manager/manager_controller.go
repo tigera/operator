@@ -50,17 +50,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, localDNS string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
 	c := &ReconcileManager{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: provider,
-		status:   status.New(mgr.GetClient(), "manager"),
-		localDNS: localDNS,
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		provider:      provider,
+		status:        status.New(mgr.GetClient(), "manager"),
+		clusterDomain: clusterDomain,
 	}
 	c.status.Run()
 	return c
@@ -147,11 +147,11 @@ var _ reconcile.Reconciler = &ReconcileManager{}
 type ReconcileManager struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider operatorv1.Provider
-	status   status.StatusManager
-	localDNS string
+	client        client.Client
+	scheme        *runtime.Scheme
+	provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -378,7 +378,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.localDNS)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -398,7 +398,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		managementCluster,
 		tunnelSecret,
 		internalTrafficSecret,
-		r.localDNS,
+		r.clusterDomain,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

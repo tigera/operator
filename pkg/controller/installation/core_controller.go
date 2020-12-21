@@ -97,7 +97,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		localDNS:             opts.LocalDNS,
+		clusterDomain:        opts.ClusterDomain,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
@@ -232,7 +232,7 @@ type ReconcileInstallation struct {
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
 	migrationChecked     bool
-	localDNS             string
+	clusterDomain        string
 }
 
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
@@ -828,7 +828,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		aci,
 		needNsMigration,
 		nodeAppArmorProfile,
-		r.localDNS,
+		r.clusterDomain,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

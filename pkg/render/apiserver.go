@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,6 +29,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -42,11 +42,14 @@ const (
 	apiServiceName          = "tigera-api"
 )
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, localDNS string) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
-	apiServiceHostname := strings.Join([]string{apiServiceName, APIServerNamespace, localDNS}, ".")
+	svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf("%s.%s.svc.%s", apiServiceName, APIServerNamespace, clusterDomain), clusterDomain)
+	if err != nil {
+		return nil, err
+	}
 
 	if tlsKeyPair == nil {
 		var err error
@@ -56,7 +59,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 			APIServerSecretCertName,
 			DefaultCertificateDuration,
 			nil,
-			apiServiceHostname,
+			svcDNSNames...,
 		)
 		if err != nil {
 			return nil, err

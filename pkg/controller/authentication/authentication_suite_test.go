@@ -39,12 +39,12 @@ func NewReconciler(
 	scheme *runtime.Scheme,
 	provider oprv1.Provider,
 	status status.StatusManager,
-	localDNS string) *ReconcileAuthentication {
+	clusterDomain string) *ReconcileAuthentication {
 	return &ReconcileAuthentication{
-		client:   client,
-		scheme:   scheme,
-		provider: provider,
-		status:   status,
-		localDNS: localDNS,
+		client:        client,
+		scheme:        scheme,
+		provider:      provider,
+		status:        status,
+		clusterDomain: clusterDomain,
 	}
 }

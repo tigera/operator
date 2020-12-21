@@ -21,6 +21,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -68,12 +69,17 @@ func Compliance(
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
 		var err error
+		svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf("compliance.tigera-compliance.svc.%s", clusterDomain), clusterDomain)
+		if err != nil {
+			return nil, err
+		}
+
 		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
 			ComplianceServerCertSecret,
 			"tls.key",
 			"tls.crt",
 			DefaultCertificateDuration,
-			nil, fmt.Sprintf("compliance.tigera-compliance.svc.%s", clusterDomain),
+			nil, svcDNSNames...,
 		)
 		if err != nil {
 			return nil, err

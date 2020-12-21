@@ -659,7 +659,11 @@ func verifyCertSANs(certBytes []byte, clusterDomain string) {
 	pemBlock, _ := pem.Decode(certBytes)
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
-	expectedDNSNames := []string{fmt.Sprintf("tigera-api.tigera-system.svc.%s", clusterDomain)}
+	expectedDNSNames := []string{
+		"tigera-api.tigera-system",
+		"tigera-api.tigera-system.svc",
+		"tigera-api.tigera-system.svc." + clusterDomain,
+	}
 	Expect(cert.DNSNames).To(ConsistOf(expectedDNSNames), "Expect cert SAN's to match extension API server service DNS names")
 }
 

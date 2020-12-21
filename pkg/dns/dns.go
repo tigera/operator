@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -57,4 +58,27 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	}
 
 	return clusterDomain, nil
+}
+
+// GetServiceDNSNames parses the fully-qualified domain service name nd
+// returns a list of its qualified service names.
+func GetServiceDNSNames(fqdnServiceName string, clusterDomain string) ([]string, error) {
+	all := strings.Split(fqdnServiceName, ".")
+
+	// The FQDN service name will be: <svc_name>.<ns>.svc.<cluster-domain>
+	// There is no guarantee the cluster-domain will be dotted (kubelet does not
+	// validate the cluster domain).
+	if len(all) < 4 {
+		return nil, fmt.Errorf("failed to split FQDN service name %q", fqdnServiceName)
+	}
+
+	// We return:
+	// - <svc_name>.<ns>
+	// - <svc_name>.<ns>.svc
+	// - <svc_name>.<ns>.svc.<cluster-domain>
+	nameWithNs := fmt.Sprintf("%s.%s", all[0], all[1])
+	svcNameWithNs := fmt.Sprintf("%s.svc", nameWithNs)
+	fqdnSvcName := fmt.Sprintf("%s.%s", svcNameWithNs, clusterDomain)
+
+	return []string{nameWithNs, svcNameWithNs, fqdnSvcName}, nil
 }

@@ -167,6 +167,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+	}
+
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
@@ -351,7 +355,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
-	applyTrial := false
+	var elasticLicenseType render.ElasticLicenseType
 
 	if managementClusterConnection == nil {
 
@@ -390,10 +394,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		applyTrial, err = r.shouldApplyElasticTrialSecret(ctx)
-		if err != nil {
-			r.status.SetDegraded("Failed to get eck trial license", err.Error())
-			return reconcile.Result{}, err
+		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+			if errors.IsNotFound(err) {
+				log.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
+			} else {
+				r.status.SetDegraded("Failed to get elastic license", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -466,8 +474,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		esService,
 		kbService,
 		r.clusterDomain,
-		applyTrial,
 		dexCfg,
+		elasticLicenseType,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -543,20 +551,6 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	}
 
 	return secrets, nil
-}
-
-// Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.
-// Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
-// installs a valid Elastic license, the trial will be ignored.
-func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context) (bool, error) {
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
-		if errors.IsNotFound(err) {
-			return true, nil
-		} else {
-			return false, err
-		}
-	}
-	return false, nil
 }
 
 func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secret, error) {

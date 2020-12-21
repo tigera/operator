@@ -44,18 +44,13 @@ var _ = Describe("Common Tests", func() {
 		})
 	})
 
-	Context("Get qualified names for a service", func() {
-		DescribeTable("Should return the correct qualified names from the service's FQDN", func(fqdn, clusterDomain string, expectError bool, expectedPQDNs []string) {
-			pqdns, err := dns.GetServiceDNSNames(fqdn, clusterDomain)
-			if !expectError {
-				Expect(err).To(BeNil())
-			}
-			Expect(pqdns).To(ConsistOf(expectedPQDNs))
+	Context("Get all DNS names for a service", func() {
+		DescribeTable("Should return the correct services names", func(service, namespace, clusterDomain string, expectedDNSNames []string) {
+			names := dns.GetServiceDNSNames(service, namespace, clusterDomain)
+			Expect(names).To(ConsistOf(expectedDNSNames))
 		},
-			Entry("default", "a.b.svc.cluster.local", "cluster.local", false, []string{"a", "a.b", "a.b.svc", "a.b.svc.cluster.local"}),
-			Entry("default", "a.b.svc.somedomain", "somedomain", false, []string{"a", "a.b", "a.b.svc", "a.b.svc.somedomain"}),
-			Entry("default", "a.b.svc", "cluster.local", true, []string{}),
-			Entry("default", "a.b", "cluster.local", true, []string{}),
+			Entry("default", "a", "b", dns.DefaultClusterDomain, []string{"a", "a.b", "a.b.svc", "a.b.svc.cluster.local"}),
+			Entry("default", "a", "b", "somedomain", []string{"a", "a.b", "a.b.svc", "a.b.svc.somedomain"}),
 		)
 	})
 })

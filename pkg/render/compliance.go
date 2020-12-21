@@ -33,6 +33,7 @@ import (
 
 const (
 	ComplianceNamespace       = "tigera-compliance"
+	ComplianceServiceName     = "compliance"
 	ComplianceServerName      = "compliance-server"
 	ComplianceControllerName  = "compliance-controller"
 	ComplianceSnapshotterName = "compliance-snapshotter"
@@ -69,11 +70,7 @@ func Compliance(
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
 		var err error
-		svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf("compliance.tigera-compliance.svc.%s", clusterDomain), clusterDomain)
-		if err != nil {
-			return nil, err
-		}
-
+		svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
 		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
 			ComplianceServerCertSecret,
 			"tls.key",

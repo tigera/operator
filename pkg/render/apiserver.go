@@ -45,11 +45,7 @@ const (
 func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
-
-	svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf("%s.%s.svc.%s", apiServiceName, APIServerNamespace, clusterDomain), clusterDomain)
-	if err != nil {
-		return nil, err
-	}
+	svcDNSNames := dns.GetServiceDNSNames(apiServiceName, APIServerNamespace, clusterDomain)
 
 	if tlsKeyPair == nil {
 		var err error

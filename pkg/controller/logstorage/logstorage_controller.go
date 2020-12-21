@@ -534,10 +534,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	secret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}, secret); err != nil {
 		if errors.IsNotFound(err) {
-			svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf(render.ElasticsearchHTTPURL, r.clusterDomain), r.clusterDomain)
-			if err != nil {
-				return nil, err
-			}
+			svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt",
 				render.DefaultCertificateDuration, nil, svcDNSNames...,
@@ -580,10 +577,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	secret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, secret); err != nil {
 		if errors.IsNotFound(err) {
-			svcDNSNames, err := dns.GetServiceDNSNames(fmt.Sprintf(render.KibanaHTTPURL, r.clusterDomain), r.clusterDomain)
-			if err != nil {
-				return nil, err
-			}
+			svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraKibanaCertSecret, "tls.key", "tls.crt",
 				render.DefaultCertificateDuration, nil, svcDNSNames...,

@@ -666,8 +666,11 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		Args:  c.startUpArgs(),
 		Env:   env,
 		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
-		VolumeMounts:    volumeMounts,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &isPrivileged,
+			RunAsUser:  Int64(0),
+		},
+		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1101,8 +1104,8 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
-	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = Bool(true)
+	psp.Spec.Privileged = false
+	psp.Spec.AllowPrivilegeEscalation = Bool(false)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp

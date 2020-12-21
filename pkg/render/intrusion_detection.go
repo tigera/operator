@@ -50,28 +50,31 @@ func IntrusionDetection(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	localDNS string,
+	elasticLicenseType ElasticLicenseType,
 ) Component {
 	return &intrusionDetectionComponent{
-		lc:               lc,
-		esSecrets:        esSecrets,
-		kibanaCertSecret: kibanaCertSecret,
-		installation:     installation,
-		esClusterConfig:  esClusterConfig,
-		pullSecrets:      pullSecrets,
-		openshift:        openshift,
-		localDNS:         localDNS,
+		lc:                 lc,
+		esSecrets:          esSecrets,
+		kibanaCertSecret:   kibanaCertSecret,
+		installation:       installation,
+		esClusterConfig:    esClusterConfig,
+		pullSecrets:        pullSecrets,
+		openshift:          openshift,
+		localDNS:           localDNS,
+		elasticLicenseType: elasticLicenseType,
 	}
 }
 
 type intrusionDetectionComponent struct {
-	lc               *operatorv1.LogCollector
-	esSecrets        []*corev1.Secret
-	kibanaCertSecret *corev1.Secret
-	installation     *operator.InstallationSpec
-	esClusterConfig  *ElasticsearchClusterConfig
-	pullSecrets      []*corev1.Secret
-	openshift        bool
-	localDNS         string
+	lc                 *operatorv1.LogCollector
+	esSecrets          []*corev1.Secret
+	kibanaCertSecret   *corev1.Secret
+	installation       *operator.InstallationSpec
+	esClusterConfig    *ElasticsearchClusterConfig
+	pullSecrets        []*corev1.Secret
+	openshift          bool
+	localDNS           string
+	elasticLicenseType ElasticLicenseType
 }
 
 func (c *intrusionDetectionComponent) SupportedOSType() OSType {
@@ -89,8 +92,12 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
 		c.intrusionDetectionRoleBinding(),
-		c.intrusionDetectionDeployment(),
-		c.intrusionDetectionElasticsearchJob())
+		c.intrusionDetectionDeployment())
+	
+	if c.elasticLicenseType != ElasticLicenseTypeBasic {
+		objs = append(objs, c.intrusionDetectionElasticsearchJob())
+	}
+
 	objs = append(objs, c.globalAlertTemplates()...)
 
 	if !c.openshift {

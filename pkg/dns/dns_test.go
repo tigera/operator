@@ -24,7 +24,7 @@ import (
 )
 
 var _ = Describe("Common Tests", func() {
-	Context("DNS Resolution", func() {
+	Context("Get cluster domain", func() {
 
 		It("Should have the right value for the alternative resolv.conf", func() {
 			dir, err := os.Getwd()
@@ -32,13 +32,13 @@ var _ = Describe("Common Tests", func() {
 				panic(err)
 			}
 			resolvConfPath := dir + "/testdata/resolv.conf"
-			localDNS, err := dns.GetLocalDNSName(resolvConfPath)
-			Expect(localDNS).To(Equal("svc.othername.local"))
+			clusterDomain, err := dns.GetClusterDomain(resolvConfPath)
+			Expect(clusterDomain).To(Equal("othername.local"))
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("Should throw an error for a nonexisting file", func() {
-			_, err := dns.GetLocalDNSName("does-not.exist")
+			_, err := dns.GetClusterDomain("does-not.exist")
 			Expect(err).To(HaveOccurred())
 		})
 	})

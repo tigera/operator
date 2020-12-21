@@ -42,11 +42,11 @@ const (
 	apiServiceName          = "tigera-api"
 )
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, localDNS string) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
-	apiServiceHostname := strings.Join([]string{apiServiceName, APIServerNamespace, localDNS}, ".")
+	apiServiceHostname := strings.Join([]string{apiServiceName, APIServerNamespace, "svc", clusterDomain}, ".")
 
 	if tlsKeyPair == nil {
 		var err error

@@ -80,7 +80,7 @@ func Calico(
 	aci *operator.AmazonCloudIntegration,
 	up bool,
 	nodeAppArmorProfile string,
-	localDNS string,
+	clusterDomain string,
 ) (Renderer, error) {
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
@@ -133,7 +133,7 @@ func Calico(
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
 			ManagerServiceIP,
-			fmt.Sprintf(ManagerServiceDNS, localDNS),
+			fmt.Sprintf(ManagerServiceDNS, clusterDomain),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("generating certificates for manager was not finalized due to %v", err)

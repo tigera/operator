@@ -30,7 +30,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 
 	"gopkg.in/inf.v0"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -78,6 +77,8 @@ const (
 
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
+
+	EsNativeUsersConfigMapName = "tigera-end-users"
 
 	// As soon as the total disk utilization exceeds the max-total-storage-percent,
 	// indices will be removed starting with the oldest. Picking a low value leads
@@ -128,6 +129,18 @@ echo "Keystore initialization successful."
 `
 )
 
+type Operation string
+
+const (
+	ElasticUsersConfigMapCreate Operation = "Create"
+	ElasticUsersConfigMapDelete Operation = "Delete"
+)
+
+type ElasticNativeUsersConfig struct {
+	Operation Operation
+	ConfigMap *corev1.ConfigMap
+}
+
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
@@ -147,7 +160,8 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticLicenseType) Component {
+	elasticLicenseType ElasticLicenseType,
+	elasticNativeUsersConfig ElasticNativeUsersConfig) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -168,6 +182,7 @@ func LogStorage(
 		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
 		elasticLicenseType:          elasticLicenseType,
+		elasticNativeUsersConfig:    elasticNativeUsersConfig,
 	}
 }
 
@@ -190,6 +205,7 @@ type elasticsearchComponent struct {
 	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
 	elasticLicenseType          ElasticLicenseType
+	elasticNativeUsersConfig    ElasticNativeUsersConfig
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -321,6 +337,14 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 
 		if es.applyTrial {
 			toCreate = append(toCreate, es.elasticEnterpriseTrial())
+		}
+
+		if es.elasticNativeUsersConfig != (ElasticNativeUsersConfig{}) {
+			if es.elasticNativeUsersConfig.Operation == ElasticUsersConfigMapCreate {
+				toCreate = append(toCreate, es.elasticNativeUsersConfig.ConfigMap)
+			} else if es.elasticNativeUsersConfig.Operation == ElasticUsersConfigMapDelete {
+				toDelete = append(toDelete, es.elasticNativeUsersConfig.ConfigMap)
+			}
 		}
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch

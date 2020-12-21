@@ -465,6 +465,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
 	}
 
+	var elasticNativeUserConfig render.ElasticNativeUsersConfig
+	if managementClusterConnection == nil {
+		elasticNativeUserConfig = r.getElasticNativeUserConfig(ctx, dexCfg, elasticLicenseType)
+	}
+
 	component := render.LogStorage(
 		ls,
 		install,
@@ -484,6 +489,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		applyTrial,
 		dexCfg,
 		elasticLicenseType,
+		elasticNativeUserConfig,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -650,6 +656,37 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 		return nil, err
 	}
 	return &svc, nil
+}
+
+// "tigera-end-users" ConfigMap should be created only ones when external IdP is set and Elasticsearch uses basic license.
+// Data will be added to this ConfigMap by other repositories as end-user information is collected, this ConfigMap should not be overwritten.
+// If external IdP is not configured or if Elasticsearch is not using Basic license, delete this ConfigMap.
+func (r *ReconcileLogStorage) getElasticNativeUserConfig(ctx context.Context, dexCfg render.DexRelyingPartyConfig, licenseType render.ElasticLicenseType) render.ElasticNativeUsersConfig {
+	var esNativeUserConfig render.ElasticNativeUsersConfig
+	addUsersConfigMap := licenseType == render.ElasticLicenseTypeBasic && dexCfg != nil
+
+	usersConfigMap := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.EsNativeUsersConfigMapName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+	}
+
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.EsNativeUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, &corev1.ConfigMap{}); err != nil {
+		if errors.IsNotFound(err) && addUsersConfigMap {
+			esNativeUserConfig = render.ElasticNativeUsersConfig{
+				Operation: render.ElasticUsersConfigMapCreate,
+				ConfigMap: usersConfigMap}
+		} else {
+			log.Error(err, "Failed to get %s ConfigMap", render.EsNativeUsersConfigMapName)
+		}
+	} else if !addUsersConfigMap {
+		esNativeUserConfig = render.ElasticNativeUsersConfig{
+			Operation: render.ElasticUsersConfigMapDelete,
+			ConfigMap: usersConfigMap}
+	}
+	return esNativeUserConfig
 }
 
 func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

@@ -82,6 +82,7 @@ func Manager(
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
+	esLicenseType ElasticsearchLicenseType,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 
@@ -131,6 +132,7 @@ func Manager(
 		clusterDomain:              clusterDomain,
 		installation:               installation,
 		managementCluster:          managementCluster,
+		esLicenseType:              esLicenseType,
 	}, nil
 }
 
@@ -147,6 +149,7 @@ type managerComponent struct {
 	clusterDomain              string
 	installation               *operator.InstallationSpec
 	managementCluster          *operator.ManagementCluster
+	esLicenseType              ElasticsearchLicenseType
 }
 
 func (c *managerComponent) SupportedOSType() OSType {
@@ -480,7 +483,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
 	}
 
-	var env []v1.EnvVar
+	env := []v1.EnvVar{
+		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)},
+	}
 	if c.dexCfg != nil {
 		env = append(env, c.dexCfg.RequiredEnv("")...)
 		volumeMounts = append(volumeMounts, c.dexCfg.RequiredVolumeMounts()...)

@@ -93,7 +93,7 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 		c.intrusionDetectionRole(),
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment())
-	
+
 	if c.elasticLicenseType != ElasticLicenseTypeBasic {
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
 	}

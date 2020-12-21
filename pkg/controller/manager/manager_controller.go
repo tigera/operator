@@ -138,6 +138,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+	}
 	return nil
 }
 
@@ -381,6 +384,14 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
 	}
 
+	var elasticLicenseType render.ElasticLicenseType
+	if managementClusterConnection == nil {
+		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -399,6 +410,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		tunnelSecret,
 		internalTrafficSecret,
 		r.clusterDomain,
+		elasticLicenseType,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

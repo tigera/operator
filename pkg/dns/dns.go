@@ -60,7 +60,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	return clusterDomain, nil
 }
 
-// GetServiceDNSNames parses the fully-qualified domain service name nd
+// GetServiceDNSNames parses the fully-qualified domain service name and
 // returns a list of its qualified service names.
 func GetServiceDNSNames(fqdnServiceName string, clusterDomain string) ([]string, error) {
 	all := strings.Split(fqdnServiceName, ".")

@@ -50,7 +50,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	})
 
-	DescribeTable("should render with a default configuration", func(localDNS, expectedElasticHost string) {
+	DescribeTable("should render with a default configuration", func(clusterDomain, expectedElasticHost string) {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -67,7 +67,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, localDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, clusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -98,8 +98,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Expect(envs).To(ContainElement(expected))
 		}
 	},
-		Entry("default cluster DNS", dns.DefaultLocalDNS, "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
-		Entry("custom cluster DNS", "svc.acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal"),
+		Entry("default cluster DNS", dns.DefaultClusterDomain, "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
+		Entry("custom cluster DNS", "acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal"),
 	)
 
 	It("should render with S3 configuration", func() {
@@ -132,7 +132,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -205,7 +205,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -288,7 +288,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -369,7 +369,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -438,7 +438,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -490,7 +490,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderEKS,
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultLocalDNS)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 

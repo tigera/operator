@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -343,7 +344,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 					},
-					nil, nil, "svc.cluster.local", true, nil)
+					nil, nil, dns.DefaultClusterDomain, true, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -511,7 +512,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						RequestedScopes: []string{"scope"},
 					},
 				},
-			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret(), "svc.cluster.local")
+			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret(), "cluster.local")
 
 			component := render.LogStorage(
 				logStorage,
@@ -585,13 +586,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						svc := resource.(*corev1.Service)
 
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.cluster.local", render.GuardianServiceName, render.GuardianNamespace)))
+						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
 					}},
 					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
 
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.cluster.local", render.GuardianServiceName, render.GuardianNamespace)))
+						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
 					}},
 				}
 

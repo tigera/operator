@@ -47,8 +47,8 @@ func ElasticsearchDecorateAnnotations(obj Annotatable, config *ElasticsearchClus
 	return obj
 }
 
-func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, localDNS string) corev1.Container {
-	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret, localDNS))
+func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string) corev1.Container {
+	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret, clusterDomain))
 }
 
 func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
@@ -61,8 +61,8 @@ func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, sh
 	return c
 }
 
-func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, localDNS string) corev1.Container {
-	esScheme, esHost, esPort, _ := ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, localDNS))
+func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, clusterDomain string) corev1.Container {
+	esScheme, esHost, esPort, _ := ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, clusterDomain))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},

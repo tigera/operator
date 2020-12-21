@@ -51,17 +51,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, p operatorv1.Provider, localDNS string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: p,
-		status:   status.New(mgr.GetClient(), "intrusion-detection"),
-		localDNS: localDNS,
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		provider:      p,
+		status:        status.New(mgr.GetClient(), "intrusion-detection"),
+		clusterDomain: clusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -127,11 +127,11 @@ var _ reconcile.Reconciler = &ReconcileIntrusionDetection{}
 type ReconcileIntrusionDetection struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider operatorv1.Provider
-	status   status.StatusManager
-	localDNS string
+	client        client.Client
+	scheme        *runtime.Scheme
+	provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -254,7 +254,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
-		r.localDNS,
+		r.clusterDomain,
 	)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

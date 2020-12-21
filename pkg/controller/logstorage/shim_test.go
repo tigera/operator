@@ -30,7 +30,7 @@ func NewReconcilerWithShims(
 	status status.StatusManager,
 	provider operatorv1.Provider,
 	esClient utils.ElasticClient,
-	localDNS string) (*ReconcileLogStorage, error) {
+	clusterDomain string) (*ReconcileLogStorage, error) {
 
-	return newReconciler(cli, schema, status, provider, esClient, localDNS)
+	return newReconciler(cli, schema, status, provider, esClient, clusterDomain)
 }

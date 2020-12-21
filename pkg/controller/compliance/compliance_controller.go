@@ -49,17 +49,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.LocalDNS))
+	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, localDNS string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
 	r := &ReconcileCompliance{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: provider,
-		status:   status.New(mgr.GetClient(), "compliance"),
-		localDNS: localDNS,
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		provider:      provider,
+		status:        status.New(mgr.GetClient(), "compliance"),
+		clusterDomain: clusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -131,11 +131,11 @@ var _ reconcile.Reconciler = &ReconcileCompliance{}
 type ReconcileCompliance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider operatorv1.Provider
-	status   status.StatusManager
-	localDNS string
+	client        client.Client
+	scheme        *runtime.Scheme
+	provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -303,13 +303,13 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.localDNS)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
 	}
 
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.localDNS)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

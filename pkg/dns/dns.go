@@ -26,25 +26,25 @@ const (
 	DefaultResolveConfPath = "/etc/resolv.conf"
 
 	// Default cluster domain value for k8s clusters.
-	DefaultLocalDNS = "svc.cluster.local"
+	DefaultClusterDomain = "cluster.local"
 )
 
-// GetLocalDNSName parses the path to resolv.conf to find the local DNS name.
-func GetLocalDNSName(resolvConfPath string) (string, error) {
-	var localDNSName string
+// GetClusterDomain parses the path to resolv.conf to find the cluster domain.
+func GetClusterDomain(resolvConfPath string) (string, error) {
+	var clusterDomain string
 	file, err := os.Open(resolvConfPath)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
 
-	reg := regexp.MustCompile(`^search.*?\s(svc\.[^\s]*)`)
+	reg := regexp.MustCompile(`^search.*?\ssvc\.([^\s]*)`)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		match := reg.FindStringSubmatch(scanner.Text())
 		if len(match) > 0 {
-			localDNSName = match[1]
+			clusterDomain = match[1]
 		}
 	}
 
@@ -52,9 +52,25 @@ func GetLocalDNSName(resolvConfPath string) (string, error) {
 		return "", err
 	}
 
-	if localDNSName == "" {
-		return "", fmt.Errorf("failed to find local DNS name in resolv.conf")
+	if clusterDomain == "" {
+		return "", fmt.Errorf("failed to find cluster domain in resolv.conf")
 	}
 
-	return localDNSName, nil
+	return clusterDomain, nil
+}
+
+// GetServiceDNSNames parses the fully-qualified domain service name and
+// returns a list of its service names.
+// We return:
+// - <svc_name>
+// - <svc_name>.<ns>
+// - <svc_name>.<ns>.svc
+// - <svc_name>.<ns>.svc.<cluster-domain>
+func GetServiceDNSNames(name, namespace, clusterDomain string) []string {
+	return []string{
+		name,
+		fmt.Sprintf("%s.%s", name, namespace),
+		fmt.Sprintf("%s.%s.svc", name, namespace),
+		fmt.Sprintf("%s.%s.svc.%s", name, namespace, clusterDomain),
+	}
 }

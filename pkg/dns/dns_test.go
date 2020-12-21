@@ -18,13 +18,14 @@ import (
 	"os"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/tigera/operator/pkg/dns"
 )
 
 var _ = Describe("Common Tests", func() {
-	Context("DNS Resolution", func() {
+	Context("Get cluster domain", func() {
 
 		It("Should have the right value for the alternative resolv.conf", func() {
 			dir, err := os.Getwd()
@@ -32,14 +33,24 @@ var _ = Describe("Common Tests", func() {
 				panic(err)
 			}
 			resolvConfPath := dir + "/testdata/resolv.conf"
-			localDNS, err := dns.GetLocalDNSName(resolvConfPath)
-			Expect(localDNS).To(Equal("svc.othername.local"))
+			clusterDomain, err := dns.GetClusterDomain(resolvConfPath)
+			Expect(clusterDomain).To(Equal("othername.local"))
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("Should throw an error for a nonexisting file", func() {
-			_, err := dns.GetLocalDNSName("does-not.exist")
+			_, err := dns.GetClusterDomain("does-not.exist")
 			Expect(err).To(HaveOccurred())
 		})
+	})
+
+	Context("Get all DNS names for a service", func() {
+		DescribeTable("Should return the correct services names", func(service, namespace, clusterDomain string, expectedDNSNames []string) {
+			names := dns.GetServiceDNSNames(service, namespace, clusterDomain)
+			Expect(names).To(ConsistOf(expectedDNSNames))
+		},
+			Entry("default", "a", "b", dns.DefaultClusterDomain, []string{"a", "a.b", "a.b.svc", "a.b.svc.cluster.local"}),
+			Entry("default", "a", "b", "somedomain", []string{"a", "a.b", "a.b.svc", "a.b.svc.somedomain"}),
+		)
 	})
 })

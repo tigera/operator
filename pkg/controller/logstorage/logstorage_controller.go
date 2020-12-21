@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	apps "k8s.io/api/apps/v1"
@@ -62,7 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient(), opts.LocalDNS)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient(), opts.ClusterDomain)
 	if err != nil {
 		return err
 	}
@@ -71,14 +72,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esClient utils.ElasticClient, localDNS string) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esClient utils.ElasticClient, clusterDomain string) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
-		client:   cli,
-		scheme:   schema,
-		status:   statusMgr,
-		provider: provider,
-		esClient: esClient,
-		localDNS: localDNS,
+		client:        cli,
+		scheme:        schema,
+		status:        statusMgr,
+		provider:      provider,
+		esClient:      esClient,
+		clusterDomain: clusterDomain,
 	}
 
 	c.status.Run()
@@ -197,12 +198,12 @@ var _ reconcile.Reconciler = &ReconcileLogStorage{}
 type ReconcileLogStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	status   status.StatusManager
-	provider operatorv1.Provider
-	esClient utils.ElasticClient
-	localDNS string
+	client        client.Client
+	scheme        *runtime.Scheme
+	status        status.StatusManager
+	provider      operatorv1.Provider
+	esClient      utils.ElasticClient
+	clusterDomain string
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -459,7 +460,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.localDNS)
+		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
 	}
 
 	component := render.LogStorage(
@@ -478,7 +479,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		curatorSecrets,
 		esService,
 		kbService,
-		r.localDNS,
+		r.clusterDomain,
 		applyTrial,
 		dexCfg,
 	)
@@ -533,9 +534,10 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	secret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}, secret); err != nil {
 		if errors.IsNotFound(err) {
+			svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt",
-				render.DefaultCertificateDuration, nil, fmt.Sprintf(render.ElasticsearchHTTPURL, r.localDNS),
+				render.DefaultCertificateDuration, nil, svcDNSNames...,
 			)
 		} else {
 			return nil, err
@@ -575,9 +577,10 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	secret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, secret); err != nil {
 		if errors.IsNotFound(err) {
+			svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			secret, err = render.CreateOperatorTLSSecret(nil,
 				render.TigeraKibanaCertSecret, "tls.key", "tls.crt",
-				render.DefaultCertificateDuration, nil, fmt.Sprintf(render.KibanaHTTPURL, r.localDNS),
+				render.DefaultCertificateDuration, nil, svcDNSNames...,
 			)
 		} else {
 			return nil, err

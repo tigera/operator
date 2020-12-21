@@ -197,17 +197,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	localDNS, err := dns.GetLocalDNSName(dns.DefaultResolveConfPath)
+	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
 	if err != nil {
-		localDNS = dns.DefaultLocalDNS
-		log.Error(err, fmt.Sprintf("Couldn't find the local dns name from the resolv.conf, defaulting to %s", localDNS))
+		clusterDomain = dns.DefaultClusterDomain
+		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
 	}
 
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		AmazonCRDExists:     amazonCRDExists,
-		LocalDNS:            localDNS,
+		ClusterDomain:       clusterDomain,
 	}
 
 	err = controllers.AddToManager(mgr, options)

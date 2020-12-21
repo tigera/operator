@@ -30,7 +30,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 
 	"gopkg.in/inf.v0"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -43,7 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type ElasticLicenseType string
+type ElasticsearchLicenseType string
 
 const (
 	ECKOperatorName         = "elastic-operator"
@@ -79,6 +78,9 @@ const (
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 
+	OIDCUsersConfigMapName = "tigera-known-oidc-users"
+	OIDCUsersSecreteName   = "tigera-known-oidc-users-credentials"
+
 	// As soon as the total disk utilization exceeds the max-total-storage-percent,
 	// indices will be removed starting with the oldest. Picking a low value leads
 	// to low disk utilization, while a high value might result in unexpected
@@ -97,10 +99,10 @@ const (
 	// +optional
 	maxLogsStoragePercent int32 = 70
 
-	ElasticLicenseTypeBasic           ElasticLicenseType = "basic"
-	ElasticLicenseTypeEnterprise      ElasticLicenseType = "enterprise"
-	ElasticLicenseTypeEnterpriseTrial ElasticLicenseType = "enterprise_trial"
-	ElasticLicenseTypeUnknown         ElasticLicenseType = ""
+	ElasticsearchLicenseTypeBasic           ElasticsearchLicenseType = "basic"
+	ElasticsearchLicenseTypeEnterprise      ElasticsearchLicenseType = "enterprise"
+	ElasticsearchLicenseTypeEnterpriseTrial ElasticsearchLicenseType = "enterprise_trial"
+	ElasticsearchLicenseTypeUnknown         ElasticsearchLicenseType = ""
 )
 
 const (
@@ -147,7 +149,9 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticLicenseType) Component {
+	elasticLicenseType ElasticsearchLicenseType,
+	oidcUserConfigMapAvailable bool,
+	oidcUserSecretAvailable bool) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -168,6 +172,8 @@ func LogStorage(
 		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
 		elasticLicenseType:          elasticLicenseType,
+		oidcUserConfigMapAvailable:  oidcUserConfigMapAvailable,
+		oidcUserSecretAvailable:     oidcUserSecretAvailable,
 	}
 }
 
@@ -189,7 +195,9 @@ type elasticsearchComponent struct {
 	clusterDomain               string
 	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
-	elasticLicenseType          ElasticLicenseType
+	elasticLicenseType          ElasticsearchLicenseType
+	oidcUserConfigMapAvailable  bool
+	oidcUserSecretAvailable     bool
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -321,6 +329,21 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 
 		if es.applyTrial {
 			toCreate = append(toCreate, es.elasticEnterpriseTrial())
+		}
+
+		// OIDCUsersConfigMapName and OIDCUsersSecreteName should be created only once
+		// when the external IdP is set and Elasticsearch uses basic license.
+		// Data will be added to these objects by other repositories as user information is collected,
+		// so these objects should not be overwritten.
+		// If external IdP is not configured or if Elasticsearch is not using Basic license, delete these objects if available.
+		if es.elasticLicenseType == ElasticsearchLicenseTypeBasic && es.dexCfg != nil {
+			if !es.oidcUserConfigMapAvailable || !es.oidcUserSecretAvailable {
+				toCreate = append(toCreate, es.oidcUserObjects()...)
+			}
+		} else {
+			if es.oidcUserConfigMapAvailable || es.oidcUserSecretAvailable {
+				toDelete = append(toDelete, es.oidcUserObjects()...)
+			}
 		}
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
@@ -1368,9 +1391,28 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 	return psp
 }
 
+func (es *elasticsearchComponent) oidcUserObjects() []runtime.Object {
+	return []runtime.Object{
+		&corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      OIDCUsersConfigMapName,
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+		&corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      OIDCUsersSecreteName,
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+}
+
 func (es *elasticsearchComponent) supportsOIDC() bool {
-	return (es.elasticLicenseType == ElasticLicenseTypeEnterpriseTrial ||
-		es.elasticLicenseType == ElasticLicenseTypeEnterprise) &&
+	return (es.elasticLicenseType == ElasticsearchLicenseTypeEnterpriseTrial ||
+		es.elasticLicenseType == ElasticsearchLicenseTypeEnterprise) &&
 		es.dexCfg != nil
 }
 

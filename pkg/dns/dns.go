@@ -73,12 +73,14 @@ func GetServiceDNSNames(fqdnServiceName string, clusterDomain string) ([]string,
 	}
 
 	// We return:
+	// - <svc_name>
 	// - <svc_name>.<ns>
 	// - <svc_name>.<ns>.svc
 	// - <svc_name>.<ns>.svc.<cluster-domain>
-	nameWithNs := fmt.Sprintf("%s.%s", all[0], all[1])
+	name := all[0]
+	nameWithNs := fmt.Sprintf("%s.%s", name, all[1])
 	svcNameWithNs := fmt.Sprintf("%s.svc", nameWithNs)
 	fqdnSvcName := fmt.Sprintf("%s.%s", svcNameWithNs, clusterDomain)
 
-	return []string{nameWithNs, svcNameWithNs, fqdnSvcName}, nil
+	return []string{name, nameWithNs, svcNameWithNs, fqdnSvcName}, nil
 }

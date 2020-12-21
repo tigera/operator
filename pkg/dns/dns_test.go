@@ -52,8 +52,8 @@ var _ = Describe("Common Tests", func() {
 			}
 			Expect(pqdns).To(ConsistOf(expectedPQDNs))
 		},
-			Entry("default", "a.b.svc.cluster.local", "cluster.local", false, []string{"a.b", "a.b.svc", "a.b.svc.cluster.local"}),
-			Entry("default", "a.b.svc.somedomain", "somedomain", false, []string{"a.b", "a.b.svc", "a.b.svc.somedomain"}),
+			Entry("default", "a.b.svc.cluster.local", "cluster.local", false, []string{"a", "a.b", "a.b.svc", "a.b.svc.cluster.local"}),
+			Entry("default", "a.b.svc.somedomain", "somedomain", false, []string{"a", "a.b", "a.b.svc", "a.b.svc.somedomain"}),
 			Entry("default", "a.b.svc", "cluster.local", true, []string{}),
 			Entry("default", "a.b", "cluster.local", true, []string{}),
 		)

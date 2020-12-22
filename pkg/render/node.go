@@ -907,7 +907,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v4pool.BlockSize)})
 			}
 			if v4pool.NATOutgoing == operator.NATOutgoingDisabled {
-				// Default for NAT Outgoing is enabled so it is only necessary to
+				// Default for IPv4 NAT Outgoing is enabled so it is only necessary to
 				// set when it is being disabled.
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
 			}
@@ -923,8 +923,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			if v6pool.BlockSize != nil {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
 			}
-			if v6pool.NATOutgoing == operator.NATOutgoingDisabled {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "false"})
+			if v6pool.NATOutgoing == operator.NATOutgoingEnabled {
+				// Default for IPv6 NAT Outgoing is disabled so it is only necessary to
+				// set when it is being enabled.
+				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "true"})
 			}
 			if v6pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})

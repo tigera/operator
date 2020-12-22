@@ -85,7 +85,7 @@ func Manager(
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 
-	if tlsKeyPair == nil {
+	if tlsKeyPair == nil && installation.CertificateManagement == nil {
 		var err error
 		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			ManagerTLSSecretName,
@@ -167,10 +167,12 @@ func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.managementCluster != nil, false, c.openshift),
+		managerClusterRole(c.installation, c.managementCluster != nil, false, c.openshift),
 		managerClusterRoleBinding(),
 	)
-	objs = append(objs, c.getTLSObjects()...)
+	if c.installation.CertificateManagement == nil {
+		objs = append(objs, c.getTLSObjects()...)
+	}
 	objs = append(objs,
 		c.managerService(),
 	)
@@ -205,13 +207,26 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		complianceServerTLSHashAnnotation:            AnnotationHash(c.complianceServerCertSecret.Data),
 	}
 
-	// Add a hash of the Secret to ensure if it changes the manager will be
-	// redeployed.	The following secrets are annotated:
-	// manager-tls : cert used for tigera UI
-	// internal-manager-tls : cert used for internal communication within K8S cluster
-	// tigera-management-cluster-connection : cert used to generate guardian certificates
-	for k, v := range c.tlsAnnotations {
-		annotations[k] = v
+	var initContainers []corev1.Container
+	if c.installation.CertificateManagement == nil {
+		// Add a hash of the Secret to ensure if it changes the manager will be
+		// redeployed.	The following secrets are annotated:
+		// manager-tls : cert used for tigera UI
+		// internal-manager-tls : cert used for internal communication within K8S cluster
+		// tigera-management-cluster-connection : cert used to generate guardian certificates
+		for k, v := range c.tlsAnnotations {
+			annotations[k] = v
+		}
+
+	} else {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation,
+			c.installation.CertificateManagement,
+			ManagerTLSSecretName,
+			ManagerTLSSecretName,
+			ManagerSecretKeyName,
+			ManagerSecretCertName,
+			false))
 	}
 
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
@@ -227,6 +242,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain),
 				ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain),
@@ -263,14 +279,23 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
+	var tlsVolume corev1.VolumeSource
+	if c.installation.CertificateManagement != nil {
+		tlsVolume = corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+	} else {
+		tlsVolume = corev1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: ManagerTLSSecretName,
+			},
+		}
+	}
+
 	v := []v1.Volume{
 		{
-			Name: ManagerTLSSecretName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: ManagerTLSSecretName,
-				},
-			},
+			Name:         ManagerTLSSecretName,
+			VolumeSource: tlsVolume,
 		},
 		{
 			Name: KibanaPublicCertSecret,
@@ -547,7 +572,7 @@ func managerServiceAccount() *v1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbacv1.ClusterRole {
+func managerClusterRole(installation *operator.InstallationSpec, managementCluster, managedCluster, openshift bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -635,6 +660,14 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				ResourceNames: []string{"tigera-manager"},
 			},
 		)
+	}
+
+	if installation.CertificateManagement != nil {
+		cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"certificates.k8s.io"},
+			Resources: []string{"certificatesigningrequests"},
+			Verbs:     []string{"create", "watch"},
+		})
 	}
 
 	return cr

@@ -1060,7 +1060,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.PluginAzureVNET:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 
 	if c.cr.CNI.Type != operator.PluginCalico {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})

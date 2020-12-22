@@ -218,7 +218,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -463,7 +462,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
@@ -613,7 +611,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -790,7 +787,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
@@ -1056,7 +1052,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -1232,7 +1227,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
@@ -1420,7 +1414,6 @@ var _ = Describe("Node rendering tests", func() {
 			}},
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
@@ -1526,7 +1519,6 @@ var _ = Describe("Node rendering tests", func() {
 
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
 		}
@@ -2347,7 +2339,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 

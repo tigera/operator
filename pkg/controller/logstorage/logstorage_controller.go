@@ -157,7 +157,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.ECKWebhookSecretName, render.OIDCSecretName, render.DexObjectName} {
+		render.OIDCSecretName, render.DexObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
@@ -351,7 +351,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
-	createWebhookSecret := false
 	applyTrial := false
 
 	if managementClusterConnection == nil {
@@ -383,18 +382,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
-		}
-
-		// The ECK operator requires that we provide it with a secret so it can add certificate information in for its webhooks.
-		// If it's created we don't want to overwrite it as we'll lose the certificate information the ECK operator relies on.
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKWebhookSecretName, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
-			if errors.IsNotFound(err) {
-				createWebhookSecret = true
-			} else {
-				log.Error(err, err.Error())
-				r.status.SetDegraded("Failed to read Elasticsearch webhook secret", err.Error())
-				return reconcile.Result{}, err
-			}
 		}
 
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
@@ -473,7 +460,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		clusterConfig,
 		elasticsearchSecrets,
 		kibanaSecrets,
-		createWebhookSecret,
 		pullSecrets,
 		r.provider,
 		curatorSecrets,

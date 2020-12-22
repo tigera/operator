@@ -239,8 +239,8 @@ func CopySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {
 	return secrets
 }
 
-func copyConfigMaps(ns string, oConfigMaps ...*v1.ConfigMap) []runtime.Object {
-	var configMaps []runtime.Object
+func CopyConfigMaps(ns string, oConfigMaps ...*v1.ConfigMap) []*v1.ConfigMap {
+	var configMaps []*v1.ConfigMap
 	for _, s := range oConfigMaps {
 		x := s.DeepCopy()
 		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}

@@ -508,7 +508,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		// ES should be in ready phase when execution reaches here, apply ILM polices
-		if err = r.esClient.SetILMPolicies(r.client, ctx, ls); err != nil {
+		esEndpoint := fmt.Sprintf(render.ElasticsearchHTTPSEndpoint, r.clusterDomain)
+		if err = r.esClient.SetILMPolicies(r.client, ctx, ls, esEndpoint); err != nil {
 			log.Error(err, "failed to create or update Elasticsearch lifecycle policies")
 			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
 			return reconcile.Result{}, err

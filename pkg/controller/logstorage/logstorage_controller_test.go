@@ -545,6 +545,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	).ShouldNot(HaveOccurred())
 }
 
-func (*mockESClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage) error {
+func (*mockESClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage, elasticHTTPSEndpoint string) error {
 	return nil
 }

@@ -364,10 +364,9 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 	if c.installation.CertificateManagement != nil {
 		rules = append(rules,
 			rbacv1.PolicyRule{
-				APIGroups:     []string{"apiregistration.k8s.io"},
-				Resources:     []string{"apiservices"},
-				Verbs:         []string{"get", "create", "update"},
-				ResourceNames: []string{"tigera-apiserver"},
+				APIGroups: []string{"apiregistration.k8s.io"},
+				Resources: []string{"apiservices"},
+				Verbs:     []string{"get", "create", "update"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"certificates.k8s.io"},
@@ -604,7 +603,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(c.installation, c.installation.CertificateManagement, APIServerTLSSecretName, TLSSecretCertName, APIServerSecretKeyName, APIServerSecretCertName, false))
+		initContainers = append(initContainers, CreateCSRInitContainer(c.installation, c.installation.CertificateManagement, APIServerTLSSecretName, TLSSecretCertName, APIServerSecretKeyName, APIServerSecretCertName, true))
 	}
 
 	d := &appsv1.Deployment{

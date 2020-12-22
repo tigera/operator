@@ -215,21 +215,24 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function returns a nil secret but no error and a self-signed
-	// certificate will be generated when rendering below.
-	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.ManagerTLSSecretName,
-		render.ManagerSecretKeyName,
-		render.ManagerSecretCertName,
-	)
+	var tlsSecret *corev1.Secret
+	if installation.CertificateManagement == nil {
+		// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
+		// If it does not exist then this function returns a nil secret but no error and a self-signed
+		// certificate will be generated when rendering below.
+		tlsSecret, err = utils.ValidateCertPair(r.client,
+			render.ManagerTLSSecretName,
+			render.ManagerSecretKeyName,
+			render.ManagerSecretCertName,
+		)
 
-	// An error is returned in case the read cannot be performed of the secret does not match the expected format
-	// In case the secret is not found, the error and the secret will be nil. This check needs to be done for all
-	// cluster types. For management cluster, we also need to check if the secret was created before hand.
-	if err != nil {
-		r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
-		return reconcile.Result{}, err
+		// An error is returned in case the read cannot be performed of the secret does not match the expected format
+		// In case the secret is not found, the error and the secret will be nil. This check needs to be done for all
+		// cluster types. For management cluster, we also need to check if the secret was created before hand.
+		if err != nil {
+			r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Check that compliance is running.
@@ -379,6 +382,32 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 			return reconcile.Result{}, err
 		}
 		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+	}
+
+	installation.CertificateManagement = &operatorv1.CertificateManagement{
+		SignerName:         "example.com/rene",
+		KeyAlgorithm:       "RSAWithSize2048",
+		SignatureAlgorithm: "SHA384WithRSA",
+		RootCA: `-----BEGIN CERTIFICATE-----
+MIIDIzCCAgugAwIBAgIUBLscBUn4/RcHQYdC+el5oaocLm0wDQYJKoZIhvcNAQEL
+BQAwITEfMB0GA1UEAwwWY2VydC1tYW5hZ2VtZW50LXNpZ25lcjAeFw0yMDEyMTUy
+MDU3MTlaFw0yMTAxMTQyMDU3MTlaMCExHzAdBgNVBAMMFmNlcnQtbWFuYWdlbWVu
+dC1zaWduZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQChOJ7tpOa7
+s2H07uDXPIK8wV6tzNaswHe+gDRRClE4c3ZnUXH3mIZidxOFrm+XJeDiCEsZvr5S
+e/L++dcLFQwyes8zJmbMjWMF4dtSyL0QESlvdQgZeCnY71IgimmULz9bF+wupD5x
+7wyVWwU5+uvMPj7fS8yGxORx08lS3goXRw1aB8BmW1nefCGNwm2wsKTIl0ik8Eo3
++8DTwbruIVRA5VPqAZyGammygI9dfs9OApxkoChvodC7W73kZYYFU1Yf8ZoVKckq
+efyeB2NEExUewyAz2LduBy/HaCIQfaHqzrXFTgcKDHGGlZlqE0zFF03OfiQAzM2K
+cP5cDpSoizM7AgMBAAGjUzBRMB0GA1UdDgQWBBRyQtOPCqVFy5YSP+Jc/QmnUnRs
+oTAfBgNVHSMEGDAWgBRyQtOPCqVFy5YSP+Jc/QmnUnRsoTAPBgNVHRMBAf8EBTAD
+AQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA9GNwFwNESLJqtijdx29arVmO1QitjDuCj
+f6De2Xjgn8OEJUT5nmKNY3Z59SUjE5b3eDYbGQF6wCby98CAG1Cn3MHltXe+IzL7
+CbEhG/vbZ5CX3siKiK8fauOuy937+3n+ySdI8ZIob92BIQQpNctibaSAvN1ykC3K
+cz9dd8tGOqYiXzMVbXg7opazzlj9kEsXX3DKiFeDECsRz2Hivei+e0Nclfwbeeyz
+2whh701+GDlzsfUwx38ril3csKEH/YnBgqV5J+pL8hWQbeYaGTW7svPA8nWcibvj
+lyelRWIDB58+nRgYxa3OIwECR164HXSdepj+vbUaSyzvURNbaJbM
+-----END CERTIFICATE-----
+`,
 	}
 
 	// Create a component handler to manage the rendered component.

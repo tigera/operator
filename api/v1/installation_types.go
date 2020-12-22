@@ -515,6 +515,12 @@ type CertificateManagement struct {
 	// +kubebuilder:validation:Enum="";SHA256WithRSA;SHA384WithRSA;SHA512WithRSA;ECDSAWithSHA256;ECDSAWithSHA384;ECDSAWithSHA512;
 	// +optional
 	SignatureAlgorithm SignatureAlgorithm `json:"signatureAlgorithm,omitempty"`
+
+	// Specify extra names for the Tigera-manager
+	// The following names are added to the certificate, regardless of the input value for ManagerDNSNames:
+	// - tigera-manager.tigera-manager.svc
+	// - tigera-manager.tigera-manager.svc.<k8s-cluster-domain>
+	ManagerDNSNames []string `json:"tigeraManagerDNSNames,omitempty"`
 }
 
 // Key algorithm for certificate signing requests.

@@ -114,7 +114,7 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*ren
 }
 
 type ElasticClient interface {
-	SetILMPolicies(client.Client, context.Context, *operatorv1.LogStorage) error
+	SetILMPolicies(client.Client, context.Context, *operatorv1.LogStorage, string) error
 }
 
 type esClient struct {
@@ -127,9 +127,9 @@ func NewElasticClient() ElasticClient {
 }
 
 // SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
-func (es *esClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage) error {
+func (es *esClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage, elasticHTTPSEndpoint string) error {
 	es.lock.Lock()
-	if err := es.createElasticClient(client, ctx); err != nil {
+	if err := es.createElasticClient(client, ctx, elasticHTTPSEndpoint); err != nil {
 		es.lock.Unlock()
 		return err
 	}
@@ -138,7 +138,7 @@ func (es *esClient) SetILMPolicies(client client.Client, ctx context.Context, ls
 	return es.createOrUpdatePolicies(ctx, policyList)
 }
 
-func (es *esClient) createElasticClient(client client.Client, ctx context.Context) error {
+func (es *esClient) createElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) error {
 	if es.client == nil {
 		user, password, root, err := getClientCredentials(client, ctx)
 		if err != nil {
@@ -149,7 +149,7 @@ func (es *esClient) createElasticClient(client client.Client, ctx context.Contex
 		}
 
 		options := []elastic.ClientOptionFunc{
-			elastic.SetURL(render.ElasticsearchHTTPSEndpoint),
+			elastic.SetURL(elasticHTTPSEndpoint),
 			elastic.SetHttpClient(h),
 			elastic.SetErrorLog(logrWrappedESLogger{}),
 			elastic.SetSniff(false),

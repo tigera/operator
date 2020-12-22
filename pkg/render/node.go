@@ -317,6 +317,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
+		if c.cr.CertificateManagement != nil {
+			// Allow the init container to create a CSR for its TLS secret.
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"certificates.k8s.io"},
+				Resources: []string{"certificatesigningrequests"},
+				Verbs:     []string{"create", "watch"},
+			})
+		}
 	}
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -495,7 +503,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations[birdTemplateHashAnnotation] = AnnotationHash(c.birdTemplates)
 	}
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
-	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+	if c.cr.CertificateManagement == nil {
+		annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+	}
 
 	if cniCfgMap != nil {
 		annotations[nodeCniConfigAnnotation] = AnnotationHash(cniCfgMap.Data)
@@ -512,9 +522,12 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
-	initContainers := []v1.Container{}
+	var initContainers []v1.Container
 	if c.cr.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
+	}
+	if c.cr.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(c.cr, c.cr.CertificateManagement, "felix-certs", FelixCommonName, TLSSecretKeyName, TLSSecretCertName, false))
 	}
 
 	var affinity *v1.Affinity
@@ -610,6 +623,20 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
 
+	var felixVolume v1.VolumeSource
+
+	if c.cr.CertificateManagement != nil {
+		felixVolume = v1.VolumeSource{
+			EmptyDir: &v1.EmptyDirVolumeSource{},
+		}
+	} else {
+		felixVolume = v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: NodeTLSSecretName,
+			},
+		}
+	}
+
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -627,12 +654,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 			},
 		},
 		{
-			Name: "felix-certs",
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: NodeTLSSecretName,
-				},
-			},
+			Name:         "felix-certs",
+			VolumeSource: felixVolume,
 		},
 	}
 
@@ -850,7 +873,25 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
-	optional := true
+	var cnEnv v1.EnvVar
+	if c.cr.CertificateManagement != nil {
+		cnEnv = v1.EnvVar{
+			Name: "FELIX_TYPHACN", Value: TyphaCommonName,
+		}
+	} else {
+		cnEnv = v1.EnvVar{
+			Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: TyphaTLSSecretName,
+					},
+					Key:      CommonName,
+					Optional: Bool(true),
+				},
+			},
+		}
+	}
+
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -878,22 +919,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
-		{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-			SecretKeyRef: &v1.SecretKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: TyphaTLSSecretName,
-				},
-				Key:      CommonName,
-				Optional: &optional,
-			},
-		}},
+		cnEnv,
 		{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
 			SecretKeyRef: &v1.SecretKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
 					Name: TyphaTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: &optional,
+				Optional: Bool(true),
 			},
 		}},
 	}

@@ -21,11 +21,14 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	mrand "math/rand"
 	"strings"
 	"time"
 
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -137,4 +140,56 @@ func CreateDexClientSecret() *corev1.Secret {
 			ClientSecretSecretField: []byte(generatePassword(24)),
 		},
 	}
+}
+
+func CreateCSRInitContainer(
+	installation *operator.InstallationSpec,
+	cm *operator.CertificateManagement,
+	mountName string,
+	commonName string,
+	keyName string,
+	certName string,
+	registerApiserver bool) corev1.Container {
+	return corev1.Container{
+		Name:            "key-cert-provisioner",
+		Image:           components.GetReference(components.ComponentCSRInitContainer, "docker.io/", installation.ImagePath),
+		ImagePullPolicy: "Always", //todo: delete this line.
+		VolumeMounts: []corev1.VolumeMount{
+			{MountPath: "/secret", Name: mountName, ReadOnly: false},
+		},
+		Env: []corev1.EnvVar{
+			{Name: "SECRET_LOCATION", Value: "/secret/"},
+			{Name: "SIGNER", Value: cm.SignerName},
+			{Name: "COMMON_NAME", Value: commonName},
+			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.KeyAlgorithm)},
+			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},
+			{Name: "REGISTER_APISERVER", Value: fmt.Sprintf("%v", registerApiserver)},
+			{Name: "KEY_NAME", Value: keyName},
+			{Name: "CERT_NAME", Value: certName},
+			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "status.podIP",
+				},
+			}},
+			{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			}},
+			{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			}},
+			{Name: "POD_UID", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.uid",
+				},
+			}},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: Bool(true),
+		},
+	}
+
 }

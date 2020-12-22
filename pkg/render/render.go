@@ -38,6 +38,8 @@ var (
 	TLSSecretKeyName     = "key.key"
 	CommonName           = "common-name"
 	URISAN               = "uri-san"
+	TyphaCommonName      = "typha-server"
+	FelixCommonName      = "typha-client"
 )
 
 type Component interface {
@@ -82,44 +84,48 @@ func Calico(
 	nodeAppArmorProfile string,
 	clusterDomain string,
 ) (Renderer, error) {
-	tcms := []*corev1.ConfigMap{}
-	tss := []*corev1.Secret{}
+	var tcms []*corev1.ConfigMap
+	var tss []*corev1.Secret
 
-	if typhaNodeTLS == nil {
-		typhaNodeTLS = &TyphaNodeTLS{}
-	}
-
-	// Check the CA configMap and Secrets to ensure they are a valid combination and
-	// if the TLS info needs to be created.
-	// We should have them all or none.
-	if typhaNodeTLS.CAConfigMap == nil {
-		if typhaNodeTLS.TyphaSecret != nil || typhaNodeTLS.NodeSecret != nil {
-			return nil, fmt.Errorf("Typha-Felix CA config map did not exist and neither should the Secrets (%v)", typhaNodeTLS)
+	if cr.CertificateManagement != nil {
+		typhaNodeTLS = &TyphaNodeTLS{
+			CAConfigMap: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      TyphaCAConfigMapName,
+					Namespace: OperatorNamespace(),
+				},
+				Data: map[string]string{
+					TyphaCABundleName: cr.CertificateManagement.RootCA,
+				},
+			},
 		}
-		var err error
-		typhaNodeTLS, err = createTLS()
-		if err != nil {
-			return nil, fmt.Errorf("Failed to create Typha TLS: %s", err)
-		}
-		tcms = append(tcms, typhaNodeTLS.CAConfigMap)
-		tss = append(tss, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)
 	} else {
-		// CA ConfigMap exists
-		if typhaNodeTLS.TyphaSecret == nil || typhaNodeTLS.NodeSecret == nil {
-			return nil, fmt.Errorf("Typha-Felix CA config map exists and so should the Secrets.")
+		// Check the CA configMap and Secrets to ensure they are a valid combination and
+		// if the TLS info needs to be created.
+		// We should have them all or none.
+		if typhaNodeTLS.CAConfigMap == nil {
+			if typhaNodeTLS.TyphaSecret != nil || typhaNodeTLS.NodeSecret != nil {
+				return nil, fmt.Errorf("Typha-Felix CA config map did not exist and neither should the Secrets (%v)", typhaNodeTLS)
+			}
+			var err error
+			typhaNodeTLS, err = createTLS()
+			if err != nil {
+				return nil, fmt.Errorf("Failed to create Typha TLS: %s", err)
+			}
+			tcms = append(tcms, typhaNodeTLS.CAConfigMap)
+			tss = append(tss, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)
+		} else {
+			// CA ConfigMap exists
+			if typhaNodeTLS.TyphaSecret == nil || typhaNodeTLS.NodeSecret == nil {
+				return nil, fmt.Errorf("Typha-Felix CA config map exists and so should the Secrets.")
+			}
 		}
+		// Create copy to go into Calico Namespace
+		tss = append(tss, CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
 	}
-
 	// Create copy to go into Calico Namespace
-	tcm := typhaNodeTLS.CAConfigMap.DeepCopy()
-	tcm.ObjectMeta = metav1.ObjectMeta{Name: typhaNodeTLS.CAConfigMap.Name, Namespace: common.CalicoNamespace}
-	tcms = append(tcms, tcm)
-
-	ts := typhaNodeTLS.TyphaSecret.DeepCopy()
-	ts.ObjectMeta = metav1.ObjectMeta{Name: ts.Name, Namespace: common.CalicoNamespace}
-	ns := typhaNodeTLS.NodeSecret.DeepCopy()
-	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
-	tss = append(tss, ts, ns)
+	tcms = append(tcms, CopyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
 	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
@@ -193,12 +199,12 @@ func createTLS() (*TyphaNodeTLS, error) {
 		TLSSecretCertName,
 		DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{setClientAuth},
-		"typha-client")
+		FelixCommonName)
 	if err != nil {
 		return nil, err
 	}
 	// Set the CommonName used to create cert
-	tntls.NodeSecret.Data[CommonName] = []byte("typha-client")
+	tntls.NodeSecret.Data[CommonName] = []byte(FelixCommonName)
 
 	// Create TLS Secret for Felix using ca from above
 	tntls.TyphaSecret, err = CreateOperatorTLSSecret(ca,
@@ -207,12 +213,12 @@ func createTLS() (*TyphaNodeTLS, error) {
 		TLSSecretCertName,
 		DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{setServerAuth},
-		"typha-server")
+		TyphaCommonName)
 	if err != nil {
 		return nil, err
 	}
 	// Set the CommonName used to create cert
-	tntls.TyphaSecret.Data[CommonName] = []byte("typha-server")
+	tntls.TyphaSecret.Data[CommonName] = []byte(TyphaCommonName)
 
 	return &tntls, nil
 }

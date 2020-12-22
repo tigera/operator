@@ -153,6 +153,43 @@ var _ = Describe("core handler", func() {
 				}
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
+			It("should error for unexpected affinities", func() {
+				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{}
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("shouldn't error for aks affinity on aks", func() {
+				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "type",
+									Operator: v1.NodeSelectorOpNotIn,
+									Values:   []string{"virtual-kubelet"},
+								}},
+							}},
+						},
+					},
+				}
+				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error for other affinities on aks", func() {
+				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "type",
+									Operator: v1.NodeSelectorOpExists,
+								}},
+							}},
+						},
+					},
+				}
+				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
 		})
 		Describe("typha", func() {
 			TestNodeSelectors(func(nodeSelectors map[string]string) {

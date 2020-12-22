@@ -1585,6 +1585,27 @@ var _ = Describe("Node rendering tests", func() {
 			}))
 	})
 
+	Describe("AKS", func() {
+		It("should avoid virtual nodes", func() {
+			defaultInstance.KubernetesProvider = operator.ProviderAKS
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
+			resources, _ := component.Objects()
+			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*apps.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				v1.NodeSelectorTerm{
+					MatchExpressions: []v1.NodeSelectorRequirement{{
+						Key:      "type",
+						Operator: v1.NodeSelectorOpNotIn,
+						Values:   []string{"virtual-kubelet"},
+					}},
+				},
+			))
+		})
+	})
 	Describe("test IP auto detection", func() {
 		It("should support canReach", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil

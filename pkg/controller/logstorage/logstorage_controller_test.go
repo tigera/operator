@@ -509,7 +509,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
 			{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
 		},
-		false,
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		}, operatorv1.ProviderNone,

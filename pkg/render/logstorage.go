@@ -492,6 +492,13 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.dexCfg != nil {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
+
+	// default to controlPlaneNodeSelector unless DataNodeSelector is set
+	nodeSels := es.installation.ControlPlaneNodeSelector
+	if es.logStorage.Spec.DataNodeSelector != nil {
+		nodeSels = es.logStorage.Spec.DataNodeSelector
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -500,7 +507,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
 			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
-			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
+			NodeSelector:       nodeSels,
+			Tolerations:        es.installation.ControlPlaneTolerations,
 			ServiceAccountName: "tigera-elasticsearch",
 			Volumes:            volumes,
 		},
@@ -970,6 +978,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					DNSPolicy:          dnsPolicy,
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					NodeSelector:       es.installation.ControlPlaneNodeSelector,
+					Tolerations:        es.installation.ControlPlaneTolerations,
 					HostNetwork:        hostNetwork,
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath),
@@ -1087,6 +1097,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				Spec: corev1.PodSpec{
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					ServiceAccountName: "tigera-kibana",
+					NodeSelector:       es.installation.ControlPlaneNodeSelector,
+					Tolerations:        es.installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
 						Name: "kibana",
 						ReadinessProbe: &corev1.Probe{
@@ -1148,6 +1160,8 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							},
 						},
 						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+							NodeSelector: es.installation.ControlPlaneNodeSelector,
+							Tolerations:  es.installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,

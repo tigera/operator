@@ -922,20 +922,6 @@ func (es elasticsearchComponent) esCuratorServiceAccount() *corev1.ServiceAccoun
 
 func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	gracePeriod := int64(10)
-
-	hostNetwork := false
-	dnsPolicy := corev1.DNSClusterFirst
-	if es.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-		es.installation.CNI.Type == operatorv1.PluginCalico {
-		// Workaround the fact that webhooks don't work for non-host-networked pods
-		// when in this networking mode on EKS, because the control plane nodes don't run
-		// Calico.
-		hostNetwork = true
-
-		// Adjust DNS policy so we can access in-cluster services.
-		dnsPolicy = corev1.DNSClusterFirstWithHostNet
-	}
-
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -967,10 +953,10 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					},
 				},
 				Spec: corev1.PodSpec{
-					DNSPolicy:          dnsPolicy,
+					DNSPolicy:          corev1.DNSClusterFirst,
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
-					HostNetwork:        hostNetwork,
+					HostNetwork:        false,
 					Containers: []corev1.Container{{
 						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath),
 						Name:  "manager",

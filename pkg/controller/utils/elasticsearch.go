@@ -169,7 +169,7 @@ func (es *esClient) createElasticClient(client client.Client, ctx context.Contex
 				es.client = esClient
 				return nil
 			}
-			log.Error(err, "Elastic connect failed, retrying")
+			log.Error(eserr, "Elastic connect failed, retrying")
 			time.Sleep(retryInterval)
 		}
 		return eserr

@@ -342,6 +342,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					Tolerations:                   c.tolerations(),
+					Affinity:                      toAffinity(c.installation.TyphaAffinity),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -556,4 +557,19 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
 	psp.Spec.HostNetwork = true
 	return psp
+}
+
+// toAffinity converts a typha affinity to a k8s affinity.
+func toAffinity(t *operator.TyphaAffinity) *v1.Affinity {
+	if t == nil {
+		return nil
+	}
+	if t.NodeAffinity == nil {
+		return nil
+	}
+	return &v1.Affinity{
+		NodeAffinity: &v1.NodeAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: t.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+		},
+	}
 }

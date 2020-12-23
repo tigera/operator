@@ -17,7 +17,6 @@ package render_test
 import (
 	"fmt"
 
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -102,7 +101,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -123,8 +122,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKWebhookName, render.ECKOperatorNamespace, &corev1.Service{}, nil},
-					{render.ECKWebhookConfiguration, "", &admissionv1beta1.ValidatingWebhookConfiguration{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
@@ -132,7 +129,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.ECKWebhookSecretName, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -161,7 +157,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-					}, true,
+					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -213,8 +209,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKWebhookName, render.ECKOperatorNamespace, &corev1.Service{}, nil},
-					{render.ECKWebhookConfiguration, "", &admissionv1beta1.ValidatingWebhookConfiguration{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
@@ -222,7 +216,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.ECKWebhookSecretName, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -255,7 +248,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-					}, true,
+					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone, nil,
@@ -287,8 +280,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKWebhookName, render.ECKOperatorNamespace, &corev1.Service{}, nil},
-					{render.ECKWebhookConfiguration, "", &admissionv1beta1.ValidatingWebhookConfiguration{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
@@ -296,7 +287,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.ECKWebhookSecretName, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -336,7 +326,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}},
-					}, true,
+					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone,
@@ -392,7 +382,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-					}, true,
+					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -425,7 +415,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-					}, true,
+					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -457,7 +447,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -486,7 +476,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -525,7 +515,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, dexCfg,
@@ -597,7 +587,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 
 				component := render.LogStorage(
-					nil, installation, nil, managementClusterConnection, nil, nil, nil, nil, nil, false,
+					nil, installation, nil, managementClusterConnection, nil, nil, nil, nil, nil,
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone,
@@ -667,7 +657,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -701,7 +691,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -735,7 +725,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -769,7 +759,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -818,7 +808,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -862,7 +852,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -904,7 +894,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -945,7 +935,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -979,7 +969,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -1018,7 +1008,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -1048,7 +1038,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -1092,7 +1082,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -1189,7 +1179,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-						}, true,
+						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
@@ -1330,7 +1320,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone,
@@ -1371,7 +1361,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone,
@@ -1410,7 +1400,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
-				}, true,
+				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				}, operatorv1.ProviderNone,

@@ -458,38 +458,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(nodeSelectors["k2"]).To(Equal("v2"))
 		})
 
-		It("should run as host network on EKS with Calico CNI", func() {
-			logStorage.Spec.DataNodeSelector = map[string]string{
-				"k1": "v1",
-				"k2": "v2",
-			}
-			installation.KubernetesProvider = "EKS"
-			installation.CNI = &operatorv1.CNISpec{Type: "Calico"}
-			component := render.LogStorage(
-				logStorage,
-				installation, nil, nil, nil, nil,
-				esConfig,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil)
-
-			// Host networking settings should be correct on the ECK operatorv1.
-			resources, _ := component.Objects()
-			eckObj := GetResource(resources, "elastic-operator", "tigera-eck-operator", "apps", "v1", "StatefulSet")
-			Expect(eckObj).NotTo(BeNil())
-			eck := eckObj.(*appsv1.StatefulSet)
-			Expect(eck.Spec.Template.Spec.HostNetwork).To(BeTrue())
-			Expect(eck.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
-		})
-
 		It("Configures OIDC for Kibana when the OIDC configuration is provided", func() {
 
 			dexCfg := render.NewDexRelyingPartyConfig(&operatorv1.Authentication{

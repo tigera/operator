@@ -301,14 +301,15 @@ func GetExpectedTyphaScale(nodes int) int {
 	return typhas
 }
 
-// GetElasticLicenseType returns the Elasticsearch license type from elastic-licensing configmap that ECK operator keeps updated.
-// If elastic-licensing configmap doesn't exists, it must be a fresh install, return "basic" license.
-func GetElasticLicenseType(ctx context.Context, cli client.Client) (render.ElasticLicenseType, error) {
+// GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.
+func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticLicenseType, error) {
 	cm := &corev1.ConfigMap{}
 	err := cli.Get(ctx, client.ObjectKey{Name: render.ECKLicenseConfigMapName, Namespace: render.ECKOperatorNamespace}, cm)
 	if err != nil {
+		// If ConfigMap is not available, it means ECK operator is not running yet, so log the information and proceed
 		if errors.IsNotFound(err) {
-			return render.ElasticLicenseTypeBasic, nil
+			logger.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
+			return render.ElasticLicenseTypeUnknown, nil
 		}
 		return render.ElasticLicenseTypeUnknown, err
 	}

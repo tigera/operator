@@ -43,10 +43,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+type ElasticLicenseType string
+
 const (
-	ECKOperatorName      = "elastic-operator"
-	ECKOperatorNamespace = "tigera-eck-operator"
-	ECKEnterpriseTrial   = "eck-trial-license"
+	ECKOperatorName         = "elastic-operator"
+	ECKOperatorNamespace    = "tigera-eck-operator"
+	ECKLicenseConfigMapName = "elastic-licensing"
 
 	ElasticsearchNamespace                = "tigera-elasticsearch"
 	ElasticsearchHTTPURL                  = "tigera-secure-es-http.tigera-elasticsearch.svc.%s"
@@ -93,6 +95,10 @@ const (
 	// Default: 70
 	// +optional
 	maxLogsStoragePercent int32 = 70
+
+	ElasticLicenseTypeBasic      ElasticLicenseType = "basic"
+	ElasticLicenseTypeEnterprise ElasticLicenseType = "enterprise"
+	ElasticLicenseTypeUnknown    ElasticLicenseType = ""
 )
 
 const (
@@ -137,8 +143,8 @@ func LogStorage(
 	esService *corev1.Service,
 	kbService *corev1.Service,
 	clusterDomain string,
-	applyTrial bool,
-	dexCfg DexRelyingPartyConfig) Component {
+	dexCfg DexRelyingPartyConfig,
+	elasticLicenseType ElasticLicenseType) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -156,8 +162,8 @@ func LogStorage(
 		esService:                   esService,
 		kbService:                   kbService,
 		clusterDomain:               clusterDomain,
-		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
+		elasticLicenseType:          elasticLicenseType,
 	}
 }
 
@@ -177,8 +183,8 @@ type elasticsearchComponent struct {
 	esService                   *corev1.Service
 	kbService                   *corev1.Service
 	clusterDomain               string
-	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
+	elasticLicenseType          ElasticLicenseType
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -275,7 +281,9 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secureSettings)
 		}
 
-		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
+		if es.elasticLicenseType != ElasticLicenseTypeUnknown {
+			toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
+		}
 
 		// Kibana CRs
 		toCreate = append(toCreate, createNamespace(KibanaNamespace, false))
@@ -289,7 +297,9 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secretsToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
-		toCreate = append(toCreate, es.kibanaCR())
+		if es.elasticLicenseType != ElasticLicenseTypeUnknown {
+			toCreate = append(toCreate, es.kibanaCR())
+		}
 
 		// Curator CRs
 		// If we have the curator secrets then create curator
@@ -306,10 +316,6 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			}
 
 			toCreate = append(toCreate, es.curatorCronJob())
-		}
-
-		if es.applyTrial {
-			toCreate = append(toCreate, es.elasticEnterpriseTrial())
 		}
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
@@ -330,7 +336,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		)
 	}
 
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		toCreate = append(toCreate, secretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
@@ -411,7 +417,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
 	var volumeMounts []corev1.VolumeMount
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		volumeMounts = append(volumeMounts, es.dexCfg.RequiredVolumeMounts()...)
 	}
 
@@ -469,7 +475,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 	annotations := map[string]string{}
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
 			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
@@ -489,7 +495,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	var volumes []corev1.Volume
 
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
 	podTemplate := corev1.PodTemplateSpec{
@@ -618,7 +624,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 func (es elasticsearchComponent) secureSettingsSecret() *corev1.Secret {
 	secureSettings := make(map[string][]byte)
 
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = es.dexCfg.ClientSecret()
 	}
 
@@ -735,7 +741,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
 			"rp.client_id":                DexClientId,
@@ -1027,7 +1033,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 	}
 
-	if es.dexCfg != nil {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
 		config["xpack.security.authc.oidc.realm"] = "oidc1"
 		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
@@ -1209,22 +1215,6 @@ func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSe
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(EsCuratorName)
 	return psp
-}
-
-// Applying this in the eck namespace will start a trial license for enterprise features.
-func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKEnterpriseTrial,
-			Namespace: ECKOperatorNamespace,
-			Labels: map[string]string{
-				"license.k8s.elastic.co/type": "enterprise-trial",
-			},
-			Annotations: map[string]string{
-				"elastic.co/eula": "accepted",
-			},
-		},
-	}
 }
 
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {

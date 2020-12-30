@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/dns"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -51,6 +52,7 @@ func Typha(
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
+	clusterDomain string,
 ) Component {
 	return &typhaComponent{
 		k8sServiceEp:       k8sServiceEp,
@@ -58,6 +60,7 @@ func Typha(
 		typhaNodeTLS:       tnTLS,
 		amazonCloudInt:     aci,
 		namespaceMigration: migrationNeeded,
+		clusterDomain:      clusterDomain,
 	}
 }
 
@@ -67,6 +70,7 @@ type typhaComponent struct {
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
+	clusterDomain      string
 }
 
 func (c *typhaComponent) SupportedOSType() OSType {
@@ -325,7 +329,15 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 
 	var initContainers []v1.Container
 	if c.installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(c.installation, c.installation.CertificateManagement, "typha-certs", TyphaCommonName, TLSSecretKeyName, TLSSecretCertName, false))
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation,
+			c.installation.CertificateManagement,
+			"typha-certs",
+			TyphaCommonName,
+			TLSSecretKeyName,
+			TLSSecretCertName,
+			dns.GetServiceDNSNames(TyphaServiceName, common.CalicoNamespace, c.clusterDomain),
+			false))
 	}
 
 	d := apps.Deployment{

@@ -22,6 +22,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,6 +38,7 @@ import (
 const (
 	managerPort                      = 9443
 	managerTargetPort                = 9443
+	ManagerObjectName                = "tigera-manager"
 	ManagerNamespace                 = "tigera-manager"
 	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc.%s"
 	ManagerServiceIP                 = "localhost"
@@ -83,9 +85,21 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 ) (Component, error) {
-	tlsSecrets := []*corev1.Secret{}
+	var tlsSecrets []*corev1.Secret
 
-	if tlsKeyPair == nil && installation.CertificateManagement == nil {
+	if installation.CertificateManagement != nil {
+		tlsKeyPair = &v1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ManagerTLSSecretName,
+				Namespace: OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				ManagerSecretCertName: []byte(installation.CertificateManagement.RootCA),
+			},
+		}
+		tlsSecrets = append(tlsSecrets, tlsKeyPair)
+	} else if tlsKeyPair == nil {
 		var err error
 		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			ManagerTLSSecretName,
@@ -97,7 +111,7 @@ func Manager(
 		if err != nil {
 			return nil, err
 		}
-		tlsSecrets = []*corev1.Secret{tlsKeyPair}
+		tlsSecrets = append(tlsSecrets, tlsKeyPair)
 	}
 
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
@@ -226,15 +240,16 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			ManagerTLSSecretName,
 			ManagerSecretKeyName,
 			ManagerSecretCertName,
+			dns.GetServiceDNSNames(ManagerObjectName, ManagerNamespace, c.clusterDomain),
 			false))
 	}
 
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerObjectName,
 			Namespace: ManagerNamespace,
 			Labels: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerObjectName,
 			},
 			Annotations: annotations,
 		},
@@ -255,16 +270,16 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerObjectName,
 			Namespace: ManagerNamespace,
 			Labels: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerObjectName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "tigera-manager",
+					"k8s-app": ManagerObjectName,
 				},
 			},
 			Replicas: &replicas,
@@ -430,7 +445,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
-		Name:            "tigera-manager",
+		Name:            ManagerObjectName,
 		Image:           components.GetReference(components.ComponentManager, c.installation.Registry, c.installation.ImagePath),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
@@ -545,7 +560,7 @@ func (c *managerComponent) managerService() *v1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerObjectName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -557,7 +572,7 @@ func (c *managerComponent) managerService() *v1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerObjectName,
 			},
 		},
 	}
@@ -657,7 +672,7 @@ func managerClusterRole(installation *operator.InstallationSpec, managementClust
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-manager"},
+				ResourceNames: []string{ManagerObjectName},
 			},
 		)
 	}
@@ -729,6 +744,6 @@ func (c *managerComponent) getTLSObjects() []runtime.Object {
 
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := basePodSecurityPolicy()
-	psp.GetObjectMeta().SetName("tigera-manager")
+	psp.GetObjectMeta().SetName(ManagerObjectName)
 	return psp
 }

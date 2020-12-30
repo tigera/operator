@@ -30,6 +30,7 @@ import (
 )
 
 var _ = Describe("Typha rendering tests", func() {
+	const defaultClusterDomain = "svc.cluster.local"
 	var installation *operator.InstallationSpec
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -71,7 +72,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -110,7 +111,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -152,7 +153,7 @@ var _ = Describe("Typha rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, aci, true)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, aci, true, defaultClusterDomain)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -191,7 +192,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")

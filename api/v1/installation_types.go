@@ -75,6 +75,10 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
+	// TyphaAffinity specifies an affinity which will be applied to typha.
+	// +optional
+	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
+
 	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
 	// components. This currently only applies to kube-controllers and the apiserver.
 	// +optional
@@ -100,6 +104,20 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
+}
+
+// TyphaAffinity exposes the NodeAffinity of affinity, but does not expose
+// the ability to set PodAffinity, as user-specification of PodAffinity for typha is not supported.
+type TyphaAffinity struct {
+	// +optional
+	NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
+}
+
+// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option, which prevents
+//
+type PreferredNodeAffinity struct {
+	// +optional
+	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
 // ComponentName CRD enum

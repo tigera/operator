@@ -281,10 +281,24 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		return ErrIncompatibleCluster{
-			err:       "node affinity not supported for calico-node daemonset",
-			component: ComponentCalicoNode,
-			fix:       "remove the affinity",
+		if install.Spec.KubernetesProvider != operatorv1.ProviderAKS || !reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: corev1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-kubelet"},
+						}},
+					}},
+				},
+			},
+		}) {
+			return ErrIncompatibleCluster{
+				err:       "node affinity not supported for calico-node daemonset",
+				component: ComponentCalicoNode,
+				fix:       "remove the affinity",
+			}
 		}
 	}
 	nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector)

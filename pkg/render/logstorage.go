@@ -281,7 +281,9 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secureSettings)
 		}
 
-		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
+		if es.elasticLicenseType != ElasticLicenseTypeUnknown {
+			toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
+		}
 
 		// Kibana CRs
 		toCreate = append(toCreate, createNamespace(KibanaNamespace, false))
@@ -295,7 +297,9 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secretsToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
-		toCreate = append(toCreate, es.kibanaCR())
+		if es.elasticLicenseType != ElasticLicenseTypeUnknown {
+			toCreate = append(toCreate, es.kibanaCR())
+		}
 
 		// Curator CRs
 		// If we have the curator secrets then create curator

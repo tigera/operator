@@ -17,6 +17,9 @@ package utils
 import (
 	"context"
 
+	"github.com/go-logr/logr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/apis"
@@ -38,6 +41,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		c      client.Client
 		ctx    context.Context
 		scheme *runtime.Scheme
+		log    logr.Logger
 	)
 
 	BeforeEach(func() {
@@ -53,6 +57,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
+		log = logf.Log.WithName("utils-test-logger")
 	})
 
 	It("Returns license type from elastic-licensing", func() {
@@ -60,13 +65,13 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": "enterprise"},
 		})).ShouldNot(HaveOccurred())
-		license, err := GetElasticLicenseType(ctx, c)
+		license, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(license).Should(Equal(render.ElasticLicenseTypeEnterprise))
 	})
 
 	It("Return basic license type if elastic-licensing not found", func() {
-		license, err := GetElasticLicenseType(ctx, c)
+		license, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(license).Should(Equal(render.ElasticLicenseTypeBasic))
 	})
@@ -75,7 +80,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 		})).ShouldNot(HaveOccurred())
-		_, err := GetElasticLicenseType(ctx, c)
+		_, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
 	})
 

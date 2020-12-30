@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/dns"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -62,6 +63,7 @@ func Node(
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 	nodeAppArmorProfile string,
+	clusterDomain string,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:        k8sServiceEp,
@@ -71,6 +73,7 @@ func Node(
 		amazonCloudInt:      aci,
 		migrationNeeded:     migrate,
 		nodeAppArmorProfile: nodeAppArmorProfile,
+		clusterDomain:       clusterDomain,
 	}
 }
 
@@ -82,6 +85,7 @@ type nodeComponent struct {
 	amazonCloudInt      *operator.AmazonCloudIntegration
 	migrationNeeded     bool
 	nodeAppArmorProfile string
+	clusterDomain       string
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {
@@ -527,7 +531,15 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 	if c.cr.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(c.cr, c.cr.CertificateManagement, "felix-certs", FelixCommonName, TLSSecretKeyName, TLSSecretCertName, false))
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.cr,
+			c.cr.CertificateManagement,
+			"felix-certs",
+			FelixCommonName,
+			TLSSecretKeyName,
+			TLSSecretCertName,
+			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.clusterDomain),
+			false))
 	}
 
 	var affinity *v1.Affinity

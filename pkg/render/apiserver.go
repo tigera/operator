@@ -93,6 +93,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 		pullSecrets:                 pullSecrets,
 		openshift:                   openshift,
 		k8sServiceEp:                k8sServiceEndpoint,
+		clusterDomain:               clusterDomain,
 	}, nil
 }
 
@@ -107,6 +108,7 @@ type apiServerComponent struct {
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
 	isManagement                bool
+	clusterDomain               string
 }
 
 func (c *apiServerComponent) SupportedOSType() OSType {
@@ -602,7 +604,14 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(c.installation, c.installation.CertificateManagement, APIServerTLSSecretName, TLSSecretCertName, APIServerSecretKeyName, APIServerSecretCertName, true))
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation,
+			c.installation.CertificateManagement,
+			APIServerTLSSecretName, TLSSecretCertName,
+			APIServerSecretKeyName,
+			APIServerSecretCertName,
+			dns.GetServiceDNSNames(apiServiceName, APIServerNamespace, c.clusterDomain),
+			true))
 	}
 
 	d := &appsv1.Deployment{

@@ -149,6 +149,7 @@ func CreateCSRInitContainer(
 	commonName string,
 	keyName string,
 	certName string,
+	dnsNames []string,
 	registerApiserver bool) corev1.Container {
 	return corev1.Container{
 		Name:            "key-cert-provisioner",
@@ -166,6 +167,7 @@ func CreateCSRInitContainer(
 			{Name: "REGISTER_APISERVER", Value: fmt.Sprintf("%v", registerApiserver)},
 			{Name: "KEY_NAME", Value: keyName},
 			{Name: "CERT_NAME", Value: certName},
+			{Name: "DNS_NAMES", Value: strings.Join(dnsNames, ",")},
 			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "status.podIP",

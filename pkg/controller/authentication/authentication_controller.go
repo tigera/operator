@@ -45,7 +45,7 @@ const (
 	ControllerName = "authentication-controller"
 
 	// Common name to add to the Dex TLS secret.
-	dexCN = "tigera-dex.tigera-dex.%s"
+	dexCN = "tigera-dex.tigera-dex.svc.%s"
 )
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller

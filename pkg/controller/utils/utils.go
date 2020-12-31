@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -298,4 +299,24 @@ func GetExpectedTyphaScale(nodes int) int {
 		typhas = 3
 	}
 	return typhas
+}
+
+// GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.
+func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticLicenseType, error) {
+	cm := &corev1.ConfigMap{}
+	err := cli.Get(ctx, client.ObjectKey{Name: render.ECKLicenseConfigMapName, Namespace: render.ECKOperatorNamespace}, cm)
+	if err != nil {
+		// If ConfigMap is not available, it means ECK operator is not running yet, so log the information and proceed
+		if errors.IsNotFound(err) {
+			logger.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
+			return render.ElasticLicenseTypeUnknown, nil
+		}
+		return render.ElasticLicenseTypeUnknown, err
+	}
+	license, ok := cm.Data["eck_license_level"]
+	if !ok {
+		return render.ElasticLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
+	}
+
+	return render.ElasticLicenseType(license), nil
 }

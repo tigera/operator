@@ -50,28 +50,31 @@ func IntrusionDetection(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	clusterDomain string,
+	elasticLicenseType ElasticLicenseType,
 ) Component {
 	return &intrusionDetectionComponent{
-		lc:               lc,
-		esSecrets:        esSecrets,
-		kibanaCertSecret: kibanaCertSecret,
-		installation:     installation,
-		esClusterConfig:  esClusterConfig,
-		pullSecrets:      pullSecrets,
-		openshift:        openshift,
-		clusterDomain:    clusterDomain,
+		lc:                 lc,
+		esSecrets:          esSecrets,
+		kibanaCertSecret:   kibanaCertSecret,
+		installation:       installation,
+		esClusterConfig:    esClusterConfig,
+		pullSecrets:        pullSecrets,
+		openshift:          openshift,
+		clusterDomain:      clusterDomain,
+		elasticLicenseType: elasticLicenseType,
 	}
 }
 
 type intrusionDetectionComponent struct {
-	lc               *operatorv1.LogCollector
-	esSecrets        []*corev1.Secret
-	kibanaCertSecret *corev1.Secret
-	installation     *operator.InstallationSpec
-	esClusterConfig  *ElasticsearchClusterConfig
-	pullSecrets      []*corev1.Secret
-	openshift        bool
-	clusterDomain    string
+	lc                 *operatorv1.LogCollector
+	esSecrets          []*corev1.Secret
+	kibanaCertSecret   *corev1.Secret
+	installation       *operator.InstallationSpec
+	esClusterConfig    *ElasticsearchClusterConfig
+	pullSecrets        []*corev1.Secret
+	openshift          bool
+	clusterDomain      string
+	elasticLicenseType ElasticLicenseType
 }
 
 func (c *intrusionDetectionComponent) SupportedOSType() OSType {
@@ -91,6 +94,7 @@ func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Obj
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
 		c.intrusionDetectionElasticsearchJob())
+
 	objs = append(objs, c.globalAlertTemplates()...)
 
 	if !c.openshift {
@@ -190,6 +194,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			{
 				Name:  "CLUSTER_NAME",
 				Value: c.esClusterConfig.ClusterName(),
+			},
+			{
+				Name:  "ELASTIC_LICENSE_TYPE",
+				Value: string(c.elasticLicenseType),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{{

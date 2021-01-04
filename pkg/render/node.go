@@ -524,6 +524,23 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
+	var affinity *v1.Affinity
+	if c.cr.KubernetesProvider == operator.ProviderAKS {
+		affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-kubelet"},
+						}},
+					}},
+				},
+			},
+		}
+	}
+
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -541,6 +558,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 				},
 				Spec: v1.PodSpec{
 					Tolerations:                   c.nodeTolerations(),
+					Affinity:                      affinity,
 					ImagePullSecrets:              c.cr.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,

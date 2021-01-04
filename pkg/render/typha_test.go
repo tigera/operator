@@ -207,4 +207,29 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 		Expect(passed).To(Equal(true))
 	})
+
+	It("should render typha affinity", func() {
+		pfts := []v1.PreferredSchedulingTerm{{
+			Weight: 100,
+			Preference: v1.NodeSelectorTerm{
+				MatchFields: []v1.NodeSelectorRequirement{{
+					Key:      "foo",
+					Operator: "in",
+					Values:   []string{"foo", "bar"},
+				}},
+			},
+		}}
+		installation.TyphaAffinity = &operator.TyphaAffinity{
+			NodeAffinity: &operator.PreferredNodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
+			},
+		}
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true)
+		resources, _ := component.Objects()
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+		Expect(na).To(Equal(pfts))
+	})
 })

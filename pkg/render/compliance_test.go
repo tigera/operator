@@ -26,6 +26,9 @@ import (
 )
 
 var _ = Describe("compliance rendering tests", func() {
+	ns := "tigera-compliance"
+	rbac := "rbac.authorization.k8s.io"
+
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
@@ -34,9 +37,6 @@ var _ = Describe("compliance rendering tests", func() {
 			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
-
-			ns := "tigera-compliance"
-			rbac := "rbac.authorization.k8s.io"
 
 			expectedResources := []struct {
 				name    string
@@ -135,9 +135,6 @@ var _ = Describe("compliance rendering tests", func() {
 				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
-
-			ns := "tigera-compliance"
-			rbac := "rbac.authorization.k8s.io"
 
 			expectedResources := []struct {
 				name    string
@@ -316,6 +313,41 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:     []string{"create"},
 				},
 			}))
+		})
+	})
+
+	Describe("node selection & affinity", func() {
+		var renderCompliance = func(i *operatorv1.InstallationSpec) (complianceServer, complianceController, complianceSnapshotter *appsv1.Deployment) {
+			component, err := render.Compliance(nil, nil, i, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, dns.DefaultClusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+			complianceServer = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			complianceController = GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			complianceSnapshotter = GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			return
+		}
+		It("should apply controlPlaneTolerations", func() {
+			t := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+			dpComplianceServer, dpComplianceController, complianceSnapshotter := renderCompliance(&operatorv1.InstallationSpec{
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			})
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+		})
+
+		It("should apply controlPlaneNodeSelectors", func() {
+			dpComplianceServer, dpComplianceController, complianceSnapshotter := renderCompliance(&operatorv1.InstallationSpec{
+				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
+			})
+			Expect(dpComplianceServer.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			Expect(dpComplianceController.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			Expect(complianceSnapshotter.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 		})
 	})
 })

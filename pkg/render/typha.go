@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -51,6 +52,7 @@ func Typha(
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
+	clusterDomain string,
 ) Component {
 	return &typhaComponent{
 		k8sServiceEp:       k8sServiceEp,
@@ -58,6 +60,7 @@ func Typha(
 		typhaNodeTLS:       tnTLS,
 		amazonCloudInt:     aci,
 		namespaceMigration: migrationNeeded,
+		clusterDomain:      clusterDomain,
 	}
 }
 
@@ -67,6 +70,7 @@ type typhaComponent struct {
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
+	clusterDomain      string
 }
 
 func (c *typhaComponent) SupportedOSType() OSType {
@@ -85,6 +89,10 @@ func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		objs = append(objs, csrClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
 
 	return objs, nil
@@ -288,6 +296,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Verbs: []string{"create"},
 			},
 		}
+
 		role.Rules = append(role.Rules, extraRules...)
 	}
 	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
@@ -310,7 +319,22 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 
 	annotations := make(map[string]string)
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
-	annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
+	if c.installation.CertificateManagement == nil {
+		annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
+	}
+
+	var initContainers []v1.Container
+	if c.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation,
+			c.installation.CertificateManagement,
+			"typha-certs",
+			TyphaCommonName,
+			TLSSecretKeyName,
+			TLSSecretCertName,
+			dns.GetServiceDNSNames(TyphaServiceName, common.CalicoNamespace, c.clusterDomain),
+			false))
+	}
 
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -346,6 +370,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
+					InitContainers:                initContainers,
 					Containers:                    []v1.Container{c.typhaContainer()},
 					Volumes:                       c.volumes(),
 				},
@@ -372,6 +397,19 @@ func (c *typhaComponent) tolerations() []v1.Toleration {
 
 // volumes creates the typha's volumes.
 func (c *typhaComponent) volumes() []v1.Volume {
+	var tlsVolume v1.VolumeSource
+	if c.installation.CertificateManagement != nil {
+		tlsVolume = v1.VolumeSource{
+			EmptyDir: &v1.EmptyDirVolumeSource{},
+		}
+	} else {
+		tlsVolume = v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: TyphaTLSSecretName,
+			},
+		}
+	}
+
 	volumes := []v1.Volume{
 		{
 			Name: "typha-ca",
@@ -384,12 +422,8 @@ func (c *typhaComponent) volumes() []v1.Volume {
 			},
 		},
 		{
-			Name: "typha-certs",
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: TyphaTLSSecretName,
-				},
-			},
+			Name:         "typha-certs",
+			VolumeSource: tlsVolume,
 		},
 	}
 
@@ -444,6 +478,26 @@ func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
 
 // typhaEnvVars creates the typha's envvars.
 func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
+
+	var cnEnv v1.EnvVar
+	if c.installation.CertificateManagement != nil {
+		cnEnv = v1.EnvVar{
+			Name: "TYPHA_CLIENTCN", Value: FelixCommonName,
+		}
+	} else {
+		cnEnv = v1.EnvVar{
+			Name: "TYPHA_CLIENTCN", ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: NodeTLSSecretName,
+					},
+					Key:      CommonName,
+					Optional: Bool(true),
+				},
+			},
+		}
+	}
+
 	typhaEnv := []v1.EnvVar{
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
@@ -457,15 +511,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		{Name: "TYPHA_SERVERKEYFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretKeyName)},
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
-		{Name: "TYPHA_CLIENTCN", ValueFrom: &v1.EnvVarSource{
-			SecretKeyRef: &v1.SecretKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: NodeTLSSecretName,
-				},
-				Key:      CommonName,
-				Optional: Bool(true),
-			},
-		}},
+		cnEnv,
 		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &v1.EnvVarSource{
 			SecretKeyRef: &v1.SecretKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{

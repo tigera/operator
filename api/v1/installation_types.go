@@ -100,6 +100,10 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
+
+	// This is a temporary placeholder until the design is ready.
+	//
+	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
 }
 
 // ComponentName CRD enum
@@ -492,3 +496,52 @@ type InstallationList struct {
 func init() {
 	SchemeBuilder.Register(&Installation{}, &InstallationList{})
 }
+
+// todo: (re)move
+// This is a temporary placeholder until the design is ready.
+type CertificateManagement struct {
+	// Root CA of the certificate authority that signs the certificate requests.
+	RootCA string `json:"rootCA"`
+
+	// Specify the signer here that will sign the Certificate Requests issued by Tigera Enterprise.
+	// Must be formatted as: "<my-domain>/<my-signername>".
+	SignerName string `json:"signerName"`
+
+	// Specify the algorithm used for (public) key generation by init containers.
+	// Default: RSAWithSize2048
+	// +kubebuilder:validation:Enum="";RSAWithSize2048;RSAWithSize4096;RSAWithSize8192;ECDSAWithCurve256;ECDSAWithCurve384;ECDSAWithCurve521;
+	// +optional
+	KeyAlgorithm KeyAlgorithm `json:"keyAlgorithm,omitempty"`
+
+	// Specify the algorithm used for the signature of the certificate request.
+	// Default: SHA256WithRSA
+	// +kubebuilder:validation:Enum="";SHA256WithRSA;SHA384WithRSA;SHA512WithRSA;ECDSAWithSHA256;ECDSAWithSHA384;ECDSAWithSHA512;
+	// +optional
+	SignatureAlgorithm SignatureAlgorithm `json:"signatureAlgorithm,omitempty"`
+}
+
+// Key algorithm for certificate signing requests.
+type KeyAlgorithm string
+
+const (
+	KeyAlgorithmNone              = ""
+	KeyAlgorithmRSAWithSize2048   = "RSAWithSize2048"
+	KeyAlgorithmRSAWithSize4096   = "RSAWithSize4096"
+	KeyAlgorithmRSAWithSize8192   = "RSAWithSize8192"
+	KeyAlgorithmECDSAWithCurve256 = "ECDSAWithCurve256"
+	KeyAlgorithmECDSAWithCurve384 = "ECDSAWithCurve384"
+	KeyAlgorithmECDSAWithCurve521 = "ECDSAWithCurve521"
+)
+
+// Signature algorithm for certificate signing requests.
+type SignatureAlgorithm string
+
+const (
+	SignatureAlgorithmNone            = ""
+	SignatureAlgorithmSHA256WithRSA   = "SHA256WithRSA"
+	SignatureAlgorithmSHA384WithRSA   = "SHA384WithRSA"
+	SignatureAlgorithmSHA512WithRSA   = "SHA512WithRSA"
+	SignatureAlgorithmECDSAWithSHA256 = "ECDSAWithSHA256"
+	SignatureAlgorithmECDSAWithSHA384 = "ECDSAWithSHA384"
+	SignatureAlgorithmECDSAWithSHA512 = "ECDSAWithSHA512"
+)

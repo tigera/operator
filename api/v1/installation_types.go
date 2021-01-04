@@ -75,7 +75,7 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
-	// TyphaAffinity specifies an affinity which will be applied to typha.
+	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 	// +optional
 	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
 
@@ -106,16 +106,19 @@ type InstallationSpec struct {
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 }
 
-// TyphaAffinity exposes the NodeAffinity of affinity, but does not expose
-// the ability to set PodAffinity, as user-specification of PodAffinity for typha is not supported.
+// TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.
 type TyphaAffinity struct {
+	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional
 	NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
 }
 
-// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option, which prevents
-//
+// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option,
+// which ensures a pod will still be scheduled even when all the nodes it matches are unschedulable.
 type PreferredNodeAffinity struct {
+	// The scheduler will prefer to schedule pods to nodes that satisfy
+	// the affinity expressions specified by this field, but it may choose
+	// a node that violates one or more of the expressions.
 	// +optional
 	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }

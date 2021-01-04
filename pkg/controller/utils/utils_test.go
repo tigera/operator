@@ -70,9 +70,9 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		Expect(license).Should(Equal(render.ElasticLicenseTypeEnterprise))
 	})
 
-	It("Return unknown license type if elastic-licensing not found", func() {
+	It("Return error if elastic-licensing not found", func() {
 		license, err := GetElasticLicenseType(ctx, c, log)
-		Expect(err).ShouldNot(HaveOccurred())
+		Expect(err).Should(HaveOccurred())
 		Expect(license).Should(Equal(render.ElasticLicenseTypeUnknown))
 	})
 

@@ -96,9 +96,10 @@ const (
 	// +optional
 	maxLogsStoragePercent int32 = 70
 
-	ElasticLicenseTypeBasic      ElasticLicenseType = "basic"
-	ElasticLicenseTypeEnterprise ElasticLicenseType = "enterprise"
-	ElasticLicenseTypeUnknown    ElasticLicenseType = ""
+	ElasticLicenseTypeBasic           ElasticLicenseType = "basic"
+	ElasticLicenseTypeEnterprise      ElasticLicenseType = "enterprise"
+	ElasticLicenseTypeEnterpriseTrial ElasticLicenseType = "enterprise_trial"
+	ElasticLicenseTypeUnknown         ElasticLicenseType = ""
 )
 
 const (
@@ -281,9 +282,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secureSettings)
 		}
 
-		if es.elasticLicenseType != ElasticLicenseTypeUnknown {
-			toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
-		}
+		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
 
 		// Kibana CRs
 		toCreate = append(toCreate, createNamespace(KibanaNamespace, false))
@@ -297,9 +296,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 			toCreate = append(toCreate, secretsToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
-		if es.elasticLicenseType != ElasticLicenseTypeUnknown {
-			toCreate = append(toCreate, es.kibanaCR())
-		}
+		toCreate = append(toCreate, es.kibanaCR())
 
 		// Curator CRs
 		// If we have the curator secrets then create curator
@@ -336,7 +333,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		)
 	}
 
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic && es.elasticLicenseType != ElasticLicenseTypeUnknown {
+	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
 		toCreate = append(toCreate, secretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 

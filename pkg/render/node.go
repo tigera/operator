@@ -125,6 +125,11 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
 
+	if c.cr.CertificateManagement != nil {
+		objsToCreate = append(objsToCreate, csrClusterRole())
+		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-node", common.CalicoNamespace))
+	}
+
 	return objsToCreate, objsToDelete
 }
 
@@ -321,14 +326,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
-		if c.cr.CertificateManagement != nil {
-			// Allow the init container to create a CSR for its TLS secret.
-			role.Rules = append(role.Rules, rbacv1.PolicyRule{
-				APIGroups: []string{"certificates.k8s.io"},
-				Resources: []string{"certificatesigningrequests"},
-				Verbs:     []string{"create", "watch"},
-			})
-		}
 	}
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -498,9 +495,10 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 	return crb
 }
 
-// nodeDaemonset creates the node damonset.
+// nodeDaemonset creates the node daemonset.
 func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 0
+	var initContainers []v1.Container
 
 	annotations := make(map[string]string)
 	if len(c.birdTemplates) != 0 {
@@ -509,6 +507,16 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	if c.cr.CertificateManagement == nil {
 		annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+	} else {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.cr,
+			c.cr.CertificateManagement,
+			"felix-certs",
+			FelixCommonName,
+			TLSSecretKeyName,
+			TLSSecretCertName,
+			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.clusterDomain),
+			false))
 	}
 
 	if cniCfgMap != nil {
@@ -526,20 +534,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
-	var initContainers []v1.Container
 	if c.cr.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
-	}
-	if c.cr.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cr,
-			c.cr.CertificateManagement,
-			"felix-certs",
-			FelixCommonName,
-			TLSSecretKeyName,
-			TLSSecretCertName,
-			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.clusterDomain),
-			false))
 	}
 
 	var affinity *v1.Affinity
@@ -636,7 +632,6 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	dirOrCreate := v1.HostPathDirectoryOrCreate
 
 	var felixVolume v1.VolumeSource
-
 	if c.cr.CertificateManagement != nil {
 		felixVolume = v1.VolumeSource{
 			EmptyDir: &v1.EmptyDirVolumeSource{},

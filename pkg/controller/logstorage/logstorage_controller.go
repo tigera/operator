@@ -395,10 +395,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
-			r.status.SetDegraded("Failed to get elastic license", err.Error())
-			return reconcile.Result{}, err
+			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+			if errors.IsNotFound(err) {
+				log.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
+			} else {
+				r.status.SetDegraded("Failed to get elastic license", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
-
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)

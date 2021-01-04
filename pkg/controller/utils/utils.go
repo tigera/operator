@@ -24,7 +24,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -306,11 +305,6 @@ func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.L
 	cm := &corev1.ConfigMap{}
 	err := cli.Get(ctx, client.ObjectKey{Name: render.ECKLicenseConfigMapName, Namespace: render.ECKOperatorNamespace}, cm)
 	if err != nil {
-		// If ConfigMap is not available, it means ECK operator is not running yet, so log the information and proceed
-		if errors.IsNotFound(err) {
-			logger.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
-			return render.ElasticLicenseTypeUnknown, nil
-		}
 		return render.ElasticLicenseTypeUnknown, err
 	}
 	license, ok := cm.Data["eck_license_level"]
@@ -318,5 +312,16 @@ func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.L
 		return render.ElasticLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
 	}
 
-	return render.ElasticLicenseType(license), nil
+	return StrToElasticLicenseType(license, logger), nil
+}
+
+// StrToElasticLicenseType maps Elasticsearch license to one of the known and expected value.
+func StrToElasticLicenseType(license string, logger logr.Logger) render.ElasticLicenseType {
+	if license == string(render.ElasticLicenseTypeEnterprise) ||
+		license == string(render.ElasticLicenseTypeBasic) ||
+		license == string(render.ElasticLicenseTypeEnterpriseTrial) {
+		return render.ElasticLicenseType(license)
+	}
+	logger.V(3).Info("Elasticsearch license %s is unexpected", license)
+	return render.ElasticLicenseTypeUnknown
 }

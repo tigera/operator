@@ -11,6 +11,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -125,5 +126,22 @@ var _ = Describe("dex rendering tests", func() {
 			Entry("default cluster domain", dns.DefaultClusterDomain),
 			Entry("custom cluster domain", "custom.internal"),
 		)
+
+		It("should apply tolerations", func() {
+			t := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
+			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			}, dexCfg)
+			resources, _ := component.Objects()
+			d := GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+		})
 	})
 })

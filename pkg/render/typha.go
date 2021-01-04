@@ -17,7 +17,6 @@ package render
 import (
 	"fmt"
 
-	"github.com/tigera/operator/pkg/dns"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -32,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -89,6 +89,10 @@ func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		objs = append(objs, csrClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
 
 	return objs, nil
@@ -291,14 +295,6 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"create"},
 			},
-		}
-		if c.installation.CertificateManagement != nil {
-			// Allow the init container to create a CSR for its TLS secret.
-			role.Rules = append(role.Rules, rbacv1.PolicyRule{
-				APIGroups: []string{"certificates.k8s.io"},
-				Resources: []string{"certificatesigningrequests"},
-				Verbs:     []string{"create", "watch"},
-			})
 		}
 
 		role.Rules = append(role.Rules, extraRules...)

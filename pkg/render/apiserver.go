@@ -17,11 +17,6 @@ package render
 import (
 	"fmt"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/dns"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,6 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -154,6 +154,8 @@ func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	if c.installation.CertificateManagement == nil {
 		objs = append(objs, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
 		objs = append(objs, c.getTLSObjects()...)
+	} else {
+		objs = append(objs, csrClusterRoleBinding("tigera-apiserver", APIServerNamespace))
 	}
 
 	if !c.openshift {
@@ -363,16 +365,12 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 	}
 
 	if c.installation.CertificateManagement != nil {
+		// Allow apiserver pod to register itself as an aggregated apiserver.
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"apiregistration.k8s.io"},
 				Resources: []string{"apiservices"},
 				Verbs:     []string{"get", "create", "update"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"certificates.k8s.io"},
-				Resources: []string{"certificatesigningrequests"},
-				Verbs:     []string{"create", "watch"},
 			},
 		)
 	}

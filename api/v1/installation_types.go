@@ -103,7 +103,7 @@ type InstallationSpec struct {
 
 	// This is a temporary placeholder until the design is ready.
 	//
-	CertificateManagement *CertificateManagement
+	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
 }
 
 // ComponentName CRD enum
@@ -497,6 +497,7 @@ func init() {
 	SchemeBuilder.Register(&Installation{}, &InstallationList{})
 }
 
+// todo: (re)move
 // This is a temporary placeholder until the design is ready.
 type CertificateManagement struct {
 	// Root CA of the certificate authority that signs the certificate requests.
@@ -506,21 +507,17 @@ type CertificateManagement struct {
 	// Must be formatted as: "<my-domain>/<my-signername>".
 	SignerName string `json:"signerName"`
 
-	// Specify the algorithm used for (public) key generation by init containers. Default: RSAWithSize2048
+	// Specify the algorithm used for (public) key generation by init containers.
+	// Default: RSAWithSize2048
 	// +kubebuilder:validation:Enum="";RSAWithSize2048;RSAWithSize4096;RSAWithSize8192;ECDSAWithCurve256;ECDSAWithCurve384;ECDSAWithCurve521;
 	// +optional
 	KeyAlgorithm KeyAlgorithm `json:"keyAlgorithm,omitempty"`
 
-	// Specify the algorithm used for the signature of the certificate request. Default: SHA256WithRSA
+	// Specify the algorithm used for the signature of the certificate request.
+	// Default: SHA256WithRSA
 	// +kubebuilder:validation:Enum="";SHA256WithRSA;SHA384WithRSA;SHA512WithRSA;ECDSAWithSHA256;ECDSAWithSHA384;ECDSAWithSHA512;
 	// +optional
 	SignatureAlgorithm SignatureAlgorithm `json:"signatureAlgorithm,omitempty"`
-
-	// Specify extra names for the Tigera-manager
-	// The following names are added to the certificate, regardless of the input value for ManagerDNSNames:
-	// - tigera-manager.tigera-manager.svc
-	// - tigera-manager.tigera-manager.svc.<k8s-cluster-domain>
-	ManagerDNSNames []string `json:"tigeraManagerDNSNames,omitempty"`
 }
 
 // Key algorithm for certificate signing requests.

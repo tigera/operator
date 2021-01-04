@@ -262,6 +262,34 @@ func GetInstallation(ctx context.Context, client client.Client) (operator.Produc
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
 func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
+
+	//todo: revert. This is just for dev purposes:
+	instance.Spec.CertificateManagement = &operator.CertificateManagement{
+		SignerName:         "example.com/rene",
+		KeyAlgorithm:       "RSAWithSize2048",
+		SignatureAlgorithm: "SHA384WithRSA",
+		RootCA: `-----BEGIN CERTIFICATE-----
+MIIDIzCCAgugAwIBAgIUBLscBUn4/RcHQYdC+el5oaocLm0wDQYJKoZIhvcNAQEL
+BQAwITEfMB0GA1UEAwwWY2VydC1tYW5hZ2VtZW50LXNpZ25lcjAeFw0yMDEyMTUy
+MDU3MTlaFw0yMTAxMTQyMDU3MTlaMCExHzAdBgNVBAMMFmNlcnQtbWFuYWdlbWVu
+dC1zaWduZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQChOJ7tpOa7
+s2H07uDXPIK8wV6tzNaswHe+gDRRClE4c3ZnUXH3mIZidxOFrm+XJeDiCEsZvr5S
+e/L++dcLFQwyes8zJmbMjWMF4dtSyL0QESlvdQgZeCnY71IgimmULz9bF+wupD5x
+7wyVWwU5+uvMPj7fS8yGxORx08lS3goXRw1aB8BmW1nefCGNwm2wsKTIl0ik8Eo3
++8DTwbruIVRA5VPqAZyGammygI9dfs9OApxkoChvodC7W73kZYYFU1Yf8ZoVKckq
+efyeB2NEExUewyAz2LduBy/HaCIQfaHqzrXFTgcKDHGGlZlqE0zFF03OfiQAzM2K
+cP5cDpSoizM7AgMBAAGjUzBRMB0GA1UdDgQWBBRyQtOPCqVFy5YSP+Jc/QmnUnRs
+oTAfBgNVHSMEGDAWgBRyQtOPCqVFy5YSP+Jc/QmnUnRsoTAPBgNVHRMBAf8EBTAD
+AQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA9GNwFwNESLJqtijdx29arVmO1QitjDuCj
+f6De2Xjgn8OEJUT5nmKNY3Z59SUjE5b3eDYbGQF6wCby98CAG1Cn3MHltXe+IzL7
+CbEhG/vbZ5CX3siKiK8fauOuy937+3n+ySdI8ZIob92BIQQpNctibaSAvN1ykC3K
+cz9dd8tGOqYiXzMVbXg7opazzlj9kEsXX3DKiFeDECsRz2Hivei+e0Nclfwbeeyz
+2whh701+GDlzsfUwx38ril3csKEH/YnBgqV5J+pL8hWQbeYaGTW7svPA8nWcibvj
+lyelRWIDB58+nRgYxa3OIwECR164HXSdepj+vbUaSyzvURNbaJbM
+-----END CERTIFICATE-----
+`,
+	}
+
 	// Determine the provider in use by combining any auto-detected value with any value
 	// specified in the Installation CR. mergeProvider updates the CR with the correct value.
 	err := mergeProvider(instance, provider)
@@ -799,33 +827,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	a := instance.GetObjectMeta().GetAnnotations()
 	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
 		nodeAppArmorProfile = val
-	}
-
-	instance.Spec.CertificateManagement = &operator.CertificateManagement{
-		SignerName:         "example.com/rene",
-		KeyAlgorithm:       "RSAWithSize2048",
-		SignatureAlgorithm: "SHA384WithRSA",
-		RootCA: `
------BEGIN CERTIFICATE-----
-MIIDIzCCAgugAwIBAgIUBLscBUn4/RcHQYdC+el5oaocLm0wDQYJKoZIhvcNAQEL
-BQAwITEfMB0GA1UEAwwWY2VydC1tYW5hZ2VtZW50LXNpZ25lcjAeFw0yMDEyMTUy
-MDU3MTlaFw0yMTAxMTQyMDU3MTlaMCExHzAdBgNVBAMMFmNlcnQtbWFuYWdlbWVu
-dC1zaWduZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQChOJ7tpOa7
-s2H07uDXPIK8wV6tzNaswHe+gDRRClE4c3ZnUXH3mIZidxOFrm+XJeDiCEsZvr5S
-e/L++dcLFQwyes8zJmbMjWMF4dtSyL0QESlvdQgZeCnY71IgimmULz9bF+wupD5x
-7wyVWwU5+uvMPj7fS8yGxORx08lS3goXRw1aB8BmW1nefCGNwm2wsKTIl0ik8Eo3
-+8DTwbruIVRA5VPqAZyGammygI9dfs9OApxkoChvodC7W73kZYYFU1Yf8ZoVKckq
-efyeB2NEExUewyAz2LduBy/HaCIQfaHqzrXFTgcKDHGGlZlqE0zFF03OfiQAzM2K
-cP5cDpSoizM7AgMBAAGjUzBRMB0GA1UdDgQWBBRyQtOPCqVFy5YSP+Jc/QmnUnRs
-oTAfBgNVHSMEGDAWgBRyQtOPCqVFy5YSP+Jc/QmnUnRsoTAPBgNVHRMBAf8EBTAD
-AQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA9GNwFwNESLJqtijdx29arVmO1QitjDuCj
-f6De2Xjgn8OEJUT5nmKNY3Z59SUjE5b3eDYbGQF6wCby98CAG1Cn3MHltXe+IzL7
-CbEhG/vbZ5CX3siKiK8fauOuy937+3n+ySdI8ZIob92BIQQpNctibaSAvN1ykC3K
-cz9dd8tGOqYiXzMVbXg7opazzlj9kEsXX3DKiFeDECsRz2Hivei+e0Nclfwbeeyz
-2whh701+GDlzsfUwx38ril3csKEH/YnBgqV5J+pL8hWQbeYaGTW7svPA8nWcibvj
-lyelRWIDB58+nRgYxa3OIwECR164HXSdepj+vbUaSyzvURNbaJbM
------END CERTIFICATE-----
-`,
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -177,17 +176,20 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, nil
 	}
 
-	// Check that if the apiserver certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function still returns true
-	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.APIServerTLSSecretName,
-		render.APIServerSecretKeyName,
-		render.APIServerSecretCertName,
-	)
-	if err != nil {
-		log.Error(err, "Invalid TLS Cert")
-		r.status.SetDegraded("Error validating TLS certificate", err.Error())
-		return reconcile.Result{}, err
+	var tlsSecret *v1.Secret
+	if network.CertificateManagement == nil {
+		// Check that if the apiserver certpair secret exists that it is valid (has key and cert fields)
+		// If it does not exist then this function still returns true
+		tlsSecret, err = utils.ValidateCertPair(r.client,
+			render.APIServerTLSSecretName,
+			render.APIServerSecretKeyName,
+			render.APIServerSecretCertName,
+		)
+		if err != nil {
+			log.Error(err, "Invalid TLS Cert")
+			r.status.SetDegraded("Error validating TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
@@ -242,32 +244,6 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
 			return reconcile.Result{}, err
 		}
-	}
-
-	network.CertificateManagement = &operatorv1.CertificateManagement{
-		SignerName:         "example.com/rene",
-		KeyAlgorithm:       "RSAWithSize2048",
-		SignatureAlgorithm: "SHA384WithRSA",
-		RootCA: `-----BEGIN CERTIFICATE-----
-MIIDIzCCAgugAwIBAgIUBLscBUn4/RcHQYdC+el5oaocLm0wDQYJKoZIhvcNAQEL
-BQAwITEfMB0GA1UEAwwWY2VydC1tYW5hZ2VtZW50LXNpZ25lcjAeFw0yMDEyMTUy
-MDU3MTlaFw0yMTAxMTQyMDU3MTlaMCExHzAdBgNVBAMMFmNlcnQtbWFuYWdlbWVu
-dC1zaWduZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQChOJ7tpOa7
-s2H07uDXPIK8wV6tzNaswHe+gDRRClE4c3ZnUXH3mIZidxOFrm+XJeDiCEsZvr5S
-e/L++dcLFQwyes8zJmbMjWMF4dtSyL0QESlvdQgZeCnY71IgimmULz9bF+wupD5x
-7wyVWwU5+uvMPj7fS8yGxORx08lS3goXRw1aB8BmW1nefCGNwm2wsKTIl0ik8Eo3
-+8DTwbruIVRA5VPqAZyGammygI9dfs9OApxkoChvodC7W73kZYYFU1Yf8ZoVKckq
-efyeB2NEExUewyAz2LduBy/HaCIQfaHqzrXFTgcKDHGGlZlqE0zFF03OfiQAzM2K
-cP5cDpSoizM7AgMBAAGjUzBRMB0GA1UdDgQWBBRyQtOPCqVFy5YSP+Jc/QmnUnRs
-oTAfBgNVHSMEGDAWgBRyQtOPCqVFy5YSP+Jc/QmnUnRsoTAPBgNVHRMBAf8EBTAD
-AQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA9GNwFwNESLJqtijdx29arVmO1QitjDuCj
-f6De2Xjgn8OEJUT5nmKNY3Z59SUjE5b3eDYbGQF6wCby98CAG1Cn3MHltXe+IzL7
-CbEhG/vbZ5CX3siKiK8fauOuy937+3n+ySdI8ZIob92BIQQpNctibaSAvN1ykC3K
-cz9dd8tGOqYiXzMVbXg7opazzlj9kEsXX3DKiFeDECsRz2Hivei+e0Nclfwbeeyz
-2whh701+GDlzsfUwx38ril3csKEH/YnBgqV5J+pL8hWQbeYaGTW7svPA8nWcibvj
-lyelRWIDB58+nRgYxa3OIwECR164HXSdepj+vbUaSyzvURNbaJbM
------END CERTIFICATE-----
-`,
 	}
 
 	// Create a component handler to manage the rendered component.

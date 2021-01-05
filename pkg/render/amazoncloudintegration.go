@@ -236,8 +236,9 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
-					Tolerations:        c.tolerations(),
+					Tolerations:        tolerateAll(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
@@ -307,17 +308,6 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 			FailureThreshold:    3,
 		},
 	}
-}
-
-// tolerations creates the tolerations used by the API server deployment.
-func (c *amazonCloudIntegrationComponent) tolerations() []corev1.Toleration {
-	tolerations := []corev1.Toleration{
-		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
-		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoExecute},
-		{Operator: corev1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
-
-	return tolerations
 }
 
 func GetTigeraSecurityGroupEnvVariables(aci *operator.AmazonCloudIntegration) []corev1.EnvVar {

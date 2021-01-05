@@ -445,6 +445,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		VolumeMounts: volumeMounts,
 	}
 
+	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch
+	// image which requires that root users have permissions to run CHROOT which is not given in OpenShift.
+	if es.provider == operatorv1.ProviderOpenShift {
+		esContainer.SecurityContext = &corev1.SecurityContext{
+			RunAsUser: Int64(1000),
+		}
+	}
+
 	// If the user has provided resource requirements, then use the user overrides instead
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
 		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements

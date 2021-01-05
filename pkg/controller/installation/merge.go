@@ -103,6 +103,11 @@ func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		copy(inst.ComponentResources, override.ComponentResources)
 	}
 
+	switch compareFields(inst.TyphaAffinity, override.TyphaAffinity) {
+	case BOnlySet, Different:
+		inst.TyphaAffinity = override.TyphaAffinity
+	}
+
 	return inst
 }
 

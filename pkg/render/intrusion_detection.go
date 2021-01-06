@@ -365,6 +365,18 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		}
 	}
 
+	container := ElasticsearchContainerDecorateIndexCreator(
+		ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain),
+		c.esClusterConfig.Replicas(), c.esClusterConfig.Shards())
+
+	if c.elasticLicenseType == ElasticLicenseTypeBasic {
+		envVars := []corev1.EnvVar{
+			{Name: "DISABLE_ANOMALY", Value: "yes"},
+			{Name: "DISABLE_ALERTS", Value: "yes"},
+		}
+		container.Env = append(container.Env, envVars...)
+	}
+
 	return ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
@@ -377,9 +389,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			ServiceAccountName: "intrusion-detection-controller",
 			ImagePullSecrets:   ps,
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorateIndexCreator(
-					ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain),
-					c.esClusterConfig.Replicas(), c.esClusterConfig.Shards()),
+				container,
 			},
 			Volumes: volumes,
 		}),

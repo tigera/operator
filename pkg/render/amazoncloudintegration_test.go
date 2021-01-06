@@ -59,6 +59,17 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		installation = &operator.InstallationSpec{}
 	})
 
+	It("should render controlPlaneNodeSelector", func() {
+		component, err := render.AmazonCloudIntegration(instance, &operator.InstallationSpec{
+			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
+		}, credential, nil, false)
+		Expect(err).ToNot(HaveOccurred())
+		resources, _ := component.Objects()
+		resource := GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
+		d := resource.(*v1.Deployment)
+		Expect(d.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+	})
+
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)

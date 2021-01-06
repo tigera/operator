@@ -362,13 +362,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 
 // tolerations creates the typha's tolerations.
 func (c *typhaComponent) tolerations() []v1.Toleration {
-	tolerations := []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
-		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
-
-	return tolerations
+	return tolerateAll()
 }
 
 // volumes creates the typha's volumes.

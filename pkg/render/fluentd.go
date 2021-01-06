@@ -273,7 +273,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			NodeSelector:                  map[string]string{},
-			Tolerations:                   c.tolerations(),
+			Tolerations:                   tolerateAll(),
 			ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			Containers:                    []corev1.Container{c.container()},
@@ -301,16 +301,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	setCriticalPod(&(ds.Spec.Template))
 	return ds
-}
-
-// logCollectorTolerations creates the node's tolerations.
-func (c *fluentdComponent) tolerations() []corev1.Toleration {
-	tolerations := []corev1.Toleration{
-		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
-		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoExecute},
-	}
-
-	return tolerations
 }
 
 // container creates the fluentd container.
@@ -709,6 +699,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
+					Tolerations:        c.installation.ControlPlaneTolerations,
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{

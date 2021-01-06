@@ -341,7 +341,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		)
 	}
 
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		toCreate = append(toCreate, secretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
@@ -422,7 +422,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
 	var volumeMounts []corev1.VolumeMount
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		volumeMounts = append(volumeMounts, es.dexCfg.RequiredVolumeMounts()...)
 	}
 
@@ -488,7 +488,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 	annotations := map[string]string{}
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
 			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
@@ -508,7 +508,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	var volumes []corev1.Volume
 
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
 	podTemplate := corev1.PodTemplateSpec{
@@ -637,7 +637,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 func (es elasticsearchComponent) secureSettingsSecret() *corev1.Secret {
 	secureSettings := make(map[string][]byte)
 
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = es.dexCfg.ClientSecret()
 	}
 
@@ -754,7 +754,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
 			"rp.client_id":                DexClientId,
@@ -1046,7 +1046,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 	}
 
-	if es.dexCfg != nil && es.elasticLicenseType != ElasticLicenseTypeBasic {
+	if es.dexCfg != nil && es.supportsOIDC() {
 		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
 		config["xpack.security.authc.oidc.realm"] = "oidc1"
 		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
@@ -1339,6 +1339,10 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 	psp := basePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-kibana")
 	return psp
+}
+
+func (es *elasticsearchComponent) supportsOIDC() bool {
+	return es.elasticLicenseType == ElasticLicenseTypeEnterpriseTrial || es.elasticLicenseType == ElasticLicenseTypeEnterprise
 }
 
 // overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.

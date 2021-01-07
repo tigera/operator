@@ -427,7 +427,20 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	esContainer := corev1.Container{
-		Name: "elasticsearch",
+		Name:            "elasticsearch",
+		ImagePullPolicy: "Always",
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/readiness-probe"},
+				},
+			},
+			FailureThreshold:    3,
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       5,
+			SuccessThreshold:    1,
+			TimeoutSeconds:      5,
+		},
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":    resource.MustParse("1"),

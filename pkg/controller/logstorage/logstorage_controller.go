@@ -167,6 +167,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+	}
+
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
@@ -351,6 +355,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
+	var elasticLicenseType render.ElasticLicenseType
 	applyTrial := false
 
 	if managementClusterConnection == nil {
@@ -394,6 +399,16 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		if err != nil {
 			r.status.SetDegraded("Failed to get eck trial license", err.Error())
 			return reconcile.Result{}, err
+		}
+
+		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+			if errors.IsNotFound(err) {
+				log.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
+			} else {
+				r.status.SetDegraded("Failed to get elastic license", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -468,6 +483,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.clusterDomain,
 		applyTrial,
 		dexCfg,
+		elasticLicenseType,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {

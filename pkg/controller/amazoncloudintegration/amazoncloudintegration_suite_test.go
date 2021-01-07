@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logstorage
+package amazoncloudintegration
 
 import (
 	"testing"
@@ -21,13 +21,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/onsi/ginkgo/reporters"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter)))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/logstorage_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/logstorage Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/amazoncloudintegration_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/amazoncloudintegration Suite", []Reporter{junitReporter})
 }

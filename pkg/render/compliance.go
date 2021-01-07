@@ -16,9 +16,11 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
@@ -113,6 +115,48 @@ type complianceComponent struct {
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
 	dexCfg                      DexKeyValidatorConfig
+	benchmarkerImage            string
+	snapshotterImage            string
+	serverImage                 string
+	controllerImage             string
+	reporterImage               string
+}
+
+func (c *complianceComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.benchmarkerImage, err = components.GetReference(components.ComponentComplianceBenchmarker, reg, path, is)
+
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *complianceComponent) SupportedOSType() OSType {
@@ -367,7 +411,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:          ComplianceControllerName,
-					Image:         components.GetReference(components.ComponentComplianceController, c.installation.Registry, c.installation.ImagePath),
+					Image:         c.controllerImage,
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.clusterDomain, c.SupportedOSType()),
@@ -490,7 +534,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					ElasticsearchContainerDecorateIndexCreator(
 						ElasticsearchContainerDecorate(corev1.Container{
 							Name:          "reporter",
-							Image:         components.GetReference(components.ComponentComplianceReporter, c.installation.Registry, c.installation.ImagePath),
+							Image:         c.reporterImage,
 							Env:           envVars,
 							LivenessProbe: complianceLivenessProbe,
 							SecurityContext: &corev1.SecurityContext{
@@ -656,7 +700,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
-					Image: components.GetReference(components.ComponentComplianceServer, c.installation.Registry, c.installation.ImagePath),
+					Image: c.serverImage,
 					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
@@ -883,7 +927,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          ComplianceSnapshotterName,
-						Image:         components.GetReference(components.ComponentComplianceSnapshotter, c.installation.Registry, c.installation.ImagePath),
+						Image:         c.snapshotterImage,
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
 					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.clusterDomain, c.SupportedOSType()), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
@@ -1027,7 +1071,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          "compliance-benchmarker",
-						Image:         components.GetReference(components.ComponentComplianceBenchmarker, c.installation.Registry, c.installation.ImagePath),
+						Image:         c.benchmarkerImage,
 						Env:           envVars,
 						VolumeMounts:  volMounts,
 						LivenessProbe: complianceLivenessProbe,

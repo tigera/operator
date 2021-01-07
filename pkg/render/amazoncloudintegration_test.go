@@ -74,6 +74,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
 
@@ -184,6 +185,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		instance.Spec.DefaultPodMetadataAccess = operator.MetadataAccessAllowed
 		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
 

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -109,6 +110,30 @@ type apiServerComponent struct {
 	openshift                   bool
 	isManagement                bool
 	clusterDomain               string
+	apiServerImage              string
+	queryServerImage            string
+}
+
+func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, is)
+
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *apiServerComponent) SupportedOSType() OSType {
@@ -684,7 +709,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: components.GetReference(components.ComponentAPIServer, c.installation.Registry, c.installation.ImagePath),
+		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
 		// Needed for permissions to write to the audit log
@@ -752,10 +777,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	image := components.GetReference(components.ComponentQueryServer, c.installation.Registry, c.installation.ImagePath)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
-		Image: image,
+		Image: c.queryServerImage,
 		Env:   env,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{

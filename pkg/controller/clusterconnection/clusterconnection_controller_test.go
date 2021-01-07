@@ -16,12 +16,14 @@ package clusterconnection_test
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
 	"github.com/tigera/operator/pkg/render"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/stretchr/testify/mock"
@@ -51,12 +53,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	BeforeSuite(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
-		Expect(err).NotTo(HaveOccurred())
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "apps", Version: "v1"}, &appsv1.Deployment{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.ClusterRole{})
-		scheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &rbacv1.ClusterRoleBinding{})
-		err = operatorv1.SchemeBuilder.AddToScheme(scheme)
+		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		err := operatorv1.SchemeBuilder.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
@@ -89,9 +89,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			},
 		}
 		c.Create(ctx, secret)
-	})
-
-	It("should create a default ManagementClusterConnection", func() {
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.
@@ -101,14 +98,18 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				ManagementClusterAddr: "127.0.0.1:12345",
 			},
 		}
-		err := c.Create(ctx, cfg)
+		err = c.Create(ctx, cfg)
 		Expect(err).NotTo(HaveOccurred())
 		err = c.Create(
 			ctx,
 			&operatorv1.Installation{
-				Spec:       operatorv1.InstallationSpec{},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
 					Computed: &operatorv1.InstallationSpec{
 						Registry:           "my-reg",
 						KubernetesProvider: operatorv1.ProviderNone,
@@ -116,15 +117,74 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			})
 		Expect(err).NotTo(HaveOccurred())
-		By("reconciling with the required prerequisites")
-		err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
-		Expect(err).To(HaveOccurred())
-		_, err = r.Reconcile(reconcile.Request{})
-		Expect(err).ToNot(HaveOccurred())
-		err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
-		// Verifying that there is a deployment is enough for the purpose of this test. More detailed testing will be done
-		// in the render package.
-		Expect(err).NotTo(HaveOccurred())
-		Expect(dpl.Labels["k8s-app"]).To(Equal(render.GuardianName))
+	})
+
+	Context("default config", func() {
+		It("should create a default ManagementClusterConnection", func() {
+			By("reconciling with the required prerequisites")
+			err := c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
+			Expect(err).To(HaveOccurred())
+			_, err = r.Reconcile(reconcile.Request{})
+			Expect(err).ToNot(HaveOccurred())
+			err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
+			// Verifying that there is a deployment is enough for the purpose of this test. More detailed testing will be done
+			// in the render package.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dpl.Labels["k8s-app"]).To(Equal(render.GuardianName))
+		})
+	})
+
+	Context("image reconciliation", func() {
+		It("should use builtin images", func() {
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.GuardianDeploymentName,
+					Namespace: render.GuardianNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
+			Expect(dexC).ToNot(BeNil())
+			Expect(dexC.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentGuardian.Image,
+					components.ComponentGuardian.Version)))
+		})
+		It("should use images from imageset", func() {
+			Expect(c.Create(ctx, &operatorv1.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+				Spec: operatorv1.ImageSetSpec{
+					Images: []operatorv1.Image{
+						{Image: "tigera/guardian", Digest: "sha256:guardianhash"},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.GuardianDeploymentName,
+					Namespace: render.GuardianNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
+			Expect(apiserver).ToNot(BeNil())
+			Expect(apiserver.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentGuardian.Image,
+					"sha256:guardianhash")))
+		})
 	})
 })

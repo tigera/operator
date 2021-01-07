@@ -88,6 +88,7 @@ var _ = Describe("API server rendering tests", func() {
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, clusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
 
@@ -265,6 +266,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
@@ -312,6 +314,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -367,6 +370,7 @@ var _ = Describe("API server rendering tests", func() {
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -424,6 +428,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -457,6 +462,7 @@ var _ = Describe("API server rendering tests", func() {
 		}
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, aci, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		deploymentResource := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
@@ -483,6 +489,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		deploymentResource := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
@@ -495,6 +502,7 @@ var _ = Describe("API server rendering tests", func() {
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
 		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
 
@@ -577,6 +585,7 @@ var _ = Describe("API server rendering tests", func() {
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
 		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
 

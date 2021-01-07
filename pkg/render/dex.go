@@ -63,6 +63,15 @@ type dexComponent struct {
 	openshift    bool
 	installation *oprv1.InstallationSpec
 	connector    map[string]interface{}
+	image        string
+}
+
+func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.image, err = components.GetReference(components.ComponentDex, reg, path, is)
+	return err
 }
 
 func (*dexComponent) SupportedOSType() OSType {
@@ -176,7 +185,7 @@ func (c *dexComponent) deployment() runtime.Object {
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,
-							Image:           components.GetReference(components.ComponentDex, c.installation.Registry, c.installation.ImagePath),
+							Image:           c.image,
 							Env:             c.dexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
 							SecurityContext: securityContext(),

@@ -66,6 +66,13 @@ var (
 	calicoPodLabel       = map[string]string{"k8s-app": "calico-node"}
 )
 
+type NamespaceMigration interface {
+	NeedsCoreNamespaceMigration(ctx context.Context) (bool, error)
+	Run(ctx context.Context, log logr.Logger) error
+	NeedCleanup() bool
+	CleanupMigration(ctx context.Context) error
+}
+
 type CoreNamespaceMigration struct {
 	client            kubernetes.Interface
 	informer          cache.Controller
@@ -111,7 +118,7 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context
 }
 
 // NewCoreNamespaceMigration initializes a CoreNamespaceMigration and returns a handle to it.
-func NewCoreNamespaceMigration(cfg *rest.Config) (*CoreNamespaceMigration, error) {
+func NewCoreNamespaceMigration(cfg *rest.Config) (NamespaceMigration, error) {
 	migration := &CoreNamespaceMigration{migrationComplete: false}
 	var err error
 	migration.client, err = kubernetes.NewForConfig(cfg)

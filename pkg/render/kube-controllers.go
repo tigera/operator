@@ -63,6 +63,19 @@ type kubeControllersComponent struct {
 	authentication              *operator.Authentication
 	k8sServiceEp                k8sapi.ServiceEndpoint
 	esLicenseType               ElasticsearchLicenseType
+	image                       string
+}
+
+func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.cr.Registry
+	path := c.cr.ImagePath
+	var err error
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, is)
+	} else {
+		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, is)
+	}
+	return err
 }
 
 func (c *kubeControllersComponent) SupportedOSType() OSType {
@@ -290,12 +303,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
-	// Pick which image to use based on variant.
-	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Registry, c.cr.ImagePath)
-	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Registry, c.cr.ImagePath)
-	}
-
 	defaultMode := int32(420)
 
 	d := apps.Deployment{
@@ -334,7 +341,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Containers: []v1.Container{
 						{
 							Name:      "calico-kube-controllers",
-							Image:     image,
+							Image:     c.image,
 							Env:       env,
 							Resources: c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{

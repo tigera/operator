@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
@@ -101,6 +102,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
+	}
+
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ImageSet: %w", err)
 	}
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
@@ -400,10 +405,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
+		log.Info(fmt.Sprintf("Curator error %v", err))
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
 			return reconcile.Result{}, err
 		}
+		log.Info(fmt.Sprintf("Curator secrets are %v", curatorSecrets))
 
 		applyTrial, err = r.shouldApplyElasticTrialSecret(ctx)
 		if err != nil {
@@ -508,6 +515,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		oidcUserSecret,
 	)
 
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
@@ -525,6 +538,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, nil
 		}
 
+		log.Info(fmt.Sprintf("Curator secrets count %d %v", len(curatorSecrets), curatorSecrets))
 		if len(curatorSecrets) == 0 {
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")

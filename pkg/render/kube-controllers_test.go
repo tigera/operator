@@ -67,6 +67,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -114,6 +115,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -156,6 +158,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operator.TigeraSecureEnterprise
 
 		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil, render.ElasticsearchLicenseTypeBasic)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -215,6 +218,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Variant = operator.TigeraSecureEnterprise
 		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -262,6 +266,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
@@ -288,6 +293,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}}
 
 		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, authentication, render.ElasticsearchLicenseTypeUnknown)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
@@ -340,6 +346,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		k8sServiceEp.Port = "1234"
 
 		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")

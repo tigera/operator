@@ -157,7 +157,6 @@ var _ = Describe("Mainline component function tests", func() {
 	})
 
 	Describe("Deleting CR", func() {
-
 		It("Should delete TigeraStatus for deleted CR", func() {
 			instance := &operator.Installation{
 				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},

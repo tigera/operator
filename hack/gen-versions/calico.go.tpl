@@ -17,31 +17,32 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-{{- with index . "calico/cni" }}
+	CalicoRelease string = "{{ .Release }}"
+{{ with index .Components "calico/cni" }}
 	ComponentCalicoCNI = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "calico/kube-controllers" }}
+{{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "calico/node" }}
+{{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .typha }}
+{{ with .Components.typha }}
 	ComponentCalicoTypha = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .flexvol }}
+{{ with .Components.flexvol }}
 	ComponentFlexVolume = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

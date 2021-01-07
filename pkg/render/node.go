@@ -35,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/version"
 )
 
 const (
@@ -62,6 +63,7 @@ func Node(
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 	nodeAppArmorProfile string,
+	k8sVersion version.Info,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:        k8sServiceEp,
@@ -71,6 +73,7 @@ func Node(
 		amazonCloudInt:      aci,
 		migrationNeeded:     migrate,
 		nodeAppArmorProfile: nodeAppArmorProfile,
+		k8sVersion:          k8sVersion,
 	}
 }
 
@@ -82,6 +85,7 @@ type nodeComponent struct {
 	amazonCloudInt      *operator.AmazonCloudIntegration
 	migrationNeeded     bool
 	nodeAppArmorProfile string
+	k8sVersion          version.Info
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {
@@ -569,7 +573,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
-	setCriticalPod(&(ds.Spec.Template))
+	setCriticalPod(&(ds.Spec.Template), c.k8sVersion)
 	if c.migrationNeeded {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}

@@ -21,6 +21,7 @@ import (
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -97,6 +98,10 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 
 	// Couldn't detect any specific platform.
 	return operatorv1.ProviderNone, nil
+}
+
+func GetKubernetesVersion(ctx context.Context, clientset kubernetes.Interface) (*version.Info, error) {
+	return clientset.Discovery().ServerVersion()
 }
 
 // autodetectFromGroup auto detects the platform based on the API groups that are present.

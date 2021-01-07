@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/version"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -54,8 +56,18 @@ func SetTestLogger(l logr.Logger) {
 	log = l
 }
 
-func setCriticalPod(t *v1.PodTemplateSpec) {
+func setCriticalPod(t *v1.PodTemplateSpec, v version.Info) {
+	// skip creation of the priorityClass if this is k8s >= v1.17 as we can
+	// use system-node-critical outside of the kube-system namespace.
+	// also, filter out a proceeding '+' from the minor version since openshift
+	// includes that.
+	minor, err := strconv.Atoi(strings.TrimSuffix(v.Minor, "+"))
+	if err == nil && v.Major == "1" && minor >= 17 {
+		t.Spec.PriorityClassName = "system-node-critical"
+		return
+	}
 	t.Spec.PriorityClassName = PriorityClassName
+	return
 }
 
 // envVarSourceFromConfigmap returns an EnvVarSource using the given configmap name and configmap key.

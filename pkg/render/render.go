@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/version"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -234,16 +235,17 @@ type calicoRenderer struct {
 	upgrade                     bool
 	authentication              *operator.Authentication
 	nodeAppArmorProfile         string
+	k8sVersion                  version.Info
 }
 
 func (r calicoRenderer) Render() []Component {
 	var components []Component
-	components = appendNotNil(components, PriorityClassDefinitions())
+	components = appendNotNil(components, PriorityClassDefinitions(r.k8sVersion))
 	components = appendNotNil(components, Namespaces(r.installation, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.k8sVersion))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }

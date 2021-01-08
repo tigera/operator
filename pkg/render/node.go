@@ -1030,6 +1030,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},

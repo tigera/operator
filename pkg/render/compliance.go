@@ -1021,7 +1021,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
-			Tolerations:        tolerateAll(),
+			Tolerations:        tolerateAll,
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorateIndexCreator(

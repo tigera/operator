@@ -389,7 +389,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(tol))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, tolerateMaster))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {

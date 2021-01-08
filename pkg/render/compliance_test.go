@@ -317,13 +317,15 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Describe("node selection & affinity", func() {
-		var renderCompliance = func(i *operatorv1.InstallationSpec) (complianceServer, complianceController, complianceSnapshotter *appsv1.Deployment) {
+		var renderCompliance = func(i *operatorv1.InstallationSpec) (complianceServer, complianceController, complianceSnapshotter *appsv1.Deployment, complianceReporter *corev1.PodTemplate, complianceBenchmarker *appsv1.DaemonSet) {
 			component, err := render.Compliance(nil, nil, i, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 			complianceServer = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			complianceController = GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			complianceSnapshotter = GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			complianceReporter = GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
+			complianceBenchmarker = GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 			return
 		}
 		It("should apply controlPlaneTolerations", func() {
@@ -333,16 +335,18 @@ var _ = Describe("compliance rendering tests", func() {
 				Value:    "bar",
 				Effect:   corev1.TaintEffectNoExecute,
 			}
-			dpComplianceServer, dpComplianceController, complianceSnapshotter := renderCompliance(&operatorv1.InstallationSpec{
+			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			})
-			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElement(t))
-			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElement(t))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(tolerateAll))
 		})
 
 		It("should apply controlPlaneNodeSelectors", func() {
-			dpComplianceServer, dpComplianceController, complianceSnapshotter := renderCompliance(&operatorv1.InstallationSpec{
+			dpComplianceServer, dpComplianceController, complianceSnapshotter, _, _ := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 			})
 			Expect(dpComplianceServer.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))

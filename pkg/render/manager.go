@@ -198,11 +198,7 @@ func (c *managerComponent) Ready() bool {
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	annotations := map[string]string{
-		// Mark this pod as a critical add-on; when enabled, the critical add-on scheduler
-		// reserves resources for critical add-on pods so that they can be rescheduled after
-		// a failure.  This annotation works in tandem with the toleration below.
-		"scheduler.alpha.kubernetes.io/critical-pod": "",
-		complianceServerTLSHashAnnotation:            AnnotationHash(c.complianceServerCertSecret.Data),
+		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecret.Data),
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -224,6 +220,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			NodeSelector:       c.installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
@@ -501,18 +498,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
 func (c *managerComponent) managerTolerations() []v1.Toleration {
-	return []v1.Toleration{
-		{
-			Key:    "node-role.kubernetes.io/master",
-			Effect: v1.TaintEffectNoSchedule,
-		},
-		// Allow this pod to be rescheduled while the node is in "critical add-ons only" mode.
-		// This, along with the annotation above marks this pod as a critical add-on.
-		{
-			Key:      "CriticalAddonsOnly",
-			Operator: v1.TolerationOpExists,
-		},
-	}
+	return append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly)
 }
 
 // managerService returns the service exposing the Tigera Secure web app.

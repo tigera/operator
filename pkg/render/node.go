@@ -550,7 +550,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   c.nodeTolerations(),
+					Tolerations:                   tolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cr.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
@@ -574,15 +574,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}
 	return &ds
-}
-
-// nodeTolerations creates the node's tolerations.
-func (c *nodeComponent) nodeTolerations() []v1.Toleration {
-	return []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
-		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.

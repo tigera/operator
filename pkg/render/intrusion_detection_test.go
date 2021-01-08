@@ -179,7 +179,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, notOpenshift, dns.DefaultClusterDomain,
+			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown,
 		)
 		resources, _ := component.Objects()
 		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
@@ -198,8 +198,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, notOpenshift, dns.DefaultClusterDomain,
-		)
+			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown)
 		resources, _ := component.Objects()
 		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
 		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)

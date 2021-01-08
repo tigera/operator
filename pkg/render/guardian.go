@@ -204,7 +204,7 @@ func (c *GuardianComponent) deployment() runtime.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        c.tolerations(),
+					Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
@@ -212,10 +212,6 @@ func (c *GuardianComponent) deployment() runtime.Object {
 			},
 		},
 	}
-}
-
-func (c *GuardianComponent) tolerations() []v1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly)
 }
 
 func (c *GuardianComponent) volumes() []v1.Volume {

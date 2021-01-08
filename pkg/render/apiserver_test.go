@@ -377,6 +377,21 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
+	It("should include a ControlPlaneToleration when specified", func() {
+		tol := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+			Effect:   corev1.TaintEffectNoExecute,
+		}
+		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
+		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, tolerateMaster))
+	})
+
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
 		expectedResources := []struct {
 			name    string

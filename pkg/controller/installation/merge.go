@@ -82,6 +82,12 @@ func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		}
 	}
 
+	switch compareFields(inst.ControlPlaneTolerations, override.ControlPlaneTolerations) {
+	case BOnlySet, Different:
+		inst.ControlPlaneTolerations = make([]v1.Toleration, len(override.ControlPlaneTolerations))
+		copy(inst.ControlPlaneTolerations, override.ControlPlaneTolerations)
+	}
+
 	switch compareFields(inst.NodeMetricsPort, override.NodeMetricsPort) {
 	case BOnlySet, Different:
 		inst.NodeMetricsPort = override.NodeMetricsPort

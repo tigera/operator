@@ -31,7 +31,7 @@ var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []runtime.Object
 
-	BeforeEach(func() {
+	var renderGuardian = func(i operator.InstallationSpec) {
 		addr := "127.0.0.1:1234"
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -54,10 +54,15 @@ var _ = Describe("Rendering tests", func() {
 				},
 			}},
 			false,
-			&operator.InstallationSpec{Registry: "my-reg/"},
+			&i,
 			secret,
 		)
 		resources, _ = g.Objects()
+		return
+	}
+
+	BeforeEach(func() {
+		renderGuardian(operator.InstallationSpec{Registry: "my-reg/"})
 	})
 
 	It("should render all resources for a managed cluster", func() {
@@ -90,4 +95,16 @@ var _ = Describe("Rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
 	})
 
+	It("should render controlPlaneTolerations", func() {
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		renderGuardian(operator.InstallationSpec{
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		})
+		deployment := GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, tolerateCriticalAddonsOnly, tolerateMaster))
+	})
 })

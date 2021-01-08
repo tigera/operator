@@ -273,7 +273,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 			NodeSelector:                  map[string]string{},
-			Tolerations:                   tolerateAll(),
+			Tolerations:                   c.tolerations(),
 			ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			Containers:                    []corev1.Container{c.container()},
@@ -301,6 +301,16 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	setCriticalPod(&(ds.Spec.Template))
 	return ds
+}
+
+// logCollectorTolerations creates the node's tolerations.
+func (c *fluentdComponent) tolerations() []corev1.Toleration {
+	tolerations := []corev1.Toleration{
+		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
+		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoExecute},
+	}
+
+	return tolerations
 }
 
 // container creates the fluentd container.

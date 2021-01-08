@@ -238,7 +238,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
-					Tolerations:        tolerateAll(),
+					Tolerations:        tolerateAll,
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.container(),

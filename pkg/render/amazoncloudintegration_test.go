@@ -126,12 +126,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal(AwsCIName))
 
-		expectedTolerations := []corev1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
-		}
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.ObjectMeta.Annotations).To(HaveKey("hash.operator.tigera.io/credential-secret"))

@@ -151,10 +151,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
-		expectedTolerations := []corev1.Toleration{
-			{Key: "node-role.kubernetes.io/master", Effect: "NoSchedule"},
-		}
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateMaster))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
@@ -389,7 +386,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(tol))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, tolerateMaster))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {

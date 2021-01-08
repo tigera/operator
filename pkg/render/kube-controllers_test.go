@@ -93,11 +93,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
-			{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
-		}
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateCriticalAddonsOnly, tolerateMaster))
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
@@ -231,6 +227,19 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		d := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+	})
+
+	It("should include a ControlPlaneToleration when specified", func() {
+		t := v1.Toleration{
+			Key:      "foo",
+			Operator: v1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		instance.ControlPlaneTolerations = []v1.Toleration{t}
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil)
+		resources, _ := component.Objects()
+		d := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
 	})
 
 	It("should render resourcerequirements", func() {

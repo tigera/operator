@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -333,6 +334,49 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:     []string{"impersonate"},
 			},
 		}))
+	})
+
+	// renderManager passes in as few parameters as possible to render.Manager without it
+	// panicing. It accepts variations on the installspec for testing purposes.
+	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
+		component, err := render.Manager(nil, nil, nil,
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceServerCertSecret,
+					Namespace: render.OperatorNamespace(),
+				},
+				Data: map[string][]byte{
+					"tls.crt": []byte("crt"),
+					"tls.key": []byte("crt"),
+				},
+			},
+			&render.ElasticsearchClusterConfig{},
+			nil, nil, false,
+			i,
+			nil, nil, nil, "")
+		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+		resources, _ := component.Objects()
+		return GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+	}
+
+	It("should apply controlPlaneNodeSelectors", func() {
+		deployment := renderManager(&operator.InstallationSpec{
+			ControlPlaneNodeSelector: map[string]string{
+				"foo": "bar",
+			},
+		})
+		Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+	})
+	It("should apply controlPlaneTolerations", func() {
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		deployment := renderManager(&operator.InstallationSpec{
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		})
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElement(t))
 	})
 })
 

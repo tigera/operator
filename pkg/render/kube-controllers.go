@@ -249,11 +249,6 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 }
 
 func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
-	tolerations := []v1.Toleration{
-		{Key: "CriticalAddonsOnly", Operator: v1.TolerationOpExists},
-		{Key: "node-role.kubernetes.io/master", Effect: v1.TaintEffectNoSchedule},
-	}
-
 	env := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
@@ -328,7 +323,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:       c.cr.ControlPlaneNodeSelector,
-					Tolerations:        tolerations,
+					Tolerations:        append(c.cr.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly),
 					ImagePullSecrets:   c.cr.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{

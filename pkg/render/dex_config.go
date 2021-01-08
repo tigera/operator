@@ -450,6 +450,11 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		//Openshift specific.
 		RootCASecretField: rootCASecretLocation,
 	}
+
+	if len(d.RequestedScopes()) > 0 {
+		config["scopes"] = d.RequestedScopes()
+	}
+
 	//Google specific.
 	if d.idpSecret.Data[serviceAccountSecretField] != nil || d.idpSecret.Data[adminEmailSecretField] == nil {
 		config["serviceAccountFilePath"] = serviceAccountSecretLocation

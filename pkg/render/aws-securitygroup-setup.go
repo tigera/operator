@@ -73,7 +73,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					ImagePullSecrets:   c.pullSecrets,
 					ServiceAccountName: TigeraAWSSGSetupName,
 					HostNetwork:        true,
-					Tolerations:        tolerateAll(),
+					Tolerations:        tolerateAll,
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
 						Image: components.GetOperatorInitReference(c.installcr.Registry, c.installcr.ImagePath),

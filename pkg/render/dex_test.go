@@ -141,7 +141,7 @@ var _ = Describe("dex rendering tests", func() {
 			}, dexCfg)
 			resources, _ := component.Objects()
 			d := GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
 		})
 	})
 })

@@ -393,16 +393,14 @@ var (
 
 // tolerateAll returns tolerations to tolerate all taints. When used, it is not necessary
 // to include the user's custom tolerations because we already tolerate everything.
-func tolerateAll() []corev1.Toleration {
-	return []corev1.Toleration{
-		tolerateCriticalAddonsOnly,
-		{
-			Effect:   corev1.TaintEffectNoSchedule,
-			Operator: corev1.TolerationOpExists,
-		},
-		{
-			Effect:   corev1.TaintEffectNoExecute,
-			Operator: corev1.TolerationOpExists,
-		},
-	}
+var tolerateAll = []corev1.Toleration{
+	tolerateCriticalAddonsOnly,
+	{
+		Effect:   corev1.TaintEffectNoSchedule,
+		Operator: corev1.TolerationOpExists,
+	},
+	{
+		Effect:   corev1.TaintEffectNoExecute,
+		Operator: corev1.TolerationOpExists,
+	},
 }

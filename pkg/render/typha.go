@@ -341,7 +341,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   c.tolerations(),
+					Tolerations:                   tolerateAll,
 					Affinity:                      toAffinity(c.installation.TyphaAffinity),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
@@ -358,11 +358,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		migration.SetTyphaAntiAffinity(&d)
 	}
 	return &d
-}
-
-// tolerations creates the typha's tolerations.
-func (c *typhaComponent) tolerations() []v1.Toleration {
-	return tolerateAll()
 }
 
 // volumes creates the typha's volumes.

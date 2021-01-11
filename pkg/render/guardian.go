@@ -200,33 +200,16 @@ func (c *GuardianComponent) deployment() runtime.Object {
 					Labels: map[string]string{
 						"k8s-app": GuardianName,
 					},
-					Annotations: map[string]string{
-						"scheduler.alpha.kubernetes.io/critical-pod": "",
-					},
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        c.tolerations(),
+					Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
 				},
 			},
-		},
-	}
-}
-
-func (c *GuardianComponent) tolerations() []v1.Toleration {
-	return []v1.Toleration{
-		{
-			Key:    "node-role.kubernetes.io/master",
-			Effect: v1.TaintEffectNoSchedule,
-		},
-		// Allow this pod to be rescheduled while the node is in "critical add-ons only" mode.
-		// This, along with the annotation above marks this pod as a critical add-on.
-		{
-			Key:      "CriticalAddonsOnly",
-			Operator: v1.TolerationOpExists,
 		},
 	}
 }

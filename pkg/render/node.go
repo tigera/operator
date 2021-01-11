@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/controller/utils"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -35,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/version"
 )
 
 const (
@@ -63,7 +63,7 @@ func Node(
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 	nodeAppArmorProfile string,
-	k8sVersion version.Info,
+	k8sVersion *utils.VersionInfo,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:        k8sServiceEp,
@@ -85,7 +85,7 @@ type nodeComponent struct {
 	amazonCloudInt      *operator.AmazonCloudIntegration
 	migrationNeeded     bool
 	nodeAppArmorProfile string
-	k8sVersion          version.Info
+	k8sVersion          *utils.VersionInfo
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {

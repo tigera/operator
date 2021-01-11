@@ -2,7 +2,7 @@ package options
 
 import (
 	v1 "github.com/tigera/operator/api/v1"
-	"k8s.io/apimachinery/pkg/version"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 // AddOptions are passed to controllers when added to the controller manager. They
@@ -14,5 +14,5 @@ type AddOptions struct {
 	EnterpriseCRDExists bool
 	AmazonCRDExists     bool
 	ClusterDomain       string
-	K8sAPIServerVersion *version.Info
+	K8sAPIServerVersion *utils.VersionInfo
 }

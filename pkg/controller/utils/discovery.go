@@ -17,11 +17,11 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -100,8 +100,32 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 	return operatorv1.ProviderNone, nil
 }
 
-func GetKubernetesVersion(ctx context.Context, clientset kubernetes.Interface) (*version.Info, error) {
-	return clientset.Discovery().ServerVersion()
+type VersionInfo struct {
+	Minor int
+}
+
+// GetKubernetesVersion gets and processes the verison reported by k8s-apiserver.
+// If the version is unrecognizable, nil is returned.
+func GetKubernetesVersion(ctx context.Context, clientset kubernetes.Interface) (*VersionInfo, error) {
+	v, err := clientset.Discovery().ServerVersion()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check k8s version: %v", err)
+	}
+
+	if v.Major != "1" {
+		return nil, nil
+	}
+
+	// filter out a proceeding '+' from the minor version since openshift
+	// includes that.
+	minor, err := strconv.Atoi(strings.TrimSuffix(v.Minor, "+"))
+	if err != nil {
+		return nil, nil
+	}
+
+	return &VersionInfo{
+		Minor: minor,
+	}, nil
 }
 
 // autodetectFromGroup auto detects the platform based on the API groups that are present.

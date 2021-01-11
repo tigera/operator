@@ -15,26 +15,20 @@
 package render
 
 import (
-	"strconv"
-	"strings"
-
+	"github.com/tigera/operator/pkg/controller/utils"
 	schedv1beta "k8s.io/api/scheduling/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/version"
 )
 
 const (
 	PriorityClassName = "calico-priority"
 )
 
-func PriorityClassDefinitions(v version.Info) Component {
+func PriorityClassDefinitions(v *utils.VersionInfo) Component {
 	// skip creation of the priorityClass if this is k8s >= v1.17 as we can
 	// use system-node-critical outside of the kube-system namespace.
-	// also, filter out a proceeding '+' from the minor version since openshift
-	// includes that.
-	minor, err := strconv.Atoi(strings.TrimSuffix(v.Minor, "+"))
-	if err == nil && v.Major == "1" && minor >= 17 {
+	if v != nil && v.Minor >= 17 {
 		return nil
 	}
 	return &priorityClassComponent{}

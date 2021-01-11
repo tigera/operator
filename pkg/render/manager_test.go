@@ -173,6 +173,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.ECKLicenseConfigMapName},
+				Verbs:         []string{"get", "list"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.EsNativeUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
+			},
 		}))
 	})
 
@@ -332,6 +344,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.ECKLicenseConfigMapName},
+				Verbs:         []string{"get", "list"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.EsNativeUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
 			},
 		}))
 	})

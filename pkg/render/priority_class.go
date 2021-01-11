@@ -15,6 +15,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/controller/utils"
 	schedv1beta "k8s.io/api/scheduling/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +25,12 @@ const (
 	PriorityClassName = "calico-priority"
 )
 
-func PriorityClassDefinitions() Component {
+func PriorityClassDefinitions(v *utils.VersionInfo) Component {
+	// skip creation of the priorityClass if this is k8s >= v1.17 as we can
+	// use system-node-critical outside of the kube-system namespace.
+	if v != nil && v.Minor >= 17 {
+		return nil
+	}
 	return &priorityClassComponent{}
 }
 

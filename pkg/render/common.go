@@ -35,6 +35,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 const (
@@ -54,8 +55,15 @@ func SetTestLogger(l logr.Logger) {
 	log = l
 }
 
-func setCriticalPod(t *v1.PodTemplateSpec) {
+func setCriticalPod(t *v1.PodTemplateSpec, v *utils.VersionInfo) {
+	// skip creation of the priorityClass if this is k8s >= v1.17 as we can
+	// use system-node-critical outside of the kube-system namespace.
+	if v != nil && v.Minor >= 17 {
+		t.Spec.PriorityClassName = "system-node-critical"
+		return
+	}
 	t.Spec.PriorityClassName = PriorityClassName
+	return
 }
 
 // envVarSourceFromConfigmap returns an EnvVarSource using the given configmap name and configmap key.

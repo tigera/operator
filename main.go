@@ -203,11 +203,18 @@ func main() {
 		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
 	}
 
+	version, err := utils.GetKubernetesVersion(ctx, clientset)
+	if err != nil {
+		setupLog.Error(err, "failed to determine version of k8s-apiserver")
+		os.Exit(1)
+	}
+
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
+		K8sAPIServerVersion: version,
 	}
 
 	err = controllers.AddToManager(mgr, options)

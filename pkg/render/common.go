@@ -376,3 +376,31 @@ func basePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 		},
 	}
 }
+
+var (
+	// tolerateMaster allows pod to be scheduled on master nodes
+	tolerateMaster = corev1.Toleration{
+		Key:    "node-role.kubernetes.io/master",
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+
+	// tolerateCriticalAddonsOnly allows pods to be rescheduled while the node is in "critical add-ons only" mode.
+	tolerateCriticalAddonsOnly = corev1.Toleration{
+		Key:      "CriticalAddonsOnly",
+		Operator: corev1.TolerationOpExists,
+	}
+)
+
+// tolerateAll returns tolerations to tolerate all taints. When used, it is not necessary
+// to include the user's custom tolerations because we already tolerate everything.
+var tolerateAll = []corev1.Toleration{
+	tolerateCriticalAddonsOnly,
+	{
+		Effect:   corev1.TaintEffectNoSchedule,
+		Operator: corev1.TolerationOpExists,
+	},
+	{
+		Effect:   corev1.TaintEffectNoExecute,
+		Operator: corev1.TolerationOpExists,
+	},
+}

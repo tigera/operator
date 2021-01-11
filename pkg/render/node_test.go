@@ -297,12 +297,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
-		}
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
 
 		verifyProbes(ds, false, false)
 	})
@@ -698,12 +693,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
-		}
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
 
 		// Verify readiness and liveness probes.
 
@@ -851,12 +841,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
-		}
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
 
 		// Verify readiness and liveness probes.
 		verifyProbes(ds, false, true)
@@ -1140,12 +1125,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
-		}
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
 
 		// Verify readiness and liveness probes.
 		verifyProbes(ds, false, false)
@@ -1292,12 +1272,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
 		// Verify tolerations.
-		expectedTolerations := []v1.Toleration{
-			{Operator: "Exists", Effect: "NoSchedule"},
-			{Operator: "Exists", Effect: "NoExecute"},
-			{Operator: "Exists", Key: "CriticalAddonsOnly"},
-		}
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
 
 		// Verify readiness and liveness probes.
 		verifyProbes(ds, false, false)

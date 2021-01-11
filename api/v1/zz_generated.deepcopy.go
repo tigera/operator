@@ -762,6 +762,13 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.ControlPlaneTolerations != nil {
+		in, out := &in.ControlPlaneTolerations, &out.ControlPlaneTolerations
+		*out = make([]corev1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.NodeMetricsPort != nil {
 		in, out := &in.NodeMetricsPort, &out.NodeMetricsPort
 		*out = new(int32)

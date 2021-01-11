@@ -84,6 +84,10 @@ var (
 		Version: "master",
 		Image:   "tigera/fluentd",
 	}
+	ComponentFluentdWindows = component{
+		Version: "master",
+		Image:   "tigera/fluentd-windows",
+	}
 
 	ComponentGuardian = component{
 		Version: "master",

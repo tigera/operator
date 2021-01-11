@@ -21,6 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -170,5 +171,38 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				}))
 			}
 		}
+	})
+
+	It("should apply controlPlaneNodeSelector correctly", func() {
+		component := render.IntrusionDetection(nil, nil,
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
+			&operatorv1.InstallationSpec{
+				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
+			},
+			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown,
+		)
+		resources, _ := component.Objects()
+		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		Expect(idc.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+	})
+	It("should apply controlPlaneTolerations correctly", func() {
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		component := render.IntrusionDetection(nil, nil,
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
+			&operatorv1.InstallationSpec{
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			},
+			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown)
+		resources, _ := component.Objects()
+		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		Expect(job.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})
 })

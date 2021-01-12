@@ -100,7 +100,7 @@ var _ = Describe("apiserver controller tests", func() {
 				amazonCRDExists: false,
 				status:          mockStatus,
 			}
-			_, err := r.Reconcile(reconcile.Request{})
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{
@@ -150,7 +150,7 @@ var _ = Describe("apiserver controller tests", func() {
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
 			}
-			_, err := r.Reconcile(reconcile.Request{})
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{

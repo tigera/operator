@@ -15,14 +15,14 @@
 package render
 
 import (
-	"github.com/tigera/operator/pkg/components"
-
-	operator "github.com/tigera/operator/api/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 )
 
 func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.InstallationSpec) (Component, error) {
@@ -47,8 +47,8 @@ func (c *awsSGSetupComponent) ResolveImages(is *operator.ImageSet) error {
 	return err
 }
 
-func (c *awsSGSetupComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	return []runtime.Object{
+func (c *awsSGSetupComponent) Objects() ([]client.Object, []client.Object) {
+	return []client.Object{
 		c.serviceAccount(),
 		c.role(),
 		c.roleBinding(),

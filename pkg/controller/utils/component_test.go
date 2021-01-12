@@ -210,7 +210,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(nodeSelectors).Should(Equal(expectedNodeSelectors))
 	},
 		TableEntry{
-			Description: "sets the required annotations for a deployment when their not set",
+			Description: "linux - sets the required annotations for a deployment when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
@@ -231,7 +231,28 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 		TableEntry{
-			Description: "sets the required annotations for a daemonset when their not set",
+			Description: "windows - sets the required annotations for a deployment when they're not set",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []runtime.Object{&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+						Spec: apps.DeploymentSpec{
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						}},
+					},
+				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				map[string]string{
+					"kubernetes.io/os": "windows",
+				},
+			},
+		},
+		TableEntry{
+			Description: "linux - sets the required annotations for a daemonset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
@@ -252,7 +273,28 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 		TableEntry{
-			Description: "sets the required annotations for a statefulset when their not set",
+			Description: "windows - sets the required annotations for a daemonset when they're not set",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []runtime.Object{&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
+						Spec: apps.DaemonSetSpec{
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						}},
+					},
+				}, client.ObjectKey{Name: "test-daemonset"}, &apps.DaemonSet{},
+				map[string]string{
+					"kubernetes.io/os": "windows",
+				},
+			},
+		},
+		TableEntry{
+			Description: "linux - sets the required annotations for a statefulset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
@@ -273,7 +315,28 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 		TableEntry{
-			Description: "sets the required annotations for a cronjob when their not set",
+			Description: "windows - sets the required annotations for a statefulset when they're not set",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []runtime.Object{&apps.StatefulSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
+						Spec: apps.StatefulSetSpec{
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						}},
+					},
+				}, client.ObjectKey{Name: "test-statefulset"}, &apps.StatefulSet{},
+				map[string]string{
+					"kubernetes.io/os": "windows",
+				},
+			},
+		},
+		TableEntry{
+			Description: "linux - sets the required annotations for a cronjob when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
@@ -298,7 +361,32 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 		TableEntry{
-			Description: "sets the required annotations for a job",
+			Description: "windows - sets the required annotations for a cronjob when they're not set",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []runtime.Object{&batchv1beta.CronJob{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
+						Spec: batchv1beta.CronJobSpec{
+							JobTemplate: batchv1beta.JobTemplateSpec{
+								Spec: batchv1.JobSpec{
+									Template: v1.PodTemplateSpec{
+										Spec: v1.PodSpec{
+											NodeSelector: map[string]string{},
+										},
+									},
+								},
+							},
+						}},
+					},
+				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1beta.CronJob{},
+				map[string]string{
+					"kubernetes.io/os": "windows",
+				},
+			},
+		},
+		TableEntry{
+			Description: "linux - sets the required annotations for a job",
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
@@ -316,6 +404,28 @@ var _ = Describe("Component handler tests", func() {
 				client.ObjectKey{Name: "test-job"}, &batchv1.Job{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "windows - sets the required annotations for a job",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []runtime.Object{&batchv1.Job{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
+						Spec: batchv1.JobSpec{
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						},
+					}},
+				},
+				client.ObjectKey{Name: "test-job"}, &batchv1.Job{},
+				map[string]string{
+					"kubernetes.io/os": "windows",
 				},
 			},
 		},
@@ -375,7 +485,7 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 		TableEntry{
-			Description: "leaves other annotations alone and sets the required ones",
+			Description: "linux - leaves other annotations alone and sets the required ones",
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
@@ -395,6 +505,30 @@ var _ = Describe("Component handler tests", func() {
 				map[string]string{
 					"kubernetes.io/foo": "bar",
 					"kubernetes.io/os":  "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "windows - leaves other annotations alone and sets the required ones",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []runtime.Object{&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+						Spec: apps.DeploymentSpec{
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{
+										"kubernetes.io/foo": "bar",
+									},
+								},
+							},
+						},
+					}},
+				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				map[string]string{
+					"kubernetes.io/foo": "bar",
+					"kubernetes.io/os":  "windows",
 				},
 			},
 		},

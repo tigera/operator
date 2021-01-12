@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -389,7 +389,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 })
 
 func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
-	tlsSecret *corev1.Secret) []runtime.Object {
+	tlsSecret *corev1.Secret) []client.Object {
 	var dexCfg render.DexKeyValidatorConfig
 	if oidc {
 		var authentication *operator.Authentication

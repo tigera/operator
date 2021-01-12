@@ -18,12 +18,13 @@ import (
 	"fmt"
 	"strings"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 )
 
 const (
@@ -92,7 +93,7 @@ func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet)
 }
 
 // csrClusterRole returns a role with the necessary permissions to create certificate signing requests.
-func csrClusterRole() runtime.Object {
+func csrClusterRole() client.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

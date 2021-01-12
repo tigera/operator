@@ -388,7 +388,6 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	if hasWindowsNodes {
-		log.Info("Rendering fluentd component for Windows")
 		component = render.Fluentd(
 			instance,
 			esSecrets,

@@ -470,6 +470,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		dexCfg,
 	)
 
+	err = utils.ApplyImageSet(ctx, r.client, []render.Component{component})
+	if err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

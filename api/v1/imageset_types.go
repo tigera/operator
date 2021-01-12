@@ -34,6 +34,7 @@ type Image struct {
 	Image string `json:"image"`
 
 	// Digest is the image identifier that will be used for the Image.
+	// Should not include leading `@`
 	Digest string `json:"digest"`
 }
 

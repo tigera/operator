@@ -16,6 +16,8 @@ package components
 import (
 	"fmt"
 	"strings"
+
+	operator "github.com/tigera/operator/api/v1"
 )
 
 type component struct {
@@ -25,7 +27,7 @@ type component struct {
 }
 
 // GetReference returns the fully qualified image to use, including registry and version.
-func GetReference(c component, registry, imagepath string) string {
+func GetReference(c component, registry, imagepath string, is *operator.ImageSet) (string, error) {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" {
@@ -49,7 +51,17 @@ func GetReference(c component, registry, imagepath string) string {
 		image = ReplaceImagePath(image, imagepath)
 	}
 
-	return fmt.Sprintf("%s%s:%s", registry, image, c.Version)
+	if is == nil {
+		return fmt.Sprintf("%s%s:%s", registry, image, c.Version), nil
+	}
+
+	for _, img := range is.Spec.Images {
+		if image.Image == c.Image {
+			return fmt.Sprintf("%s%s@%s", registry, image, image.Digest), nil
+		}
+	}
+
+	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image)
 }
 
 func ReplaceImagePath(image, imagepath string) string {

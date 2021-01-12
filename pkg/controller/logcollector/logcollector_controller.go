@@ -100,6 +100,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
+	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)
+	}
 	return nil
 }
 
@@ -357,7 +361,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	// Render the desired objects from the CRD and create or update them.
+	// Render the fluentd component for Linux
 	component := render.Fluentd(
 		instance,
 		esSecrets,
@@ -369,11 +373,43 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		pullSecrets,
 		installation,
 		r.clusterDomain,
+		render.OSTypeLinux,
 	)
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	// Render a fluentd component for Windows if the cluster has Windows nodes.
+	hasWindowsNodes, err := hasWindowsNodes(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if hasWindowsNodes {
+		log.Info("Rendering fluentd component for Windows")
+		component = render.Fluentd(
+			instance,
+			esSecrets,
+			esClusterConfig,
+			s3Credential,
+			splunkCredential,
+			filters,
+			eksConfig,
+			pullSecrets,
+			installation,
+			r.clusterDomain,
+			render.OSTypeWindows,
+		)
+
+		// Create a component handler to manage the rendered component.
+		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+		if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Clear the degraded bit if we've reached this far.
@@ -391,6 +427,16 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func hasWindowsNodes(c client.Client) (bool, error) {
+	nodes := corev1.NodeList{}
+	err := c.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})
+	if err != nil {
+		return false, err
+	}
+
+	return len(nodes.Items) > 0, nil
 }
 
 func getS3Credential(client client.Client) (*render.S3Credential, error) {

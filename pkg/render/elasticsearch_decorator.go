@@ -23,16 +23,32 @@ import (
 )
 
 const (
-	ElasticsearchDefaultCertDir      = "/etc/ssl/elastic/"
-	ElasticsearchDefaultCertPath     = ElasticsearchDefaultCertDir + "ca.pem"
-	TigeraElasticsearchCertSecret    = "tigera-secure-elasticsearch-cert"
-	ElasticsearchPublicCertSecret    = "tigera-secure-es-http-certs-public"
-	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
+	ElasticsearchDefaultCertDir         = "/etc/ssl/elastic/"
+	ElasticsearchDefaultCertDirWindows  = "c:/etc/ssl/elastic/"
+	ElasticsearchDefaultCertPath        = ElasticsearchDefaultCertDir + "ca.pem"
+	ElasticsearchDefaultCertPathWindows = ElasticsearchDefaultCertDirWindows + "ca.pem"
+	TigeraElasticsearchCertSecret       = "tigera-secure-elasticsearch-cert"
+	ElasticsearchPublicCertSecret       = "tigera-secure-es-http-certs-public"
+	elasticsearchConfigMapAnnotation    = "hash.operator.tigera.io/elasticsearch-configmap"
 )
 
 type Annotatable interface {
 	SetAnnotations(map[string]string)
 	GetAnnotations() map[string]string
+}
+
+func elasticCertDir(osType OSType) string {
+	if osType == OSTypeWindows {
+		return ElasticsearchDefaultCertDirWindows
+	}
+	return ElasticsearchDefaultCertDir
+}
+
+func elasticCertPath(osType OSType) string {
+	if osType == OSTypeWindows {
+		return ElasticsearchDefaultCertPathWindows
+	}
+	return ElasticsearchDefaultCertPath
 }
 
 func ElasticsearchDecorateAnnotations(obj Annotatable, config *ElasticsearchClusterConfig, secrets []*corev1.Secret) Annotatable {
@@ -47,8 +63,8 @@ func ElasticsearchDecorateAnnotations(obj Annotatable, config *ElasticsearchClus
 	return obj
 }
 
-func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string) corev1.Container {
-	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret, clusterDomain))
+func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType OSType) corev1.Container {
+	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret, clusterDomain, osType), osType)
 }
 
 func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
@@ -61,7 +77,8 @@ func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, sh
 	return c
 }
 
-func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, clusterDomain string) corev1.Container {
+func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, clusterDomain string, osType OSType) corev1.Container {
+	certPath := elasticCertPath(osType)
 	esScheme, esHost, esPort, _ := ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, clusterDomain))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
@@ -82,25 +99,26 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSe
 			Name:      "ELASTIC_PASSWORD",
 			ValueFrom: envVarSourceFromSecret(esUserSecretName, "password", false),
 		},
-		{Name: "ELASTIC_CA", Value: ElasticsearchDefaultCertPath},
-		{Name: "ES_CA_CERT", Value: ElasticsearchDefaultCertPath},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: ElasticsearchDefaultCertPath},
+		{Name: "ELASTIC_CA", Value: certPath},
+		{Name: "ES_CA_CERT", Value: certPath},
+		{Name: "ES_CURATOR_BACKEND_CERT", Value: certPath},
 	}
 
 	c.Env = append(c.Env, envVars...)
 	return c
 }
 
-func ElasticsearchContainerDecorateVolumeMounts(c corev1.Container) corev1.Container {
-	c.VolumeMounts = append(c.VolumeMounts, ElasticsearchDefaultVolumeMount())
+func ElasticsearchContainerDecorateVolumeMounts(c corev1.Container, osType OSType) corev1.Container {
+	c.VolumeMounts = append(c.VolumeMounts, ElasticsearchDefaultVolumeMount(osType))
 
 	return c
 }
 
-func ElasticsearchDefaultVolumeMount() corev1.VolumeMount {
+func ElasticsearchDefaultVolumeMount(osType OSType) corev1.VolumeMount {
+	certPath := elasticCertDir(osType)
 	return corev1.VolumeMount{
 		Name:      "elastic-ca-cert-volume",
-		MountPath: ElasticsearchDefaultCertDir,
+		MountPath: certPath,
 	}
 }
 

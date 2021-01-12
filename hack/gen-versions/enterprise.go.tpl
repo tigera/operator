@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,157 +15,158 @@
 package components
 
 var (
-{{- with index . "cnx-apiserver" }}
+	EnterpriseRelease string = "{{ .Release }}"
+{{ with index .Components "cnx-apiserver" }}
 	ComponentAPIServer = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "compliance-benchmarker" }}
+{{ with index .Components "compliance-benchmarker" }}
 	ComponentComplianceBenchmarker = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "compliance-controller" }}
+{{ with index .Components "compliance-controller" }}
 	ComponentComplianceController = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "compliance-reporter" }}
+{{ with index .Components "compliance-reporter" }}
 	ComponentComplianceReporter = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "compliance-server" }}
+{{ with index .Components "compliance-server" }}
 	ComponentComplianceServer = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "compliance-snapshotter" }}
+{{ with index .Components "compliance-snapshotter" }}
 	ComponentComplianceSnapshotter = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "eck-elasticsearch" }}
+{{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "eck-kibana" }}
+{{ with index .Components "eck-kibana" }}
 	ComponentEckKibana = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "elastic-tsee-installer" }}
+{{ with index .Components "elastic-tsee-installer" }}
 	ComponentElasticTseeInstaller = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .elasticsearch }}
+{{ with .Components.elasticsearch }}
 	ComponentElasticsearch = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "elasticsearch-operator" }}
+{{ with index .Components "elasticsearch-operator" }}
 	ComponentElasticsearchOperator = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "es-curator" }}
+{{ with index .Components "es-curator" }}
 	ComponentEsCurator = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "es-proxy" }}
+{{ with index .Components "es-proxy" }}
 	ComponentEsProxy = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .fluentd }}
+{{ with .Components.fluentd }}
 	ComponentFluentd = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .guardian }}
+{{ with .Components.guardian }}
 	ComponentGuardian = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "intrusion-detection-controller" }}
+{{ with index .Components "intrusion-detection-controller" }}
 	ComponentIntrusionDetectionController = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .kibana }}
+{{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "cnx-manager" }}
+{{ with index .Components "cnx-manager" }}
 	ComponentManager = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "dex" }}
+{{ with index .Components "dex" }}
 	ComponentDex = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .voltron }}
+{{ with .Components.voltron }}
 	ComponentManagerProxy = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "cnx-queryserver" }}
+{{ with index .Components "cnx-queryserver" }}
 	ComponentQueryServer = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "cnx-kube-controllers" }}
+{{ with index .Components "cnx-kube-controllers" }}
 	ComponentTigeraKubeControllers = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "cnx-node" }}
+{{ with index .Components "cnx-node" }}
 	ComponentTigeraNode = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .typha }}
+{{ with .Components.typha }}
 	ComponentTigeraTypha = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "tigera-cni" }}
+{{ with index .Components "tigera-cni" }}
 	ComponentTigeraCNI = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "cloud-controllers" }}
+{{ with index .Components "cloud-controllers" }}
 	ComponentCloudControllers = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

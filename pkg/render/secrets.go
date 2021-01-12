@@ -17,6 +17,8 @@ package render
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	operator "github.com/tigera/operator/api/v1"
 )
 
 func Secrets(secrets []*corev1.Secret) Component {
@@ -25,6 +27,11 @@ func Secrets(secrets []*corev1.Secret) Component {
 
 type secretsComponent struct {
 	secrets []*corev1.Secret
+}
+
+func (c *secretsComponent) ValidateImages(is *operator.ImageSet) error {
+	// No images to validate
+	return nil
 }
 
 func (c *secretsComponent) SupportedOSType() OSType {

@@ -38,6 +38,11 @@ var defaultImages = map[string]string{
 	"tigera-cni":              "tigera/cni",
 }
 
+type ComponentRelease struct {
+	Release    string     `json:"release"`
+	Components Components `json:"components"`
+}
+
 type Components map[string]*Component
 
 type Component struct {
@@ -48,16 +53,19 @@ type Component struct {
 
 // GetComponents parses a versions.yml file, scrubs the data of known issues,
 // and returns the data in a Components struct.
-func GetComponents(versionsPath string) (Components, error) {
+func GetComponents(versionsPath string) (ComponentRelease, error) {
+	var cv ComponentRelease
 	v, err := readComponents(versionsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read components: %v", err)
+		return cv, fmt.Errorf("failed to read components: %v", err)
 	}
 
-	comps := make(Components)
+	//comps := make(Components)
+	cv.Components = make(Components)
+	cv.Release = v.Release
 
 	// add known default images to any components that are missing them.
-	for key, component := range v {
+	for key, component := range v.Components {
 		if key == "calico" || key == "networking-calico" || key == "calico-private" || key == "cnx-manager-proxy" || key == "busybox" {
 			continue
 		}
@@ -65,37 +73,35 @@ func GetComponents(versionsPath string) (Components, error) {
 		if component.Image == "" {
 			image := defaultImages[key]
 			if image == "" {
-				return nil, fmt.Errorf("no image nor default image available for component '%s'. "+
+				return cv, fmt.Errorf("no image nor default image available for component '%s'. "+
 					"Either fill in the 'image' field or update this code with a defaultImage.", key)
 			}
 			component.Image = image
 		}
 
-		comps[key] = component
+		//comps[key] = component
+		cv.Components[key] = component
 	}
 
-	return comps, nil
+	return cv, nil
 }
 
-// readComponents opens a versions.yml file and returns the components
-// section in a Components struct.
-func readComponents(versionsPath string) (Components, error) {
+// readComponents opens a versions.yml file and returns a ComponentRelease
+func readComponents(versionsPath string) (ComponentRelease, error) {
+	var cr ComponentRelease
 	f, err := ioutil.ReadFile(versionsPath)
 	if err != nil {
-		return nil, err
+		return cr, err
 	}
 
-	c := struct {
-		Components Components
-	}{}
-	if err := yaml.Unmarshal(f, &c); err != nil {
-		return nil, err
+	if err := yaml.Unmarshal(f, &cr); err != nil {
+		return cr, err
 	}
 
-	return c.Components, nil
+	return cr, nil
 }
 
-func render(tplFile string, vz Components) error {
+func render(tplFile string, vz ComponentRelease) error {
 	t, err := template.ParseFiles(tplFile)
 	if err != nil {
 		return fmt.Errorf("failed to parse template file file: %v", err)

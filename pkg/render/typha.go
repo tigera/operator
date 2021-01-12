@@ -67,6 +67,20 @@ type typhaComponent struct {
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
+	typhaImage         string
+}
+
+func (c *typhaComponent) ValidateImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
+		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, is)
+	} else {
+		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, is)
+	}
+
+	return err
 }
 
 func (c *typhaComponent) SupportedOSType() OSType {
@@ -410,14 +424,9 @@ func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
 func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
-	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoTypha, c.installation.Registry, c.installation.ImagePath)
-	if c.installation.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraTypha, c.installation.Registry, c.installation.ImagePath)
-	}
 	return v1.Container{
 		Name:           "calico-typha",
-		Image:          image,
+		Image:          c.typhaImage,
 		Resources:      c.typhaResources(),
 		Env:            c.typhaEnvVars(),
 		VolumeMounts:   c.typhaVolumeMounts(),

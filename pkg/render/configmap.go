@@ -17,6 +17,8 @@ package render
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	operator "github.com/tigera/operator/api/v1"
 )
 
 func ConfigMaps(cms []*corev1.ConfigMap) Component {
@@ -25,6 +27,11 @@ func ConfigMaps(cms []*corev1.ConfigMap) Component {
 
 type configMapComponent struct {
 	configMaps []*corev1.ConfigMap
+}
+
+func (c *configMapComponent) ValidateImages(is *operator.ImageSet) error {
+	// No images to validate
+	return nil
 }
 
 func (c *configMapComponent) SupportedOSType() OSType {

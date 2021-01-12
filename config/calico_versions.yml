@@ -1,3 +1,4 @@
+release: master
 components:
   typha:
     version: master

@@ -99,6 +99,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index . "fluentd-windows" }}
+	ComponentFluentdWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .guardian }}
 	ComponentGuardian = component{
 		Version: "{{ .Version }}",

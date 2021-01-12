@@ -184,6 +184,46 @@ spec:
                         type: string
                     type: object
                 type: object
+              certificateManagement:
+                description: This is a temporary placeholder until the design is ready.
+                properties:
+                  keyAlgorithm:
+                    description: 'Specify the algorithm used for (public) key generation
+                      by init containers. Default: RSAWithSize2048'
+                    enum:
+                    - ""
+                    - RSAWithSize2048
+                    - RSAWithSize4096
+                    - RSAWithSize8192
+                    - ECDSAWithCurve256
+                    - ECDSAWithCurve384
+                    - ECDSAWithCurve521
+                    type: string
+                  rootCA:
+                    description: Root CA of the certificate authority that signs the
+                      certificate requests.
+                    type: string
+                  signatureAlgorithm:
+                    description: 'Specify the algorithm used for the signature of
+                      the certificate request. Default: SHA256WithRSA'
+                    enum:
+                    - ""
+                    - SHA256WithRSA
+                    - SHA384WithRSA
+                    - SHA512WithRSA
+                    - ECDSAWithSHA256
+                    - ECDSAWithSHA384
+                    - ECDSAWithSHA512
+                    type: string
+                  signerName:
+                    description: 'Specify the signer here that will sign the Certificate
+                      Requests issued by Tigera Enterprise. Must be formatted as:
+                      "<my-domain>/<my-signername>".'
+                    type: string
+                required:
+                - rootCA
+                - signerName
+                type: object
               cni:
                 description: CNI specifies the CNI that will be used by this installation.
                 properties:
@@ -688,6 +728,47 @@ spec:
                               on interfaces that do not match the given regex.
                             type: string
                         type: object
+                    type: object
+                  certificateManagement:
+                    description: This is a temporary placeholder until the design
+                      is ready.
+                    properties:
+                      keyAlgorithm:
+                        description: 'Specify the algorithm used for (public) key
+                          generation by init containers. Default: RSAWithSize2048'
+                        enum:
+                        - ""
+                        - RSAWithSize2048
+                        - RSAWithSize4096
+                        - RSAWithSize8192
+                        - ECDSAWithCurve256
+                        - ECDSAWithCurve384
+                        - ECDSAWithCurve521
+                        type: string
+                      rootCA:
+                        description: Root CA of the certificate authority that signs
+                          the certificate requests.
+                        type: string
+                      signatureAlgorithm:
+                        description: 'Specify the algorithm used for the signature
+                          of the certificate request. Default: SHA256WithRSA'
+                        enum:
+                        - ""
+                        - SHA256WithRSA
+                        - SHA384WithRSA
+                        - SHA512WithRSA
+                        - ECDSAWithSHA256
+                        - ECDSAWithSHA384
+                        - ECDSAWithSHA512
+                        type: string
+                      signerName:
+                        description: 'Specify the signer here that will sign the Certificate
+                          Requests issued by Tigera Enterprise. Must be formatted
+                          as: "<my-domain>/<my-signername>".'
+                        type: string
+                    required:
+                    - rootCA
+                    - signerName
                     type: object
                   cni:
                     description: CNI specifies the CNI that will be used by this installation.

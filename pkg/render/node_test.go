@@ -1746,6 +1746,25 @@ var _ = Describe("Node rendering tests", func() {
 				// Enabled is the default so we don't set
 				// NAT_OUTGOING if it is enabled.
 			}),
+		Entry("Pool with nat outgoing disabled (IPv6)",
+			operator.IPPool{
+				CIDR:        "fc00::/48",
+				NATOutgoing: "Disabled",
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR": "fc00::/48",
+				// Disabled is the default so we don't set
+				// NAT_OUTGOING if it is disabled.
+			}),
+		Entry("Pool with nat outgoing enabled (IPv6)",
+			operator.IPPool{
+				CIDR:        "fc00::/48",
+				NATOutgoing: "Enabled",
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":         "fc00::/48",
+				"CALICO_IPV6POOL_NAT_OUTGOING": "true",
+			}),
 		Entry("Pool with CrossSubnet",
 			operator.IPPool{
 				CIDR:          "172.16.0.0/24",

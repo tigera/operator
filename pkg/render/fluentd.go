@@ -57,6 +57,7 @@ const (
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 	ProbeTimeoutSeconds                      = 5
+	ProbeTimeoutSecondsWindows               = 10
 
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
@@ -180,6 +181,13 @@ func (c *fluentdComponent) livenessCmd() []string {
 		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
 	}
 	return []string{"sh", "-c", "/bin/liveness.sh"}
+}
+
+func (c *fluentdComponent) probeTimeout() int32 {
+	if c.osType == OSTypeWindows {
+		return ProbeTimeoutSeconds
+	}
+	return ProbeTimeoutSecondsWindows
 }
 
 func (c *fluentdComponent) path(path string) string {
@@ -585,7 +593,7 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds: ProbeTimeoutSeconds,
+		TimeoutSeconds: c.probeTimeout(),
 	}
 }
 

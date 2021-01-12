@@ -405,6 +405,11 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 
 		// Create a component handler to manage the rendered component.
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+		if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Clear the degraded bit if we've reached this far.

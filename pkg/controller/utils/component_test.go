@@ -86,7 +86,7 @@ var _ = Describe("Component handler tests", func() {
 	It("merges annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
 			supportedOSType: render.OSTypeLinux,
-			objs: []runtime.Object{&v1.Namespace{
+			objs: []client.Object{&v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -178,7 +178,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 	})
 
-	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj runtime.Object, expectedNodeSelectors map[string]string) {
+	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
 		Expect(handler.CreateOrUpdate(ctx, component, sm)).ShouldNot(HaveOccurred())
 		Expect(c.Get(ctx, key, obj)).ShouldNot(HaveOccurred())
 
@@ -214,7 +214,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&apps.Deployment{
+					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
 							Template: v1.PodTemplateSpec{
@@ -235,7 +235,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeWindows,
-					objs: []runtime.Object{&apps.Deployment{
+					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
 							Template: v1.PodTemplateSpec{
@@ -256,7 +256,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&apps.DaemonSet{
+					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
 							Template: v1.PodTemplateSpec{
@@ -277,7 +277,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeWindows,
-					objs: []runtime.Object{&apps.DaemonSet{
+					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
 							Template: v1.PodTemplateSpec{
@@ -298,7 +298,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&apps.StatefulSet{
+					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
 							Template: v1.PodTemplateSpec{
@@ -319,7 +319,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeWindows,
-					objs: []runtime.Object{&apps.StatefulSet{
+					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
 							Template: v1.PodTemplateSpec{
@@ -340,7 +340,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&batchv1beta.CronJob{
+					objs: []client.Object{&batchv1beta.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
 						Spec: batchv1beta.CronJobSpec{
 							JobTemplate: batchv1beta.JobTemplateSpec{
@@ -365,7 +365,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeWindows,
-					objs: []runtime.Object{&batchv1beta.CronJob{
+					objs: []client.Object{&batchv1beta.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
 						Spec: batchv1beta.CronJobSpec{
 							JobTemplate: batchv1beta.JobTemplateSpec{
@@ -390,7 +390,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&batchv1.Job{
+					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
 							Template: v1.PodTemplateSpec{
@@ -412,7 +412,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeWindows,
-					objs: []runtime.Object{&batchv1.Job{
+					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
 							Template: v1.PodTemplateSpec{
@@ -434,7 +434,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&kbv1.Kibana{
+					objs: []client.Object{&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
 						Spec: kbv1.KibanaSpec{
 							PodTemplate: v1.PodTemplateSpec{
@@ -456,7 +456,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&esv1.Elasticsearch{
+					objs: []client.Object{&esv1.Elasticsearch{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-elasticsearch"},
 						Spec: esv1.ElasticsearchSpec{
 							NodeSets: []esv1.NodeSet{
@@ -489,7 +489,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeLinux,
-					objs: []runtime.Object{&apps.Deployment{
+					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
 							Template: v1.PodTemplateSpec{
@@ -513,7 +513,7 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: render.OSTypeWindows,
-					objs: []runtime.Object{&apps.Deployment{
+					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
 							Template: v1.PodTemplateSpec{
@@ -537,7 +537,7 @@ var _ = Describe("Component handler tests", func() {
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.
 type fakeComponent struct {
-	objs            []runtime.Object
+	objs            []client.Object
 	supportedOSType render.OSType
 }
 
@@ -549,7 +549,7 @@ func (c *fakeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *fakeComponent) Objects() ([]runtime.Object, []runtime.Object) {
+func (c *fakeComponent) Objects() ([]client.Object, []client.Object) {
 	return c.objs, nil
 }
 

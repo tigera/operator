@@ -189,9 +189,9 @@ func (c *fluentdComponent) livenessCmd() []string {
 
 func (c *fluentdComponent) probeTimeout() int32 {
 	if c.osType == OSTypeWindows {
-		return ProbeTimeoutSeconds
+		return ProbeTimeoutSecondsWindows
 	}
-	return ProbeTimeoutSecondsWindows
+	return ProbeTimeoutSeconds
 }
 
 func (c *fluentdComponent) probePeriod() int32 {

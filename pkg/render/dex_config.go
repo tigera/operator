@@ -217,10 +217,10 @@ func (d *dexBaseCfg) ClientSecret() []byte {
 }
 
 func (d *dexBaseCfg) RequestedScopes() []string {
-	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.RequestedScopes != nil {
+	if d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
-	return []string{"openid", "email", "profile", "groups", "offline_access"}
+	return []string{"openid", "email", "profile"}
 }
 
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
@@ -451,7 +451,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		RootCASecretField: rootCASecretLocation,
 	}
 
-	if len(d.RequestedScopes()) > 0 {
+	if d.connectorType != connectorTypeOpenshift && len(d.RequestedScopes()) > 0 {
 		config["scopes"] = d.RequestedScopes()
 	}
 

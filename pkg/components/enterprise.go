@@ -144,4 +144,10 @@ var (
 		Version: "master",
 		Image:   "tigera/cloud-controllers",
 	}
+
+	//Todo: Use tigera hosted image.
+	ComponentCSRInitContainer = component{
+		Version: "master",
+		Image:   "rdtigera/init-container",
+	}
 )

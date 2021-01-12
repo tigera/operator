@@ -755,11 +755,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
-	if err != nil {
-		log.Error(err, "Error with Typha/Felix secrets")
-		r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
-		return reconcile.Result{}, err
+	var typhaNodeTLS *render.TyphaNodeTLS
+	if instance.Spec.CertificateManagement == nil {
+		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
+		if err != nil {
+			log.Error(err, "Error with Typha/Felix secrets")
+			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)

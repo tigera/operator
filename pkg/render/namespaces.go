@@ -35,6 +35,11 @@ type namespaceComponent struct {
 	pullSecrets  []*corev1.Secret
 }
 
+func (c *namespaceComponent) ValidateImages(is *operatorv1.ImageSet) error {
+	// No images to validate on a namespace
+	return nil
+}
+
 func (c *namespaceComponent) SupportedOSType() OSType {
 	return OSTypeAny
 }

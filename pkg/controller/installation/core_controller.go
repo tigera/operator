@@ -851,6 +851,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	components = append(components, calico.Render()...)
 
+	err = utils.ApplyImageSet(ctx, r.client, components)
+	if err != nil {
+		r.SetDegraded("Error with images from ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	for _, component := range components {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)

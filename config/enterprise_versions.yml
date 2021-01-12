@@ -23,6 +23,9 @@ components:
   fluentd:
     image: tigera/fluentd
     version: master
+  fluentd-windows:
+    image: tigera/fluentd-windows
+    version: master
   es-proxy:
     image: tigera/es-proxy
     version: master

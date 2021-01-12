@@ -43,7 +43,7 @@ var _ = Describe("Elasticsearch decorator tests", func() {
 	})
 	Context("ElasticsearchContainerDecorate", func() {
 		DescribeTable("should decorate a container with the given cluster DNS used for the ES host name", func(clusterDNS, expectedESHost string) {
-			c := ElasticsearchContainerDecorate(container, "test-cluster", "secret", clusterDNS)
+			c := ElasticsearchContainerDecorate(container, "test-cluster", "secret", clusterDNS, OSTypeLinux)
 
 			expectedEnvs := []corev1.EnvVar{
 				{Name: "ELASTIC_HOST", Value: expectedESHost},

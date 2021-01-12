@@ -41,8 +41,9 @@ const (
 	Optional                   = true
 	DefaultCertificateDuration = 100 * 365 * 24 * time.Hour
 
-	OSTypeAny   OSType = "any"
-	OSTypeLinux OSType = "linux"
+	OSTypeAny     OSType = "any"
+	OSTypeLinux   OSType = "linux"
+	OSTypeWindows OSType = "windows"
 )
 
 // This type helps ensure that we only use defined os types

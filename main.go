@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
@@ -145,6 +146,11 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "operator-lock",
+		// We should test this again in the future to see if the problem with LicenseKey updates
+		// being missed is resolved.
+		ClientDisableCacheFor: []client.Object{
+			&v3.LicenseKey{},
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

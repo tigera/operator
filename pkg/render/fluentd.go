@@ -208,7 +208,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.eksConfig != nil {
-		// Windows does not support allowedHostPaths yet.
+		// Windows PSP does not support allowedHostPaths yet.
 		// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
 		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
 			objs = append(objs,
@@ -221,7 +221,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 			c.eksLogForwarderDeployment())
 	}
 
-	// Windows does not support allowedHostPaths yet.
+	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
 	if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
 		objs = append(objs,

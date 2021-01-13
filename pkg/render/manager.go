@@ -587,6 +587,18 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{ECKLicenseConfigMapName},
+				Verbs:         []string{"get", "list"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{OIDCUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
+			},
 		},
 	}
 

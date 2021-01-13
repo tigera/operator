@@ -194,6 +194,7 @@ var (
 		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
+		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentKibana,

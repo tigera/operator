@@ -35,8 +35,8 @@ type namespaceComponent struct {
 	pullSecrets  []*corev1.Secret
 }
 
-func (c *namespaceComponent) ValidateImages(is *operatorv1.ImageSet) error {
-	// No images to validate on a namespace
+func (c *namespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	// No images on a namespace
 	return nil
 }
 

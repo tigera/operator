@@ -70,7 +70,7 @@ type typhaComponent struct {
 	typhaImage         string
 }
 
-func (c *typhaComponent) ValidateImages(is *operator.ImageSet) error {
+func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	var err error

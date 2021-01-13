@@ -29,8 +29,8 @@ type secretsComponent struct {
 	secrets []*corev1.Secret
 }
 
-func (c *secretsComponent) ValidateImages(is *operator.ImageSet) error {
-	// No images to validate
+func (c *secretsComponent) ResolveImages(is *operator.ImageSet) error {
+	// No images to resolve
 	return nil
 }
 

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -75,6 +76,29 @@ type intrusionDetectionComponent struct {
 	openshift          bool
 	clusterDomain      string
 	elasticLicenseType ElasticLicenseType
+	jobInstallerImage  string
+	controllerImage    string
+}
+
+func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, is)
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *intrusionDetectionComponent) SupportedOSType() OSType {
@@ -161,7 +185,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
-		Image: components.GetReference(components.ComponentElasticTseeInstaller, c.installation.Registry, c.installation.ImagePath),
+		Image: c.jobInstallerImage,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -427,7 +451,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1
 
 	return corev1.Container{
 		Name:  "controller",
-		Image: components.GetReference(components.ComponentIntrusionDetectionController, c.installation.Registry, c.installation.ImagePath),
+		Image: c.controllerImage,
 		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{

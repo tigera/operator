@@ -41,6 +41,8 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 			registry = CalicoRegistry
 		case ComponentElasticsearchOperator:
 			registry = ECKRegistry
+		case ComponentOperatorInit:
+			registry = InitRegistry
 		default:
 			registry = TigeraRegistry
 		}
@@ -56,8 +58,8 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 	}
 
 	for _, img := range is.Spec.Images {
-		if image.Image == c.Image {
-			return fmt.Sprintf("%s%s@%s", registry, image, image.Digest), nil
+		if img.Image == c.Image {
+			return fmt.Sprintf("%s%s@%s", registry, image, img.Digest), nil
 		}
 	}
 
@@ -70,25 +72,4 @@ func ReplaceImagePath(image, imagepath string) string {
 		return fmt.Sprintf("%s/%s", imagepath, subs[1])
 	}
 	return fmt.Sprintf("%s/%s", imagepath, subs[0])
-}
-
-// GetOperatorInitReference returns the fully qualified image to use, including registry and version
-// for the operatorInit image.
-//
-// Deprecated: GetOperatorInitReference exists to solve a complex dependency where the digest of the operator
-// init image isn't known until it's built, and it's code and docker image share this repository. This function
-// should go away once operatorInit logic is moved into the operator.
-func GetOperatorInitReference(registry, imagepath string) string {
-	// If a user did not supply a registry, use the default registry
-	// based on component
-	if registry == "" {
-		registry = InitRegistry
-	}
-
-	image := ComponentOperatorInit.Image
-	if imagepath != "" {
-		image = ReplaceImagePath(image, imagepath)
-	}
-
-	return fmt.Sprintf("%s%s:%s", registry, image, ComponentOperatorInit.Version)
 }

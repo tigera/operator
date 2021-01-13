@@ -33,8 +33,8 @@ func PriorityClassDefinitions() Component {
 type priorityClassComponent struct {
 }
 
-func (c *priorityClassComponent) ValidateImages(is *operator.ImageSet) error {
-	// No images to validate on a prority class
+func (c *priorityClassComponent) ResolveImages(is *operator.ImageSet) error {
+	// No images to resolve
 	return nil
 }
 

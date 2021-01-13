@@ -29,8 +29,8 @@ type configMapComponent struct {
 	configMaps []*corev1.ConfigMap
 }
 
-func (c *configMapComponent) ValidateImages(is *operator.ImageSet) error {
-	// No images to validate
+func (c *configMapComponent) ResolveImages(is *operator.ImageSet) error {
+	// No images to resolve
 	return nil
 }
 

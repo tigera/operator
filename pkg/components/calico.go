@@ -48,4 +48,13 @@ var (
 		Version: version.VERSION,
 		Image:   "tigera/operator",
 	}
+
+	CalicoComponents = []component{
+		ComponentCalicoCNI,
+		ComponentCalicoKubeControllers,
+		ComponentCalicoNode,
+		ComponentCalicoTypha,
+		ComponentFlexVolume,
+		ComponentOperatorInit,
+	}
 )

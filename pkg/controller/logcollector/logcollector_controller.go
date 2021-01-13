@@ -85,6 +85,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch ImageSet: %w", err)
+	}
+
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
@@ -185,7 +189,7 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	_, installation, err := installation.GetInstallation(ctx, r.client)
+	variant, installation, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -375,6 +379,12 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 		r.clusterDomain,
 		render.OSTypeLinux,
 	)
+
+	if err = utils.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		reqLogger.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

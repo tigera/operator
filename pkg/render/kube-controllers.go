@@ -60,17 +60,17 @@ type kubeControllersComponent struct {
 	logStorageExists            bool
 	authentication              *operator.Authentication
 	k8sServiceEp                k8sapi.ServiceEndpoint
-	kubeControllerImage         string
+	image                       string
 }
 
-func (c *kubeControllersComponent) ValidateImages(is *operator.ImageSet) error {
+func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
 	var err error
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.kubeControllerImage, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, is)
 	} else {
-		c.kubeControllerImage, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, is)
 	}
 	return err
 }
@@ -336,7 +336,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Containers: []v1.Container{
 						{
 							Name:      "calico-kube-controllers",
-							Image:     kubeControllerImage,
+							Image:     c.image,
 							Env:       env,
 							Resources: c.kubeControllersResources(),
 							ReadinessProbe: &v1.Probe{

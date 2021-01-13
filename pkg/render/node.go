@@ -87,7 +87,7 @@ type nodeComponent struct {
 	flexvolImage        string
 }
 
-func (c *nodeComponent) ValidateImages(is *operator.ImageSet) error {
+func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
 	var err error
@@ -98,12 +98,12 @@ func (c *nodeComponent) ValidateImages(is *operator.ImageSet) error {
 	}
 	errMsgs := []string{}
 	if err != nil {
-		errMsgs = append(errMsgs, err)
+		errMsgs = append(errMsgs, err.Error())
 	}
 
 	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err)
+		errMsgs = append(errMsgs, err.Error())
 	}
 
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
@@ -112,7 +112,7 @@ func (c *nodeComponent) ValidateImages(is *operator.ImageSet) error {
 		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, is)
 	}
 	if err != nil {
-		errMsgs = append(errMsgs, err)
+		errMsgs = append(errMsgs, err.Error())
 	}
 
 	if len(errMsgs) != 0 {

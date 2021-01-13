@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -137,6 +138,29 @@ type fluentdComponent struct {
 	installation    *operatorv1.InstallationSpec
 	clusterDomain   string
 	osType          OSType
+	linuxImage      string
+	windowsImage    string
+}
+
+func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.linuxImage, err = components.GetReference(components.ComponentFluentd, reg, path, is)
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.windowsImage, err = components.GetReference(components.ComponentFluentdWindows, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *fluentdComponent) SupportedOSType() OSType {
@@ -166,9 +190,9 @@ func (c *fluentdComponent) eksLogForwarderName() string {
 
 func (c *fluentdComponent) image() string {
 	if c.osType == OSTypeWindows {
-		return components.GetReference(components.ComponentFluentdWindows, c.installation.Registry, c.installation.ImagePath)
+		return c.windowsImage
 	}
-	return components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath)
+	return c.linuxImage
 }
 
 func (c *fluentdComponent) readinessCmd() []string {

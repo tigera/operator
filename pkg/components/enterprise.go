@@ -151,4 +151,33 @@ var (
 		Version: "master",
 		Image:   "tigera/cloud-controllers",
 	}
+
+	EnterpriseComponents = []component{
+		ComponentAPIServer,
+		ComponentComplianceBenchmarker,
+		ComponentComplianceController,
+		ComponentComplianceReporter,
+		ComponentComplianceServer,
+		ComponentComplianceSnapshotter,
+		ComponentEckElasticsearch,
+		ComponentEckKibana,
+		ComponentElasticTseeInstaller,
+		ComponentElasticsearch,
+		ComponentElasticsearchOperator,
+		ComponentEsCurator,
+		ComponentEsProxy,
+		ComponentFluentd,
+		ComponentGuardian,
+		ComponentIntrusionDetectionController,
+		ComponentKibana,
+		ComponentManager,
+		ComponentDex,
+		ComponentManagerProxy,
+		ComponentQueryServer,
+		ComponentTigeraKubeControllers,
+		ComponentTigeraNode,
+		ComponentTigeraTypha,
+		ComponentTigeraCNI,
+		ComponentCloudControllers,
+	}
 )

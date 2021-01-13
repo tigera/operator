@@ -465,6 +465,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
 	}
 
+	var elasticNativeUserConfig render.ElasticNativeUsersConfig
+	if managementClusterConnection == nil {
+		elasticNativeUserConfig = r.getElasticNativeUserConfig(ctx, dexCfg, elasticLicenseType)
+	}
+
 	component := render.LogStorage(
 		ls,
 		install,
@@ -484,6 +489,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		applyTrial,
 		dexCfg,
 		elasticLicenseType,
+		elasticNativeUserConfig,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -650,6 +656,45 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 		return nil, err
 	}
 	return &svc, nil
+}
+
+// "tigera-end-users" ConfigMap and tigera-elastic-users-credentials secret should be created only ones when external IdP is set and Elasticsearch uses basic license.
+// Data will be added to these objects by other repositories as end-user information is collected, these objects should not be overwritten.
+// If external IdP is not configured or if Elasticsearch is not using Basic license, delete these objects.
+func (r *ReconcileLogStorage) getElasticNativeUserConfig(ctx context.Context, dexCfg render.DexRelyingPartyConfig, licenseType render.ElasticLicenseType) render.ElasticNativeUsersConfig {
+	var esNativeUserConfig render.ElasticNativeUsersConfig
+	addUsersConfigMap := licenseType == render.ElasticLicenseTypeBasic && dexCfg != nil
+
+	objs := &[]runtime.Object{
+		&corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.OIDCUsersConfigMapName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+		},
+		&corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.OIDCUsersSecreteName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+		},
+	}
+
+	cmErr := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, &corev1.ConfigMap{})
+	secretErr := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersSecreteName, Namespace: render.ElasticsearchNamespace}, &corev1.Secret{})
+	if (cmErr != nil || secretErr != nil) && addUsersConfigMap {
+		esNativeUserConfig = render.ElasticNativeUsersConfig{
+			Operation: render.ElasticUsersConfigCreate,
+			Objects:   objs}
+	} else if !addUsersConfigMap {
+		esNativeUserConfig = render.ElasticNativeUsersConfig{
+			Operation: render.ElasticUsersConfigDelete,
+			Objects:   objs}
+	}
+
+	return esNativeUserConfig
 }
 
 func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

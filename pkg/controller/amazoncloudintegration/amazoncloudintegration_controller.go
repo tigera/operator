@@ -89,6 +89,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch the Secret resource(%s): %v", render.AmazonCloudIntegrationCredentialName, err)
 	}
 
+	err = utils.AddImageSetWatch(c)
+	if err != nil {
+		return fmt.Errorf("amazoncloudintegration-controller failed to watch ImageSet: %w", err)
+	}
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -184,6 +189,12 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	component, err := render.AmazonCloudIntegration(instance, network, awsCredential, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
 		r.SetDegraded("Error rendering AmazonCloudIntegration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	err = utils.ApplyImageSet(ctx, r.client, variant, component)
+	if err != nil {
+		r.SetDegraded("Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

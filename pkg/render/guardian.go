@@ -63,6 +63,15 @@ type GuardianComponent struct {
 	openshift    bool
 	installation *operatorv1.InstallationSpec
 	tunnelSecret *corev1.Secret
+	image        string
+}
+
+func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, is)
+	return err
 }
 
 func (c *GuardianComponent) SupportedOSType() OSType {
@@ -231,7 +240,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
-			Image: components.GetReference(components.ComponentGuardian, c.installation.Registry, c.installation.ImagePath),
+			Image: c.image,
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

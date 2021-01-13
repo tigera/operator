@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -147,6 +148,35 @@ type managerComponent struct {
 	clusterDomain              string
 	installation               *operator.InstallationSpec
 	managementCluster          *operator.ManagementCluster
+	managerImage               string
+	proxyImage                 string
+	esProxyImage               string
+}
+
+func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, is)
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *managerComponent) SupportedOSType() OSType {
@@ -403,7 +433,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
-		Image:           components.GetReference(components.ComponentManager, c.installation.Registry, c.installation.ImagePath),
+		Image:           c.managerImage,
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securityContext(),
@@ -446,7 +476,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           components.GetReference(components.ComponentManagerProxy, c.installation.Registry, c.installation.ImagePath),
+		Image:           c.proxyImage,
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
@@ -488,7 +518,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "tigera-es-proxy",
-		Image:           components.GetReference(components.ComponentEsProxy, c.installation.Registry, c.installation.ImagePath),
+		Image:           c.esProxyImage,
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securityContext(),
 		Env:             env,

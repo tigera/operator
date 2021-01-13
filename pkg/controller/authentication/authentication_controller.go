@@ -102,6 +102,10 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		}
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch ImageSet: %w", ControllerName, err)
+	}
+
 	return nil
 }
 
@@ -256,6 +260,12 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		install,
 		dexCfg,
 	)
+
+	if err = utils.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	if err := hlr.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		log.Error(err, "Error creating / updating resource")

@@ -100,6 +100,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch ImageSet: %w", err)
+	}
+
 	if err = utils.AddAPIServerWatch(c); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
 	}
@@ -180,7 +184,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Query for the installation object.
-	_, network, err := installation.GetInstallation(context.Background(), r.client)
+	variant, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -275,6 +279,13 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		r.clusterDomain,
 		elasticLicenseType,
 	)
+
+	if err = utils.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		reqLogger.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

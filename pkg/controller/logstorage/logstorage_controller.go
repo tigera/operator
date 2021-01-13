@@ -103,6 +103,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ImageSet: %w", err)
+	}
+
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err = c.Watch(&source.Kind{
 		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
@@ -485,6 +489,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		dexCfg,
 		elasticLicenseType,
 	)
+
+	if err = utils.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
 		log.Error(err, err.Error())

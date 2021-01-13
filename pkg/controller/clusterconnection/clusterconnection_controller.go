@@ -95,6 +95,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch ImageSet: %w", controllerName, err)
+	}
+
 	return nil
 }
 
@@ -119,7 +123,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 	result := reconcile.Result{}
 
-	_, instl, err := installation.GetInstallation(ctx, r.Client)
+	variant, instl, err := installation.GetInstallation(ctx, r.Client)
 	if err != nil {
 		return result, err
 	}
@@ -177,6 +181,12 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 		instl,
 		tunnelSecret,
 	)
+
+	if err = utils.ApplyImageSet(ctx, r.Client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	if err := ch.CreateOrUpdate(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

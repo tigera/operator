@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 package components
 
 var (
+	EnterpriseRelease string = "master"
+
 	ComponentAPIServer = component{
 		Version: "master",
 		Image:   "tigera/cnx-apiserver",
@@ -148,5 +150,34 @@ var (
 	ComponentCloudControllers = component{
 		Version: "master",
 		Image:   "tigera/cloud-controllers",
+	}
+
+	EnterpriseComponents = []component{
+		ComponentAPIServer,
+		ComponentComplianceBenchmarker,
+		ComponentComplianceController,
+		ComponentComplianceReporter,
+		ComponentComplianceServer,
+		ComponentComplianceSnapshotter,
+		ComponentEckElasticsearch,
+		ComponentEckKibana,
+		ComponentElasticTseeInstaller,
+		ComponentElasticsearch,
+		ComponentElasticsearchOperator,
+		ComponentEsCurator,
+		ComponentEsProxy,
+		ComponentFluentd,
+		ComponentGuardian,
+		ComponentIntrusionDetectionController,
+		ComponentKibana,
+		ComponentManager,
+		ComponentDex,
+		ComponentManagerProxy,
+		ComponentQueryServer,
+		ComponentTigeraKubeControllers,
+		ComponentTigeraNode,
+		ComponentTigeraTypha,
+		ComponentTigeraCNI,
+		ComponentCloudControllers,
 	}
 )

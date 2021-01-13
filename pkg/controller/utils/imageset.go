@@ -31,15 +31,19 @@ import (
 
 // ApplyImageSet gets the appropriate ImageSet and applies it to
 // the components passed in.
-func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVariant, components ...render.Component) error {
+func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVariant, comps ...render.Component) error {
 
 	imageSet, err := getImageSet(ctx, c, v)
 	if err != nil {
 		return err
 	}
 
+	if err = validateImageSet(imageSet); err != nil {
+		return err
+	}
+
 	errMsgs := []string{}
-	for _, component := range components {
+	for _, component := range comps {
 		err = component.ResolveImages(imageSet)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -50,12 +54,19 @@ func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVaria
 		return nil
 	}
 
-	// return errors if they existed
 	return fmt.Errorf("Invalid ImageSet: %s", strings.Join(errMsgs, ", "))
 }
 
 func AddImageSetWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operator.ImageSet{}}, &handler.EnqueueRequestForObject{})
+}
+
+func getSetName(v operator.ProductVariant) string {
+	setName := fmt.Sprintf("calico-%s", components.CalicoRelease)
+	if v == operator.TigeraSecureEnterprise {
+		setName = fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
+	}
+	return setName
 }
 
 // getImageSet finds the ImageSet CR for specified variant and for the correct .
@@ -75,10 +86,7 @@ func getImageSet(ctx context.Context, cli client.Client, v operator.ProductVaria
 		return nil, nil
 	}
 
-	setName := fmt.Sprintf("calico-%s", components.CalicoRelease)
-	if v == operator.TigeraSecureEnterprise {
-		setName = fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
-	}
+	setName := getSetName(v)
 
 	for _, is := range isl.Items {
 		if is.Name == setName {
@@ -87,4 +95,38 @@ func getImageSet(ctx context.Context, cli client.Client, v operator.ProductVaria
 	}
 
 	return nil, fmt.Errorf("ImageSets exist but none with the expected name %s", setName)
+}
+
+func validateImageSet(is *operator.ImageSet) error {
+	if is == nil {
+		return nil
+	}
+	invalidImages := []string{}
+	for _, img := range is.Spec.Images {
+		valid := false
+		for _, x := range components.CalicoComponents {
+			if img.Image == x.Image {
+				valid = true
+				break
+			}
+		}
+		if valid {
+			continue
+		}
+		for _, x := range components.EnterpriseComponents {
+			if img.Image == x.Image {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			invalidImages = append(invalidImages, img.Image)
+		}
+	}
+
+	if len(invalidImages) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("unexpected images in ImageSet %s: %s", is.Name, strings.Join(invalidImages, ", "))
 }

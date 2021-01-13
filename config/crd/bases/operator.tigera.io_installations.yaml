@@ -426,10 +426,18 @@ spec:
                   above format."
                 type: string
               typhaAffinity:
+                description: TyphaAffinity allows configuration of node affinity characteristics
+                  for Typha pods.
                 properties:
                   nodeAffinity:
+                    description: NodeAffinity describes node affinity scheduling rules
+                      for typha.
                     properties:
                       preferredDuringSchedulingIgnoredDuringExecution:
+                        description: The scheduler will prefer to schedule pods to
+                          nodes that satisfy the affinity expressions specified by
+                          this field, but it may choose a node that violates one or
+                          more of the expressions.
                         items:
                           description: An empty preferred scheduling term matches
                             all objects with implicit weight 0 (i.e. it's a no-op).
@@ -935,10 +943,18 @@ spec:
                       the above format."
                     type: string
                   typhaAffinity:
+                    description: TyphaAffinity allows configuration of node affinity
+                      characteristics for Typha pods.
                     properties:
                       nodeAffinity:
+                        description: NodeAffinity describes node affinity scheduling
+                          rules for typha.
                         properties:
                           preferredDuringSchedulingIgnoredDuringExecution:
+                            description: The scheduler will prefer to schedule pods
+                              to nodes that satisfy the affinity expressions specified
+                              by this field, but it may choose a node that violates
+                              one or more of the expressions.
                             items:
                               description: An empty preferred scheduling term matches
                                 all objects with implicit weight 0 (i.e. it's a no-op).

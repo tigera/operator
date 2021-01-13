@@ -153,6 +153,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
+	}
+
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -850,6 +854,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 	components = append(components, calico.Render()...)
+
+	if err = utils.ApplyImageSet(ctx, r.client, instance.Spec.Variant, components...); err != nil {
+		r.SetDegraded("Error with images from ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	for _, component := range components {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {

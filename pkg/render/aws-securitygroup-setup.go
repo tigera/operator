@@ -32,10 +32,19 @@ func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator
 type awsSGSetupComponent struct {
 	pullSecrets []corev1.LocalObjectReference
 	installcr   *operator.InstallationSpec
+	image       string
 }
 
 func (c *awsSGSetupComponent) SupportedOSType() OSType {
 	return OSTypeLinux
+}
+
+func (c *awsSGSetupComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installcr.Registry
+	path := c.installcr.ImagePath
+	var err error
+	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, is)
+	return err
 }
 
 func (c *awsSGSetupComponent) Objects() ([]runtime.Object, []runtime.Object) {
@@ -76,7 +85,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					Tolerations:        tolerateAll,
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
-						Image: components.GetOperatorInitReference(c.installcr.Registry, c.installcr.ImagePath),
+						Image: c.image,
 						Args:  []string{"--aws-sg-setup"},
 						Env: []corev1.EnvVar{
 							{

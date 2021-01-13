@@ -52,6 +52,15 @@ type amazonCloudIntegrationComponent struct {
 	credentials            *AmazonCredential
 	pullSecrets            []*corev1.Secret
 	openshift              bool
+	image                  string
+}
+
+func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, is)
+	return err
 }
 
 func (c *amazonCloudIntegrationComponent) SupportedOSType() OSType {
@@ -287,7 +296,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 
 	return corev1.Container{
 		Name:  AmazonCloudIntegrationComponentName,
-		Image: components.GetReference(components.ComponentCloudControllers, c.installation.Registry, c.installation.ImagePath),
+		Image: c.image,
 		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{

@@ -83,6 +83,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch Network resource: %w", err)
 	}
 
+	if err = utils.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch ImageSet: %w", err)
+	}
+
 	if err = utils.AddAPIServerWatch(c); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
 	}
@@ -186,7 +190,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Query for the installation object.
-	_, network, err := installation.GetInstallation(ctx, r.client)
+	variant, network, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -313,6 +317,12 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if err = utils.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 

@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/dns"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -42,6 +43,7 @@ const (
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation    = "hash.operator.tigera.io/cni-config"
+	CSRLabelCalicoSystem       = "calico-system"
 )
 
 var (
@@ -62,6 +64,7 @@ func Node(
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
 	nodeAppArmorProfile string,
+	clusterDomain string,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:        k8sServiceEp,
@@ -71,6 +74,7 @@ func Node(
 		amazonCloudInt:      aci,
 		migrationNeeded:     migrate,
 		nodeAppArmorProfile: nodeAppArmorProfile,
+		clusterDomain:       clusterDomain,
 	}
 }
 
@@ -82,6 +86,7 @@ type nodeComponent struct {
 	amazonCloudInt      *operator.AmazonCloudIntegration
 	migrationNeeded     bool
 	nodeAppArmorProfile string
+	clusterDomain       string
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {
@@ -120,6 +125,11 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	}
 
 	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
+
+	if c.cr.CertificateManagement != nil {
+		objsToCreate = append(objsToCreate, csrClusterRole())
+		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-node", common.CalicoNamespace))
+	}
 
 	return objsToCreate, objsToDelete
 }
@@ -486,16 +496,29 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 	return crb
 }
 
-// nodeDaemonset creates the node damonset.
+// nodeDaemonset creates the node daemonset.
 func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	var terminationGracePeriod int64 = 0
+	var initContainers []v1.Container
 
 	annotations := make(map[string]string)
 	if len(c.birdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = AnnotationHash(c.birdTemplates)
 	}
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
-	annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+	if c.cr.CertificateManagement == nil {
+		annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+	} else {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.cr,
+			c.cr.CertificateManagement,
+			"felix-certs",
+			FelixCommonName,
+			TLSSecretKeyName,
+			TLSSecretCertName,
+			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.clusterDomain),
+			CSRLabelCalicoSystem))
+	}
 
 	if cniCfgMap != nil {
 		annotations[nodeCniConfigAnnotation] = AnnotationHash(cniCfgMap.Data)
@@ -512,7 +535,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
-	initContainers := []v1.Container{}
 	if c.cr.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
@@ -618,12 +640,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 			},
 		},
 		{
-			Name: "felix-certs",
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: NodeTLSSecretName,
-				},
-			},
+			Name:         "felix-certs",
+			VolumeSource: certificateVolumeSource(c.cr.CertificateManagement, NodeTLSSecretName),
 		},
 	}
 
@@ -841,7 +859,25 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
-	optional := true
+	var cnEnv v1.EnvVar
+	if c.cr.CertificateManagement != nil {
+		cnEnv = v1.EnvVar{
+			Name: "FELIX_TYPHACN", Value: TyphaCommonName,
+		}
+	} else {
+		cnEnv = v1.EnvVar{
+			Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: TyphaTLSSecretName,
+					},
+					Key:      CommonName,
+					Optional: Bool(true),
+				},
+			},
+		}
+	}
+
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -869,22 +905,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
-		{Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-			SecretKeyRef: &v1.SecretKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: TyphaTLSSecretName,
-				},
-				Key:      CommonName,
-				Optional: &optional,
-			},
-		}},
+		cnEnv,
 		{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
 			SecretKeyRef: &v1.SecretKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
 					Name: TyphaTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: &optional,
+				Optional: Bool(true),
 			},
 		}},
 	}

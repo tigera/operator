@@ -20,7 +20,6 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -177,17 +176,24 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, nil
 	}
 
-	// Check that if the apiserver certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function still returns true
-	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.APIServerTLSSecretName,
-		render.APIServerSecretKeyName,
-		render.APIServerSecretCertName,
-	)
-	if err != nil {
-		log.Error(err, "Invalid TLS Cert")
-		r.status.SetDegraded("Error validating TLS certificate", err.Error())
-		return reconcile.Result{}, err
+	var tlsSecret *v1.Secret
+	if network.CertificateManagement == nil {
+		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
+		// If it does not exist then this function still returns true
+		tlsSecret, err = utils.ValidateCertPair(r.client,
+			render.APIServerTLSSecretName,
+			render.APIServerSecretKeyName,
+			render.APIServerSecretCertName,
+		)
+		if err != nil {
+			log.Error(err, "Invalid TLS Cert")
+			r.status.SetDegraded("Error validating TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+		r.status.RemoveCertificateSigningRequests(render.APIServerNamespace)
+	} else {
+		// Monitor pending CSRs for the TigeraStatus
+		r.status.AddCertificateSigningRequests(render.APIServerNamespace)
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)

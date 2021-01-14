@@ -201,6 +201,13 @@ func (c *fluentdComponent) probePeriod() int32 {
 	return ProbePeriodSeconds
 }
 
+func (c *fluentdComponent) volumeHostPath() string {
+	if c.osType == OSTypeWindows {
+		return "/var/log/calico"
+	}
+	return "c:/TigeraCalico"
+}
+
 func (c *fluentdComponent) path(path string) string {
 	if c.osType == OSTypeWindows {
 		// Use c: path prefix for windows.
@@ -628,7 +635,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 			Name: "var-log-calico",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: c.path("/var/log/calico"),
+					Path: c.volumeHostPath(),
 					Type: &dirOrCreate,
 				},
 			},

@@ -41,7 +41,7 @@ func CreateCSRInitContainer(
 	keyName string,
 	certName string,
 	dnsNames []string,
-	label string) corev1.Container {
+	appNameLabel string) corev1.Container {
 	return corev1.Container{
 		Name:  CSRInitContainerName,
 		Image: components.GetReference(components.ComponentCSRInitContainer, components.CalicoRegistry, installation.ImagePath),
@@ -56,7 +56,7 @@ func CreateCSRInitContainer(
 			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},
 			{Name: "KEY_NAME", Value: keyName},
 			{Name: "CERT_NAME", Value: certName},
-			{Name: "LABEL", Value: label},
+			{Name: "APP_NAME", Value: appNameLabel},
 			{Name: "DNS_NAMES", Value: strings.Join(dnsNames, ",")},
 			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{

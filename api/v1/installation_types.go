@@ -109,6 +109,12 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
+
+	// CertificateManagement configures pods to submit a CertificateSigningRequest to the certificates.k8s.io/v1beta1 API in order
+	// to obtain TLS certificates. This feature requires that you bring your own CSR signing and approval process, otherwise
+	// pods will be stuck during initialization.
+	// +optional
+	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
 }
 
 // TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.
@@ -517,4 +523,29 @@ type InstallationList struct {
 
 func init() {
 	SchemeBuilder.Register(&Installation{}, &InstallationList{})
+}
+
+// CertificateManagement configures pods to submit a CertificateSigningRequest to the certificates.k8s.io/v1beta1 API in order
+// to obtain TLS certificates. This feature requires that you bring your own CSR signing and approval process, otherwise
+// pods will be stuck during initialization.
+type CertificateManagement struct {
+	// Certificate of the authority that signs the CertificateSigningRequests in PEM format.
+	CACert []byte `json:"caCert"`
+
+	// When a CSR is issued to the certificates.k8s.io API, the signerName is added to the request in order to accommodate for clusters
+	// with multiple signers.
+	// Must be formatted as: "<my-domain>/<my-signername>".
+	SignerName string `json:"signerName"`
+
+	// Specify the algorithm used by pods to generate a key pair that is associated with the X.509 certificate request.
+	// Default: RSAWithSize2048
+	// +kubebuilder:validation:Enum="";RSAWithSize2048;RSAWithSize4096;RSAWithSize8192;ECDSAWithCurve256;ECDSAWithCurve384;ECDSAWithCurve521;
+	// +optional
+	KeyAlgorithm string `json:"keyAlgorithm,omitempty"`
+
+	// Specify the algorithm used for the signature of the X.509 certificate request.
+	// Default: SHA256WithRSA
+	// +kubebuilder:validation:Enum="";SHA256WithRSA;SHA384WithRSA;SHA512WithRSA;ECDSAWithSHA256;ECDSAWithSHA384;ECDSAWithSHA512;
+	// +optional
+	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
 }

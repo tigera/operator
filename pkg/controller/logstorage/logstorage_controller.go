@@ -304,6 +304,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	if install.CertificateManagement != nil {
+		r.status.SetDegraded("Certificate Management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource.", "")
+		return reconcile.Result{}, fmt.Errorf("certificate management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource")
+	}
+
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading ManagementCluster")

@@ -47,7 +47,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-
+{{ with index . "rdtigera/init-container" }}
+	ComponentCSRInitContainer = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

@@ -355,7 +355,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
-	var elasticLicenseType render.ElasticLicenseType
+	var elasticLicenseType render.ElasticsearchLicenseType
 	applyTrial := false
 
 	if managementClusterConnection == nil {
@@ -465,6 +465,12 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
 	}
 
+	var oidcUserConfigMapAvailable, oidcUserSecretAvailable bool
+	if managementClusterConnection == nil {
+		oidcUserConfigMapAvailable = r.oidcUserConfigMapAvailable(ctx)
+		oidcUserSecretAvailable = r.oidcUserSecretAvailable(ctx)
+	}
+
 	component := render.LogStorage(
 		ls,
 		install,
@@ -484,6 +490,8 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		applyTrial,
 		dexCfg,
 		elasticLicenseType,
+		oidcUserConfigMapAvailable,
+		oidcUserSecretAvailable,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -650,6 +658,20 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 		return nil, err
 	}
 	return &svc, nil
+}
+
+func (r *ReconcileLogStorage) oidcUserConfigMapAvailable(ctx context.Context) bool {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, &corev1.ConfigMap{}); err != nil {
+		return false
+	}
+	return true
+}
+
+func (r *ReconcileLogStorage) oidcUserSecretAvailable(ctx context.Context) bool {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersSecreteName, Namespace: render.ElasticsearchNamespace}, &corev1.Secret{}); err != nil {
+		return false
+	}
+	return true
 }
 
 func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

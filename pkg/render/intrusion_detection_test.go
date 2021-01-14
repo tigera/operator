@@ -35,7 +35,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown,
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
 		)
 		resources, _ := component.Objects()
 
@@ -100,7 +100,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown,
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
 		)
 		resources, _ := component.Objects()
 
@@ -179,7 +179,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown,
+			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
 		)
 		resources, _ := component.Objects()
 		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
@@ -198,7 +198,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticLicenseTypeUnknown)
+			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		resources, _ := component.Objects()
 		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
 		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)

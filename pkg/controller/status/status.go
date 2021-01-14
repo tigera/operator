@@ -26,9 +26,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"
+	"k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -58,10 +61,12 @@ type StatusManager interface {
 	AddDeployments(deps []types.NamespacedName)
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
+	AddCertificateSigningRequests(label string)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
+	RemoveCertificateSigningRequests(label string)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -70,14 +75,15 @@ type StatusManager interface {
 }
 
 type statusManager struct {
-	client       client.Client
-	component    string
-	daemonsets   map[string]types.NamespacedName
-	deployments  map[string]types.NamespacedName
-	statefulsets map[string]types.NamespacedName
-	cronjobs     map[string]types.NamespacedName
-	lock         sync.Mutex
-	enabled      *bool
+	client                    client.Client
+	component                 string
+	daemonsets                map[string]types.NamespacedName
+	deployments               map[string]types.NamespacedName
+	statefulsets              map[string]types.NamespacedName
+	cronjobs                  map[string]types.NamespacedName
+	certificatestatusrequests map[string]bool
+	lock                      sync.Mutex
+	enabled                   *bool
 
 	// Track degraded state as set by external controllers.
 	degraded               bool
@@ -91,12 +97,13 @@ type statusManager struct {
 
 func New(client client.Client, component string) StatusManager {
 	return &statusManager{
-		client:       client,
-		component:    component,
-		daemonsets:   make(map[string]types.NamespacedName),
-		deployments:  make(map[string]types.NamespacedName),
-		statefulsets: make(map[string]types.NamespacedName),
-		cronjobs:     make(map[string]types.NamespacedName),
+		client:                    client,
+		component:                 component,
+		daemonsets:                make(map[string]types.NamespacedName),
+		deployments:               make(map[string]types.NamespacedName),
+		statefulsets:              make(map[string]types.NamespacedName),
+		cronjobs:                  make(map[string]types.NamespacedName),
+		certificatestatusrequests: make(map[string]bool),
 	}
 }
 
@@ -216,6 +223,13 @@ func (m *statusManager) AddCronJobs(cjs []types.NamespacedName) {
 	}
 }
 
+// AddCertificateSigningRequests tells the status manager to monitor the health of the given CertificateSigningRequests.
+func (m *statusManager) AddCertificateSigningRequests(label string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.certificatestatusrequests[label] = true
+}
+
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
 func (m *statusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.lock.Lock()
@@ -250,6 +264,13 @@ func (m *statusManager) RemoveCronJobs(cjs ...types.NamespacedName) {
 	for _, cj := range cjs {
 		delete(m.cronjobs, cj.String())
 	}
+}
+
+// RemoveCertificateSigningRequests tells the status manager to stop monitoring the health of the given CertificateSigningRequests.
+func (m *statusManager) RemoveCertificateSigningRequests(label string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	delete(m.certificatestatusrequests, label)
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
@@ -406,6 +427,15 @@ func (m *statusManager) syncState() bool {
 
 		if numFailed > 0 {
 			failing = append(failing, "cronjob/"+cj.Name+" failed in ns '"+cj.Namespace+"'")
+		}
+	}
+
+	for csrLabel := range m.certificatestatusrequests {
+		pending, err := hasPendingCSR(context.TODO(), m.client, csrLabel)
+		if err != nil {
+			log.WithValues("error", err).Info(fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with label value %s", csrLabel))
+		} else if pending {
+			progressing = append(progressing, fmt.Sprintf("Waiting on CertificateSigningRequest(s) with label value %s to be approved", csrLabel))
 		}
 	}
 
@@ -638,4 +668,36 @@ func (m *statusManager) degradedReason() string {
 		reasons = append(reasons, "Some pods are failing")
 	}
 	return strings.Join(reasons, "; ")
+}
+
+func hasPendingCSR(ctx context.Context, cli client.Client, label string) (bool, error) {
+	csrs := &v1beta1.CertificateSigningRequestList{}
+	lbls := map[string]string{
+		"k8s-app": label,
+	}
+	selector := labels.SelectorFromSet(lbls)
+	err := cli.List(ctx, csrs, &client.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return false, err
+	}
+
+	if len(csrs.Items) == 0 {
+		return false, nil
+	}
+
+	for _, csr := range csrs.Items {
+		if len(csr.Status.Conditions) == 0 {
+			// No conditions means status is pending
+			return true, nil
+		}
+		// no condition approved, means it is pending.
+		for _, condition := range csr.Status.Conditions {
+			if condition.Status == v1.ConditionUnknown {
+				return true, nil
+			} else if condition.Type == v1beta1.CertificateApproved && csr.Status.Certificate == nil {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

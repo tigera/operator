@@ -18,7 +18,10 @@ import (
 	"context"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"k8s.io/api/certificates/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,21 +37,20 @@ import (
 var _ = Describe("Status reporting tests", func() {
 	var sm *statusManager
 	var client client.Client
+	var (
+		ctx    = context.Background()
+		label  = "label"
+		labels = map[string]string{"k8s-app": label}
+	)
 	BeforeEach(func() {
 		// Setup Scheme for all resources
 		scheme := runtime.NewScheme()
+		Expect(v1beta1.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 		client = fake.NewFakeClientWithScheme(scheme)
 
-		sm = &statusManager{
-			client:       client,
-			component:    "test-component",
-			daemonsets:   make(map[string]types.NamespacedName),
-			deployments:  make(map[string]types.NamespacedName),
-			statefulsets: make(map[string]types.NamespacedName),
-			cronjobs:     make(map[string]types.NamespacedName),
-		}
+		sm = New(client, "test-component").(*statusManager)
 
 		Expect(sm.IsAvailable()).To(BeFalse())
 	})
@@ -163,6 +165,8 @@ var _ = Describe("Status reporting tests", func() {
 			sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS2"}})
 			sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "CJ1"}})
 			sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "CJ2"}})
+			sm.AddCertificateSigningRequests("CSR1")
+			sm.AddCertificateSigningRequests("CSR2")
 
 			Expect(sm.statefulsets).Should(Equal(map[string]types.NamespacedName{
 				"NS1/SS1": {Namespace: "NS1", Name: "SS1"},
@@ -179,6 +183,10 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.cronjobs).Should(Equal(map[string]types.NamespacedName{
 				"NS1/CJ1": {Namespace: "NS1", Name: "CJ1"},
 				"NS1/CJ2": {Namespace: "NS1", Name: "CJ2"},
+			}))
+			Expect(sm.certificatestatusrequests).Should(Equal(map[string]bool{
+				"CSR1": true,
+				"CSR2": true,
 			}))
 		})
 
@@ -199,11 +207,14 @@ var _ = Describe("Status reporting tests", func() {
 				{Namespace: "NS1", Name: "CJ1"},
 				{Namespace: "NS1", Name: "CJ2"},
 			})
+			sm.AddCertificateSigningRequests("CSR1")
+			sm.AddCertificateSigningRequests("CSR2")
 
 			sm.RemoveStatefulSets(types.NamespacedName{Namespace: "NS1", Name: "SS2"})
 			sm.RemoveDeployments(types.NamespacedName{Namespace: "NS1", Name: "DP2"})
 			sm.RemoveDaemonsets(types.NamespacedName{Namespace: "NS1", Name: "DS2"})
 			sm.RemoveCronJobs(types.NamespacedName{Namespace: "NS1", Name: "CJ2"})
+			sm.RemoveCertificateSigningRequests("CSR2")
 
 			Expect(sm.statefulsets).Should(Equal(map[string]types.NamespacedName{
 				"NS1/SS1": {Namespace: "NS1", Name: "SS1"},
@@ -217,6 +228,62 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.cronjobs).Should(Equal(map[string]types.NamespacedName{
 				"NS1/CJ1": {Namespace: "NS1", Name: "CJ1"},
 			}))
+			Expect(sm.certificatestatusrequests).Should(Equal(map[string]bool{
+				"CSR1": true,
+			}))
 		})
+
+		DescribeTable("Monitor CSRs", func(csrs []*v1beta1.CertificateSigningRequest, expectErr bool, expectPending bool) {
+			for _, csr := range csrs {
+				Expect(client.Create(ctx, csr)).NotTo(HaveOccurred())
+			}
+			pending, err := hasPendingCSR(ctx, client, label)
+			Expect(err != nil).To(Equal(expectErr))
+			Expect(pending).To(Equal(expectPending))
+		},
+			Entry("no CSR is present", nil, false, false),
+			Entry("1 pending CSR is present",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels}}},
+				false, true),
+			Entry("1 pending CSR is present, but no labels",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1"}}},
+				false, false),
+			Entry("1 approved CSR is present",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: v1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
+							Conditions: []v1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: v1beta1.CertificateApproved}}}},
+				}, false, false),
+			Entry("2 approved CSR are present",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: v1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
+							Conditions: []v1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: v1beta1.CertificateApproved}}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels},
+						Status: v1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
+							Conditions: []v1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: v1beta1.CertificateApproved}}}},
+				}, false, false),
+			Entry("1 approved, 1 pending CSR are present",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: v1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
+							Conditions: []v1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: v1beta1.CertificateApproved}}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
+				}, false, true),
+			Entry("1 pending CSR are present (approved: no, cert: yes)",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: v1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert")}},
+				}, false, true),
+			Entry("1 pending CSR are present (approved: yes, cert: no)",
+				[]*v1beta1.CertificateSigningRequest{
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: v1beta1.CertificateSigningRequestStatus{
+							Conditions: []v1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: v1beta1.CertificateApproved}}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
+				}, false, true),
+		)
 	})
 })

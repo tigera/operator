@@ -20,7 +20,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/logstorage"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -147,8 +146,9 @@ var _ = Describe("LogStorage controller", func() {
 
 		Context("Managed Cluster", func() {
 			Context("LogStorage is nil", func() {
+				var install *operatorv1.Installation
 				BeforeEach(func() {
-					Expect(cli.Create(ctx, &operatorv1.Installation{
+					install = &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
 						},
@@ -159,7 +159,8 @@ var _ = Describe("LogStorage controller", func() {
 						Spec: operatorv1.InstallationSpec{
 							Variant: operatorv1.TigeraSecureEnterprise,
 						},
-					})).ShouldNot(HaveOccurred())
+					}
+					Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Create(
 						ctx,
@@ -266,9 +267,9 @@ var _ = Describe("LogStorage controller", func() {
 		Context("Unmanaged cluster", func() {
 			Context("successful LogStorage Reconcile", func() {
 				var mockStatus *status.MockStatus
-
+				var install *operatorv1.Installation
 				BeforeEach(func() {
-					Expect(cli.Create(ctx, &operatorv1.Installation{
+					install = &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
 						},
@@ -279,7 +280,8 @@ var _ = Describe("LogStorage controller", func() {
 						Spec: operatorv1.InstallationSpec{
 							Variant: operatorv1.TigeraSecureEnterprise,
 						},
-					})).ShouldNot(HaveOccurred())
+					}
+					Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Create(
 						ctx,
@@ -548,6 +550,54 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		}),
 	).ShouldNot(HaveOccurred())
 }
+
+var _ = Describe("LogStorage w/ Certificate management", func() {
+	Context("Reconcile", func() {
+		var (
+			cli          client.Client
+			mockStatus   *status.MockStatus
+			scheme       *runtime.Scheme
+			ctx          = context.Background()
+			install      *operatorv1.Installation
+			logstorageCR *operatorv1.LogStorage
+		)
+		BeforeEach(func() {
+			install = &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			logstorageCR = &operatorv1.LogStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operatorv1.LogStorageSpec{},
+			}
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("Run").Return()
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("SetDegraded", "Certificate Management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource.", "").Return()
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			cli = fake.NewFakeClientWithScheme(scheme)
+			Expect(cli.Create(ctx, &storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: logstorage.DefaultElasticsearchStorageClass,
+				},
+			}))
+		})
+		It("should return an error when certification management is enabled while logstorage is present", func() {
+			install.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("ca"), SignerName: "a.b/c"}
+			Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, logstorageCR)).To(BeNil())
+			r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = r.Reconcile(reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+		})
+	})
+})
 
 func (*mockESClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage, elasticHTTPSEndpoint string) error {
 	return nil

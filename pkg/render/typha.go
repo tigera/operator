@@ -316,14 +316,13 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromString("25%")
 
+	var initContainers []v1.Container
 	annotations := make(map[string]string)
 	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	if c.installation.CertificateManagement == nil {
 		annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
-	}
-
-	var initContainers []v1.Container
-	if c.installation.CertificateManagement != nil {
+	} else {
+		annotations[typhaCertHashAnnotation] = AnnotationHash(c.installation.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
 			c.installation.CertificateManagement,

@@ -251,6 +251,17 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 					"*",
 				},
 			},
+			{
+				APIGroups: []string{
+					"crd.projectcalico.org",
+				},
+				Resources: []string{
+					"licensekeys",
+				},
+				Verbs: []string{
+					"get", "watch",
+				},
+			},
 		},
 	}
 }

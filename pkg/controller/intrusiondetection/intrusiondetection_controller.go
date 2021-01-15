@@ -245,7 +245,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	var elasticLicenseType render.ElasticLicenseType
+	var esLicenseType render.ElasticsearchLicenseType
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Failed to read ManagementClusterConnection")
@@ -253,7 +253,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 	if managementClusterConnection == nil {
-		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -273,7 +273,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,
 		r.clusterDomain,
-		elasticLicenseType,
+		esLicenseType,
 	)
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

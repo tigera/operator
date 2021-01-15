@@ -203,9 +203,9 @@ func (c *fluentdComponent) probePeriod() int32 {
 
 func (c *fluentdComponent) volumeHostPath() string {
 	if c.osType == OSTypeWindows {
-		return "/var/log/calico"
+		return "c:/TigeraCalico"
 	}
-	return "c:/TigeraCalico"
+	return "/var/log/calico"
 }
 
 func (c *fluentdComponent) path(path string) string {

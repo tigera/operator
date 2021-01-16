@@ -50,31 +50,31 @@ func IntrusionDetection(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	clusterDomain string,
-	elasticLicenseType ElasticLicenseType,
+	esLicenseType ElasticsearchLicenseType,
 ) Component {
 	return &intrusionDetectionComponent{
-		lc:                 lc,
-		esSecrets:          esSecrets,
-		kibanaCertSecret:   kibanaCertSecret,
-		installation:       installation,
-		esClusterConfig:    esClusterConfig,
-		pullSecrets:        pullSecrets,
-		openshift:          openshift,
-		clusterDomain:      clusterDomain,
-		elasticLicenseType: elasticLicenseType,
+		lc:               lc,
+		esSecrets:        esSecrets,
+		kibanaCertSecret: kibanaCertSecret,
+		installation:     installation,
+		esClusterConfig:  esClusterConfig,
+		pullSecrets:      pullSecrets,
+		openshift:        openshift,
+		clusterDomain:    clusterDomain,
+		esLicenseType:    esLicenseType,
 	}
 }
 
 type intrusionDetectionComponent struct {
-	lc                 *operatorv1.LogCollector
-	esSecrets          []*corev1.Secret
-	kibanaCertSecret   *corev1.Secret
-	installation       *operator.InstallationSpec
-	esClusterConfig    *ElasticsearchClusterConfig
-	pullSecrets        []*corev1.Secret
-	openshift          bool
-	clusterDomain      string
-	elasticLicenseType ElasticLicenseType
+	lc               *operatorv1.LogCollector
+	esSecrets        []*corev1.Secret
+	kibanaCertSecret *corev1.Secret
+	installation     *operator.InstallationSpec
+	esClusterConfig  *ElasticsearchClusterConfig
+	pullSecrets      []*corev1.Secret
+	openshift        bool
+	clusterDomain    string
+	esLicenseType    ElasticsearchLicenseType
 }
 
 func (c *intrusionDetectionComponent) SupportedOSType() OSType {
@@ -199,7 +199,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			},
 			{
 				Name:  "ELASTIC_LICENSE_TYPE",
-				Value: string(c.elasticLicenseType),
+				Value: string(c.esLicenseType),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{{
@@ -382,7 +382,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain, OSTypeLinux),
 		c.esClusterConfig.Replicas(), c.esClusterConfig.Shards())
 
-	if c.elasticLicenseType == ElasticLicenseTypeBasic {
+	if c.esLicenseType == ElasticsearchLicenseTypeBasic {
 		envVars := []corev1.EnvVar{
 			{Name: "DISABLE_ANOMALY", Value: "yes"},
 			{Name: "DISABLE_ALERTS", Value: "yes"},

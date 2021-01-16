@@ -301,27 +301,27 @@ func GetExpectedTyphaScale(nodes int) int {
 }
 
 // GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.
-func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticLicenseType, error) {
+func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticsearchLicenseType, error) {
 	cm := &corev1.ConfigMap{}
 	err := cli.Get(ctx, client.ObjectKey{Name: render.ECKLicenseConfigMapName, Namespace: render.ECKOperatorNamespace}, cm)
 	if err != nil {
-		return render.ElasticLicenseTypeUnknown, err
+		return render.ElasticsearchLicenseTypeUnknown, err
 	}
 	license, ok := cm.Data["eck_license_level"]
 	if !ok {
-		return render.ElasticLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
+		return render.ElasticsearchLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
 	}
 
 	return StrToElasticLicenseType(license, logger), nil
 }
 
 // StrToElasticLicenseType maps Elasticsearch license to one of the known and expected value.
-func StrToElasticLicenseType(license string, logger logr.Logger) render.ElasticLicenseType {
-	if license == string(render.ElasticLicenseTypeEnterprise) ||
-		license == string(render.ElasticLicenseTypeBasic) ||
-		license == string(render.ElasticLicenseTypeEnterpriseTrial) {
-		return render.ElasticLicenseType(license)
+func StrToElasticLicenseType(license string, logger logr.Logger) render.ElasticsearchLicenseType {
+	if license == string(render.ElasticsearchLicenseTypeEnterprise) ||
+		license == string(render.ElasticsearchLicenseTypeBasic) ||
+		license == string(render.ElasticsearchLicenseTypeEnterpriseTrial) {
+		return render.ElasticsearchLicenseType(license)
 	}
 	logger.V(3).Info("Elasticsearch license %s is unexpected", license)
-	return render.ElasticLicenseTypeUnknown
+	return render.ElasticsearchLicenseTypeUnknown
 }

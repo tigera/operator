@@ -21,6 +21,8 @@ import (
 	"hash/fnv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -30,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 
 	"gopkg.in/inf.v0"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -43,7 +44,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type ElasticLicenseType string
+type ElasticsearchLicenseType string
 
 const (
 	ECKOperatorName         = "elastic-operator"
@@ -79,6 +80,9 @@ const (
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 
+	OIDCUsersConfigMapName = "tigera-known-oidc-users"
+	OIDCUsersSecreteName   = "tigera-known-oidc-users-credentials"
+
 	// As soon as the total disk utilization exceeds the max-total-storage-percent,
 	// indices will be removed starting with the oldest. Picking a low value leads
 	// to low disk utilization, while a high value might result in unexpected
@@ -97,10 +101,15 @@ const (
 	// +optional
 	maxLogsStoragePercent int32 = 70
 
-	ElasticLicenseTypeBasic           ElasticLicenseType = "basic"
-	ElasticLicenseTypeEnterprise      ElasticLicenseType = "enterprise"
-	ElasticLicenseTypeEnterpriseTrial ElasticLicenseType = "enterprise_trial"
-	ElasticLicenseTypeUnknown         ElasticLicenseType = ""
+	ElasticsearchLicenseTypeBasic           ElasticsearchLicenseType = "basic"
+	ElasticsearchLicenseTypeEnterprise      ElasticsearchLicenseType = "enterprise"
+	ElasticsearchLicenseTypeEnterpriseTrial ElasticsearchLicenseType = "enterprise_trial"
+	ElasticsearchLicenseTypeUnknown         ElasticsearchLicenseType = ""
+
+	EsManagerRole               = "es-manager"
+	EsManagerRoleBinding        = "es-manager"
+	EsKubeControllerRole        = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding = "es-calico-kube-controllers"
 )
 
 const (
@@ -147,7 +156,9 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticLicenseType) Component {
+	elasticLicenseType ElasticsearchLicenseType,
+	oidcUserConfigMap *corev1.ConfigMap,
+	oidcUserSecret *corev1.Secret) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -168,6 +179,8 @@ func LogStorage(
 		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
 		elasticLicenseType:          elasticLicenseType,
+		oidcUserConfigMap:           oidcUserConfigMap,
+		oidcUserSecret:              oidcUserSecret,
 	}
 }
 
@@ -189,7 +202,9 @@ type elasticsearchComponent struct {
 	clusterDomain               string
 	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
-	elasticLicenseType          ElasticLicenseType
+	elasticLicenseType          ElasticsearchLicenseType
+	oidcUserConfigMap           *corev1.ConfigMap
+	oidcUserSecret              *corev1.Secret
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -321,6 +336,20 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 
 		if es.applyTrial {
 			toCreate = append(toCreate, es.elasticEnterpriseTrial())
+		}
+
+		toCreate = append(toCreate, es.oidcUserRole()...)
+		toCreate = append(toCreate, es.oidcUserRoleBinding()...)
+
+		// OIDCUsersConfigMapName and OIDCUsersSecreteName should be created only once
+		// when the external IdP is set and Elasticsearch uses basic license.
+		// If external IdP is not configured or if Elasticsearch is not using Basic license, delete these objects if available.
+		if es.elasticLicenseType == ElasticsearchLicenseTypeBasic && es.dexCfg != nil {
+			toCreate = append(toCreate, es.oidcUserConfigMap)
+			toCreate = append(toCreate, es.oidcUserSecret)
+		} else {
+			toDelete = append(toDelete, es.oidcUserConfigMap)
+			toDelete = append(toDelete, es.oidcUserSecret)
 		}
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
@@ -1369,9 +1398,99 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 }
 
 func (es *elasticsearchComponent) supportsOIDC() bool {
-	return (es.elasticLicenseType == ElasticLicenseTypeEnterpriseTrial ||
-		es.elasticLicenseType == ElasticLicenseTypeEnterprise) &&
+	return (es.elasticLicenseType == ElasticsearchLicenseTypeEnterpriseTrial ||
+		es.elasticLicenseType == ElasticsearchLicenseTypeEnterprise) &&
 		es.dexCfg != nil
+}
+
+func (es elasticsearchComponent) oidcUserRole() []runtime.Object {
+	return []runtime.Object{
+		&rbacv1.Role{
+			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      EsManagerRole,
+				Namespace: ElasticsearchNamespace,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{OIDCUsersConfigMapName},
+					Verbs:         []string{"update", "patch"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"secrets"},
+					ResourceNames: []string{OIDCUsersSecreteName},
+					Verbs:         []string{"get", "list"},
+				},
+			},
+		},
+		&rbacv1.Role{
+			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      EsKubeControllerRole,
+				Namespace: ElasticsearchNamespace,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{OIDCUsersConfigMapName},
+					Verbs:         []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"secrets"},
+					ResourceNames: []string{OIDCUsersSecreteName},
+					Verbs:         []string{"update", "get", "list"},
+				},
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) oidcUserRoleBinding() []runtime.Object {
+	return []runtime.Object{
+		&rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      EsManagerRoleBinding,
+				Namespace: ElasticsearchNamespace,
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "Role",
+				Name:     EsManagerRole,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ManagerServiceAccount,
+					Namespace: ManagerNamespace,
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      EsKubeControllerRoleBinding,
+				Namespace: ElasticsearchNamespace,
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     EsKubeControllerRole,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      "calico-kube-controllers",
+					Namespace: common.CalicoNamespace,
+				},
+			},
+		},
+	}
 }
 
 // overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.

@@ -9,3 +9,6 @@ components:
     version: master
   flexvol:
     version: master
+  rdtigera/init-container:
+    image: rdtigera/init-container
+    version: master

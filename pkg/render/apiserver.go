@@ -47,30 +47,33 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 	tlsHashAnnotations := make(map[string]string)
 	svcDNSNames := dns.GetServiceDNSNames(apiServiceName, APIServerNamespace, clusterDomain)
 
-	if tlsKeyPair == nil {
-		var err error
-		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
-			APIServerTLSSecretName,
-			APIServerSecretKeyName,
-			APIServerSecretCertName,
-			DefaultCertificateDuration,
-			nil,
-			svcDNSNames...,
-		)
-		if err != nil {
-			return nil, err
+	if installation.CertificateManagement == nil {
+		if tlsKeyPair == nil {
+			var err error
+			tlsKeyPair, err = CreateOperatorTLSSecret(nil,
+				APIServerTLSSecretName,
+				APIServerSecretKeyName,
+				APIServerSecretCertName,
+				DefaultCertificateDuration,
+				nil,
+				svcDNSNames...,
+			)
+			if err != nil {
+				return nil, err
+			}
+			// We only need to add the tlsKeyPair if we created it, otherwise
+			// it already exists.
+			tlsSecrets = []*corev1.Secret{tlsKeyPair}
+			tlsHashAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
 		}
-		// We only need to add the tlsKeyPair if we created it, otherwise
-		// it already exists.
-		tlsSecrets = []*corev1.Secret{tlsKeyPair}
-		tlsHashAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+		copy := tlsKeyPair.DeepCopy()
+		copy.ObjectMeta = metav1.ObjectMeta{
+			Name:      APIServerTLSSecretName,
+			Namespace: APIServerNamespace,
+		}
+		tlsSecrets = append(tlsSecrets, copy)
 	}
-	copy := tlsKeyPair.DeepCopy()
-	copy.ObjectMeta = metav1.ObjectMeta{
-		Name:      APIServerTLSSecretName,
-		Namespace: APIServerNamespace,
-	}
-	tlsSecrets = append(tlsSecrets, copy)
+
 	if managementCluster != nil {
 		if tunnelCASecret == nil {
 			tunnelCASecret = voltronTunnelSecret()
@@ -90,6 +93,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 		pullSecrets:                 pullSecrets,
 		openshift:                   openshift,
 		k8sServiceEp:                k8sServiceEndpoint,
+		clusterDomain:               clusterDomain,
 	}, nil
 }
 
@@ -104,6 +108,7 @@ type apiServerComponent struct {
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
 	isManagement                bool
+	clusterDomain               string
 }
 
 func (c *apiServerComponent) SupportedOSType() OSType {
@@ -129,10 +134,16 @@ func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.authReaderRoleBinding(),
 	)
 
-	objs = append(objs, c.getTLSObjects()...)
+	if c.installation.CertificateManagement == nil {
+		objs = append(objs, c.getTLSObjects()...)
+		objs = append(objs, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
+	} else {
+		objs = append(objs, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
+		objs = append(objs, csrClusterRoleBinding("tigera-apiserver", APIServerNamespace))
+	}
+
 	objs = append(objs,
 		c.apiServer(),
-		c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]),
 		c.apiServerService(),
 	)
 
@@ -579,6 +590,18 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
 
+	var initContainers []corev1.Container
+	if c.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation,
+			c.installation.CertificateManagement,
+			APIServerTLSSecretName, TLSSecretCertName,
+			APIServerSecretKeyName,
+			APIServerSecretCertName,
+			dns.GetServiceDNSNames(apiServiceName, APIServerNamespace, c.clusterDomain),
+			APIServerNamespace))
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -612,6 +635,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
 						c.queryServerContainer(),
@@ -630,7 +654,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
 		{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
-		{Name: "tigera-apiserver-certs", MountPath: "/code/apiserver.local.config/certificates"},
+		{Name: APIServerTLSSecretName, MountPath: "/code/apiserver.local.config/certificates"},
 	}
 
 	if c.managementCluster != nil {
@@ -778,12 +802,8 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 			},
 		},
 		{
-			Name: "tigera-apiserver-certs",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: APIServerTLSSecretName,
-				},
-			},
+			Name:         APIServerTLSSecretName,
+			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, APIServerTLSSecretName),
 		},
 	}
 

@@ -296,6 +296,11 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	if ls != nil && install.CertificateManagement != nil {
+		r.status.SetDegraded("Certificate Management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource.", "")
+		return reconcile.Result{}, fmt.Errorf("certificate management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource")
+	}
+
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading ManagementCluster")
@@ -322,7 +327,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	} else if ls == nil && managementClusterConnection == nil {
-		log.Error(err, "LogStorage must exist for management and standalone clusters")
+		log.Info("LogStorage must exist for management and standalone clusters that require storage.")
 		return reconcile.Result{}, nil
 	} else if ls != nil && ls.DeletionTimestamp == nil && managementClusterConnection != nil {
 		// Note that we check if the DeletionTimestamp is set as the render function is responsible for any cleanup needed

@@ -21,10 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	APIServerStatusReady = "Ready"
-)
-
 // APIServerSpec defines the desired state of Tigera API server.
 type APIServerSpec struct {
 }

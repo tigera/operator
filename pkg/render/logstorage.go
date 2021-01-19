@@ -21,14 +21,16 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+
 	"gopkg.in/inf.v0"
+
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -47,6 +49,7 @@ const (
 	ECKOperatorNamespace    = "tigera-eck-operator"
 	ECKWebhookSecretName    = "elastic-webhook-server-cert"
 	ECKWebhookName          = "elastic-webhook-server"
+	ECKWebhookPortName      = "https"
 	ECKEnterpriseTrial      = "eck-trial-license"
 	ECKWebhookConfiguration = "elastic-webhook.k8s.elastic.co"
 
@@ -120,26 +123,10 @@ echo "Keystore initialization successful."
 `
 )
 
-type OIDCAuthentication struct {
-	ClientID              string
-	Secret                string
-	IssuerURL             string
-	SiteURL               string
-	UsernameClaim         string
-	UsernamePrefix        string
-	GroupPrefix           string
-	GroupsClaim           string
-	AuthorizationEndpoint string
-	TokenEndpoint         string
-	JWKSetURI             string
-	RequestedScopes       []string
-	UserInfoEndpoint      string
-}
-
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,
@@ -155,7 +142,7 @@ func LogStorage(
 	kbService *corev1.Service,
 	clusterDNS string,
 	applyTrial bool,
-	authentication interface{}) Component {
+	dexCfg DexRelyingPartyConfig) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -175,13 +162,13 @@ func LogStorage(
 		kbService:                   kbService,
 		clusterDNS:                  clusterDNS,
 		applyTrial:                  applyTrial,
-		authentication:              authentication,
+		dexCfg:                      dexCfg,
 	}
 }
 
 type elasticsearchComponent struct {
 	logStorage                  *operatorv1.LogStorage
-	installation                *operatorv1.Installation
+	installation                *operatorv1.InstallationSpec
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
 	elasticsearch               *esv1.Elasticsearch
@@ -197,7 +184,7 @@ type elasticsearchComponent struct {
 	kbService                   *corev1.Service
 	clusterDNS                  string
 	applyTrial                  bool
-	authentication              interface{}
+	dexCfg                      DexRelyingPartyConfig
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -354,6 +341,10 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		)
 	}
 
+	if es.dexCfg != nil {
+		toCreate = append(toCreate, secretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
+	}
+
 	return toCreate, toDelete
 }
 
@@ -430,6 +421,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
+	var volumeMounts []corev1.VolumeMount
+	if es.dexCfg != nil {
+		volumeMounts = append(volumeMounts, es.dexCfg.RequiredVolumeMounts()...)
+	}
+
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
 		Resources: corev1.ResourceRequirements{
@@ -446,6 +442,15 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			// Set to 30% of the default memory, such that resources can be divided over ES, Lucene and ML.
 			{Name: "ES_JAVA_OPTS", Value: "-Xms1398101K -Xmx1398101K"},
 		},
+		VolumeMounts: volumeMounts,
+	}
+
+	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch
+	// image which requires that root users have permissions to run CHROOT which is not given in OpenShift.
+	if es.provider == operatorv1.ProviderOpenShift {
+		esContainer.SecurityContext = &corev1.SecurityContext{
+			RunAsUser: Int64(1000),
+		}
 	}
 
 	// If the user has provided resource requirements, then use the user overrides instead
@@ -471,7 +476,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: Bool(true),
 			RunAsUser:  Int64(0),
 		},
-		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
 		Command: []string{
 			"/bin/sh",
 		},
@@ -482,12 +487,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
-
+	annotations := map[string]string{}
+	if es.dexCfg != nil {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
-			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: Bool(false),
 			},
@@ -499,15 +503,25 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			}},
 		}
 		initContainers = append(initContainers, initKeystore)
+		annotations = es.dexCfg.RequiredAnnotations()
 	}
 
+	var volumes []corev1.Volume
+
+	if es.dexCfg != nil {
+		volumes = es.dexCfg.RequiredVolumes()
+	}
 	podTemplate := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: annotations,
+		},
 		Spec: corev1.PodSpec{
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
 			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:       es.logStorage.Spec.DataNodeSelector,
 			ServiceAccountName: "tigera-elasticsearch",
+			Volumes:            volumes,
 		},
 	}
 
@@ -599,7 +613,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -623,10 +637,8 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 func (es elasticsearchComponent) secureSettingsSecret() *corev1.Secret {
 	secureSettings := make(map[string][]byte)
 
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
-		clientSecret := es.authentication.(OIDCAuthentication).Secret
-		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = []byte(clientSecret)
+	if es.dexCfg != nil {
+		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = es.dexCfg.ClientSecret()
 	}
 
 	return &corev1.Secret{
@@ -734,24 +746,22 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
-
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
-		oidcAuth := es.authentication.(OIDCAuthentication)
+	if es.dexCfg != nil {
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
-			"rp.client_id":                oidcAuth.ClientID,
+			"rp.client_id":                DexClientId,
+			"op.jwkset_path":              es.dexCfg.JWKSURI(),
+			"op.userinfo_endpoint":        es.dexCfg.UserInfoURI(),
+			"op.token_endpoint":           es.dexCfg.TokenURI(),
+			"claims.principal":            es.dexCfg.UsernameClaim(),
+			"claims.groups":               es.dexCfg.GroupsClaim(),
 			"rp.response_type":            "code",
-			"rp.redirect_uri":             fmt.Sprintf("https://%s:9443/tigera-kibana/api/security/oidc/callback", oidcAuth.SiteURL),
-			"rp.requested_scopes":         oidcAuth.RequestedScopes,
-			"op.issuer":                   oidcAuth.IssuerURL,
-			"op.authorization_endpoint":   oidcAuth.AuthorizationEndpoint,
-			"op.token_endpoint":           oidcAuth.TokenEndpoint,
-			"op.jwkset_path":              oidcAuth.JWKSetURI,
-			"op.userinfo_endpoint":        oidcAuth.UserInfoEndpoint,
-			"rp.post_logout_redirect_uri": fmt.Sprintf("https://%s:9443/tigera-kibana/logged_out", oidcAuth.SiteURL),
-			"claims.principal":            oidcAuth.UsernameClaim,
-			"claims.groups":               oidcAuth.GroupsClaim,
+			"rp.requested_scopes":         es.dexCfg.RequestedScopes(),
+			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerURI()),
+			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
+			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
+			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
+			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 		}
 	}
 
@@ -796,13 +806,18 @@ func (es elasticsearchComponent) eckOperatorWebhookSecret() *corev1.Secret {
 func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
+			APIGroups: []string{"authorization.k8s.io"},
+			Resources: []string{"subjectaccessreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
 			APIGroups: []string{""},
-			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
+			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
 			APIGroups: []string{"apps"},
-			Resources: []string{"deployments", "statefulsets"},
+			Resources: []string{"deployments", "statefulsets", "daemonsets"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
@@ -828,6 +843,16 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"apm.k8s.elastic.co"},
 			Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
+			Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"beat.k8s.elastic.co"},
+			Resources: []string{"beats", "beats/status", "beats/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
@@ -926,8 +951,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 
 	hostNetwork := false
 	dnsPolicy := corev1.DNSClusterFirst
-	if es.installation.Spec.KubernetesProvider == operatorv1.ProviderEKS &&
-		es.installation.Spec.CNI.Type == operatorv1.PluginCalico {
+	if es.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		es.installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
 		// Calico.
@@ -961,6 +986,11 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						"control-plane": "elastic-operator",
 						"k8s-app":       "elastic-operator",
 					},
+					Annotations: map[string]string{
+						// Rename the fields "error" to "error.message" and "source" to "event.source"
+						// This is to avoid a conflict with the ECS "error" and "source" documents.
+						"co.elastic.logs/raw": "[{\"type\":\"container\",\"json.keys_under_root\":true,\"paths\":[\"/var/log/containers/*${data.kubernetes.container.id}.log\"],\"processors\":[{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"error\",\"to\":\"_error\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"_error\",\"to\":\"error.message\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"source\",\"to\":\"_source\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"_source\",\"to\":\"event.source\"}]}}]}]",
+					},
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
@@ -968,10 +998,21 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
 					HostNetwork:        hostNetwork,
 					Containers: []corev1.Container{{
-						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath),
 						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
-						Args: []string{"manager", "--operator-roles", "all", "--log-verbosity=0"},
+						Args: []string{
+							"manager",
+							"--log-verbosity=0",
+							"--metrics-port=0",
+							"--container-registry=" + es.installation.Registry,
+							"--max-concurrent-reconciles=3",
+							"--ca-cert-validity=8760h",
+							"--ca-cert-rotate-before=24h",
+							"--cert-validity=8760h",
+							"--cert-rotate-before=24h",
+							"--enable-webhook",
+						},
 						Env: []corev1.EnvVar{
 							{
 								Name: "OPERATOR_NAMESPACE",
@@ -982,8 +1023,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 								},
 							},
 							{Name: "WEBHOOK_SECRET", Value: ECKWebhookSecretName},
-							{Name: "WEBHOOK_PODS_LABEL", Value: "elastic-operator"},
-							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Spec.Registry, es.installation.Spec.ImagePath)},
+							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath)},
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -1046,8 +1086,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 	}
 
-	switch es.authentication.(type) {
-	case OIDCAuthentication:
+	if es.dexCfg != nil {
 		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
 		config["xpack.security.authc.oidc.realm"] = "oidc1"
 		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
@@ -1066,7 +1105,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		},
 		Spec: kbv1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+			Image:   components.GetReference(components.ComponentKibana, es.installation.Registry, es.installation.ImagePath),
 			Config: &cmnv1.Config{
 				Data: config,
 			},
@@ -1142,14 +1181,22 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 			JobTemplate: batchv1beta.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: EsCuratorName,
+					Labels: map[string]string{
+						"k8s-app": EsCuratorName,
+					},
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"k8s-app": EsCuratorName,
+							},
+						},
 						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Spec.Registry, es.installation.Spec.ImagePath),
+									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Registry, es.installation.ImagePath),
 									Env:           es.curatorEnvVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{
@@ -1234,7 +1281,7 @@ func (es elasticsearchComponent) webhookService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       ECKWebhookName,
+					Name:       ECKWebhookPortName,
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(9443),
@@ -1263,12 +1310,16 @@ func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
 
 // A ValidatingWebhookConfiguration is used in order to validate changes made to the Kibana and ES CR's
 func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1.ValidatingWebhookConfiguration {
-	path := "/validate-elasticsearch-k8s-elastic-co-v1-elasticsearch"
+	pathES := "/validate-elasticsearch-k8s-elastic-co-v1-elasticsearch"
+	pathKibana := "/validate-kibana-k8s-elastic-co-v1-kibana"
+	pathAPMServer := "/validate-apm-k8s-elastic-co-v1-apmserver"
+	pathBeat := "/validate-beat-k8s-elastic-co-v1beta1-beat"
 	failure := admissionv1beta1.Ignore
 	return &admissionv1beta1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ECKWebhookConfiguration,
 		},
+		// Note that we have only included the latest version of each webhook from the ECK manifests.
 		Webhooks: []admissionv1beta1.ValidatingWebhook{
 			{
 				ClientConfig: admissionv1beta1.WebhookClientConfig{
@@ -1276,7 +1327,100 @@ func (es elasticsearchComponent) elasticWebhookConfiguration() *admissionv1beta1
 					Service: &admissionv1beta1.ServiceReference{
 						Name:      ECKWebhookName,
 						Namespace: ECKOperatorNamespace,
-						Path:      &path,
+						Path:      &pathAPMServer,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-apm-validation-v1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1",
+							},
+							Resources: []string{
+								"apmservers",
+							},
+							APIGroups: []string{
+								"apm.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &pathBeat,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-beat-validation-v1beta1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1beta1",
+							},
+							Resources: []string{
+								"beats",
+							},
+							APIGroups: []string{
+								"beat.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &pathKibana,
+					},
+				},
+				FailurePolicy: &failure,
+				Name:          "elastic-kb-validation-v1.k8s.elastic.co",
+				Rules: []admissionv1beta1.RuleWithOperations{
+					{
+						Operations: []admissionv1beta1.OperationType{
+							"CREATE",
+							"UPDATE",
+						},
+						Rule: admissionv1beta1.Rule{
+							APIVersions: []string{
+								"v1",
+							},
+							Resources: []string{
+								"kibanas",
+							},
+							APIGroups: []string{
+								"kibana.k8s.elastic.co",
+							},
+						},
+					},
+				},
+			},
+			{
+				ClientConfig: admissionv1beta1.WebhookClientConfig{
+					CABundle: []byte("Cg=="), // base64 empty string
+					Service: &admissionv1beta1.ServiceReference{
+						Name:      ECKWebhookName,
+						Namespace: ECKOperatorNamespace,
+						Path:      &pathES,
 					},
 				},
 				FailurePolicy: &failure,

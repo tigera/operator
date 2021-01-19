@@ -17,8 +17,6 @@ package render
 import (
 	"fmt"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -27,6 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 const (
@@ -41,7 +43,7 @@ const (
 
 var apiServiceHostname = apiServiceName + "." + APIServerNamespace + ".svc"
 
-func APIServer(installation *operator.Installation, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
@@ -87,11 +89,13 @@ func APIServer(installation *operator.Installation, managementCluster *operator.
 		tlsAnnotations:              tlsHashAnnotations,
 		pullSecrets:                 pullSecrets,
 		openshift:                   openshift,
+		k8sServiceEp:                k8sServiceEndpoint,
 	}, nil
 }
 
 type apiServerComponent struct {
-	installation                *operator.Installation
+	k8sServiceEp                k8sapi.ServiceEndpoint
+	installation                *operator.InstallationSpec
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	amazonCloudIntegration      *operator.AmazonCloudIntegration
@@ -564,8 +568,8 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 
 	hostNetwork := false
 	dnsPolicy := corev1.DNSClusterFirst
-	if c.installation.Spec.KubernetesProvider == operator.ProviderEKS &&
-		c.installation.Spec.CNI.Type == operator.PluginCalico {
+	if c.installation.KubernetesProvider == operator.ProviderEKS &&
+		c.installation.CNI.Type == operator.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
 		// Calico.
@@ -603,7 +607,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
-					NodeSelector:       c.installation.Spec.ControlPlaneNodeSelector,
+					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
@@ -639,7 +643,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	//On OpenShift apiserver needs privileged access to write audit logs to host path volume
+	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
 	isPrivileged := false
 	if c.openshift {
 		isPrivileged = true
@@ -649,13 +653,15 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+	env = append(env, c.k8sServiceEp.EnvVars()...)
+
+	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
 	apiServer := corev1.Container{
 		Name:  "tigera-apiserver",
-		Image: components.GetReference(components.ComponentAPIServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image: components.GetReference(components.ComponentAPIServer, c.installation.Registry, c.installation.ImagePath),
 		Args:  c.startUpArgs(),
 		Env:   env,
 		// Needed for permissions to write to the audit log
@@ -713,14 +719,14 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
-
+	env = append(env, c.k8sServiceEp.EnvVars()...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
 
-	if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	image := components.GetReference(components.ComponentQueryServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
+	image := components.GetReference(components.ComponentQueryServer, c.installation.Registry, c.installation.ImagePath)
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: image,

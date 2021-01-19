@@ -2,10 +2,11 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.5
+    "helm.sh/hook": "crd-install"
   creationTimestamp: null
   name: apmservers.apm.k8s.elastic.co
-  annotations:
-    "helm.sh/hook": "crd-install"
 spec:
   additionalPrinterColumns:
     - JSONPath: .status.health
@@ -207,8 +208,8 @@ spec:
                                 type: string
                               targetPort:
                                 anyOf:
-                                  - type: string
                                   - type: integer
+                                  - type: string
                                 description: 'Number or name of the port to access
                                   on the pods targeted by the service. Number must
                                   be in the range 1 to 65535. Name must be an IANA_SVC_NAME.
@@ -265,6 +266,24 @@ spec:
                                   type: integer
                               type: object
                           type: object
+                        topologyKeys:
+                          description: topologyKeys is a preference-order list of
+                            topology keys which implementations of services should
+                            use to preferentially sort endpoints when accessing this
+                            Service, it can not be used at the same time as externalTrafficPolicy=Local.
+                            Topology keys must be valid label keys and at most 16
+                            keys may be specified. Endpoints are chosen based on the
+                            first topology key with available backends. If this field
+                            is specified and all entries have no backends that match
+                            the topology of the client, the service has no backends
+                            for that client and connections should fail. The special
+                            value "*" may be used to mean "any topology". This catch-all
+                            value, if used, only makes sense as the last value in
+                            the list. If this is not specified or empty, no topology
+                            constraints will be applied.
+                          items:
+                            type: string
+                          type: array
                         type:
                           description: 'type determines how the Service is exposed.
                             Defaults to ClusterIP. Valid options are ExternalName,
@@ -327,13 +346,28 @@ spec:
             image:
               description: Image is the APM Server Docker image to deploy.
               type: string
+            kibanaRef:
+              description: KibanaRef is a reference to a Kibana instance running in
+                the same Kubernetes cluster. It allows APM agent central configuration
+                management in Kibana.
+              properties:
+                name:
+                  description: Name of the Kubernetes object.
+                  type: string
+                namespace:
+                  description: Namespace of the Kubernetes object. If empty, defaults
+                    to the current namespace.
+                  type: string
+              required:
+              - name
+              type: object
             podTemplate:
               description: PodTemplate provides customisation options (labels, annotations,
                 affinity rules, resource requests, and so on) for the APM Server pods.
               type: object
             secureSettings:
-              description: 'SecureSettings is a list of references to Kubernetes secrets
-                containing sensitive configuration options for APM Server. See: https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-apm-server.html#k8s-apm-secure-settings'
+              description: SecureSettings is a list of references to Kubernetes secrets
+                containing sensitive configuration options for APM Server.
               items:
                 description: SecretSource defines a data source based on a Kubernetes
                   Secret.
@@ -367,23 +401,34 @@ spec:
                   - secretName
                 type: object
               type: array
+            serviceAccountName:
+              description: ServiceAccountName is used to check access from the current
+                resource to a resource (eg. Elasticsearch) in a different namespace.
+                Can only be used if ECK is enforcing RBAC on references.
+              type: string
             version:
               description: Version of the APM Server.
               type: string
+          required:
+          - version
           type: object
         status:
           description: ApmServerStatus defines the observed state of ApmServer
           properties:
-            associationStatus:
-              description: Association is the status of any auto-linking to Elasticsearch
-                clusters.
-              type: string
             availableNodes:
               format: int32
               type: integer
+            elasticsearchAssociationStatus:
+              description: ElasticsearchAssociationStatus is the status of any auto-linking
+                to Elasticsearch clusters.
+              type: string
             health:
               description: ApmServerHealth expresses the status of the Apm Server
                 instances.
+              type: string
+            kibanaAssociationStatus:
+              description: KibanaAssociationStatus is the status of any auto-linking
+                to Kibana.
               type: string
             secretTokenSecret:
               description: SecretTokenSecretName is the name of the Secret that contains

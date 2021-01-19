@@ -123,6 +123,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index . "dex" }}
+	ComponentDex = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .voltron }}
 	ComponentManagerProxy = component{
 		Version: "{{ .Version }}",

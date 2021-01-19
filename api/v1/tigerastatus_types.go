@@ -20,6 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	TigeraStatusReady = "Ready"
+)
+
 // TigeraStatusSpec defines the desired state of TigeraStatus
 type TigeraStatusSpec struct {
 }

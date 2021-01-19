@@ -71,28 +71,28 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("failed to create %s: %v", controllerName, err)
+		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("%s failed to watch primary resource: %v", controllerName, err)
+		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("%s failed to watch primary resource: %v", controllerName, err)
+		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
 
 	// Watch for changes to the secrets associated with the ManagementClusterConnection.
 	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %v", controllerName, render.GuardianSecretName, err)
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch Network resource: %v", controllerName, err)
+		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
 	}
 
 	return nil
@@ -119,7 +119,7 @@ func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := context.Background()
 	result := reconcile.Result{}
 
-	instl, err := installation.GetInstallation(ctx, r.Client)
+	_, instl, err := installation.GetInstallation(ctx, r.Client)
 	if err != nil {
 		return result, err
 	}

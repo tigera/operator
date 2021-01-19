@@ -192,6 +192,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.OIDCUsersConfigMapName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.OIDCUsersSecreteName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
 	return nil
 }
 
@@ -355,7 +363,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
-	var elasticLicenseType render.ElasticLicenseType
+	var esLicenseType render.ElasticsearchLicenseType
+	var oidcUserConfigMap *corev1.ConfigMap
+	var oidcUserSecret *corev1.Secret
 	applyTrial := false
 
 	if managementClusterConnection == nil {
@@ -401,7 +411,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
 			if errors.IsNotFound(err) {
 				log.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
@@ -409,6 +419,16 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 				r.status.SetDegraded("Failed to get elastic license", err.Error())
 				return reconcile.Result{}, err
 			}
+		}
+
+		if oidcUserConfigMap, err = r.getOIDCUserConfigMap(ctx); err != nil {
+			r.status.SetDegraded("Failed to read oid user configmap", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if oidcUserSecret, err = r.oidcUserSecret(ctx); err != nil {
+			r.status.SetDegraded("Failed to read oid user secret", err.Error())
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -483,7 +503,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.clusterDomain,
 		applyTrial,
 		dexCfg,
-		elasticLicenseType,
+		esLicenseType,
+		oidcUserConfigMap,
+		oidcUserSecret,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -650,6 +672,40 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 		return nil, err
 	}
 	return &svc, nil
+}
+
+func (r *ReconcileLogStorage) getOIDCUserConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.OIDCUsersConfigMapName,
+					Namespace: render.ElasticsearchNamespace,
+				},
+			}, nil
+		}
+		return nil, err
+	}
+	return cm, nil
+}
+
+func (r *ReconcileLogStorage) oidcUserSecret(ctx context.Context) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersSecreteName, Namespace: render.ElasticsearchNamespace}, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.OIDCUsersSecreteName,
+					Namespace: render.ElasticsearchNamespace,
+				},
+			}, nil
+		}
+		return nil, err
+	}
+	return secret, nil
 }
 
 func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

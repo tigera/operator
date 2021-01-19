@@ -49,6 +49,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		replicas := int32(1)
 		retention := int32(1)
 		var esConfig *render.ElasticsearchClusterConfig
+		var oidcConfigMap *corev1.ConfigMap
+		var oidcSecret *corev1.Secret
+
 		BeforeEach(func() {
 			logStorage = &operatorv1.LogStorage{
 				ObjectMeta: metav1.ObjectMeta{
@@ -79,6 +82,18 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Registry:           "testregistry.com/",
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
+			oidcConfigMap = &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.OIDCUsersConfigMapName,
+					Namespace: render.ElasticsearchNamespace,
+				}}
+			oidcSecret = &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.OIDCUsersSecreteName,
+					Namespace: render.ElasticsearchNamespace,
+				}}
 		})
 
 		It("should not panic if an empty spec is provided", func() {
@@ -104,7 +119,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
 
 			// Render the objects and make sure we don't panic!
 			_, _ = component.Objects()
@@ -144,8 +159,15 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
-
+				expectedDeleteResources := []resourceTestObj{
+					{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
+					{render.OIDCUsersSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				}
 				component := render.LogStorage(
 					logStorage,
 					installation, nil, nil, nil, nil,
@@ -160,12 +182,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
 
 				createResources, deleteResources := component.Objects()
 
 				compareResources(createResources, expectedCreateResources)
-				compareResources(deleteResources, []resourceTestObj{})
+				compareResources(deleteResources, expectedDeleteResources)
 
 				resultES := GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
@@ -230,9 +252,15 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraKibanaCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
+					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
 
 				expectedDeleteResources := []resourceTestObj{
+					{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
+					{render.OIDCUsersSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, nil},
 				}
@@ -259,7 +287,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: render.KibanaServiceName, Namespace: render.KibanaNamespace},
 						Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeExternalName},
-					}, "cluster.local", false, nil, render.ElasticLicenseTypeBasic)
+					}, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic, oidcConfigMap, oidcSecret)
 
 				createResources, deleteResources := component.Objects()
 
@@ -311,8 +339,15 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 					{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
-
+				expectedDeleteResources := []resourceTestObj{
+					{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
+					{render.OIDCUsersSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				}
 				component := render.LogStorage(
 					logStorage,
 					installation, nil, nil, nil, nil,
@@ -334,12 +369,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 					},
-					nil, nil, dns.DefaultClusterDomain, true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+					nil, nil, dns.DefaultClusterDomain, true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
 
 				createResources, deleteResources := component.Objects()
 
 				compareResources(createResources, expectedCreateResources)
-				compareResources(deleteResources, []resourceTestObj{})
+				compareResources(deleteResources, expectedDeleteResources)
 			})
 		})
 
@@ -385,7 +420,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
 
 				createResources, _ := component.Objects()
 
@@ -418,7 +453,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
 
 				updatedResources, _ := updatedComponent.Objects()
 
@@ -450,7 +485,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
+
 			// Verify that the node selectors are passed into the Elasticsearch pod spec.
 			createResources, _ := component.Objects()
 			nodeSelectors := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.NodeSelector
@@ -459,7 +495,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 
 		It("Configures OIDC for Kibana when the OIDC configuration is provided", func() {
-
 			dexCfg := render.NewDexRelyingPartyConfig(&operatorv1.Authentication{
 				Spec: operatorv1.AuthenticationSpec{
 					ManagerDomain: "https://example.com",
@@ -486,10 +521,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, dexCfg, render.ElasticLicenseTypeEnterpriseTrial,
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, dexCfg, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret,
 			)
 
-			createResources, _ := component.Objects()
+			createResources, deleteResources := component.Objects()
 			securitySecret := GetResource(createResources, render.ElasticsearchSecureSettingsSecretName, render.ElasticsearchNamespace, "", "", "")
 			Expect(securitySecret).ShouldNot(BeNil())
 			Expect(securitySecret.(*corev1.Secret).Data["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"]).Should(HaveLen(24))
@@ -522,6 +557,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(len(initContainers)).To(Equal(2))
 			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
+
+			oidcUserConfigMap := GetResource(deleteResources, render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, "", "v1", "ConfigMap")
+			Expect(oidcUserConfigMap).ShouldNot(BeNil())
+
+			oidcUserSecret := GetResource(deleteResources, render.OIDCUsersSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
+			Expect(oidcUserSecret).ShouldNot(BeNil())
 		})
 
 		It("should not configures OIDC for Kibana when elasticsearch basic license is used", func() {
@@ -552,7 +593,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", false, dexCfg, render.ElasticLicenseTypeBasic)
+				}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", false, dexCfg, render.ElasticsearchLicenseTypeBasic, oidcConfigMap, oidcSecret)
 
 			createResources, _ := component.Objects()
 			securitySecret := GetResource(createResources, render.ElasticsearchSecureSettingsSecretName, render.ElasticsearchNamespace, "", "", "")
@@ -568,12 +609,19 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
 			Expect(len(initContainers)).To(Equal(1))
 			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+
+			oidcUserConfigMap := GetResource(createResources, render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, "", "v1", "ConfigMap")
+			Expect(oidcUserConfigMap).ShouldNot(BeNil())
+
+			oidcUserSecret := GetResource(createResources, render.OIDCUsersSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
+			Expect(oidcUserSecret).ShouldNot(BeNil())
 		})
 	})
 
 	Context("Managed cluster", func() {
 		var installation *operatorv1.InstallationSpec
 		var managementClusterConnection *operatorv1.ManagementClusterConnection
+
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
@@ -605,7 +653,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 					}, operatorv1.ProviderNone,
-					nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+					nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 				createResources, deleteResources := component.Objects()
 
@@ -674,7 +722,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -708,7 +756,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -742,7 +790,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -776,7 +824,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -825,7 +873,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -869,7 +917,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -911,7 +959,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -952,7 +1000,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
@@ -986,7 +1034,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
@@ -1025,7 +1073,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
@@ -1055,7 +1103,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -1099,7 +1147,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -1196,7 +1244,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						[]*corev1.Secret{
 							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 					createResources, _ := component.Objects()
 					nodeSets := getElasticsearch(createResources).Spec.NodeSets
@@ -1342,7 +1390,8 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+				nil, nil, "cluster.local", true, nil,
+				render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 			createResources, deleteResources := component.Objects()
 
@@ -1383,7 +1432,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+				nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 			createResources, deleteResources := component.Objects()
 
@@ -1422,7 +1471,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 				},
-				nil, nil, "cluster.local", true, nil, render.ElasticLicenseTypeEnterpriseTrial)
+				nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
 
 			createResources, deleteResources := component.Objects()
 

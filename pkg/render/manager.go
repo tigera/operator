@@ -485,7 +485,10 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	env := []v1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)},
+		{Name: "ELASTIC_VERSION", Value: components.ComponentEckElasticsearch.Version},
+		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain)},
 	}
+
 	if c.dexCfg != nil {
 		env = append(env, c.dexCfg.RequiredEnv("")...)
 		volumeMounts = append(volumeMounts, c.dexCfg.RequiredVolumeMounts()...)

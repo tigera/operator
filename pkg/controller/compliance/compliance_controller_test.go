@@ -16,10 +16,13 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/test"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -70,14 +73,19 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(
 			ctx,
 			&operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
 				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
 					Computed: &operatorv1.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.
 						KubernetesProvider: operatorv1.ProviderNone,
 					},
 				},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			})).NotTo(HaveOccurred())
 
 		// The compliance reconcile loop depends on a ton of objects that should be available in your client as
@@ -182,5 +190,194 @@ var _ = Describe("Compliance controller tests", func() {
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceControllerName))
+	})
+
+	Context("image reconciliation", func() {
+		It("should use builtin images", func() {
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			//components.ComponentComplianceBenchmarker
+			//components.ComponentComplianceSnapshotter
+			//components.ComponentComplianceServer
+			//components.ComponentComplianceController
+			//components.ComponentComplianceReporter
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceControllerName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceControllerName)
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentComplianceController.Image,
+					components.ComponentComplianceController.Version)))
+
+			pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera.io.report",
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &pt)).To(BeNil())
+			Expect(pt.Template.Spec.Containers).To(HaveLen(1))
+			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
+			Expect(reporter).ToNot(BeNil())
+			Expect(reporter.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentComplianceReporter.Image,
+					components.ComponentComplianceReporter.Version)))
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceSnapshotterName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			snap := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceSnapshotterName)
+			Expect(snap).ToNot(BeNil())
+			Expect(snap.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentComplianceSnapshotter.Image,
+					components.ComponentComplianceSnapshotter.Version)))
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "compliance-benchmarker",
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			bench := test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
+			Expect(bench).ToNot(BeNil())
+			Expect(bench.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentComplianceBenchmarker.Image,
+					components.ComponentComplianceBenchmarker.Version)))
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceServerName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			server := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceServerName)
+			Expect(server).ToNot(BeNil())
+			Expect(server.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentComplianceServer.Image,
+					components.ComponentComplianceServer.Version)))
+		})
+		It("should use images from imageset", func() {
+			Expect(c.Create(ctx, &operatorv1.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+				Spec: operatorv1.ImageSetSpec{
+					Images: []operatorv1.Image{
+						{Image: "tigera/compliance-benchmarker", Digest: "sha256:benchmarkerhash"},
+						{Image: "tigera/compliance-controller", Digest: "sha256:controllerhash"},
+						{Image: "tigera/compliance-reporter", Digest: "sha256:reporterhash"},
+						{Image: "tigera/compliance-server", Digest: "sha256:serverhash"},
+						{Image: "tigera/compliance-snapshotter", Digest: "sha256:snapshotterhash"},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceControllerName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceControllerName)
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentComplianceController.Image,
+					"sha256:controllerhash")))
+
+			pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera.io.report",
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &pt)).To(BeNil())
+			Expect(pt.Template.Spec.Containers).To(HaveLen(1))
+			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
+			Expect(reporter).ToNot(BeNil())
+			Expect(reporter.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentComplianceReporter.Image,
+					"sha256:reporterhash")))
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceSnapshotterName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			snap := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceSnapshotterName)
+			Expect(snap).ToNot(BeNil())
+			Expect(snap.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentComplianceSnapshotter.Image,
+					"sha256:snapshotterhash")))
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "compliance-benchmarker",
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			bench := test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
+			Expect(bench).ToNot(BeNil())
+			Expect(bench.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentComplianceBenchmarker.Image,
+					"sha256:benchmarkerhash")))
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceServerName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			server := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceServerName)
+			Expect(server).ToNot(BeNil())
+			Expect(server.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentComplianceServer.Image,
+					"sha256:serverhash")))
+		})
 	})
 })

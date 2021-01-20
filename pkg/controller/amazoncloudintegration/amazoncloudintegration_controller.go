@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -87,6 +88,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err = utils.AddSecretsWatch(c, render.AmazonCloudIntegrationCredentialName, render.OperatorNamespace()); err != nil {
 		log.V(5).Info("amazoncloudintegration-controller failed to watch Secret", "err", err, "resource", render.AmazonCloudIntegrationCredentialName)
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch the Secret resource(%s): %v", render.AmazonCloudIntegrationCredentialName, err)
+	}
+
+	err = imageset.AddImageSetWatch(c)
+	if err != nil {
+		return fmt.Errorf("amazoncloudintegration-controller failed to watch ImageSet: %w", err)
 	}
 
 	log.V(5).Info("Controller created and Watches setup")
@@ -184,6 +190,12 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(request reconcile.Request) (
 	component, err := render.AmazonCloudIntegration(instance, network, awsCredential, pullSecrets, r.provider == operatorv1.ProviderOpenShift)
 	if err != nil {
 		r.SetDegraded("Error rendering AmazonCloudIntegration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	err = imageset.ApplyImageSet(ctx, r.client, variant, component)
+	if err != nil {
+		r.SetDegraded("Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

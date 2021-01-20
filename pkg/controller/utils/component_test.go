@@ -545,6 +545,10 @@ func (c *fakeComponent) Ready() bool {
 	return true
 }
 
+func (c *fakeComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	return nil
+}
+
 func (c *fakeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	return c.objs, nil
 }

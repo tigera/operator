@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package authentication_test
+package authentication
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,10 +25,11 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/authentication"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -116,7 +118,7 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+			r := NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
 			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -126,6 +128,101 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(*authentication.Spec.OIDC.EmailVerification).To(Equal(operatorv1.EmailVerificationTypeVerify))
 			Expect(authentication.Spec.UsernamePrefix).To(Equal("u"))
 			Expect(authentication.Spec.GroupsPrefix).To(Equal("g"))
+		})
+	})
+	Context("image reconciliation", func() {
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{},
+				},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
+			})).To(BeNil())
+			Expect(cli.Create(ctx, &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.AuthenticationSpec{
+					ManagerDomain: "https://example.com",
+					OIDC: &operatorv1.AuthenticationOIDC{
+						IssuerURL:      "https://example.com",
+						UsernameClaim:  "email",
+						GroupsClaim:    "group",
+						GroupsPrefix:   "g",
+						UsernamePrefix: "u",
+					},
+				},
+			})).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
+		})
+
+		It("should use builtin images", func() {
+
+			r := ReconcileAuthentication{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.DexObjectName,
+					Namespace: render.DexNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
+			Expect(dexC).ToNot(BeNil())
+			Expect(dexC.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentDex.Image,
+					components.ComponentDex.Version)))
+		})
+		It("should use images from imageset", func() {
+			Expect(cli.Create(ctx, &operatorv1.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+				Spec: operatorv1.ImageSetSpec{
+					Images: []operatorv1.Image{
+						{Image: "tigera/dex", Digest: "sha256:dexhash"},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			r := ReconcileAuthentication{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.DexObjectName,
+					Namespace: render.DexNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
+			Expect(apiserver).ToNot(BeNil())
+			Expect(apiserver.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentDex.Image,
+					"sha256:dexhash")))
 		})
 	})
 })

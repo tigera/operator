@@ -18,6 +18,8 @@ import (
 	schedv1beta "k8s.io/api/scheduling/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	operator "github.com/tigera/operator/api/v1"
 )
 
 const (
@@ -29,6 +31,11 @@ func PriorityClassDefinitions() Component {
 }
 
 type priorityClassComponent struct {
+}
+
+func (c *priorityClassComponent) ResolveImages(is *operator.ImageSet) error {
+	// No images to resolve
+	return nil
 }
 
 func (c *priorityClassComponent) SupportedOSType() OSType {

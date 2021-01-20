@@ -405,12 +405,10 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
-		log.Info(fmt.Sprintf("Curator error %v", err))
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
 			return reconcile.Result{}, err
 		}
-		log.Info(fmt.Sprintf("Curator secrets are %v", curatorSecrets))
 
 		applyTrial, err = r.shouldApplyElasticTrialSecret(ctx)
 		if err != nil {
@@ -538,7 +536,6 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, nil
 		}
 
-		log.Info(fmt.Sprintf("Curator secrets count %d %v", len(curatorSecrets), curatorSecrets))
 		if len(curatorSecrets) == 0 {
 			log.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")

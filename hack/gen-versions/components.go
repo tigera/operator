@@ -63,7 +63,7 @@ func GetComponents(versionsPath string) (Release, error) {
 	}
 
 	cv.Components = make(Components)
-	cv.Release = v.Release
+	cv.Title = v.Title
 
 	// add known default images to any components that are missing them.
 	for key, component := range v.Components {

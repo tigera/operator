@@ -150,6 +150,13 @@ var _ = Describe("Manager controller tests", func() {
 					"tls.key": []byte("crt"),
 				},
 			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ECKLicenseConfigMapName,
+					Namespace: render.ECKOperatorNamespace,
+				},
+				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
+			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &operatorv1.Manager{
 				ObjectMeta: metav1.ObjectMeta{

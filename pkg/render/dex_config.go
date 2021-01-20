@@ -217,7 +217,7 @@ func (d *dexBaseCfg) ClientSecret() []byte {
 }
 
 func (d *dexBaseCfg) RequestedScopes() []string {
-	if d.authentication.Spec.OIDC.RequestedScopes != nil {
+	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
 	return []string{"openid", "email", "profile"}

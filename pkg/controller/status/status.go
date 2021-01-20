@@ -61,12 +61,12 @@ type StatusManager interface {
 	AddDeployments(deps []types.NamespacedName)
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
-	AddCertificateSigningRequests(label string)
+	AddCertificateSigningRequests(name string, labels map[string]string)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
-	RemoveCertificateSigningRequests(label string)
+	RemoveCertificateSigningRequests(name string)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -81,7 +81,7 @@ type statusManager struct {
 	deployments               map[string]types.NamespacedName
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
-	certificatestatusrequests map[string]bool
+	certificatestatusrequests map[string]map[string]string
 	lock                      sync.Mutex
 	enabled                   *bool
 
@@ -103,7 +103,7 @@ func New(client client.Client, component string) StatusManager {
 		deployments:               make(map[string]types.NamespacedName),
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
-		certificatestatusrequests: make(map[string]bool),
+		certificatestatusrequests: make(map[string]map[string]string),
 	}
 }
 
@@ -224,10 +224,10 @@ func (m *statusManager) AddCronJobs(cjs []types.NamespacedName) {
 }
 
 // AddCertificateSigningRequests tells the status manager to monitor the health of the given CertificateSigningRequests.
-func (m *statusManager) AddCertificateSigningRequests(label string) {
+func (m *statusManager) AddCertificateSigningRequests(name string, labels map[string]string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.certificatestatusrequests[label] = true
+	m.certificatestatusrequests[name] = labels
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
@@ -267,10 +267,10 @@ func (m *statusManager) RemoveCronJobs(cjs ...types.NamespacedName) {
 }
 
 // RemoveCertificateSigningRequests tells the status manager to stop monitoring the health of the given CertificateSigningRequests.
-func (m *statusManager) RemoveCertificateSigningRequests(label string) {
+func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	delete(m.certificatestatusrequests, label)
+	delete(m.certificatestatusrequests, name)
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
@@ -430,12 +430,12 @@ func (m *statusManager) syncState() bool {
 		}
 	}
 
-	for csrLabel := range m.certificatestatusrequests {
-		pending, err := hasPendingCSR(context.TODO(), m.client, csrLabel)
+	for _, labels := range m.certificatestatusrequests {
+		pending, err := hasPendingCSR(context.TODO(), m.client, labels)
 		if err != nil {
-			log.WithValues("error", err).Info(fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with label value %s", csrLabel))
+			log.WithValues("error", err).Info(fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with labels value %v", labels))
 		} else if pending {
-			progressing = append(progressing, fmt.Sprintf("Waiting on CertificateSigningRequest(s) with label value %s to be approved", csrLabel))
+			progressing = append(progressing, fmt.Sprintf("Waiting on CertificateSigningRequest(s) with labels %v to be approved", labels))
 		}
 	}
 
@@ -670,12 +670,9 @@ func (m *statusManager) degradedReason() string {
 	return strings.Join(reasons, "; ")
 }
 
-func hasPendingCSR(ctx context.Context, cli client.Client, label string) (bool, error) {
+func hasPendingCSR(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
 	csrs := &v1beta1.CertificateSigningRequestList{}
-	lbls := map[string]string{
-		"k8s-app": label,
-	}
-	selector := labels.SelectorFromSet(lbls)
+	selector := labels.SelectorFromSet(labelMap)
 	err := cli.List(ctx, csrs, &client.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return false, err

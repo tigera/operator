@@ -193,7 +193,9 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 		r.status.RemoveCertificateSigningRequests(render.APIServerNamespace)
 	} else {
 		// Monitor pending CSRs for the TigeraStatus
-		r.status.AddCertificateSigningRequests(render.APIServerNamespace)
+		r.status.AddCertificateSigningRequests(render.APIServerNamespace, map[string]string{
+			"k8s-app": render.APIServerNamespace,
+		})
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)

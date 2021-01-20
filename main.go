@@ -121,6 +121,7 @@ func main() {
 		fmt.Println(components.GetReference(components.ComponentKibana, "", ""))
 		fmt.Println(components.GetReference(components.ComponentElasticsearch, "", ""))
 		fmt.Println(components.GetReference(components.ComponentDex, "", ""))
+		fmt.Println(components.GetReference(components.ComponentCSRInitContainer, "", ""))
 		os.Exit(0)
 	}
 

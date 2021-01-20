@@ -81,7 +81,7 @@ const (
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 
 	OIDCUsersConfigMapName = "tigera-known-oidc-users"
-	OIDCUsersSecreteName   = "tigera-known-oidc-users-credentials"
+	OIDCUsersEsSecreteName = "tigera-oidc-users-elasticsearch-credentials"
 
 	// As soon as the total disk utilization exceeds the max-total-storage-percent,
 	// indices will be removed starting with the oldest. Picking a low value leads
@@ -341,7 +341,7 @@ func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object)
 		toCreate = append(toCreate, es.oidcUserRole()...)
 		toCreate = append(toCreate, es.oidcUserRoleBinding()...)
 
-		// OIDCUsersConfigMapName and OIDCUsersSecreteName should be created only once
+		// OIDCUsersConfigMapName and OIDCUsersEsSecreteName should be created only once
 		// when the external IdP is set and Elasticsearch uses basic license.
 		// If external IdP is not configured or if Elasticsearch is not using Basic license, delete these objects if available.
 		if es.elasticLicenseType == ElasticsearchLicenseTypeBasic && es.dexCfg != nil {
@@ -1421,7 +1421,7 @@ func (es elasticsearchComponent) oidcUserRole() []runtime.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
-					ResourceNames: []string{OIDCUsersSecreteName},
+					ResourceNames: []string{OIDCUsersEsSecreteName},
 					Verbs:         []string{"get", "list"},
 				},
 			},
@@ -1442,7 +1442,7 @@ func (es elasticsearchComponent) oidcUserRole() []runtime.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
-					ResourceNames: []string{OIDCUsersSecreteName},
+					ResourceNames: []string{OIDCUsersEsSecreteName},
 					Verbs:         []string{"update", "get", "list"},
 				},
 			},

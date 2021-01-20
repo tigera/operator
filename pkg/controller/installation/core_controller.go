@@ -195,6 +195,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
+
+		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+		}
 	}
 
 	return nil
@@ -716,6 +720,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logStorageExists bool
 	var authentication *operator.Authentication
+	var esLicenseType render.ElasticsearchLicenseType
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -751,6 +756,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
+		if err != nil && apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -829,6 +841,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		needNsMigration,
 		nodeAppArmorProfile,
 		r.clusterDomain,
+		esLicenseType,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

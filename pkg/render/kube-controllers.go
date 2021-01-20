@@ -40,6 +40,7 @@ func KubeControllers(
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
 	authentication *operator.Authentication,
+	esLicenseType ElasticsearchLicenseType,
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
@@ -49,6 +50,7 @@ func KubeControllers(
 		logStorageExists:            logStorageExists,
 		authentication:              authentication,
 		k8sServiceEp:                k8sServiceEp,
+		esLicenseType:               esLicenseType,
 	}
 }
 
@@ -60,6 +62,7 @@ type kubeControllersComponent struct {
 	logStorageExists            bool
 	authentication              *operator.Authentication
 	k8sServiceEp                k8sapi.ServiceEndpoint
+	esLicenseType               ElasticsearchLicenseType
 }
 
 func (c *kubeControllersComponent) SupportedOSType() OSType {
@@ -263,6 +266,8 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
 			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
+
+			env = append(env, v1.EnvVar{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)})
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.

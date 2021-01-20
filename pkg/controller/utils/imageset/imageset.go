@@ -29,8 +29,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// ApplyImageSet gets the appropriate ImageSet, validates the ImageSet, and applies it to
-// the components passed in.
+// ApplyImageSet gets the appropriate ImageSet, validates the ImageSet, and calls ResolveImages
+// passing in the ImageSet on each of the comps.
 func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVariant, comps ...render.Component) error {
 	imageSet, err := GetImageSet(ctx, c, v)
 	if err != nil {

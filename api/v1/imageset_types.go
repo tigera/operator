@@ -40,10 +40,6 @@ type Image struct {
 	Digest string `json:"digest"`
 }
 
-// ImageSetStatus defines the observed state of ImageSet
-type ImageSetStatus struct {
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
@@ -58,8 +54,7 @@ type ImageSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ImageSetSpec   `json:"spec,omitempty"`
-	Status ImageSetStatus `json:"status,omitempty"`
+	Spec ImageSetSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

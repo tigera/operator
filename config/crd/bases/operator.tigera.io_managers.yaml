@@ -40,8 +40,8 @@ spec:
               manager.
             properties:
               auth:
-                description: Auth defines the authentication strategy for the Calico
-                  Enterprise manager GUI.
+                description: Deprecated. Please use the Authentication CR for configuring
+                  authentication.
                 properties:
                   authority:
                     description: Authority configures the OAuth2/OIDC authority/issuer
@@ -66,7 +66,8 @@ spec:
             description: Most recently observed state for the Calico Enterprise manager.
             properties:
               auth:
-                description: The last successfully applied authentication configuration.
+                description: Deprecated. Please use the Authentication CR for configuring
+                  authentication.
                 properties:
                   authority:
                     description: Authority configures the OAuth2/OIDC authority/issuer
@@ -86,6 +87,9 @@ spec:
                     - OAuth
                     type: string
                 type: object
+              state:
+                description: State provides user-readable status.
+                type: string
             type: object
         type: object
     served: true

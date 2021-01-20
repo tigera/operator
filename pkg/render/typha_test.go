@@ -22,28 +22,28 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Typha rendering tests", func() {
-	var installation *operator.Installation
+	var installation *operator.InstallationSpec
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
-	k8sServiceEp := render.K8sServiceEndpoint{}
+	k8sServiceEp := k8sapi.ServiceEndpoint{}
 	BeforeEach(func() {
 		registry = "test.registry.com/org"
 		// Initialize a default installation to use. Each test can override this to its
 		// desired configuration.
-		installation = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				KubernetesProvider: operator.ProviderNone,
-				//Variant ProductVariant `json:"variant,omitempty"`
-				Registry: registry,
-				CNI: &operator.CNISpec{
-					Type: operator.PluginCalico,
-				},
+		installation = &operator.InstallationSpec{
+			KubernetesProvider: operator.ProviderNone,
+			//Variant ProductVariant `json:"variant,omitempty"`
+			Registry: registry,
+			CNI: &operator.CNISpec{
+				Type: operator.PluginCalico,
 			},
 		}
 		typhaNodeTLS = &render.TyphaNodeTLS{
@@ -184,7 +184,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		installation.Spec.ComponentResources = []operator.ComponentResource{
+		installation.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameTypha,
 				ResourceRequirements: rr,

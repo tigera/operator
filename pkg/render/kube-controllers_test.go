@@ -20,10 +20,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -31,23 +33,22 @@ import (
 )
 
 var _ = Describe("kube-controllers rendering tests", func() {
-	var instance *operator.Installation
+	var instance *operator.InstallationSpec
+	var k8sServiceEp k8sapi.ServiceEndpoint
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 
 		miMode := operator.MultiInterfaceModeNone
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
-					MultiInterfaceMode: &miMode,
-				},
-				Registry: "test-reg/",
+		instance = &operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+				MultiInterfaceMode: &miMode,
 			},
+			Registry: "test-reg/",
 		}
-
+		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
 
 	It("should render all resources for a custom configuration", func() {
@@ -65,7 +66,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.KubeControllers(instance, false, nil, nil, nil, nil)
+		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -114,9 +115,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, true, nil, nil, nil, nil)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -156,9 +157,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil)
+		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -215,9 +216,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		instance.Spec.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		component := render.KubeControllers(instance, true, nil, nil, nil, nil)
+		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		instance.Variant = operator.TigeraSecureEnterprise
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -244,14 +245,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		instance.Spec.ComponentResources = []operator.ComponentResource{
+		instance.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameKubeControllers,
 				ResourceRequirements: rr,
 			},
 		}
 
-		component := render.KubeControllers(instance, false, nil, nil, nil, nil)
+		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
@@ -269,12 +270,15 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the OIDC prefix env variables", func() {
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(instance, true, nil, nil, nil, render.OIDCAuthentication{
+		authentication := &operator.Authentication{Spec: operator.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
-			GroupPrefix:    "gOIDC:",
-		})
+			GroupsPrefix:   "gOIDC:",
+			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
+		}}
+
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, authentication)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
@@ -296,5 +300,18 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		Expect(usernamePrefix).To(Equal("uOIDC:"))
 		Expect(groupPrefix).To(Equal("gOIDC:"))
+	})
+
+	It("should add the KUBERNETES_SERVICE_... variables", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil)
+		resources, _ := component.Objects()
+
+		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*apps.Deployment)
+		expectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 })

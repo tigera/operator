@@ -26,6 +26,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 var (
@@ -65,12 +66,12 @@ type TyphaNodeTLS struct {
 }
 
 func Calico(
-	k8sServiceEp K8sServiceEndpoint,
-	cr *operator.Installation,
+	k8sServiceEp k8sapi.ServiceEndpoint,
+	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
-	authentication interface{},
+	authentication *operator.Authentication,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
@@ -78,8 +79,8 @@ func Calico(
 	p operator.Provider,
 	aci *operator.AmazonCloudIntegration,
 	up bool,
+	nodeAppArmorProfile string,
 ) (Renderer, error) {
-
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
 
@@ -119,7 +120,7 @@ func Calico(
 	ns.ObjectMeta = metav1.ObjectMeta{Name: ns.Name, Namespace: common.CalicoNamespace}
 	tss = append(tss, ts, ns)
 
-	if managerInternalTLSSecret == nil && cr.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
+	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
 		// The certificate will be issued for ManagerServiceDNS and localhost
 		log.Info("Creating secret for internal manager credentials")
@@ -155,6 +156,7 @@ func Calico(
 		amazonCloudInt:              aci,
 		upgrade:                     up,
 		authentication:              authentication,
+		nodeAppArmorProfile:         nodeAppArmorProfile,
 	}, nil
 }
 
@@ -215,8 +217,8 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	k8sServiceEp                K8sServiceEndpoint
-	installation                *operator.Installation
+	k8sServiceEp                k8sapi.ServiceEndpoint
+	installation                *operator.InstallationSpec
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
@@ -229,18 +231,19 @@ type calicoRenderer struct {
 	provider                    operator.Provider
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
-	authentication              interface{}
+	authentication              *operator.Authentication
+	nodeAppArmorProfile         string
 }
 
 func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, PriorityClassDefinitions())
-	components = appendNotNil(components, Namespaces(r.installation.Spec.KubernetesProvider == operator.ProviderOpenShift, r.pullSecrets))
+	components = appendNotNil(components, Namespaces(r.installation, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
-	components = appendNotNil(components, KubeControllers(r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
 	return components
 }
 

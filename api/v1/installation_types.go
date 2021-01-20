@@ -209,7 +209,7 @@ type CalicoNetworkSpec struct {
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
 	// MTU specifies the maximum transmission unit to use on the pod network.
-	// Default: 1410
+	// If not specified, Calico will perform MTU auto-detection based on the cluster network.
 	// +optional
 	MTU *int32 `json:"mtu,omitempty"`
 
@@ -453,6 +453,14 @@ type InstallationStatus struct {
 	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
 	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
+
+	// MTU is the most recently observed value for pod network MTU. This may be an explicitly
+	// configured value, or based on Calico's native auto-detetion.
+	MTU int32 `json:"mtu,omitempty"`
+
+	// Computed is the final installation including overlaid resources.
+	// +optional
+	Computed *InstallationSpec `json:"computed,omitempty"`
 }
 
 // +kubebuilder:object:root=true

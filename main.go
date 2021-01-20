@@ -119,6 +119,7 @@ func main() {
 		fmt.Println(components.GetReference(components.ComponentEsCurator, "", ""))
 		fmt.Println(components.GetReference(components.ComponentKibana, "", ""))
 		fmt.Println(components.GetReference(components.ComponentElasticsearch, "", ""))
+		fmt.Println(components.GetReference(components.ComponentDex, "", ""))
 		os.Exit(0)
 	}
 

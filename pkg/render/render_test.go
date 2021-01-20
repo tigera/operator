@@ -20,6 +20,8 @@ import (
 	"fmt"
 
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+
 	"k8s.io/apimachinery/pkg/runtime"
 
 	. "github.com/onsi/ginkgo"
@@ -27,40 +29,39 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	zap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var _ = Describe("Rendering tests", func() {
-	var instance *operator.Installation
+	var instance *operator.InstallationSpec
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
 	one := intstr.FromInt(1)
 	miMode := operator.MultiInterfaceModeNone
-	k8sServiceEp := render.K8sServiceEndpoint{}
+	k8sServiceEp := k8sapi.ServiceEndpoint{}
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{
-					Type: operator.PluginCalico,
-					IPAM: &operator.IPAMSpec{
-						Type: operator.IPAMPluginCalico,
-					},
+		instance = &operator.InstallationSpec{
+			CNI: &operator.CNISpec{
+				Type: operator.PluginCalico,
+				IPAM: &operator.IPAMSpec{
+					Type: operator.IPAMPluginCalico,
 				},
-				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
-					MultiInterfaceMode: &miMode,
-				},
-				Registry: "test-reg/",
-				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-						MaxUnavailable: &one,
-					},
+			},
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+				MultiInterfaceMode: &miMode,
+			},
+			Registry: "test-reg/",
+			NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxUnavailable: &one,
 				},
 			},
 		}
@@ -86,7 +87,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "")
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 5 + 1 + 1))
 	})
@@ -95,26 +96,24 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
-		// - 1 ns (tigera-prometheus)
+		// - 1 ns (tigera-dex)
 		var nodeMetricsPort int32 = 9081
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		instance.Variant = operator.TigeraSecureEnterprise
+		instance.NodeMetricsPort = &nodeMetricsPort
+		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "")
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(((6 + 4 + 2 + 7 + 5 + 1) + 1 + 1)))
+		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
-		// - X Same as default config
-		// - 1 Service to expose calico/node metrics.
-		// - 1 ns (tigera-prometheus)
+		// - X Same as default config for EE
 		// - pass in internalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		instance.Spec.NodeMetricsPort = &nodeMetricsPort
+		instance.Variant = operator.TigeraSecureEnterprise
+		instance.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false)
+		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "")
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -126,6 +125,7 @@ var _ = Describe("Rendering tests", func() {
 		}{
 			{render.PriorityClassName, "", "scheduling.k8s.io", "v1beta1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
+			{render.DexObjectName, "", "", "v1", "Namespace"},
 			{render.TyphaCAConfigMapName, render.OperatorNamespace(), "", "v1", "ConfigMap"},
 			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{render.TyphaTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
@@ -165,6 +165,24 @@ var _ = Describe("Rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+	})
+
+	It("should render calico with a apparmor profile if annotation is present in installation", func() {
+		apparmorProf := "foobar"
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, apparmorProf)
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		comps := r.Render()
+		var cn *appsv1.DaemonSet
+		for _, comp := range comps {
+			resources, _ := comp.Objects()
+			r := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			if r != nil {
+				cn = r.(*appsv1.DaemonSet)
+				break
+			}
+		}
+		Expect(cn).ToNot(BeNil())
+		Expect(cn.Spec.Template.ObjectMeta.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(apparmorProf))
 	})
 })
 

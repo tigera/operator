@@ -196,7 +196,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.OIDCUsersSecreteName, render.ElasticsearchNamespace); err != nil {
+	if err = utils.AddSecretsWatch(c, render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
@@ -426,7 +426,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if oidcUserSecret, err = r.oidcUserSecret(ctx); err != nil {
+		if oidcUserSecret, err = r.oidcUsersEsSecret(ctx); err != nil {
 			r.status.SetDegraded("Failed to read oid user secret", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -691,14 +691,14 @@ func (r *ReconcileLogStorage) getOIDCUserConfigMap(ctx context.Context) (*corev1
 	return cm, nil
 }
 
-func (r *ReconcileLogStorage) oidcUserSecret(ctx context.Context) (*corev1.Secret, error) {
+func (r *ReconcileLogStorage) oidcUsersEsSecret(ctx context.Context) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersSecreteName, Namespace: render.ElasticsearchNamespace}, secret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersEsSecreteName, Namespace: render.ElasticsearchNamespace}, secret); err != nil {
 		if errors.IsNotFound(err) {
 			return &corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCUsersSecreteName,
+					Name:      render.OIDCUsersEsSecreteName,
 					Namespace: render.ElasticsearchNamespace,
 				},
 			}, nil

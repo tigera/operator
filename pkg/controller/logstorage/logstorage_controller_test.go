@@ -466,7 +466,7 @@ var _ = Describe("LogStorage controller", func() {
 						types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersConfigMapName},
 						&corev1.ConfigMap{})).ShouldNot(HaveOccurred())
 					Expect(cli.Get(ctx,
-						types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersSecreteName},
+						types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersEsSecreteName},
 						&corev1.Secret{})).ShouldNot(HaveOccurred())
 
 					mockStatus.AssertExpectations(GinkgoT())
@@ -634,7 +634,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		&corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.OIDCUsersSecreteName,
+				Name:      render.OIDCUsersEsSecreteName,
 				Namespace: render.ElasticsearchNamespace,
 			}})
 

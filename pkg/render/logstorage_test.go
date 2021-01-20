@@ -91,7 +91,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			oidcSecret = &corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCUsersSecreteName,
+					Name:      render.OIDCUsersEsSecreteName,
 					Namespace: render.ElasticsearchNamespace,
 				}}
 		})
@@ -166,7 +166,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 				expectedDeleteResources := []resourceTestObj{
 					{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
-					{render.OIDCUsersSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				}
 				component := render.LogStorage(
 					logStorage,
@@ -260,7 +260,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				expectedDeleteResources := []resourceTestObj{
 					{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
-					{render.OIDCUsersSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, nil},
 				}
@@ -346,7 +346,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 				expectedDeleteResources := []resourceTestObj{
 					{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
-					{render.OIDCUsersSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				}
 				component := render.LogStorage(
 					logStorage,
@@ -561,7 +561,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			oidcUserConfigMap := GetResource(deleteResources, render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, "", "v1", "ConfigMap")
 			Expect(oidcUserConfigMap).ShouldNot(BeNil())
 
-			oidcUserSecret := GetResource(deleteResources, render.OIDCUsersSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
+			oidcUserSecret := GetResource(deleteResources, render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
 			Expect(oidcUserSecret).ShouldNot(BeNil())
 		})
 
@@ -613,7 +613,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			oidcUserConfigMap := GetResource(createResources, render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, "", "v1", "ConfigMap")
 			Expect(oidcUserConfigMap).ShouldNot(BeNil())
 
-			oidcUserSecret := GetResource(createResources, render.OIDCUsersSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
+			oidcUserSecret := GetResource(createResources, render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
 			Expect(oidcUserSecret).ShouldNot(BeNil())
 		})
 	})

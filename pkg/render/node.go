@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 
 	apps "k8s.io/api/apps/v1"
@@ -41,8 +42,6 @@ const (
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation    = "hash.operator.tigera.io/cni-config"
-
-	techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
 )
 
 var (
@@ -56,30 +55,33 @@ var (
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
-	k8sServiceEp K8sServiceEndpoint,
-	cr *operator.Installation,
+	k8sServiceEp k8sapi.ServiceEndpoint,
+	cr *operator.InstallationSpec,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
+	nodeAppArmorProfile string,
 ) Component {
 	return &nodeComponent{
-		k8sServiceEp:    k8sServiceEp,
-		cr:              cr,
-		birdTemplates:   bt,
-		typhaNodeTLS:    tnTLS,
-		amazonCloudInt:  aci,
-		migrationNeeded: migrate,
+		k8sServiceEp:        k8sServiceEp,
+		cr:                  cr,
+		birdTemplates:       bt,
+		typhaNodeTLS:        tnTLS,
+		amazonCloudInt:      aci,
+		migrationNeeded:     migrate,
+		nodeAppArmorProfile: nodeAppArmorProfile,
 	}
 }
 
 type nodeComponent struct {
-	k8sServiceEp    K8sServiceEndpoint
-	cr              *operator.Installation
-	birdTemplates   map[string]string
-	typhaNodeTLS    *TyphaNodeTLS
-	amazonCloudInt  *operator.AmazonCloudIntegration
-	migrationNeeded bool
+	k8sServiceEp        k8sapi.ServiceEndpoint
+	cr                  *operator.InstallationSpec
+	birdTemplates       map[string]string
+	typhaNodeTLS        *TyphaNodeTLS
+	amazonCloudInt      *operator.AmazonCloudIntegration
+	migrationNeeded     bool
+	nodeAppArmorProfile string
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {
@@ -95,7 +97,7 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	var objsToDelete []runtime.Object
 
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
 		objsToCreate = append(objsToCreate, c.nodeMetricsService())
 	}
@@ -109,11 +111,11 @@ func (c *nodeComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objsToCreate = append(objsToCreate, btcm)
 	}
 
-	if c.cr.Spec.KubernetesProvider == operator.ProviderDockerEE {
+	if c.cr.KubernetesProvider == operator.ProviderDockerEE {
 		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		objsToCreate = append(objsToCreate, c.nodePodSecurityPolicy())
 	}
 
@@ -289,7 +291,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -316,7 +318,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -331,40 +333,54 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
-	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+	if c.cr.CNI.Type != operator.PluginCalico {
 		// If calico cni is not being used, then no cni configmap is needed.
 		return nil
 	}
 
 	// Determine MTU to use for veth interfaces.
-	var mtu int32 = 1410
+	// Zero means to use auto-detection.
+	var mtu int32 = 0
 	if m := getMTU(c.cr); m != nil {
 		mtu = *m
 	}
 
+	// Calico Enterprise doesn't do auto-MTU detection yet.
+	// If not specified, default it to the smallest value (wireguard) so that
+	// it will work in the most environments.
+	if c.cr.Variant == operatorv1.TigeraSecureEnterprise && mtu == 0 {
+		mtu = 1400
+	}
+
 	// Determine per-provider settings.
 	nodenameFileOptional := false
-	switch c.cr.Spec.KubernetesProvider {
+	switch c.cr.KubernetesProvider {
 	case operatorv1.ProviderDockerEE:
 		nodenameFileOptional = true
 	}
 
 	// Pull out other settings.
 	ipForward := false
-	if c.cr.Spec.CalicoNetwork.ContainerIPForwarding != nil {
-		ipForward = (*c.cr.Spec.CalicoNetwork.ContainerIPForwarding == operator.ContainerIPForwardingEnabled)
+	if c.cr.CalicoNetwork.ContainerIPForwarding != nil {
+		ipForward = (*c.cr.CalicoNetwork.ContainerIPForwarding == operator.ContainerIPForwardingEnabled)
 	}
 
 	// Determine portmap configuration to use.
 	var portmap string = ""
-	if c.cr.Spec.CalicoNetwork.HostPorts != nil && *c.cr.Spec.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
+	if c.cr.CalicoNetwork.HostPorts != nil && *c.cr.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
 		portmap = `,
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
 	ipam := c.getCalicoIPAM()
-	if c.cr.Spec.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
-		ipam = buildHostLocalIPAM(c.cr.Spec.CalicoNetwork)
+	if c.cr.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+		ipam = buildHostLocalIPAM(c.cr.CalicoNetwork)
+	}
+
+	var k8sAPIRoot string
+	apiRoot := c.k8sServiceEp.CNIAPIRoot()
+	if apiRoot != "" {
+		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
 	}
 
 	// Build the CNI configuration json.
@@ -386,7 +402,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "policy": {
           "type": "k8s"
       },
-      "kubernetes": {
+      "kubernetes": {%s
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
     },
@@ -395,7 +411,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, portmap)
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -414,12 +430,12 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
+	if v4pool := GetIPv4Pool(c.cr.CalicoNetwork.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
-	if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
+	if v6pool := GetIPv6Pool(c.cr.CalicoNetwork.IPPools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"
@@ -493,20 +509,18 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	}
 
 	// Include annotation for prometheus scraping configuration.
-	if c.cr.Spec.NodeMetricsPort != nil {
+	if c.cr.NodeMetricsPort != nil {
 		annotations["prometheus.io/scrape"] = "true"
-		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cr.NodeMetricsPort)
 	}
 
 	// check tech preview annotation for calico-node apparmor profile
-	a := c.cr.GetObjectMeta().GetAnnotations()
-	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
-		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = val
-
+	if c.nodeAppArmorProfile != "" {
+		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
 	initContainers := []v1.Container{}
-	if c.cr.Spec.FlexVolumePath != "None" {
+	if c.cr.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
@@ -527,7 +541,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 				},
 				Spec: v1.PodSpec{
 					Tolerations:                   c.nodeTolerations(),
-					ImagePullSecrets:              c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:              c.cr.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
@@ -536,11 +550,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Volumes:                       c.nodeVolumes(),
 				},
 			},
-			UpdateStrategy: c.cr.Spec.NodeUpdateStrategy,
+			UpdateStrategy: c.cr.NodeUpdateStrategy,
 		},
 	}
 
-	if c.cr.Spec.CNI.Type == operator.PluginCalico {
+	if c.cr.CNI.Type == operator.PluginCalico {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
@@ -563,7 +577,7 @@ func (c *nodeComponent) nodeTolerations() []v1.Toleration {
 // cniDirectories returns the binary and network config directories for the configured platform.
 func (c *nodeComponent) cniDirectories() (string, string, string) {
 	var cniBinDir, cniNetDir, cniLogDir string
-	switch c.cr.Spec.KubernetesProvider {
+	switch c.cr.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		cniNetDir = "/var/run/multus/cni/net.d"
 		cniBinDir = "/var/lib/cni/bin"
@@ -612,7 +626,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
-	if c.cr.Spec.CNI.Type == operator.PluginCalico {
+	if c.cr.CNI.Type == operator.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
 		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
 		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
@@ -621,7 +635,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Override with Tigera-specific config.
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		// Add volume for calico logs.
 		calicoLogVol := v1.Volume{
 			Name:         "var-log-calico",
@@ -631,11 +645,11 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	}
 
 	// Create and append flexvolume
-	if c.cr.Spec.FlexVolumePath != "None" {
+	if c.cr.FlexVolumePath != "None" {
 		volumes = append(volumes, v1.Volume{
 			Name: "flexvol-driver-host",
 			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: c.cr.Spec.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
+				HostPath: &v1.HostPathVolumeSource{Path: c.cr.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
 			},
 		})
 	}
@@ -664,9 +678,9 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Registry, c.cr.ImagePath)
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Registry, c.cr.ImagePath)
 	}
 
 	return v1.Container{
@@ -690,7 +704,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Spec.Registry, c.cr.Spec.ImagePath),
+		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Registry, c.cr.ImagePath),
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
 			Privileged: Bool(true),
@@ -700,7 +714,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
-	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+	if c.cr.CNI.Type != operator.PluginCalico {
 		return []v1.EnvVar{}
 	}
 
@@ -726,9 +740,9 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 
 	envVars = append(envVars, c.k8sServiceEp.EnvVars()...)
 
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
+			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
 
@@ -740,9 +754,9 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
 
 	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoNode, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraNode, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	image := components.GetReference(components.ComponentCalicoNode, c.cr.Registry, c.cr.ImagePath)
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		image = components.GetReference(components.ComponentTigeraNode, c.cr.Registry, c.cr.ImagePath)
 	}
 	return v1.Container{
 		Name:            "calico-node",
@@ -772,12 +786,12 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
-	} else if c.cr.Spec.CNI.Type == operator.PluginCalico {
+	} else if c.cr.CNI.Type == operator.PluginCalico {
 		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
@@ -810,7 +824,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	// Set the clusterType.
 	clusterType := "k8s,operator"
 
-	switch c.cr.Spec.KubernetesProvider {
+	switch c.cr.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"
 	case operator.ProviderEKS:
@@ -874,11 +888,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	// If there are no IP pools specified, then configure no default IP pools.
-	if c.cr.Spec.CalicoNetwork == nil || len(c.cr.Spec.CalicoNetwork.IPPools) == 0 {
+	if c.cr.CalicoNetwork == nil || len(c.cr.CalicoNetwork.IPPools) == 0 {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 	} else {
 		// Configure IPv4 pool
-		if v4pool := GetIPv4Pool(c.cr.Spec.CalicoNetwork.IPPools); v4pool != nil {
+		if v4pool := GetIPv4Pool(c.cr.CalicoNetwork.IPPools); v4pool != nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
 
 			switch v4pool.Encapsulation {
@@ -910,7 +924,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 
 		// Configure IPv6 pool.
-		if v6pool := GetIPv6Pool(c.cr.Spec.CalicoNetwork.IPPools); v6pool != nil {
+		if v6pool := GetIPv6Pool(c.cr.CalicoNetwork.IPPools); v6pool != nil {
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
 
 			if v6pool.BlockSize != nil {
@@ -928,21 +942,24 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
 	// MTU of 1460.
-	ipipMtu := "1440"
-	vxlanMtu := "1410"
-	wireguardMtu := "1400"
-	if m := getMTU(c.cr); m != nil {
-		ipipMtu = strconv.Itoa(int(*m))
-		vxlanMtu = strconv.Itoa(int(*m))
-		wireguardMtu = strconv.Itoa(int(*m))
+	mtu := getMTU(c.cr)
+	if mtu != nil {
+		vxlanMtu := strconv.Itoa(int(*mtu))
+		wireguardMtu := strconv.Itoa(int(*mtu))
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+	} else if c.cr.Variant == operatorv1.TigeraSecureEnterprise {
+		// Calico Enterprise does not yet support auto-MTU in this release.
+		v := int32(1440)
+		mtu = &v
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: "1410"})
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: "1400"})
 	}
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cr) {
-		if c.cr.Spec.CNI.Type == operator.PluginCalico {
-			if c.cr.Spec.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+		if c.cr.CNI.Type == operator.PluginCalico {
+			if c.cr.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
 				// If BGP is disabled and using HostLocal, then that means routing is done
 				// by Cloud routing, so networking backend is none. (because we don't support
 				// vxlan with HostLocal.)
@@ -959,13 +976,16 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	} else {
 		// BGP is enabled.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		if mtu != nil {
+			ipipMtu := strconv.Itoa(int(*mtu))
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+		}
 	}
 
 	// IPv4 auto-detection configuration.
 	var v4Method string
-	if c.cr.Spec.CalicoNetwork != nil {
-		v4Method = getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
+	if c.cr.CalicoNetwork != nil {
+		v4Method = getAutodetectionMethod(c.cr.CalicoNetwork.NodeAddressAutodetectionV4)
 	}
 	if v4Method != "" {
 		// IPv4 Auto-detection is enabled.
@@ -978,8 +998,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	// IPv6 auto-detection and ippool configuration.
 	var v6Method string
-	if c.cr.Spec.CalicoNetwork != nil {
-		v6Method = getAutodetectionMethod(c.cr.Spec.CalicoNetwork.NodeAddressAutodetectionV6)
+	if c.cr.CalicoNetwork != nil {
+		v6Method = getAutodetectionMethod(c.cr.CalicoNetwork.NodeAddressAutodetectionV6)
 	}
 	if v6Method != "" {
 		// IPv6 Auto-detection is enabled.
@@ -997,7 +1017,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -1010,35 +1030,35 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
 
-		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-			extraNodeEnv = append(extraNodeEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
+			extraNodeEnv = append(extraNodeEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
-	if c.cr.Spec.NodeMetricsPort != nil {
+	if c.cr.NodeMetricsPort != nil {
 		// If a node metrics port was given, then enable felix prometheus metrics and set the port.
 		// Note that this takes precedence over any FelixConfiguration resources in the cluster.
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSMETRICSENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cr.Spec.NodeMetricsPort)},
+			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cr.NodeMetricsPort)},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
 	// Configure provider specific environment variables here.
-	switch c.cr.Spec.KubernetesProvider {
+	switch c.cr.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
-		if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+		if c.cr.Variant == operator.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
 	}
 
-	switch c.cr.Spec.CNI.Type {
+	switch c.cr.CNI.Type {
 	case operator.PluginAmazonVPC:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
@@ -1053,7 +1073,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESBACKEND", Value: "auto"})
 
-	if c.cr.Spec.CNI.Type != operator.PluginCalico {
+	if c.cr.CNI.Type != operator.PluginCalico {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
 	}
 
@@ -1081,7 +1101,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 
 	// Want to check for BGP metrics server if this is enterprise
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
@@ -1091,7 +1111,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	}
 
 	// For Openshift, we need a different port since our default port is already in use.
-	if c.cr.Spec.KubernetesProvider == operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider == operator.ProviderOpenShift {
 		livenessPort = intstr.FromInt(9199)
 	}
 
@@ -1206,17 +1226,17 @@ func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
 }
 
 // bgpEnabled returns true if the given Installation enables BGP, false otherwise.
-func bgpEnabled(instance *operator.Installation) bool {
-	return instance.Spec.CalicoNetwork != nil &&
-		instance.Spec.CalicoNetwork.BGP != nil &&
-		*instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled
+func bgpEnabled(instance *operator.InstallationSpec) bool {
+	return instance.CalicoNetwork != nil &&
+		instance.CalicoNetwork.BGP != nil &&
+		*instance.CalicoNetwork.BGP == operatorv1.BGPEnabled
 }
 
 // getMTU returns the MTU configured in the Installation if there is one, nil otherwise.
-func getMTU(instance *operator.Installation) *int32 {
+func getMTU(instance *operator.InstallationSpec) *int32 {
 	var mtu *int32
-	if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
-		mtu = instance.Spec.CalicoNetwork.MTU
+	if instance.CalicoNetwork != nil && instance.CalicoNetwork.MTU != nil {
+		mtu = instance.CalicoNetwork.MTU
 	}
 	return mtu
 }

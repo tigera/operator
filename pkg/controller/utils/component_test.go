@@ -16,12 +16,15 @@ package utils_test
 
 import (
 	"context"
+	"fmt"
 
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,6 +69,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
@@ -188,8 +192,19 @@ var _ = Describe("Component handler tests", func() {
 			nodeSelectors = obj.(*apps.StatefulSet).Spec.Template.Spec.NodeSelector
 		case *batchv1beta.CronJob:
 			nodeSelectors = obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec.NodeSelector
-		default:
+		case *batchv1.Job:
+			nodeSelectors = obj.(*batchv1.Job).Spec.Template.Spec.NodeSelector
+		case *kbv1.Kibana:
+			nodeSelectors = obj.(*kbv1.Kibana).Spec.PodTemplate.Spec.NodeSelector
+		case *esv1.Elasticsearch:
+			// elasticsearch resource describes multiple nodeSets which each have a nodeSelector.
+			nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
+			for _, ns := range nodeSets {
+				Expect(ns.PodTemplate.Spec.NodeSelector).Should(Equal(expectedNodeSelectors))
+			}
 			return
+		default:
+			Expect(fmt.Errorf("unexpected type passed to test")).ToNot(HaveOccurred())
 		}
 
 		Expect(nodeSelectors).Should(Equal(expectedNodeSelectors))
@@ -277,6 +292,83 @@ var _ = Describe("Component handler tests", func() {
 						}},
 					},
 				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1beta.CronJob{},
+				map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "sets the required annotations for a job",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeLinux,
+					objs: []runtime.Object{&batchv1.Job{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
+						Spec: batchv1.JobSpec{
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						},
+					}},
+				},
+				client.ObjectKey{Name: "test-job"}, &batchv1.Job{},
+				map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "sets the required annotations for kibana",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeLinux,
+					objs: []runtime.Object{&kbv1.Kibana{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
+						Spec: kbv1.KibanaSpec{
+							PodTemplate: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						},
+					}},
+				},
+				client.ObjectKey{Name: "test-kibana"}, &kbv1.Kibana{},
+				map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "sets the required annotations for an elasticsearch nodeset",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeLinux,
+					objs: []runtime.Object{&esv1.Elasticsearch{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-elasticsearch"},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									PodTemplate: v1.PodTemplateSpec{
+										Spec: v1.PodSpec{
+											NodeSelector: map[string]string{},
+										},
+									},
+								},
+								{
+									PodTemplate: v1.PodTemplateSpec{
+										Spec: v1.PodSpec{
+											NodeSelector: nil,
+										},
+									},
+								},
+							},
+						},
+					}},
+				},
+				client.ObjectKey{Name: "test-elasticsearch"}, &esv1.Elasticsearch{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},

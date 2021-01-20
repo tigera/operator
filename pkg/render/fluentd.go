@@ -83,9 +83,8 @@ func Fluentd(
 	spC *SplunkCredential,
 	f *FluentdFilters,
 	eksConfig *EksCloudwatchLogConfig,
-
 	pullSecrets []*corev1.Secret,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 ) Component {
 	return &fluentdComponent{
 		lc:              lc,
@@ -118,7 +117,7 @@ type fluentdComponent struct {
 	filters         *FluentdFilters
 	eksConfig       *EksCloudwatchLogConfig
 	pullSecrets     []*corev1.Secret
-	installation    *operatorv1.Installation
+	installation    *operatorv1.InstallationSpec
 }
 
 func (c *fluentdComponent) SupportedOSType() OSType {
@@ -130,7 +129,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs,
 		createNamespace(
 			LogCollectorNamespace,
-			c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift))
+			c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, LogCollectorNamespace)...)
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())
@@ -142,7 +141,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.eksConfig != nil {
-		if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
+		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
 				c.eksLogForwarderClusterRoleBinding(),
@@ -152,7 +151,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 			c.eksLogForwarderSecret(),
 			c.eksLogForwarderDeployment())
 	}
-	if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		objs = append(objs,
 			c.fluentdClusterRole(),
 			c.fluentdClusterRoleBinding(),
@@ -348,13 +347,13 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	isPrivileged := false
 	//On OpenShift Fluentd needs privileged access to access logs on host path volume
-	if c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		isPrivileged = true
 	}
 
 	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
-		Image:           components.GetReference(components.ComponentFluentd, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+		Image:           components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath),
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -405,8 +404,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		if syslog != nil {
 			proto, host, port, _ := ParseEndpoint(syslog.Endpoint)
 			envs = append(envs,
-				corev1.EnvVar{Name: "SYSLOG_FLOW_LOG", Value: "true"},
-				corev1.EnvVar{Name: "SYSLOG_AUDIT_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SYSLOG_HOST", Value: host},
 				corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
 				corev1.EnvVar{Name: "SYSLOG_PROTOCOL", Value: proto},
@@ -426,6 +423,32 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 						Value: fmt.Sprintf("%d", *syslog.PacketSize),
 					},
 				)
+			}
+
+			if syslog.LogTypes != nil {
+				for _, t := range syslog.LogTypes {
+					switch t {
+					case operatorv1.SyslogLogAudit:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_AUDIT_EE_LOG", Value: "true"},
+						)
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_AUDIT_KUBE_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogDNS:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_DNS_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogFlows:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_FLOW_LOG", Value: "true"},
+						)
+					case operatorv1.SyslogLogIDSEvents:
+						envs = append(envs,
+							corev1.EnvVar{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true"},
+						)
+					}
+				}
 			}
 		}
 		splunk := c.lc.Spec.AdditionalStores.Splunk
@@ -685,14 +708,14 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName + "-startup",
-						Image:        components.GetReference(components.ComponentFluentd, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+						Image:        components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath),
 						Command:      []string{"/bin/eks-log-forwarder-startup"},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         eksLogForwarderName,
-						Image:        components.GetReference(components.ComponentFluentd, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+						Image:        components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath),
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret)},

@@ -165,8 +165,8 @@ var _ = Describe("Status reporting tests", func() {
 			sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS2"}})
 			sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "CJ1"}})
 			sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "CJ2"}})
-			sm.AddCertificateSigningRequests("CSR1")
-			sm.AddCertificateSigningRequests("CSR2")
+			sm.AddCertificateSigningRequests("CSR1", map[string]string{"k8s-app": "CSR1"})
+			sm.AddCertificateSigningRequests("CSR2", map[string]string{"k8s-app": "CSR2"})
 
 			Expect(sm.statefulsets).Should(Equal(map[string]types.NamespacedName{
 				"NS1/SS1": {Namespace: "NS1", Name: "SS1"},
@@ -184,9 +184,9 @@ var _ = Describe("Status reporting tests", func() {
 				"NS1/CJ1": {Namespace: "NS1", Name: "CJ1"},
 				"NS1/CJ2": {Namespace: "NS1", Name: "CJ2"},
 			}))
-			Expect(sm.certificatestatusrequests).Should(Equal(map[string]bool{
-				"CSR1": true,
-				"CSR2": true,
+			Expect(sm.certificatestatusrequests).Should(Equal(map[string]map[string]string{
+				"CSR1": {"k8s-app": "CSR1"},
+				"CSR2": {"k8s-app": "CSR2"},
 			}))
 		})
 
@@ -207,8 +207,8 @@ var _ = Describe("Status reporting tests", func() {
 				{Namespace: "NS1", Name: "CJ1"},
 				{Namespace: "NS1", Name: "CJ2"},
 			})
-			sm.AddCertificateSigningRequests("CSR1")
-			sm.AddCertificateSigningRequests("CSR2")
+			sm.AddCertificateSigningRequests("CSR1", map[string]string{"k8s-app": "CSR1"})
+			sm.AddCertificateSigningRequests("CSR2", map[string]string{"k8s-app": "CSR2"})
 
 			sm.RemoveStatefulSets(types.NamespacedName{Namespace: "NS1", Name: "SS2"})
 			sm.RemoveDeployments(types.NamespacedName{Namespace: "NS1", Name: "DP2"})
@@ -228,8 +228,8 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.cronjobs).Should(Equal(map[string]types.NamespacedName{
 				"NS1/CJ1": {Namespace: "NS1", Name: "CJ1"},
 			}))
-			Expect(sm.certificatestatusrequests).Should(Equal(map[string]bool{
-				"CSR1": true,
+			Expect(sm.certificatestatusrequests).Should(Equal(map[string]map[string]string{
+				"CSR1": {"k8s-app": "CSR1"},
 			}))
 		})
 
@@ -237,7 +237,7 @@ var _ = Describe("Status reporting tests", func() {
 			for _, csr := range csrs {
 				Expect(client.Create(ctx, csr)).NotTo(HaveOccurred())
 			}
-			pending, err := hasPendingCSR(ctx, client, label)
+			pending, err := hasPendingCSR(ctx, client, map[string]string{"k8s-app": label})
 			Expect(err != nil).To(Equal(expectErr))
 			Expect(pending).To(Equal(expectPending))
 		},

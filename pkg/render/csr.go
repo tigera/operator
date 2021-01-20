@@ -94,7 +94,7 @@ func csrClusterRole() runtime.Object {
 			{
 				APIGroups: []string{"certificates.k8s.io"},
 				Resources: []string{"certificatesigningrequests"},
-				Verbs:     []string{"create", "watch"},
+				Verbs:     []string{"create", "watch", "delete"},
 			},
 		},
 	}

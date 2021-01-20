@@ -37,8 +37,8 @@ func (m *MockStatus) AddCronJobs(cjs []types.NamespacedName) {
 	m.Called(cjs)
 }
 
-func (m *MockStatus) AddCertificateSigningRequests(label string) {
-	m.Called(label)
+func (m *MockStatus) AddCertificateSigningRequests(name string, labels map[string]string) {
+	m.Called(name)
 }
 
 func (m *MockStatus) RemoveDaemonsets(dss ...types.NamespacedName) {

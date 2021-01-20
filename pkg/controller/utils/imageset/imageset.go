@@ -50,14 +50,13 @@ func AddImageSetWatch(c controller.Controller) error {
 }
 
 func getSetName(v operator.ProductVariant) string {
-	setName := fmt.Sprintf("calico-%s", components.CalicoRelease)
 	if v == operator.TigeraSecureEnterprise {
-		setName = fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
+		return fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
 	}
-	return setName
+	return fmt.Sprintf("calico-%s", components.CalicoRelease)
 }
 
-// GetImageSet finds the ImageSet CR for specified variant and for the appropriate version.
+// GetImageSet finds the ImageSet for specified variant.
 func GetImageSet(ctx context.Context, cli client.Client, v operator.ProductVariant) (*operator.ImageSet, error) {
 	isl := &operator.ImageSetList{}
 

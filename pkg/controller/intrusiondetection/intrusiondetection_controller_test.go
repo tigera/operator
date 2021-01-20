@@ -133,7 +133,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Name:      render.ECKLicenseConfigMapName,
 				Namespace: render.ECKOperatorNamespace,
 			},
-			Data: map[string]string{"eck_license_level": string(render.ElasticLicenseTypeEnterpriseTrial)},
+			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())
 
 		// Apply the intrusiondetection CR to the fake cluster.

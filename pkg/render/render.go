@@ -81,6 +81,7 @@ func Calico(
 	up bool,
 	nodeAppArmorProfile string,
 	clusterDomain string,
+	esLicenseType ElasticsearchLicenseType,
 ) (Renderer, error) {
 	tcms := []*corev1.ConfigMap{}
 	tss := []*corev1.Secret{}
@@ -158,6 +159,7 @@ func Calico(
 		upgrade:                     up,
 		authentication:              authentication,
 		nodeAppArmorProfile:         nodeAppArmorProfile,
+		esLicenseType:               esLicenseType,
 	}, nil
 }
 
@@ -234,6 +236,7 @@ type calicoRenderer struct {
 	upgrade                     bool
 	authentication              *operator.Authentication
 	nodeAppArmorProfile         string
+	esLicenseType               ElasticsearchLicenseType
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -244,7 +247,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade))
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile))
-	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication, r.esLicenseType))
 	return components
 }
 

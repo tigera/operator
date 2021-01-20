@@ -114,6 +114,13 @@ func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.TyphaAffinity = override.TyphaAffinity
 	}
 
+	switch compareFields(inst.CertificateManagement, override.CertificateManagement) {
+	case BOnlySet:
+		inst.CertificateManagement = override.CertificateManagement.DeepCopy()
+	case Different:
+		override.CertificateManagement.DeepCopyInto(inst.CertificateManagement)
+	}
+
 	return inst
 }
 

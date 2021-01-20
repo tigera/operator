@@ -55,13 +55,14 @@ const (
 func Compliance(
 	esSecrets []*corev1.Secret,
 	managerInternalTLSSecret *corev1.Secret,
-	installation *operatorv1.Installation,
+	installation *operatorv1.InstallationSpec,
 	complianceServerCertSecret *corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
+	dexCfg DexKeyValidatorConfig,
 ) (Component, error) {
 	var complianceServerCertSecrets []*corev1.Secret
 	if complianceServerCertSecret == nil {
@@ -91,19 +92,21 @@ func Compliance(
 		openshift:                   openshift,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
+		dexCfg:                      dexCfg,
 	}, nil
 }
 
 type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
 	managerInternalTLSSecret    *corev1.Secret
-	installation                *operatorv1.Installation
+	installation                *operatorv1.InstallationSpec
 	esClusterConfig             *ElasticsearchClusterConfig
 	pullSecrets                 []*corev1.Secret
 	complianceServerCertSecrets []*corev1.Secret
 	openshift                   bool
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
+	dexCfg                      DexKeyValidatorConfig
 }
 
 func (c *complianceComponent) SupportedOSType() OSType {
@@ -153,6 +156,10 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
+	if c.dexCfg != nil {
+		complianceObjs = append(complianceObjs, secretsToRuntimeObjects(c.dexCfg.RequiredSecrets(ComplianceNamespace)...)...)
+	}
+
 	var objsToDelete []runtime.Object
 	// Compliance server is only for Standalone or Management clusters
 	if c.managementClusterConnection == nil {
@@ -182,7 +189,7 @@ func (c *complianceComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
-	if c.installation.Spec.KubernetesProvider == operatorv1.ProviderDockerEE {
+	if c.installation.KubernetesProvider == operatorv1.ProviderDockerEE {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
@@ -338,7 +345,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 	}
-
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
@@ -359,7 +365,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:          ComplianceControllerName,
-					Image:         components.GetReference(components.ComponentComplianceController, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+					Image:         components.GetReference(components.ComponentComplianceController, c.installation.Registry, c.installation.ImagePath),
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret),
@@ -447,7 +453,7 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	privileged := false
-	//On OpenShift reported needs privileged access to write compliance reports to host path volume
+	// On OpenShift reporter needs privileged access to write compliance reports to host path volume
 	if c.openshift {
 		privileged = true
 	}
@@ -486,7 +492,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					ElasticsearchContainerDecorateIndexCreator(
 						ElasticsearchContainerDecorate(corev1.Container{
 							Name:          "reporter",
-							Image:         components.GetReference(components.ComponentComplianceReporter, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+							Image:         components.GetReference(components.ComponentComplianceReporter, c.installation.Registry, c.installation.ImagePath),
 							Env:           envVars,
 							LivenessProbe: complianceLivenessProbe,
 							SecurityContext: &corev1.SecurityContext{
@@ -632,7 +638,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
-	defaultMode := int32(420)
+	if c.dexCfg != nil {
+		envVars = append(envVars, c.dexCfg.RequiredEnv("TIGERA_COMPLIANCE_")...)
+	}
 	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
@@ -654,7 +662,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				ElasticsearchContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
-					Image: components.GetReference(components.ComponentComplianceServer, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+					Image: components.GetReference(components.ComponentComplianceServer, c.installation.Registry, c.installation.ImagePath),
 					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
@@ -680,10 +688,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: complianceVolumeMounts(c.managerInternalTLSSecret),
+					VolumeMounts: c.complianceVolumeMounts(),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret),
 			},
-			Volumes: complianceVolumes(defaultMode, c.managerInternalTLSSecret),
+			Volumes: c.complianceVolumes(),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -713,14 +721,14 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 	return psp
 }
 
-func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
+func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{{
 		Name:      "cert",
 		MountPath: "/code/apiserver.local.config/certificates",
 		ReadOnly:  true,
 	}}
 
-	if managerSecret != nil {
+	if c.managerInternalTLSSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      ManagerInternalTLSSecretName,
 			MountPath: "/manager-tls",
@@ -728,10 +736,15 @@ func complianceVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
 		})
 	}
 
+	if c.dexCfg != nil {
+		mounts = append(mounts, c.dexCfg.RequiredVolumeMounts()...)
+	}
+
 	return mounts
 }
 
-func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1.Volume {
+func (c *complianceComponent) complianceVolumes() []corev1.Volume {
+	defaultMode := int32(420)
 	var volumes = []corev1.Volume{{
 		Name: "cert",
 		VolumeSource: corev1.VolumeSource{
@@ -751,7 +764,7 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 			},
 		}}}
 
-	if managerSecret != nil {
+	if c.managerInternalTLSSecret != nil {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: ManagerInternalTLSSecretName,
@@ -768,6 +781,10 @@ func complianceVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1
 					},
 				},
 			})
+	}
+
+	if c.dexCfg != nil {
+		volumes = append(volumes, c.dexCfg.RequiredVolumes()...)
 	}
 
 	return volumes
@@ -876,7 +893,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          ComplianceSnapshotterName,
-						Image:         components.GetReference(components.ComponentComplianceSnapshotter, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+						Image:         components.GetReference(components.ComponentComplianceSnapshotter, c.installation.Registry, c.installation.ImagePath),
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
 					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
@@ -1033,7 +1050,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				ElasticsearchContainerDecorateIndexCreator(
 					ElasticsearchContainerDecorate(corev1.Container{
 						Name:          "compliance-benchmarker",
-						Image:         components.GetReference(components.ComponentComplianceBenchmarker, c.installation.Spec.Registry, c.installation.Spec.ImagePath),
+						Image:         components.GetReference(components.ComponentComplianceBenchmarker, c.installation.Registry, c.installation.ImagePath),
 						Env:           envVars,
 						VolumeMounts:  volMounts,
 						LivenessProbe: complianceLivenessProbe,

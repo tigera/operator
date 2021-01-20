@@ -28,17 +28,15 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var s3Creds *render.S3Credential
 	var filters *render.FluentdFilters
 	var eksConfig *render.EksCloudwatchLogConfig
-	var installation *operatorv1.Installation
+	var installation *operatorv1.InstallationSpec
 	var esConfigMap *render.ElasticsearchClusterConfig
 	var splkCreds *render.SplunkCredential
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		instance = &operatorv1.LogCollector{}
-		installation = &operatorv1.Installation{
-			Spec: operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-			},
+		installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderNone,
 		}
 		s3Creds = nil
 		filters = nil
@@ -191,6 +189,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Syslog: &operatorv1.SyslogStoreSpec{
 				Endpoint:   "tcp://1.2.3.4:80",
 				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
 			},
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
@@ -215,13 +218,14 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			secretName string
 			secretKey  string
 		}{
-			{"SYSLOG_FLOW_LOG", "true", "", ""},
-			{"SYSLOG_AUDIT_LOG", "true", "", ""},
 			{"SYSLOG_HOST", "1.2.3.4", "", ""},
 			{"SYSLOG_PORT", "80", "", ""},
 			{"SYSLOG_PROTOCOL", "tcp", "", ""},
 			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
 			{"SYSLOG_PACKET_SIZE", "180", "", ""},
+			{"SYSLOG_DNS_LOG", "true", "", ""},
+			{"SYSLOG_FLOW_LOG", "true", "", ""},
+			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {
@@ -244,7 +248,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 					FieldPath: "spec.nodeName",
 				}},
 		}))
-
 	})
 
 	It("should render with splunk configuration with ca", func() {
@@ -475,10 +478,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
 			FetchInterval: fetchInterval,
 		}
-		installation = &operatorv1.Installation{
-			Spec: operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderEKS,
-			},
+		installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderEKS,
 		}
 		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation)
 		resources, _ := component.Objects()

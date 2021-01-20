@@ -29,6 +29,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 )
 
@@ -45,8 +46,8 @@ const (
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
 func Typha(
-	k8sServiceEp K8sServiceEndpoint,
-	installation *operator.Installation,
+	k8sServiceEp k8sapi.ServiceEndpoint,
+	installation *operator.InstallationSpec,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
@@ -61,8 +62,8 @@ func Typha(
 }
 
 type typhaComponent struct {
-	k8sServiceEp       K8sServiceEndpoint
-	installation       *operator.Installation
+	k8sServiceEp       k8sapi.ServiceEndpoint
+	installation       *operator.InstallationSpec
 	typhaNodeTLS       *TyphaNodeTLS
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
@@ -82,7 +83,7 @@ func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
 		c.typhaPodDisruptionBudget(),
 	}
 
-	if c.installation.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
@@ -262,7 +263,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.installation.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -289,7 +290,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.installation.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
@@ -341,7 +342,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					Tolerations:                   c.tolerations(),
-					ImagePullSecrets:              c.installation.Spec.ImagePullSecrets,
+					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
@@ -420,9 +421,9 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoTypha, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
-	if c.installation.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraTypha, c.installation.Spec.Registry, c.installation.Spec.ImagePath)
+	image := components.GetReference(components.ComponentCalicoTypha, c.installation.Registry, c.installation.ImagePath)
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
+		image = components.GetReference(components.ComponentTigeraTypha, c.installation.Registry, c.installation.ImagePath)
 	}
 	return v1.Container{
 		Name:           "calico-typha",
@@ -476,7 +477,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		}},
 	}
 
-	switch c.installation.Spec.CNI.Type {
+	switch c.installation.CNI.Type {
 	case operator.PluginAmazonVPC:
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 	case operator.PluginGKE:
@@ -485,11 +486,11 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
-	if c.installation.Spec.Variant == operator.TigeraSecureEnterprise {
-		if c.installation.Spec.CalicoNetwork != nil && c.installation.Spec.CalicoNetwork.MultiInterfaceMode != nil {
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
+		if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, v1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.installation.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+				Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
 

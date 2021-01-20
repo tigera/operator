@@ -23,6 +23,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -85,6 +86,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch installer job: %v", err)
+	}
+
+	// Watch for changes to to primary resource LogCollector, to determine if syslog forwarding is
+	// turned on or off.
+	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -166,7 +174,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Query for the installation object.
-	network, err := installation.GetInstallation(context.Background(), r.client)
+	_, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -184,6 +192,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// Query for the LogCollector instance. We need this to determine whether or not
+	// to forward IDS event logs. Since this is optional, we don't need to degrade or
+	// change status if LogCollector is not found.
+	lc, err := logcollector.GetLogCollector(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Info("(optional) LogCollector object not found, proceed without it")
+		}
+	}
+
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -196,10 +214,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(context.Background(), []string{
-		render.ElasticsearchIntrusionDetectionUserSecret, render.ElasticsearchIntrusionDetectionJobUserSecret,
-	},
-		r.client)
+	esSecrets, err := utils.ElasticsearchSecrets(
+		context.Background(),
+		[]string{
+			render.ElasticsearchIntrusionDetectionUserSecret,
+			render.ElasticsearchIntrusionDetectionJobUserSecret,
+		},
+		r.client,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
@@ -223,6 +245,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	component := render.IntrusionDetection(
+		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
 		network,
@@ -245,7 +268,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Everything is available - update the CRD status.
-	instance.Status.State = operatorv1.IntrusionDetectionStatusReady
+	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

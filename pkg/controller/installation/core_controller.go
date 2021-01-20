@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -59,16 +62,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var k8sEndpoint render.K8sServiceEndpoint
-
-func init() {
-	// We read whatever is in the variable. We would read "" if they were not set.
-	// We decide at the point of usage what to do with the values.
-	k8sEndpoint = render.K8sServiceEndpoint{
-		Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
-		Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
-	}
-}
+const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
 
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
@@ -78,7 +72,7 @@ var openshiftNetworkConfig = "cluster"
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	ri, err := newReconciler(mgr, opts)
 	if err != nil {
-		return fmt.Errorf("failed to create Core Reconciler: %v", err)
+		return fmt.Errorf("failed to create Core Reconciler: %w", err)
 	}
 	return add(mgr, ri)
 }
@@ -87,7 +81,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize Namespace migration: %v", err)
+		return nil, fmt.Errorf("Failed to initialize Namespace migration: %w", err)
 	}
 
 	statusManager := status.New(mgr.GetClient(), "calico")
@@ -114,7 +108,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Create a new controller
 	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create tigera-installation-controller: %v", err)
+		return fmt.Errorf("Failed to create tigera-installation-controller: %w", err)
 	}
 
 	r.controller = c
@@ -122,7 +116,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for changes to primary resource Installation
 	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %w", err)
 	}
 
 	if r.autoDetectedProvider == operator.ProviderOpenShift {
@@ -131,7 +125,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %v", err)
+				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)
 			}
 		}
 	}
@@ -141,12 +135,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// may have been provided by the user with arbitrary names.
 	err = utils.AddSecretsWatch(c, "", render.OperatorNamespace())
 	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %v", err)
+		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	cm := render.BirdTemplatesConfigMapName
 	if err = utils.AddConfigMapWatch(c, cm, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %v", cm, err)
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
@@ -154,7 +148,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
+			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %w", err)
 		}
 	}
 
@@ -179,7 +173,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			OwnerType:    &operator.Installation{},
 		}, pred)
 		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch %s: %v", t, err)
+			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", t, err)
 		}
 	}
 
@@ -239,12 +233,29 @@ type ReconcileInstallation struct {
 	migrationChecked     bool
 }
 
-// GetInstallation returns the current installation resource.
-func GetInstallation(ctx context.Context, client client.Client) (*operator.Installation, error) {
+// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
+// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
+// launch enterprise-dependent components.
+func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *operator.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
-	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
-	return instance, err
+	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		return instance.Status.Variant, nil, err
+	}
+
+	spec := instance.Spec
+
+	// update Installation with 'overlay'
+	overlay := operator.Installation{}
+	if err := client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return instance.Status.Variant, nil, err
+		}
+	} else {
+		spec = overrideInstallationSpec(spec, overlay.Spec)
+	}
+
+	return instance.Status.Variant, &spec, nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -545,10 +556,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil && apierrors.IsNotFound(err) {
-		reqLogger.Info("Installation config not found")
-		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			reqLogger.Info("Installation config not found")
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
+		}
+		reqLogger.Error(err, "An error occurred when querying the Installation resource")
+		return reconcile.Result{}, err
 	}
 	status := instance.Status
 
@@ -594,9 +609,30 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
+	// be stored in the 'overlay' resource.
 	if err := r.client.Update(ctx, instance); err != nil {
 		r.SetDegraded("Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// update Installation with 'overlay'
+	overlay := operator.Installation{}
+	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the 'overlay' Installation resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("no 'overlay' installation found")
+	} else {
+		instance.Spec = overrideInstallationSpec(instance.Spec, overlay.Spec)
+		reqLogger.V(2).Info("loaded final computed config", "config", instance)
+
+		// Validate the configuration.
+		if err := validateCustomResource(instance); err != nil {
+			r.SetDegraded("Invalid computed config", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// now that migrated config is stored in the installation resource, we no longer need
@@ -660,7 +696,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instance, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.SetDegraded("Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -676,7 +712,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logStorageExists bool
-	var authentication interface{}
+	var authentication *operator.Authentication
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -709,7 +745,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 
 		authentication, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
 			return reconcile.Result{}, err
@@ -763,14 +799,20 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	nodeAppArmorProfile := ""
+	a := instance.GetObjectMeta().GetAnnotations()
+	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
+		nodeAppArmorProfile = val
+	}
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
-		k8sEndpoint,
-		instance,
+		k8sapi.Endpoint,
+		&instance.Spec,
 		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
@@ -782,6 +824,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
+		nodeAppArmorProfile,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -793,7 +836,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
-		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, instance)
+		awsSetup, err := render.AWSSecurityGroupSetup(instance.Spec.ImagePullSecrets, &instance.Spec)
 		if err != nil {
 			// If there is a problem rendering this do not degrade or stop rendering
 			// anything else.
@@ -816,37 +859,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 
-	// We have successfully reconciled the Calico installation.
-	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		openshiftConfig := &configv1.Network{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
-		if err != nil {
-			r.SetDegraded("Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		// Get resource before updating to use in the Patch call.
-		patchFrom := client.MergeFrom(openshiftConfig.DeepCopy())
-		// If configured to run in openshift, update the config status with the current state.
-		reqLogger.WithValues("openshiftConfig", openshiftConfig).V(1).Info("Updating OpenShift cluster network status")
-		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
-		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
-		openshiftConfig.Status.NetworkType = "Calico"
-		if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
-			// If specified in the spec, then use the value provided by the user.
-			// This is what the rendering code will have populated into the created resources.
-			openshiftConfig.Status.ClusterNetworkMTU = int(*instance.Spec.CalicoNetwork.MTU)
-		} else if instance.Spec.CalicoNetwork != nil {
-			// If not specified, then use the value for Calico VXLAN networking. This is the smallest
-			// value, so might not perform the best but will work everywhere.
-			openshiftConfig.Status.ClusterNetworkMTU = 1410
-		}
-
-		if err = r.client.Patch(ctx, openshiftConfig, patchFrom); err != nil {
-			r.SetDegraded("Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))
-			return reconcile.Result{}, err
-		}
-	}
-
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
@@ -865,6 +877,58 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
+	// Determine which MTU to use in the status fields.
+	statusMTU := 0
+	if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
+		// If set explicitly in the spec, then use that.
+		statusMTU = int(*instance.Spec.CalicoNetwork.MTU)
+	} else if calicoDirectoryExists() {
+		// Otherwise, if the /var/lib/calico directory is present, see if we can read
+		// a value from there.
+		statusMTU, err = readMTUFile()
+		if err != nil {
+			r.SetDegraded("error reading network MTU", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		// If neither is present, then we don't have MTU information available.
+		// Auto-detection will still be used for Calico, but the operator won't know
+		// what the value is.
+		reqLogger.V(1).Info("Unable to determine MTU - no explicit config, and /var/lib/calico is not mounted")
+	}
+
+	// We have successfully reconciled the Calico installation.
+	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		openshiftConfig := &configv1.Network{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
+		if err != nil {
+			r.SetDegraded("Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Get resource before updating to use in the Patch call.
+		patchFrom := client.MergeFrom(openshiftConfig.DeepCopy())
+
+		// Update the config status with the current state.
+		reqLogger.WithValues("openshiftConfig", openshiftConfig).V(1).Info("Updating OpenShift cluster network status")
+		openshiftConfig.Status.ClusterNetwork = openshiftConfig.Spec.ClusterNetwork
+		openshiftConfig.Status.ServiceNetwork = openshiftConfig.Spec.ServiceNetwork
+		openshiftConfig.Status.NetworkType = "Calico"
+
+		if statusMTU != 0 {
+			openshiftConfig.Status.ClusterNetworkMTU = statusMTU
+		} else if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+			// Enterprise doesn't support auto-MTU yet, so default this to a reasonable value that should
+			// work everywhere. Can be overridden by the user specifying an explicit MTU.
+			openshiftConfig.Status.ClusterNetworkMTU = 1400
+		}
+
+		if err = r.client.Patch(ctx, openshiftConfig, patchFrom); err != nil {
+			r.SetDegraded("Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))
+			return reconcile.Result{}, err
+		}
+	}
+
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
 
@@ -874,15 +938,41 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Everything is available - update the CRD status.
+	// Write updated status.
+	instance.Status.MTU = int32(statusMTU)
 	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Created successfully - don't requeue
+	// Created successfully. Requeue anyway so that we perform periodic reconciliation.
+	// This acts as a backstop to catch reconcile issues, and also makes sure we spot when
+	// things change that might not trigger a reconciliation.
 	reqLogger.V(1).Info("Finished reconciling network installation")
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+func readMTUFile() (int, error) {
+	filename := "/var/lib/calico/mtu"
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, return zero.
+			return 0, nil
+		}
+		return 0, err
+	}
+	res, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	return res, err
+}
+
+func calicoDirectoryExists() bool {
+	_, err := os.Stat("/var/lib/calico")
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {
@@ -1121,7 +1211,7 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 				within = within || cidrWithinCidr(c, pool.CIDR)
 			}
 			if !within {
-				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s)", pool.CIDR)
+				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s) %v", pool.CIDR, platformCIDRs)
 			}
 		}
 	}

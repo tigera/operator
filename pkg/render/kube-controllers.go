@@ -27,17 +27,19 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 var replicas int32 = 1
 
 func KubeControllers(
-	cr *operator.Installation,
+	k8sServiceEp k8sapi.ServiceEndpoint,
+	cr *operator.InstallationSpec,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
-	authentication interface{},
+	authentication *operator.Authentication,
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
 		cr:                          cr,
@@ -46,16 +48,18 @@ func KubeControllers(
 		managerInternalSecret:       managerInternalSecret,
 		logStorageExists:            logStorageExists,
 		authentication:              authentication,
+		k8sServiceEp:                k8sServiceEp,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr                          *operator.Installation
+	cr                          *operator.InstallationSpec
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
 	logStorageExists            bool
-	authentication              interface{}
+	authentication              *operator.Authentication
+	k8sServiceEp                k8sapi.ServiceEndpoint
 }
 
 func (c *kubeControllersComponent) SupportedOSType() OSType {
@@ -73,7 +77,7 @@ func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object
 		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
 	}
 
-	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		kubeControllerObjects = append(kubeControllerObjects, c.controllersPodSecurityPolicy())
 	}
 
@@ -148,7 +152,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
@@ -209,7 +213,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		}
 	}
 
-	if c.cr.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -254,8 +258,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
+	env = append(env, c.k8sServiceEp.EnvVars()...)
+
 	enabledControllers := []string{"node"}
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
 		if c.logStorageExists {
@@ -265,11 +271,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.
-			switch c.authentication.(type) {
-			case OIDCAuthentication:
+			if c.authentication != nil {
 				env = append(env,
-					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.(OIDCAuthentication).UsernamePrefix},
-					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.(OIDCAuthentication).GroupPrefix},
+					v1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.authentication.Spec.UsernamePrefix},
+					v1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.authentication.Spec.GroupsPrefix},
 				)
 			}
 		}
@@ -278,17 +283,17 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
 
-		if c.cr.Spec.CalicoNetwork != nil && c.cr.Spec.CalicoNetwork.MultiInterfaceMode != nil {
-			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.Spec.CalicoNetwork.MultiInterfaceMode.Value()})
+		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
+			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
 
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	// Pick which image to use based on variant.
-	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
-	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Spec.Registry, c.cr.Spec.ImagePath)
+	image := components.GetReference(components.ComponentCalicoKubeControllers, c.cr.Registry, c.cr.ImagePath)
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		image = components.GetReference(components.ComponentTigeraKubeControllers, c.cr.Registry, c.cr.ImagePath)
 	}
 
 	defaultMode := int32(420)
@@ -322,9 +327,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 				Spec: v1.PodSpec{
-					NodeSelector:       c.cr.Spec.ControlPlaneNodeSelector,
+					NodeSelector:       c.cr.ControlPlaneNodeSelector,
 					Tolerations:        tolerations,
-					ImagePullSecrets:   c.cr.Spec.ImagePullSecrets,
+					ImagePullSecrets:   c.cr.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
 						{

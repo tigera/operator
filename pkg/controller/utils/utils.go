@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/oidc"
-
 	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -43,11 +41,11 @@ const (
 	// This is for development and testing purposes only. Do not use this annotation
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
-	OIDCSecretName              = "tigera-oidc-credentials"
 )
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
 var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
+var OverlayInstanceKey = client.ObjectKey{Name: "overlay"}
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj runtime.Object) logr.Logger {
@@ -157,7 +155,7 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 
-	if instance.Status.State != operatorv1.APIServerStatusReady {
+	if instance.Status.State != operatorv1.TigeraStatusReady {
 		l.V(3).Info("APIServer resource not ready")
 		return false
 	}
@@ -218,9 +216,9 @@ func ValidateCertPair(client client.Client, certPairSecretName, keyName, certNam
 	return secret, nil
 }
 
-func GetNetworkingPullSecrets(i *operatorv1.Installation, c client.Client) ([]*corev1.Secret, error) {
+func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {
 	secrets := []*corev1.Secret{}
-	for _, ps := range i.Spec.ImagePullSecrets {
+	for _, ps := range i.ImagePullSecrets {
 		s := &corev1.Secret{}
 		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: render.OperatorNamespace()}, s)
 		if err != nil {
@@ -274,64 +272,15 @@ func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*oper
 	return instance, nil
 }
 
-// getAuthentication
-func GetAuthentication(ctx context.Context, client client.Client) (interface{}, error) {
-	var authenticationConfig interface{}
-
-	authenticationCR := &operatorv1.Authentication{}
-	if err := client.Get(ctx, DefaultTSEEInstanceKey, authenticationCR); err != nil {
-		if !kerrors.IsNotFound(err) {
-			return nil, err
-		}
-	} else {
-		if authenticationCR.Spec.Method == operatorv1.AuthMethodOIDC {
-			if authenticationCR.Spec.OIDC == nil {
-				return nil, fmt.Errorf("authentication method is OIDC but no OIDC configuration was provided")
-			}
-
-			wellKnownConfig, err := oidc.LookupWellKnownConfig(authenticationCR.Spec.OIDC.IssuerURL)
-			if err != nil {
-				return nil, err
-			}
-
-			oidcSecret := &corev1.Secret{}
-			err = client.Get(ctx, types.NamespacedName{Name: OIDCSecretName, Namespace: render.OperatorNamespace()}, oidcSecret)
-			if err != nil {
-				return nil, err
-			}
-
-			_, clientIDExists := oidcSecret.Data["clientID"]
-			_, clientSecretExists := oidcSecret.Data["clientSecret"]
-
-			if !clientIDExists || !clientSecretExists {
-				return nil, fmt.Errorf("%s must contain both the clientID and the clientSecret", OIDCSecretName)
-			}
-
-			// If no scopes were requests specifically request all of them
-			requestedScopes := authenticationCR.Spec.OIDC.RequestedScopes
-			if requestedScopes == nil || len(requestedScopes) == 0 {
-				requestedScopes = wellKnownConfig.ScopesSupported
-			}
-
-			authenticationConfig = render.OIDCAuthentication{
-				ClientID:              string(oidcSecret.Data["clientID"]),
-				Secret:                string(oidcSecret.Data["clientSecret"]),
-				IssuerURL:             authenticationCR.Spec.OIDC.IssuerURL,
-				RequestedScopes:       requestedScopes,
-				SiteURL:               authenticationCR.Spec.ManagerDomain,
-				UsernameClaim:         authenticationCR.Spec.OIDC.UsernameClaim,
-				UsernamePrefix:        authenticationCR.Spec.OIDC.UsernamePrefix,
-				GroupsClaim:           authenticationCR.Spec.OIDC.GroupsClaim,
-				GroupPrefix:           authenticationCR.Spec.OIDC.GroupsPrefix,
-				AuthorizationEndpoint: wellKnownConfig.AuthorizationEndpoint,
-				TokenEndpoint:         wellKnownConfig.TokenEndpoint,
-				JWKSetURI:             wellKnownConfig.JWKSetURI,
-				UserInfoEndpoint:      wellKnownConfig.UserInfoEndpoint,
-			}
-		}
+// GetAuthentication finds the authentication CR in your cluster.
+func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
+	authentication := &operatorv1.Authentication{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, authentication)
+	if err != nil {
+		return nil, err
 	}
 
-	return authenticationConfig, nil
+	return authentication, nil
 }
 
 // GetTyphaScaleCount will return the number of Typhas needed for the number of nodes.

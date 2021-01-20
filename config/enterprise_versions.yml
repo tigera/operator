@@ -1,77 +1,80 @@
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.3.2
+    version: v3.4.0
   voltron:
     image: tigera/voltron
-    version: v3.3.2
+    version: v3.4.0
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v3.3.2
+    version: v3.4.0
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: v3.3.2
+    version: v3.4.0
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.3.2
+    version: v3.4.0
   typha:
     image: tigera/typha
-    version: v3.3.2
+    version: v3.4.0
   cnx-node:
     image: tigera/cnx-node
-    version: v3.3.2
+    version: v3.4.0
   fluentd:
     image: tigera/fluentd
-    version: v3.3.2
+    version: v3.4.0
   es-proxy:
     image: tigera/es-proxy
-    version: v3.3.2
+    version: v3.4.0
   eck-kibana:
     version: 7.6.2
+  dex:
+    image: tigera/dex
+    version: v3.4.0
   kibana:
     image: tigera/kibana
-    version: v3.3.2
+    version: v3.4.0
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
-    version: 1.0.1
+    version: 1.2.1
   eck-elasticsearch:
     version: 7.6.2
   elasticsearch:
     image: tigera/elasticsearch
-    version: v3.3.2
+    version: v3.4.0
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v3.3.2
+    version: v3.4.0
   es-curator:
     image: tigera/es-curator
-    version: v3.3.2
+    version: v3.4.0
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.3.2
+    version: v3.4.0
   compliance-controller:
     image: tigera/compliance-controller
-    version: v3.3.2
+    version: v3.4.0
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v3.3.2
+    version: v3.4.0
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v3.3.2
+    version: v3.4.0
   compliance-server:
     image: tigera/compliance-server
-    version: v3.3.2
+    version: v3.4.0
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v3.3.2
+    version: v3.4.0
   # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
   # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
-    version: v3.3.2
+    version: v3.4.0
   tigera-cni:
     image: tigera/cni
-    version: v3.3.2
+    version: v3.4.0
   cloud-controllers:
     image: tigera/cloud-controllers
-    version: v3.3.2
+    version: v3.4.0

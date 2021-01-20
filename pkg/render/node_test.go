@@ -25,14 +25,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var (
@@ -42,34 +44,31 @@ var (
 )
 
 var _ = Describe("Node rendering tests", func() {
-	var defaultInstance *operator.Installation
+	var defaultInstance *operator.InstallationSpec
 	var typhaNodeTLS *render.TyphaNodeTLS
+	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
 	defaultNumExpectedResources := 6
-
-	k8sServiceEp := render.K8sServiceEndpoint{}
 
 	BeforeEach(func() {
 		ff := true
 		hp := operator.HostPortsEnabled
 		miMode := operator.MultiInterfaceModeNone
-		defaultInstance = &operator.Installation{
-			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{
-					Type: "Calico",
-					IPAM: &operator.IPAMSpec{Type: "Calico"},
-				},
-				CalicoNetwork: &operator.CalicoNetworkSpec{
-					BGP:                        &bgpEnabled,
-					IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
-					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
-					HostPorts:                  &hp,
-					MultiInterfaceMode:         &miMode,
-				},
-				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-						MaxUnavailable: &one,
-					},
+		defaultInstance = &operator.InstallationSpec{
+			CNI: &operator.CNISpec{
+				Type: "Calico",
+				IPAM: &operator.IPAMSpec{Type: "Calico"},
+			},
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				BGP:                        &bgpEnabled,
+				IPPools:                    []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+				NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{FirstFound: &ff},
+				HostPorts:                  &hp,
+				MultiInterfaceMode:         &miMode,
+			},
+			NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxUnavailable: &one,
 				},
 			},
 		}
@@ -78,6 +77,7 @@ var _ = Describe("Node rendering tests", func() {
 			TyphaSecret: &v1.Secret{},
 			NodeSecret:  &v1.Secret{},
 		}
+		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -96,8 +96,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -118,7 +118,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -180,9 +180,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -310,6 +307,67 @@ var _ = Describe("Node rendering tests", func() {
 		verifyProbes(ds, false, false)
 	})
 
+	It("should properly render an explicitly configured MTU", func() {
+		mtu := int32(1450)
+		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.CalicoNetwork.MTU = &mtu
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
+		resources, _ := component.Objects()
+
+		// Make sure the configmap is populated correctly with the MTU.
+		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*v1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 1450,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+          "type": "calico-ipam",
+          "assign_ipv4" : "true",
+          "assign_ipv6" : "false"
+      },
+      "container_settings": {
+          "allow_ip_forwarding": false
+      },
+      "policy": {
+          "type": "k8s"
+      },
+      "kubernetes": {
+          "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
+    },
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+
+		// Make sure daemonset has the MTU set as well.
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*apps.DaemonSet)
+
+		// Verify env
+		expectedNodeEnv := []v1.EnvVar{
+			{Name: "FELIX_IPINIPMTU", Value: "1450"},
+			{Name: "FELIX_VXLANMTU", Value: "1450"},
+			{Name: "FELIX_WIREGUARDMTU", Value: "1450"},
+		}
+		for _, e := range expectedNodeEnv {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(e))
+		}
+	})
+
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 		expectedResources := []struct {
 			name    string
@@ -326,9 +384,9 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
-		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
+		defaultInstance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -357,9 +415,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -409,7 +464,13 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
+
+			// For enterprise, we also expect MTU vars.
+			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
+			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 		}
+
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
@@ -433,11 +494,11 @@ var _ = Describe("Node rendering tests", func() {
 		}
 
 		disabled := operator.BGPDisabled
-		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-		defaultInstance.Spec.KubernetesProvider = operator.ProviderEKS
-		defaultInstance.Spec.CalicoNetwork.BGP = &disabled
-		defaultInstance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.KubernetesProvider = operator.ProviderEKS
+		defaultInstance.CalicoNetwork.BGP = &disabled
+		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -458,7 +519,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -520,8 +581,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -647,27 +706,18 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
 		// Verify readiness and liveness probes.
-		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}}}
-		expectedLiveness := &v1.Probe{Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Host: "localhost",
-				Path: "/liveness",
-				Port: intstr.FromInt(9099),
-			}}}
-		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+
+		verifyProbes(ds, false, false)
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := &operator.Installation{
-			Spec: operator.InstallationSpec{
-				KubernetesProvider: operator.ProviderEKS,
-				CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
-				FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
-			},
+		amazonVPCInstalllation := &operator.InstallationSpec{
+			KubernetesProvider: operator.ProviderEKS,
+			CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
+			FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		}
 
-		component := render.Node(k8sServiceEp, amazonVPCInstalllation, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, amazonVPCInstalllation, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -708,8 +758,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -811,30 +859,20 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
 		// Verify readiness and liveness probes.
-		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}}}
-		expectedLiveness := &v1.Probe{Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Host: "localhost",
-				Path: "/liveness",
-				Port: intstr.FromInt(9099),
-			}}}
-		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+		verifyProbes(ds, false, true)
 	})
 
 	DescribeTable("should properly render configuration using non-Calico CNI plugin",
 		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType, expectedEnvs []v1.EnvVar) {
-			installlation := &operator.Installation{
-				Spec: operator.InstallationSpec{
-					CNI: &operator.CNISpec{
-						Type: cni,
-						IPAM: &operator.IPAMSpec{Type: ipam},
-					},
-					FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+			installlation := &operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: cni,
+					IPAM: &operator.IPAMSpec{Type: ipam},
 				},
+				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			}
 
-			component := render.Node(k8sServiceEp, installlation, nil, typhaNodeTLS, nil, false)
+			component := render.Node(k8sServiceEp, installlation, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 
 			// Should render the correct resources.
@@ -866,15 +904,7 @@ var _ = Describe("Node rendering tests", func() {
 			}
 
 			// Verify readiness and liveness probes.
-			expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}}}
-			expectedLiveness := &v1.Probe{Handler: v1.Handler{
-				HTTPGet: &v1.HTTPGetAction{
-					Host: "localhost",
-					Path: "/liveness",
-					Port: intstr.FromInt(9099),
-				}}}
-			Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-			Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+			verifyProbes(ds, false, false)
 		},
 		Entry("GKE", operator.PluginGKE, operator.IPAMPluginHostLocal, []v1.EnvVar{
 			{Name: "FELIX_INTERFACEPREFIX", Value: "gke"},
@@ -906,11 +936,11 @@ var _ = Describe("Node rendering tests", func() {
 		}
 
 		disabled := operator.BGPDisabled
-		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-		defaultInstance.Spec.KubernetesProvider = operator.ProviderEKS
-		defaultInstance.Spec.CalicoNetwork.BGP = &disabled
-		defaultInstance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.KubernetesProvider = operator.ProviderEKS
+		defaultInstance.CalicoNetwork.BGP = &disabled
+		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -931,7 +961,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -993,8 +1023,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1124,15 +1152,13 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := &operator.Installation{
-			Spec: operator.InstallationSpec{
-				KubernetesProvider: operator.ProviderEKS,
-				CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
-				FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
-			},
+		amazonVPCInstalllation := &operator.InstallationSpec{
+			KubernetesProvider: operator.ProviderEKS,
+			CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
+			FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		}
 
-		component := render.Node(k8sServiceEp, amazonVPCInstalllation, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, amazonVPCInstalllation, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
 
@@ -1173,8 +1199,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1276,7 +1300,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(expectedTolerations))
 
 		// Verify readiness and liveness probes.
-		verifyProbes(ds, false, true)
+		verifyProbes(ds, false, false)
 	})
 
 	It("should render all resources when running on openshift", func() {
@@ -1294,9 +1318,9 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Spec.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
-		defaultInstance.Spec.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1361,9 +1385,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1428,9 +1449,9 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		defaultInstance.Spec.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1460,9 +1481,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
-			{Name: "FELIX_IPINIPMTU", Value: "1440"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1511,6 +1529,11 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 
+			// For enterprise, we also expect MTU vars.
+			{Name: "FELIX_IPINIPMTU", Value: "1440"},
+			{Name: "FELIX_VXLANMTU", Value: "1410"},
+			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
+
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{Name: "FELIX_IPTABLESBACKEND", Value: "auto"},
@@ -1542,8 +1565,8 @@ var _ = Describe("Node rendering tests", func() {
 		bt := map[string]string{
 			"template-1.yaml": "dataforTemplate1 that is not used here",
 		}
-		defaultInstance.Spec.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, bt, typhaNodeTLS, nil, false)
+		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
+		component := render.Node(k8sServiceEp, defaultInstance, bt, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1582,9 +1605,9 @@ var _ = Describe("Node rendering tests", func() {
 
 	Describe("test IP auto detection", func() {
 		It("should support canReach", func() {
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1597,9 +1620,9 @@ var _ = Describe("Node rendering tests", func() {
 		})
 
 		It("should support interface regex", func() {
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1612,9 +1635,9 @@ var _ = Describe("Node rendering tests", func() {
 		})
 
 		It("should support skip-interface regex", func() {
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1627,9 +1650,9 @@ var _ = Describe("Node rendering tests", func() {
 		})
 
 		It("should support cidr", func() {
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
-			defaultInstance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS = []string{"10.0.1.0/24", "10.0.2.0/24"}
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS = []string{"10.0.1.0/24", "10.0.2.0/24"}
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1644,8 +1667,8 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should include updates needed for the core upgrade", func() {
-		defaultInstance.Spec.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, true)
+		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, true, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources-1), fmt.Sprintf("resources are %v", resources))
 
@@ -1679,8 +1702,8 @@ var _ = Describe("Node rendering tests", func() {
 	DescribeTable("test IP Pool configuration",
 		func(pool operator.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration
-			defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{pool}
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			defaultInstance.CalicoNetwork.IPPools = []operator.IPPool{pool}
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1805,9 +1828,9 @@ var _ = Describe("Node rendering tests", func() {
 	)
 
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
-		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		defaultInstance.Spec.NodeMetricsPort = nil
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		defaultInstance.NodeMetricsPort = nil
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
 
@@ -1825,9 +1848,9 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
 		var nodeMetricsPort int32 = 1234
-		defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
-		defaultInstance.Spec.NodeMetricsPort = &nodeMetricsPort
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		defaultInstance.NodeMetricsPort = &nodeMetricsPort
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
 
@@ -1850,8 +1873,8 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
-		defaultInstance.Spec.FlexVolumePath = "None"
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.FlexVolumePath = "None"
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1864,8 +1887,8 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render MaxUnavailable if a custom value was set", func() {
 		two := intstr.FromInt(2)
-		defaultInstance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1893,10 +1916,10 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		hpd := operator.HostPortsDisabled
-		defaultInstance.Spec.CalicoNetwork.HostPorts = &hpd
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.CalicoNetwork.HostPorts = &hpd
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1917,7 +1940,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -1982,8 +2005,8 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render a proper 'allow_ip_forwarding' container setting in the cni config", func() {
 		cif := operator.ContainerIPForwardingEnabled
-		defaultInstance.Spec.CalicoNetwork.ContainerIPForwarding = &cif
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.CalicoNetwork.ContainerIPForwarding = &cif
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -1998,7 +2021,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2027,8 +2050,8 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render cni config with host-local", func() {
-		defaultInstance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		defaultInstance.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
@@ -2043,7 +2066,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2061,11 +2084,64 @@ var _ = Describe("Node rendering tests", func() {
 }`))
 	})
 
+	It("should render cni config with k8s endpoint", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+		// Should render the correct resources.
+		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*v1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+        "type": "calico-ipam",
+        "assign_ipv4": "true",
+        "assign_ipv6": "false"
+      },
+      "container_settings": {
+        "allow_ip_forwarding": false
+      },
+      "policy": {
+        "type": "k8s"
+      },
+      "kubernetes": {
+        "k8s_api_root": "https://k8shost:1234",
+        "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {
+        "bandwidth": true
+      }
+    },
+    {
+      "type": "portmap",
+      "snat": true,
+      "capabilities": {
+        "portMappings": true
+      }
+    }
+  ]
+}`))
+	})
+
 	It("should render seccomp profiles", func() {
 		seccompProf := "localhost/calico-node-v1"
-		defaultInstance.ObjectMeta.Annotations = make(map[string]string)
-		defaultInstance.ObjectMeta.Annotations["tech-preview.operator.tigera.io/node-apparmor-profile"] = seccompProf
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, seccompProf)
 		resources, _ := component.Objects()
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -2083,7 +2159,7 @@ var _ = Describe("Node rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, aci, false)
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, aci, false, "")
 		resources, _ := component.Objects()
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -2112,14 +2188,14 @@ var _ = Describe("Node rendering tests", func() {
 			},
 		}
 
-		defaultInstance.Spec.ComponentResources = []operator.ComponentResource{
+		defaultInstance.ComponentResources = []operator.ComponentResource{
 			{
 				ComponentName:        operator.ComponentNameNode,
 				ResourceRequirements: rr,
 			},
 		}
 
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 
 		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -2153,15 +2229,15 @@ var _ = Describe("Node rendering tests", func() {
 		}
 
 		disabled := operator.BGPDisabled
-		defaultInstance.Spec.CalicoNetwork.BGP = &disabled
-		defaultInstance.Spec.CNI.Type = operator.PluginCalico
-		defaultInstance.Spec.CNI.IPAM.Type = operator.IPAMPluginHostLocal
-		defaultInstance.Spec.CalicoNetwork.IPPools = []operator.IPPool{{
+		defaultInstance.CalicoNetwork.BGP = &disabled
+		defaultInstance.CNI.Type = operator.PluginCalico
+		defaultInstance.CNI.IPAM.Type = operator.IPAMPluginHostLocal
+		defaultInstance.CalicoNetwork.IPPools = []operator.IPPool{{
 			CIDR:          "192.168.1.0/16",
 			Encapsulation: operator.EncapsulationNone,
 			NATOutgoing:   operator.NATOutgoingEnabled,
 		}}
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -2182,7 +2258,7 @@ var _ = Describe("Node rendering tests", func() {
     {
       "type": "calico",
       "datastore_type": "kubernetes",
-      "mtu": 1410,
+      "mtu": 0,
       "nodename_file_optional": false,
       "log_level": "Info",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2243,8 +2319,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"},
-			{Name: "FELIX_VXLANMTU", Value: "1410"},
-			{Name: "FELIX_WIREGUARDMTU", Value: "1400"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -2306,29 +2380,22 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify readiness and liveness probes.
-		expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}}}
-		expectedLiveness := &v1.Probe{Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Host: "localhost",
-				Path: "/liveness",
-				Port: intstr.FromInt(9099),
-			}}}
-		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+		verifyProbes(ds, false, false)
 	})
+
 	DescribeTable("test node probes",
 		func(isOpenshift, isEnterprise bool, bgpOption operator.BGPOption) {
 			if isOpenshift {
-				defaultInstance.Spec.KubernetesProvider = operator.ProviderOpenShift
+				defaultInstance.KubernetesProvider = operator.ProviderOpenShift
 			}
 
 			if isEnterprise {
-				defaultInstance.Spec.Variant = operator.TigeraSecureEnterprise
+				defaultInstance.Variant = operator.TigeraSecureEnterprise
 			}
 
-			defaultInstance.Spec.CalicoNetwork.BGP = &bgpOption
+			defaultInstance.CalicoNetwork.BGP = &bgpOption
 
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
@@ -2349,11 +2416,11 @@ var _ = Describe("Node rendering tests", func() {
 
 	Context("with k8s overrides set", func() {
 		It("should override k8s endpoints", func() {
-			k8sServiceEp := render.K8sServiceEndpoint{
+			k8sServiceEp := k8sapi.ServiceEndpoint{
 				Host: "k8shost",
 				Port: "1234",
 			}
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false)
+			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "")
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 

@@ -21,33 +21,31 @@ import (
 	"os"
 	"regexp"
 
-	"k8s.io/apimachinery/pkg/types"
-
-	apps "k8s.io/api/apps/v1"
-	storagev1 "k8s.io/api/storage/v1"
-
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
+
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 
+	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -141,38 +139,38 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Network resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
 	}
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err = c.Watch(&source.Kind{
 		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{
 		ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %w", err)
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
@@ -198,35 +196,35 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.ECKWebhookSecretName, utils.OIDCSecretName} {
+		render.ECKWebhookSecretName, render.OIDCSecretName, render.DexObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %v", err)
+			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	return nil
@@ -318,7 +316,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.OnCRFound()
 	}
 
-	installationCR, err := installation.GetInstallation(context.Background(), r.client)
+	variant, install, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -350,7 +348,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
-	if installationCR.Status.Variant != operatorv1.TigeraSecureEnterprise {
+	if variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	} else if ls == nil && managementClusterConnection == nil {
@@ -364,7 +362,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installationCR, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		log.Error(err, "error retrieving pull secrets")
 		r.status.SetDegraded("An error occurring while retrieving the pull secrets", err.Error())
@@ -461,24 +459,47 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
-	// create the ComponentHandler from the installationCR
+	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
 	if ls != nil {
 		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
 	} else {
-		hdler = utils.NewComponentHandler(log, r.client, r.scheme, installationCR)
+		hdler = utils.NewComponentHandler(log, r.client, r.scheme, managementClusterConnection)
 	}
 
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil {
-		log.Error(err, err.Error())
-		r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
+	}
+	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+		return reconcile.Result{}, nil
+	}
+
+	var dexCfg render.DexRelyingPartyConfig
+	if authentication != nil {
+		var dexTLSSecret *corev1.Secret
+		dexTLSSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		var dexSecret *corev1.Secret
+		if authentication != nil {
+			dexSecret = &corev1.Secret{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
+				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret)
 	}
 
 	component := render.LogStorage(
 		ls,
-		installationCR,
+		install,
 		managementCluster,
 		managementClusterConnection,
 		elasticsearch,
@@ -494,7 +515,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		kbService,
 		r.localDNS,
 		applyTrial,
-		authentication,
+		dexCfg,
 	)
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
@@ -524,10 +545,10 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	r.status.ClearDegraded()
 
 	if ls != nil {
-		ls.Status.State = operatorv1.LogStorageStatusReady
+		ls.Status.State = operatorv1.TigeraStatusReady
 		if err := r.client.Status().Update(ctx, ls); err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady))
-			r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.LogStorageStatusReady), err.Error())
+			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady))
+			r.status.SetDegraded(fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err.Error())
 			return reconcile.Result{}, err
 		}
 	}

@@ -866,7 +866,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 	if instance.Spec.CertificateManagement != nil {
-		r.status.AddCertificateSigningRequests(render.CSRLabelCalicoSystem)
+		r.status.AddCertificateSigningRequests(render.CSRLabelCalicoSystem, map[string]string{
+			"k8s-app": render.CSRLabelCalicoSystem,
+		})
 	} else {
 		r.status.RemoveCertificateSigningRequests(render.CSRLabelCalicoSystem)
 	}

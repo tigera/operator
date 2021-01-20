@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -98,6 +99,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
+	}
+
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch ImageSet: %w", err)
 	}
 
 	if err = utils.AddAPIServerWatch(c); err != nil {
@@ -180,7 +185,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Query for the installation object.
-	_, network, err := installation.GetInstallation(context.Background(), r.client)
+	variant, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -275,6 +280,13 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		r.clusterDomain,
 		esLicenseType,
 	)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		reqLogger.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err

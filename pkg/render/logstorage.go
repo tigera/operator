@@ -205,6 +205,41 @@ type elasticsearchComponent struct {
 	elasticLicenseType          ElasticsearchLicenseType
 	oidcUserConfigMap           *corev1.ConfigMap
 	oidcUserSecret              *corev1.Secret
+	esImage                     string
+	esOperatorImage             string
+	kibanaImage                 string
+	curatorImage                string
+}
+
+func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	reg := es.installation.Registry
+	path := es.installation.ImagePath
+	var err error
+	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, is)
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (es *elasticsearchComponent) SupportedOSType() OSType {
@@ -518,7 +553,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: Bool(true),
 			RunAsUser:  Int64(0),
 		},
-		Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
+		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
 		},
@@ -533,7 +568,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
-			Image: components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
+			Image: es.esImage,
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: Bool(false),
 			},
@@ -663,7 +698,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			Image:   components.GetReference(components.ComponentElasticsearch, es.installation.Registry, es.installation.ImagePath),
+			Image:   es.esImage,
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -1029,7 +1064,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
-						Image: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath),
+						Image: es.esOperatorImage,
 						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
@@ -1054,7 +1089,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 									},
 								},
 							},
-							{Name: "OPERATOR_IMAGE", Value: components.GetReference(components.ComponentElasticsearchOperator, es.installation.Registry, es.installation.ImagePath)},
+							{Name: "OPERATOR_IMAGE", Value: es.esOperatorImage},
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -1117,7 +1152,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		},
 		Spec: kbv1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
-			Image:   components.GetReference(components.ComponentKibana, es.installation.Registry, es.installation.ImagePath),
+			Image:   es.kibanaImage,
 			Config: &cmnv1.Config{
 				Data: config,
 			},
@@ -1212,7 +1247,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							Containers: []corev1.Container{
 								ElasticsearchContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
-									Image:         components.GetReference(components.ComponentEsCurator, es.installation.Registry, es.installation.ImagePath),
+									Image:         es.curatorImage,
 									Env:           es.curatorEnvVars(),
 									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{

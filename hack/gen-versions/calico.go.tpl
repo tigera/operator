@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,31 +17,32 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-{{- with index . "calico/cni" }}
+	CalicoRelease string = "{{ .Title }}"
+{{ with index .Components "calico/cni" }}
 	ComponentCalicoCNI = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "calico/kube-controllers" }}
+{{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "calico/node" }}
+{{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .typha }}
+{{ with .Components.typha }}
 	ComponentCalicoTypha = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .flexvol }}
+{{ with .Components.flexvol }}
 	ComponentFlexVolume = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
@@ -51,5 +52,14 @@ var (
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
+	}
+
+	CalicoComponents = []component{
+		ComponentCalicoCNI,
+		ComponentCalicoKubeControllers,
+		ComponentCalicoNode,
+		ComponentCalicoTypha,
+		ComponentFlexVolume,
+		ComponentOperatorInit,
 	}
 )

@@ -12,20 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logstorage_test
+package logstorage
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/logstorage"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 
 	"github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -67,27 +69,26 @@ type mockESClient struct {
 }
 
 var _ = Describe("LogStorage controller", func() {
+	var (
+		cli        client.Client
+		mockStatus *status.MockStatus
+		scheme     *runtime.Scheme
+		ctx        context.Context
+	)
+
+	BeforeEach(func() {
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		ctx = context.Background()
+		cli = fake.NewFakeClientWithScheme(scheme)
+	})
 	Context("Reconcile", func() {
-		var (
-			cli        client.Client
-			mockStatus *status.MockStatus
-			scheme     *runtime.Scheme
-			ctx        context.Context
-		)
-
-		BeforeEach(func() {
-			scheme = runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-
-			ctx = context.Background()
-			cli = fake.NewFakeClientWithScheme(scheme)
-		})
-
 		Context("Check default logstorage settings", func() {
 			var ls *operatorv1.LogStorage
 			var err error
@@ -102,7 +103,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					},
 				})).To(BeNil())
-				ls, err = logstorage.GetLogStorage(ctx, cli)
+				ls, err = GetLogStorage(ctx, cli)
 				Expect(err).To(BeNil())
 			})
 
@@ -121,7 +122,7 @@ var _ = Describe("LogStorage controller", func() {
 			})
 
 			It("should set the storage class to the default settings", func() {
-				Expect(ls.Spec.StorageClassName).To(Equal(logstorage.DefaultElasticsearchStorageClass))
+				Expect(ls.Spec.StorageClassName).To(Equal(DefaultElasticsearchStorageClass))
 			})
 
 			It("should default the spec.nodes structure", func() {
@@ -137,7 +138,7 @@ var _ = Describe("LogStorage controller", func() {
 				},
 				Spec: operatorv1.LogStorageSpec{},
 			})).To(BeNil())
-			ls, err := logstorage.GetLogStorage(ctx, cli)
+			ls, err := GetLogStorage(ctx, cli)
 			Expect(err).To(BeNil())
 
 			Expect(ls.Spec.Nodes).NotTo(BeNil())
@@ -182,7 +183,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					DescribeTable("tests that the ExternalService is setup with the default service name", func(clusterDomain, expectedSvcName string) {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, clusterDomain)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, clusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
 						_, err = r.Reconcile(reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
@@ -206,7 +207,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
 						result, err := r.Reconcile(reconcile.Request{})
@@ -223,7 +224,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 
-						r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
@@ -278,7 +279,8 @@ var _ = Describe("LogStorage controller", func() {
 							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant: operatorv1.TigeraSecureEnterprise,
+							Variant:  operatorv1.TigeraSecureEnterprise,
+							Registry: "some.registry.org/",
 						},
 					}
 					Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -321,7 +323,7 @@ var _ = Describe("LogStorage controller", func() {
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -416,7 +418,7 @@ var _ = Describe("LogStorage controller", func() {
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeBasic)},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -473,6 +475,235 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})
+				Context("checking rendered images", func() {
+					BeforeEach(func() {
+						mockStatus.On("ClearDegraded", mock.Anything)
+						Expect(cli.Create(ctx, &operatorv1.LogStorage{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "tigera-secure",
+							},
+							Spec: operatorv1.LogStorageSpec{
+								Nodes: &operatorv1.Nodes{
+									Count: int64(1),
+								},
+								StorageClassName: storageClassName,
+							},
+						})).ShouldNot(HaveOccurred())
+
+						resources := []runtime.Object{
+							&storagev1.StorageClass{
+								ObjectMeta: metav1.ObjectMeta{
+									Name: storageClassName,
+								},
+							},
+							&esv1.Elasticsearch{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      render.ElasticsearchName,
+									Namespace: render.ElasticsearchNamespace,
+								},
+								Status: esv1.ElasticsearchStatus{
+									Phase: esv1.ElasticsearchReadyPhase,
+								},
+							},
+							&kbv1.Kibana{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      render.KibanaName,
+									Namespace: render.KibanaNamespace,
+								},
+								Status: kbv1.KibanaStatus{
+									AssociationStatus: cmnv1.AssociationEstablished,
+								},
+							},
+							render.NewElasticsearchClusterConfig("cluster", 1, 1, 1).ConfigMap(),
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+								Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+								Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+								Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+								Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+							&corev1.ConfigMap{
+								ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+								Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
+							},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
+							&corev1.Secret{ObjectMeta: kbPublicCertObjMeta},
+							&corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+								Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace}},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}},
+						}
+
+						for _, rec := range resources {
+							Expect(cli.Create(ctx, rec)).ShouldNot(HaveOccurred())
+						}
+					})
+					It("should use default images", func() {
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+						Expect(err).ShouldNot(HaveOccurred())
+
+						By("running reconcile")
+						_, err = r.Reconcile(reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+
+						By("confirming curator job is created")
+						Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
+
+						mockStatus.AssertExpectations(GinkgoT())
+
+						cj := batchv1beta.CronJob{
+							TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.EsCuratorName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &cj)).To(BeNil())
+						Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
+						curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.EsCuratorName)
+						Expect(curator).ToNot(BeNil())
+						Expect(curator.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentEsCurator.Image,
+								components.ComponentEsCurator.Version)))
+
+						escfg := esv1.Elasticsearch{
+							TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &escfg)).To(BeNil())
+						Expect(escfg.Spec.NodeSets).To(HaveLen(1))
+						// The Image is not populated for the container so no need to get and check it
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
+						initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
+						Expect(initset).ToNot(BeNil())
+						Expect(initset.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentElasticsearch.Image,
+								components.ComponentElasticsearch.Version)))
+
+						kb := kbv1.Kibana{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.KibanaName,
+								Namespace: render.KibanaNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &kb)).To(BeNil())
+						Expect(kb.Spec.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentKibana.Image,
+								components.ComponentKibana.Version)))
+
+						ss := appsv1.StatefulSet{
+							TypeMeta: metav1.TypeMeta{Kind: "StatefuleSet", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ECKOperatorName,
+								Namespace: render.ECKOperatorNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &ss)).To(BeNil())
+						Expect(ss.Spec.Template.Spec.Containers).To(HaveLen(1))
+						mgr := test.GetContainer(ss.Spec.Template.Spec.Containers, "manager")
+						Expect(mgr).ToNot(BeNil())
+						Expect(mgr.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentElasticsearchOperator.Image,
+								components.ComponentElasticsearchOperator.Version)))
+					})
+					It("should use images from ImageSet", func() {
+						Expect(cli.Create(ctx, &operatorv1.ImageSet{
+							ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+							Spec: operatorv1.ImageSetSpec{
+								Images: []operatorv1.Image{
+									{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
+									{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
+									{Image: "eck/eck-operator", Digest: "sha256:eckoperatorhash"},
+									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
+								},
+							},
+						})).ToNot(HaveOccurred())
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+						Expect(err).ShouldNot(HaveOccurred())
+
+						By("running reconcile")
+						_, err = r.Reconcile(reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+
+						By("confirming curator job is created")
+						Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
+
+						mockStatus.AssertExpectations(GinkgoT())
+
+						cj := batchv1beta.CronJob{
+							TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.EsCuratorName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &cj)).To(BeNil())
+						Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
+						curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.EsCuratorName)
+						Expect(curator).ToNot(BeNil())
+						Expect(curator.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentEsCurator.Image,
+								"sha256:escuratorhash")))
+
+						escfg := esv1.Elasticsearch{
+							TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &escfg)).To(BeNil())
+						Expect(escfg.Spec.NodeSets).To(HaveLen(1))
+						// The Image is not populated for the container so no need to get and check it
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
+						initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
+						Expect(initset).ToNot(BeNil())
+						Expect(initset.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentElasticsearch.Image,
+								"sha256:elasticsearchhash")))
+
+						kb := kbv1.Kibana{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.KibanaName,
+								Namespace: render.KibanaNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &kb)).To(BeNil())
+						Expect(kb.Spec.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentKibana.Image,
+								"sha256:kibanahash")))
+
+						ss := appsv1.StatefulSet{
+							TypeMeta: metav1.TypeMeta{Kind: "StatefuleSet", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ECKOperatorName,
+								Namespace: render.ECKOperatorNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &ss)).To(BeNil())
+						Expect(ss.Spec.Template.Spec.Containers).To(HaveLen(1))
+						mgr := test.GetContainer(ss.Spec.Template.Spec.Containers, "manager")
+						Expect(mgr).ToNot(BeNil())
+						Expect(mgr.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentElasticsearchOperator.Image,
+								"sha256:eckoperatorhash")))
+					})
+				})
 			})
 
 			Context("LogStorage CR deleted", func() {
@@ -512,7 +743,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-					r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
@@ -529,7 +760,7 @@ var _ = Describe("LogStorage controller", func() {
 					now := metav1.Now()
 					ls.DeletionTimestamp = &now
 					Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
-					Expect(ls.Spec.StorageClassName).To(Equal(logstorage.DefaultElasticsearchStorageClass))
+					Expect(ls.Spec.StorageClassName).To(Equal(DefaultElasticsearchStorageClass))
 
 					result, err = r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
@@ -568,7 +799,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	if storageClass == "" {
 		Expect(cli.Create(ctx, &storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: logstorage.DefaultElasticsearchStorageClass,
+				Name: DefaultElasticsearchStorageClass,
 			},
 		})).ShouldNot(HaveOccurred())
 	} else {
@@ -698,7 +929,7 @@ var _ = Describe("LogStorage w/ Certificate management", func() {
 			cli = fake.NewFakeClientWithScheme(scheme)
 			Expect(cli.Create(ctx, &storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: logstorage.DefaultElasticsearchStorageClass,
+					Name: DefaultElasticsearchStorageClass,
 				},
 			}))
 		})
@@ -706,7 +937,7 @@ var _ = Describe("LogStorage w/ Certificate management", func() {
 			install.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("ca"), SignerName: "a.b/c"}
 			Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
 			Expect(cli.Create(ctx, logstorageCR)).To(BeNil())
-			r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+			r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			_, err = r.Reconcile(reconcile.Request{})
 			Expect(err).Should(HaveOccurred())

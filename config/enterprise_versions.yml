@@ -1,3 +1,4 @@
+title: master
 components:
   cnx-manager:
     image: tigera/cnx-manager

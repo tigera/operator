@@ -490,6 +490,11 @@ type InstallationStatus struct {
 	// configured value, or based on Calico's native auto-detetion.
 	MTU int32 `json:"mtu,omitempty"`
 
+	// ImageSet is the name of the ImageSet being used, if there is an ImageSet
+	// that is being used. If an ImageSet is not being used then this will not be set.
+	// +optional
+	ImageSet string `json:"imageSet,omitempty"`
+
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`

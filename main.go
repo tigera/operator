@@ -94,34 +94,15 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
 	if showVersion {
-		fmt.Println("Operator:", version.VERSION)
-		fmt.Println(components.GetReference(components.ComponentCalicoNode, "", ""))
-		fmt.Println(components.GetReference(components.ComponentCalicoCNI, "", ""))
-		fmt.Println(components.GetReference(components.ComponentCalicoTypha, "", ""))
-		fmt.Println(components.GetReference(components.ComponentCalicoKubeControllers, "", ""))
-		fmt.Println(components.GetReference(components.ComponentFlexVolume, "", ""))
-		fmt.Println(components.GetReference(components.ComponentTigeraNode, "", ""))
-		fmt.Println(components.GetReference(components.ComponentTigeraTypha, "", ""))
-		fmt.Println(components.GetReference(components.ComponentTigeraKubeControllers, "", ""))
-		fmt.Println(components.GetReference(components.ComponentCloudControllers, "", ""))
-		fmt.Println(components.GetReference(components.ComponentAPIServer, "", ""))
-		fmt.Println(components.GetReference(components.ComponentQueryServer, "", ""))
-		fmt.Println(components.GetReference(components.ComponentComplianceController, "", ""))
-		fmt.Println(components.GetReference(components.ComponentComplianceReporter, "", ""))
-		fmt.Println(components.GetReference(components.ComponentComplianceServer, "", ""))
-		fmt.Println(components.GetReference(components.ComponentComplianceSnapshotter, "", ""))
-		fmt.Println(components.GetReference(components.ComponentComplianceBenchmarker, "", ""))
-		fmt.Println(components.GetReference(components.ComponentIntrusionDetectionController, "", ""))
-		fmt.Println(components.GetReference(components.ComponentElasticTseeInstaller, "", ""))
-		fmt.Println(components.GetReference(components.ComponentManager, "", ""))
-		fmt.Println(components.GetReference(components.ComponentManagerProxy, "", ""))
-		fmt.Println(components.GetReference(components.ComponentGuardian, "", ""))
-		fmt.Println(components.GetReference(components.ComponentFluentd, "", ""))
-		fmt.Println(components.GetReference(components.ComponentEsCurator, "", ""))
-		fmt.Println(components.GetReference(components.ComponentKibana, "", ""))
-		fmt.Println(components.GetReference(components.ComponentElasticsearch, "", ""))
-		fmt.Println(components.GetReference(components.ComponentDex, "", ""))
-		fmt.Println(components.GetReference(components.ComponentCSRInitContainer, "", ""))
+		fmt.Println("Operator:", version.VERSION, "Calico:", components.CalicoRelease, "Enterprise:", components.EnterpriseRelease)
+		for _, x := range components.CalicoComponents {
+			ref, _ := components.GetReference(x, "", "", nil)
+			fmt.Println(ref)
+		}
+		for _, x := range components.EnterpriseComponents {
+			ref, _ := components.GetReference(x, "", "", nil)
+			fmt.Println(ref)
+		}
 		os.Exit(0)
 	}
 

@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
 )
 
@@ -319,6 +320,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
+			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -341,8 +344,9 @@ var _ = Describe("Testing core-controller installation", func() {
 				&operator.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operator.InstallationSpec{
-						Variant:  operator.TigeraSecureEnterprise,
-						Registry: "some.registry.org/",
+						Variant:               operator.TigeraSecureEnterprise,
+						Registry:              "some.registry.org/",
+						CertificateManagement: &operator.CertificateManagement{},
 					},
 					Status: operator.InstallationStatus{
 						Variant: operator.TigeraSecureEnterprise,
@@ -390,6 +394,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraTypha.Image,
 					components.ComponentTigeraTypha.Version)))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -406,7 +417,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraNode.Image,
 					components.ComponentTigeraNode.Version)))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(3))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
@@ -419,6 +430,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraCNI.Image,
 					components.ComponentTigeraCNI.Version)))
+			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operator.ImageSet{
@@ -430,6 +447,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
+						{Image: "rdtigera/init-container", Digest: "sha256:calicocsrinithash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -468,6 +486,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraTypha.Image,
 					"sha256:tigeratyphahash")))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -484,7 +509,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraNode.Image,
 					"sha256:tigeracnxnodehash")))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(3))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
@@ -497,6 +522,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraCNI.Image,
 					"sha256:tigeracnihash")))
+			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
 
 			inst := operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{

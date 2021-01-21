@@ -112,6 +112,7 @@ type apiServerComponent struct {
 	clusterDomain               string
 	apiServerImage              string
 	queryServerImage            string
+	certSignReqImage            string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -128,6 +129,13 @@ func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
 	c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		c.certSignReqImage, err = ResolveCSRInitImage(c.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -619,6 +627,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	if c.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
+			c.certSignReqImage,
 			APIServerTLSSecretName, TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,

@@ -35,6 +35,7 @@ const (
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
 	installation *operator.InstallationSpec,
+	image string,
 	mountName string,
 	commonName string,
 	keyName string,
@@ -43,7 +44,7 @@ func CreateCSRInitContainer(
 	appNameLabel string) corev1.Container {
 	return corev1.Container{
 		Name:  CSRInitContainerName,
-		Image: components.GetReference(components.ComponentCSRInitContainer, components.CalicoRegistry, installation.ImagePath),
+		Image: image,
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: "/certs-share", Name: mountName, ReadOnly: false},
 		},
@@ -78,6 +79,16 @@ func CreateCSRInitContainer(
 			AllowPrivilegeEscalation: Bool(false),
 		},
 	}
+}
+
+// ResolveCsrInitImage resolves the image needed for the CSR init image taking into account the specified ImageSet
+func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet) (string, error) {
+	return components.GetReference(
+		components.ComponentCSRInitContainer,
+		inst.Registry,
+		inst.ImagePath,
+		is,
+	)
 }
 
 // csrClusterRole returns a role with the necessary permissions to create certificate signing requests.

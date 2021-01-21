@@ -48,7 +48,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index . "rdtigera/init-container" }}
+{{ with index .Components "rdtigera/init-container" }}
 	ComponentCSRInitContainer = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

@@ -67,6 +67,8 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
@@ -77,8 +79,9 @@ var _ = Describe("apiserver controller tests", func() {
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
-				Registry: "some.registry.org/",
+				Variant:               operatorv1.TigeraSecureEnterprise,
+				Registry:              "some.registry.org/",
+				CertificateManagement: &operatorv1.CertificateManagement{},
 			},
 		})).To(BeNil())
 		// Apply prerequisites for the basic reconcile to succeed.
@@ -121,6 +124,13 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentQueryServer.Image,
 					components.ComponentQueryServer.Version)))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
@@ -129,6 +139,7 @@ var _ = Describe("apiserver controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
 						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
+						{Image: "rdtigera/init-container", Digest: "sha256:calicocsrinithash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -163,6 +174,12 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentQueryServer.Image,
 					"sha256:queryserverhash")))
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
 		})
 	})
 })

@@ -929,7 +929,7 @@ var _ = Describe("LogStorage w/ Certificate management", func() {
 			cli = fake.NewFakeClientWithScheme(scheme)
 			Expect(cli.Create(ctx, &storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: logstorage.DefaultElasticsearchStorageClass,
+					Name: DefaultElasticsearchStorageClass,
 				},
 			}))
 		})
@@ -937,7 +937,7 @@ var _ = Describe("LogStorage w/ Certificate management", func() {
 			install.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("ca"), SignerName: "a.b/c"}
 			Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
 			Expect(cli.Create(ctx, logstorageCR)).To(BeNil())
-			r, err := logstorage.NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+			r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			_, err = r.Reconcile(reconcile.Request{})
 			Expect(err).Should(HaveOccurred())

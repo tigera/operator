@@ -90,6 +90,7 @@ type nodeComponent struct {
 	nodeImage           string
 	cniImage            string
 	flexvolImage        string
+	certSignReqImage    string
 }
 
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
@@ -118,6 +119,13 @@ func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.cr.CertificateManagement != nil {
+		c.certSignReqImage, err = ResolveCSRInitImage(c.cr, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -549,6 +557,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations[nodeCertHashAnnotation] = AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cr,
+			c.certSignReqImage,
 			"felix-certs",
 			FelixCommonName,
 			TLSSecretKeyName,

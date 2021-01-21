@@ -433,7 +433,7 @@ func (m *statusManager) syncState() bool {
 	for _, labels := range m.certificatestatusrequests {
 		pending, err := hasPendingCSR(context.TODO(), m.client, labels)
 		if err != nil {
-			log.WithValues("error", err).Info(fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with labels value %v", labels))
+			log.WithValues("error", err).Error(err, fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with labels value %v", labels))
 		} else if pending {
 			progressing = append(progressing, fmt.Sprintf("Waiting on CertificateSigningRequest(s) with labels %v to be approved", labels))
 		}

@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,6 +60,15 @@ func GetResource(c client.Client, obj runtime.Object) error {
 		Namespace: obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace(),
 	}
 	return c.Get(context.Background(), k, obj)
+}
+
+func GetContainer(containers []v1.Container, name string) *v1.Container {
+	for _, container := range containers {
+		if container.Name == name {
+			return &container
+		}
+	}
+	return nil
 }
 
 // RunOperator runs the provided operator manager in a separate goroutine so that

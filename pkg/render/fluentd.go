@@ -137,6 +137,22 @@ type fluentdComponent struct {
 	installation    *operatorv1.InstallationSpec
 	clusterDomain   string
 	osType          OSType
+	image           string
+}
+
+func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+
+	if c.osType == OSTypeWindows {
+		var err error
+		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, is)
+		return err
+	}
+
+	var err error
+	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, is)
+	return err
 }
 
 func (c *fluentdComponent) SupportedOSType() OSType {
@@ -162,13 +178,6 @@ func (c *fluentdComponent) eksLogForwarderName() string {
 		return eksLogForwarderWindowsName
 	}
 	return eksLogForwarderName
-}
-
-func (c *fluentdComponent) image() string {
-	if c.osType == OSTypeWindows {
-		return components.GetReference(components.ComponentFluentdWindows, c.installation.Registry, c.installation.ImagePath)
-	}
-	return components.GetReference(components.ComponentFluentd, c.installation.Registry, c.installation.ImagePath)
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -451,7 +460,7 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	return ElasticsearchContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
-		Image:           c.image(),
+		Image:           c.image,
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -810,14 +819,14 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         c.eksLogForwarderName() + "-startup",
-						Image:        c.image(),
+						Image:        c.image,
 						Command:      []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.clusterDomain, c.osType)},
 					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
 						Name:         c.eksLogForwarderName(),
-						Image:        c.image(),
+						Image:        c.image,
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.clusterDomain, c.osType)},

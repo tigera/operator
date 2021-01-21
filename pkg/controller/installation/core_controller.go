@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -153,6 +154,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
+	}
+
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -232,7 +237,7 @@ type ReconcileInstallation struct {
 	autoDetectedProvider operator.Provider
 	status               status.StatusManager
 	typhaAutoscaler      *typhaAutoscaler
-	namespaceMigration   *migration.CoreNamespaceMigration
+	namespaceMigration   migration.NamespaceMigration
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
 	migrationChecked     bool
@@ -864,6 +869,22 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	components = append(components, calico.Render()...)
 
+	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
+	if err != nil {
+		r.SetDegraded("Error getting ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ValidateImageSet(imageSet); err != nil {
+		r.SetDegraded("Error validating ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ResolveImages(imageSet, components...); err != nil {
+		r.SetDegraded("Error resolving ImageSet for components", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	for _, component := range components {
 		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
@@ -951,6 +972,11 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// Write updated status.
 	instance.Status.MTU = int32(statusMTU)
 	instance.Status.Variant = instance.Spec.Variant
+	if imageSet == nil {
+		instance.Status.ImageSet = ""
+	} else {
+		instance.Status.ImageSet = imageSet.Name
+	}
 	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

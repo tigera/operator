@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -115,6 +116,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
+	}
+
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
@@ -208,7 +213,7 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	_, installation, err := installation.GetInstallation(ctx, r.client)
+	variant, installation, err := installation.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -415,6 +420,12 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	if err != nil {
 		log.Error(err, "Error rendering Manager")
 		r.status.SetDegraded("Error rendering Manager", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 

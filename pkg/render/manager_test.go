@@ -424,6 +424,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		dns.DefaultClusterDomain,
 		render.ElasticsearchLicenseTypeEnterpriseTrial)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
+	Expect(component.ResolveImages(nil)).To(BeNil())
 	resources, _ := component.Objects()
 	return resources
 }

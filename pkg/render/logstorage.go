@@ -1443,7 +1443,7 @@ func (es elasticsearchComponent) oidcUserRole() []runtime.Object {
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
 					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"update", "get", "list"},
+					Verbs:         []string{"update", "patch"},
 				},
 			},
 		},

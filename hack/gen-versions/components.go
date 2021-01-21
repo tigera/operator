@@ -36,6 +36,7 @@ var defaultImages = map[string]string{
 	"eck-kibana":              "tigera/kibana",
 	"guardian":                "tigera/guardian",
 	"tigera-cni":              "tigera/cni",
+	"rdtigera/init-container": "rdtigera/init-container",
 }
 
 type Components map[string]*Component

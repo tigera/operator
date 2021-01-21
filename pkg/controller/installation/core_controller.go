@@ -767,11 +767,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	typhaNodeTLS, err := r.GetTyphaFelixTLSConfig()
-	if err != nil {
-		log.Error(err, "Error with Typha/Felix secrets")
-		r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
-		return reconcile.Result{}, err
+	var typhaNodeTLS *render.TyphaNodeTLS
+	if instance.Spec.CertificateManagement == nil {
+		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
+		if err != nil {
+			log.Error(err, "Error with Typha/Felix secrets")
+			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
@@ -875,6 +878,13 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
+	if instance.Spec.CertificateManagement != nil {
+		r.status.AddCertificateSigningRequests(render.CSRLabelCalicoSystem, map[string]string{
+			"k8s-app": render.CSRLabelCalicoSystem,
+		})
+	} else {
+		r.status.RemoveCertificateSigningRequests(render.CSRLabelCalicoSystem)
+	}
 
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.

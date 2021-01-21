@@ -37,6 +37,10 @@ func (m *MockStatus) AddCronJobs(cjs []types.NamespacedName) {
 	m.Called(cjs)
 }
 
+func (m *MockStatus) AddCertificateSigningRequests(name string, labels map[string]string) {
+	m.Called(name)
+}
+
 func (m *MockStatus) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.Called(dss)
 }
@@ -51,6 +55,10 @@ func (m *MockStatus) RemoveStatefulSets(sss ...types.NamespacedName) {
 
 func (m *MockStatus) RemoveCronJobs(cjs ...types.NamespacedName) {
 	m.Called(cjs)
+}
+
+func (m *MockStatus) RemoveCertificateSigningRequests(label string) {
+	m.Called(label)
 }
 
 func (m *MockStatus) SetDegraded(reason, msg string) {

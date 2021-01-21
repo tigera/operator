@@ -87,6 +87,51 @@ type nodeComponent struct {
 	migrationNeeded     bool
 	nodeAppArmorProfile string
 	clusterDomain       string
+	nodeImage           string
+	cniImage            string
+	flexvolImage        string
+	certSignReqImage    string
+}
+
+func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.cr.Registry
+	path := c.cr.ImagePath
+	var err error
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, is)
+	} else {
+		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, is)
+	}
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, is)
+	} else {
+		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, is)
+	}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.cr.CertificateManagement != nil {
+		c.certSignReqImage, err = ResolveCSRInitImage(c.cr, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *nodeComponent) SupportedOSType() OSType {
@@ -512,6 +557,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations[nodeCertHashAnnotation] = AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cr,
+			c.certSignReqImage,
 			"felix-certs",
 			FelixCommonName,
 			TLSSecretKeyName,
@@ -698,14 +744,9 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	image := components.GetReference(components.ComponentCalicoCNI, c.cr.Registry, c.cr.ImagePath)
-	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraCNI, c.cr.Registry, c.cr.ImagePath)
-	}
-
 	return v1.Container{
 		Name:         "install-cni",
-		Image:        image,
+		Image:        c.cniImage,
 		Command:      []string{"/opt/cni/bin/install"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
@@ -724,7 +765,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 
 	return v1.Container{
 		Name:         "flexvol-driver",
-		Image:        components.GetReference(components.ComponentFlexVolume, c.cr.Registry, c.cr.ImagePath),
+		Image:        c.flexvolImage,
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
 			Privileged: Bool(true),
@@ -772,15 +813,9 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
-
-	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoNode, c.cr.Registry, c.cr.ImagePath)
-	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraNode, c.cr.Registry, c.cr.ImagePath)
-	}
 	return v1.Container{
 		Name:            "calico-node",
-		Image:           image,
+		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
 		SecurityContext: &v1.SecurityContext{Privileged: Bool(true)},
 		Env:             c.nodeEnvVars(),

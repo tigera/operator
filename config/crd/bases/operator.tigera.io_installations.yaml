@@ -1154,6 +1154,11 @@ spec:
                     - TigeraSecureEnterprise
                     type: string
                 type: object
+              imageSet:
+                description: ImageSet is the name of the ImageSet being used, if there
+                  is an ImageSet that is being used. If an ImageSet is not being used
+                  then this will not be set.
+                type: string
               mtu:
                 description: MTU is the most recently observed value for pod network
                   MTU. This may be an explicitly configured value, or based on Calico's

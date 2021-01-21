@@ -15,17 +15,50 @@
 package installation
 
 import (
+	"context"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	schedv1beta "k8s.io/api/scheduling/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 
 	osconfigv1 "github.com/openshift/api/config/v1"
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 )
 
 var mismatchedError = fmt.Errorf("Installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
+
+type fakeNamespaceMigration struct{}
+
+func (f *fakeNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context) (bool, error) {
+	return false, nil
+}
+func (f *fakeNamespaceMigration) Run(ctx context.Context, log logr.Logger) error {
+	return nil
+}
+func (f *fakeNamespaceMigration) NeedCleanup() bool {
+	return false
+}
+func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
+	return nil
+}
 
 var _ = Describe("Testing core-controller installation", func() {
 
@@ -258,4 +291,251 @@ var _ = Describe("Testing core-controller installation", func() {
 				HostPorts: &hpDisabled,
 			}),
 	)
+	Context("image reconciliation tests", func() {
+		var c client.Client
+		var ctx context.Context
+		var r ReconcileInstallation
+		var scheme *runtime.Scheme
+		var mockStatus *status.MockStatus
+
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(schedv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+			// Create a client that will have a crud interface of k8s objects.
+			c = fake.NewFakeClientWithScheme(scheme)
+			ctx = context.Background()
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+
+			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
+			r = ReconcileInstallation{
+				config:               nil, // there is no fake for config
+				client:               c,
+				scheme:               scheme,
+				autoDetectedProvider: operator.ProviderNone,
+				status:               mockStatus,
+				typhaAutoscaler:      newTyphaAutoscaler(c, mockStatus),
+				namespaceMigration:   &fakeNamespaceMigration{},
+				amazonCRDExists:      true,
+				enterpriseCRDsExist:  true,
+				migrationChecked:     true,
+			}
+			r.typhaAutoscaler.start()
+
+			// We start off with a 'standard' installation, with nothing special
+			Expect(c.Create(
+				ctx,
+				&operator.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec: operator.InstallationSpec{
+						Variant:               operator.TigeraSecureEnterprise,
+						Registry:              "some.registry.org/",
+						CertificateManagement: &operator.CertificateManagement{},
+					},
+					Status: operator.InstallationStatus{
+						Variant: operator.TigeraSecureEnterprise,
+						Computed: &operator.InstallationSpec{
+							Registry: "my-reg",
+							// The test is provider agnostic.
+							KubernetesProvider: operator.ProviderNone,
+						},
+					},
+				})).NotTo(HaveOccurred())
+		})
+
+		It("should use builtin images", func() {
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-kube-controllers",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentTigeraKubeControllers.Image,
+					components.ComponentTigeraKubeControllers.Version)))
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      common.TyphaDeploymentName,
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
+			Expect(typha).ToNot(BeNil())
+			Expect(typha.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentTigeraTypha.Image,
+					components.ComponentTigeraTypha.Version)))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      common.NodeDaemonSetName,
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
+			Expect(node).ToNot(BeNil())
+			Expect(node.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentTigeraNode.Image,
+					components.ComponentTigeraNode.Version)))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(3))
+			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
+			Expect(fv).ToNot(BeNil())
+			Expect(fv.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentFlexVolume.Image,
+					components.ComponentFlexVolume.Version)))
+			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+			Expect(cni).ToNot(BeNil())
+			Expect(cni.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentTigeraCNI.Image,
+					components.ComponentTigeraCNI.Version)))
+			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
+		})
+		It("should use images from imageset", func() {
+			Expect(c.Create(ctx, &operator.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+				Spec: operator.ImageSetSpec{
+					Images: []operator.Image{
+						{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
+						{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
+						{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
+						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
+						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
+						{Image: "rdtigera/init-container", Digest: "sha256:calicocsrinithash"},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-kube-controllers",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentTigeraKubeControllers.Image,
+					"sha256:tigerakubecontrollerhash")))
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      common.TyphaDeploymentName,
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
+			Expect(typha).ToNot(BeNil())
+			Expect(typha.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentTigeraTypha.Image,
+					"sha256:tigeratyphahash")))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      common.NodeDaemonSetName,
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
+			Expect(node).ToNot(BeNil())
+			Expect(node.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentTigeraNode.Image,
+					"sha256:tigeracnxnodehash")))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(3))
+			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
+			Expect(fv).ToNot(BeNil())
+			Expect(fv.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentFlexVolume.Image,
+					"sha256:calicoflexvolhash")))
+			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+			Expect(cni).ToNot(BeNil())
+			Expect(cni.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentTigeraCNI.Image,
+					"sha256:tigeracnihash")))
+			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinit).ToNot(BeNil())
+			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
+
+			inst := operator.Installation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(test.GetResource(c, &inst)).To(BeNil())
+			Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
+		})
+	})
 })

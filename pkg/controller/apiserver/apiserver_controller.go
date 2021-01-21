@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -113,6 +114,10 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+	}
+
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch ImageSet: %w", err)
 	}
 
 	log.V(5).Info("Controller created and Watches setup")
@@ -262,6 +267,12 @@ func (r *ReconcileAPIServer) Reconcile(request reconcile.Request) (reconcile.Res
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 

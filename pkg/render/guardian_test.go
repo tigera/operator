@@ -57,6 +57,7 @@ var _ = Describe("Rendering tests", func() {
 			&i,
 			secret,
 		)
+		Expect(g.ResolveImages(nil)).To(BeNil())
 		resources, _ = g.Objects()
 		return
 	}

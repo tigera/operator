@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -100,6 +101,10 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", ControllerName, secretName, namespace, err)
 			}
 		}
+	}
+
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch ImageSet: %w", ControllerName, err)
 	}
 
 	return nil
@@ -256,6 +261,12 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		install,
 		dexCfg,
 	)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	if err := hlr.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		log.Error(err, "Error creating / updating resource")

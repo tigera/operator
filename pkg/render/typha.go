@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,6 +72,35 @@ type typhaComponent struct {
 	amazonCloudInt     *operator.AmazonCloudIntegration
 	namespaceMigration bool
 	clusterDomain      string
+	typhaImage         string
+	certSignReqImage   string
+}
+
+func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := c.installation.Registry
+	path := c.installation.ImagePath
+	var err error
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
+		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, is)
+	} else {
+		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, is)
+	}
+	errMsgs := []string{}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		c.certSignReqImage, err = ResolveCSRInitImage(c.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (c *typhaComponent) SupportedOSType() OSType {
@@ -325,6 +355,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		annotations[typhaCertHashAnnotation] = AnnotationHash(c.installation.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
+			c.certSignReqImage,
 			"typha-certs",
 			TyphaCommonName,
 			TLSSecretKeyName,
@@ -428,14 +459,9 @@ func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
 func (c *typhaComponent) typhaContainer() v1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
-	// Select which image to use.
-	image := components.GetReference(components.ComponentCalicoTypha, c.installation.Registry, c.installation.ImagePath)
-	if c.installation.Variant == operator.TigeraSecureEnterprise {
-		image = components.GetReference(components.ComponentTigeraTypha, c.installation.Registry, c.installation.ImagePath)
-	}
 	return v1.Container{
 		Name:           "calico-typha",
-		Image:          image,
+		Image:          c.typhaImage,
 		Resources:      c.typhaResources(),
 		Env:            c.typhaEnvVars(),
 		VolumeMounts:   c.typhaVolumeMounts(),

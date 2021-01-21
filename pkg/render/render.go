@@ -43,6 +43,12 @@ var (
 )
 
 type Component interface {
+	// ResolveImages should call components.GetReference for all images that the Component
+	// needs, passing 'is' to the GetReference call and if there are any errors those
+	// are returned. It is valid to pass nil for 'is' as GetReference accepts the value.
+	// ResolveImages must be called before Objects is called for the component.
+	ResolveImages(is *operator.ImageSet) error
+
 	// Objects returns the lists of objects in this component that should be created and/or deleted during
 	// rendering.
 	Objects() (objsToCreate, objsToDelete []runtime.Object)

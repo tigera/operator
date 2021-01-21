@@ -594,7 +594,6 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	if c.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
-			c.installation.CertificateManagement,
 			APIServerTLSSecretName, TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,

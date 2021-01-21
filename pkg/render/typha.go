@@ -325,7 +325,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		annotations[typhaCertHashAnnotation] = AnnotationHash(c.installation.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
-			c.installation.CertificateManagement,
 			"typha-certs",
 			TyphaCommonName,
 			TLSSecretKeyName,

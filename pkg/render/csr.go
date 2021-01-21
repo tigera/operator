@@ -35,7 +35,6 @@ const (
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
 	installation *operator.InstallationSpec,
-	cm *operator.CertificateManagement,
 	mountName string,
 	commonName string,
 	keyName string,
@@ -50,7 +49,7 @@ func CreateCSRInitContainer(
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
-			{Name: "SIGNER", Value: cm.SignerName},
+			{Name: "SIGNER", Value: installation.CertificateManagement.SignerName},
 			{Name: "COMMON_NAME", Value: commonName},
 			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.KeyAlgorithm)},
 			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},

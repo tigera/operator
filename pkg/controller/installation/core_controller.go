@@ -30,6 +30,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -244,10 +245,12 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 }
 
+const TigeraCustom = "unsupported.operator.tigera.io/custom"
+
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.
-func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *operator.InstallationSpec, error) {
+func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *common.InstallationInternal, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
@@ -266,7 +269,21 @@ func GetInstallation(ctx context.Context, client client.Client) (operator.Produc
 		spec = overrideInstallationSpec(spec, overlay.Spec)
 	}
 
-	return instance.Status.Variant, &spec, nil
+	// Only look at the annotations on the base Installation for the purposes of InstallationInternal
+	ii := getInstallationInternal(&spec, instance.Annotations)
+
+	return instance.Status.Variant, &ii, nil
+}
+
+func getInstallationInternal(inst *operator.InstallationSpec, annotations map[string]string) common.InstallationInternal {
+	ii := common.InstallationInternal{Spec: inst}
+
+	ii.NodeAppArmorProfile = annotations[techPreviewFeatureSeccompApparmor]
+
+	_, ok := annotations[TigeraCustom]
+	ii.TigeraCustom = ok
+
+	return ii
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -822,20 +839,16 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 
-	nodeAppArmorProfile := ""
-	a := instance.GetObjectMeta().GetAnnotations()
-	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
-		nodeAppArmorProfile = val
-	}
-
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+	ii := getInstallationInternal(&instance.Spec, instance.GetObjectMeta().GetAnnotations())
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
 		k8sapi.Endpoint,
-		&instance.Spec,
+		&ii,
 		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
@@ -847,7 +860,6 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
-		nodeAppArmorProfile,
 		r.clusterDomain,
 		esLicenseType,
 	)
@@ -989,6 +1001,7 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
+		reqLogger.Error(err, "Failed updating status")
 		return reconcile.Result{}, err
 	}
 

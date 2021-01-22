@@ -199,6 +199,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error querying for ManagementCluster")
+		r.status.SetDegraded("Error querying for ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -368,6 +375,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Render the fluentd component for Linux
 	component := render.Fluentd(
 		instance,
+		managementCluster,
 		esSecrets,
 		esClusterConfig,
 		s3Credential,
@@ -400,6 +408,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		component = render.Fluentd(
 			instance,
+			managementCluster,
 			esSecrets,
 			esClusterConfig,
 			s3Credential,

@@ -111,7 +111,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchPublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
-		render.ElasticsearchIntrusionDetectionJobUserSecret, render.KibanaPublicCertSecret,
+		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
+		render.KibanaPublicCertSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -230,6 +231,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(request reconcile.Request) (reco
 		[]string{
 			render.ElasticsearchIntrusionDetectionUserSecret,
 			render.ElasticsearchIntrusionDetectionJobUserSecret,
+			render.ElasticsearchADJobUserSecret,
 		},
 		r.client,
 	)

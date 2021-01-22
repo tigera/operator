@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <testsuite name="pkg/controller/utils/imageset Suite" tests="4" failures="0" errors="0" time="0.006">
+      <testcase name="imageset tests no imageset is fine should not error for Calico" classname="pkg/controller/utils/imageset Suite" time="0.002111095"></testcase>
+      <testcase name="imageset tests no imageset is fine should not error for Enterprise" classname="pkg/controller/utils/imageset Suite" time="0.000895725"></testcase>
+      <testcase name="imageset tests Test imageset validation  Calico variant" classname="pkg/controller/utils/imageset Suite" time="0.000950563"></testcase>
+      <testcase name="imageset tests Test imageset validation  Enterprise variant" classname="pkg/controller/utils/imageset Suite" time="0.00225988"></testcase>
+  </testsuite>

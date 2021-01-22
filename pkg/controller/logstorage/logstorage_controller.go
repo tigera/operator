@@ -309,7 +309,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if ls != nil && install.CertificateManagement != nil {
+	if ls != nil && install.Spec.CertificateManagement != nil {
 		r.status.SetDegraded("Certificate Management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource.", "")
 		return reconcile.Result{}, fmt.Errorf("certificate management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource")
 	}
@@ -350,7 +350,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install.Spec, r.client)
 	if err != nil {
 		log.Error(err, "error retrieving pull secrets")
 		r.status.SetDegraded("An error occurring while retrieving the pull secrets", err.Error())

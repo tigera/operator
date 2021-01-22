@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
@@ -45,7 +46,7 @@ type resourceTestObj struct {
 var _ = Describe("Elasticsearch rendering tests", func() {
 	Context("Standalone cluster type", func() {
 		var logStorage *operatorv1.LogStorage
-		var installation *operatorv1.InstallationSpec
+		var installation *common.InstallationInternal
 		replicas := int32(1)
 		retention := int32(1)
 		var esConfig *render.ElasticsearchClusterConfig
@@ -77,9 +78,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 			}
 
-			installation = &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+			installation = &common.InstallationInternal{
+				Spec: &operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
+				},
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
 			oidcConfigMap = &corev1.ConfigMap{
@@ -619,13 +622,15 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 
 	Context("Managed cluster", func() {
-		var installation *operatorv1.InstallationSpec
+		var installation *common.InstallationInternal
 		var managementClusterConnection *operatorv1.ManagementClusterConnection
 
 		BeforeEach(func() {
-			installation = &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+			installation = &common.InstallationInternal{
+				Spec: &operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
+				},
 			}
 			managementClusterConnection = &operatorv1.ManagementClusterConnection{}
 		})
@@ -666,7 +671,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 	Context("NodeSet configuration", func() {
 		var logStorage *operatorv1.LogStorage
-		var installation *operatorv1.InstallationSpec
+		var installation *common.InstallationInternal
 		var esConfig *render.ElasticsearchClusterConfig
 
 		replicas, retention := int32(1), int32(1)
@@ -692,9 +697,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 			}
 
-			installation = &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+			installation = &common.InstallationInternal{
+				Spec: &operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
+				},
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
 		})
@@ -1314,7 +1321,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster, managementClusterConnection *operatorv1.ManagementClusterConnection) func() {
 	return func() {
 		var logStorage *operatorv1.LogStorage
-		var installation *operatorv1.InstallationSpec
+		var installation *common.InstallationInternal
 		replicas := int32(1)
 		retention := int32(1)
 		var esConfig *render.ElasticsearchClusterConfig
@@ -1346,9 +1353,11 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				},
 			}
 
-			installation = &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+			installation = &common.InstallationInternal{
+				Spec: &operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
+				},
 			}
 			esConfig = render.NewElasticsearchClusterConfig("cluster", 1, 1, 1)
 		})

@@ -124,9 +124,25 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+// This should not be added to the EnterpriseComponents below, it is the same
+// image as the standard kibana but with a different Version/Tag
+{{- with index .Components.kibana }}
+	ComponentKibanaCustom = component{
+		Version: "tesla-{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "cnx-manager" }}
 	ComponentManager = component{
 		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+// This should not be added to the EnterpriseComponents below, it is the same
+// image as the standard cnx-manager but with a different Version/Tag
+{{- with index .Components "cnx-manager" }}
+	ComponentManagerCustom = component{
+		Version: "tesla-{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}

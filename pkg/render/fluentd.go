@@ -90,6 +90,7 @@ type SplunkCredential struct {
 
 func Fluentd(
 	lc *operatorv1.LogCollector,
+	mc *operatorv1.ManagementCluster,
 	esSecrets []*corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
 	s3C *S3Credential,
@@ -102,17 +103,18 @@ func Fluentd(
 	osType OSType,
 ) Component {
 	return &fluentdComponent{
-		lc:              lc,
-		esSecrets:       esSecrets,
-		esClusterConfig: esClusterConfig,
-		s3Credential:    s3C,
-		splkCredential:  spC,
-		filters:         f,
-		eksConfig:       eksConfig,
-		pullSecrets:     pullSecrets,
-		installation:    installation,
-		clusterDomain:   clusterDomain,
-		osType:          osType,
+		lc:                lc,
+		managementCluster: mc,
+		esSecrets:         esSecrets,
+		esClusterConfig:   esClusterConfig,
+		s3Credential:      s3C,
+		splkCredential:    spC,
+		filters:           f,
+		eksConfig:         eksConfig,
+		pullSecrets:       pullSecrets,
+		installation:      installation,
+		clusterDomain:     clusterDomain,
+		osType:            osType,
 	}
 }
 
@@ -126,18 +128,20 @@ type EksCloudwatchLogConfig struct {
 }
 
 type fluentdComponent struct {
-	lc              *operatorv1.LogCollector
-	esSecrets       []*corev1.Secret
-	esClusterConfig *ElasticsearchClusterConfig
-	s3Credential    *S3Credential
-	splkCredential  *SplunkCredential
-	filters         *FluentdFilters
-	eksConfig       *EksCloudwatchLogConfig
-	pullSecrets     []*corev1.Secret
-	installation    *operatorv1.InstallationSpec
-	clusterDomain   string
-	osType          OSType
-	image           string
+	lc                *operatorv1.LogCollector
+	managementCluster *operatorv1.ManagementCluster
+	esSecrets         []*corev1.Secret
+	esClusterConfig   *ElasticsearchClusterConfig
+	s3Credential      *S3Credential
+	splkCredential    *SplunkCredential
+	filters           *FluentdFilters
+	eksConfig         *EksCloudwatchLogConfig
+	pullSecrets       []*corev1.Secret
+	installation      *operatorv1.InstallationSpec
+	clusterDomain     string
+	osType            OSType
+	image             string
+	// TODO: Add a flag field here to determine whether or not this is Calico Cloud installation
 }
 
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -352,7 +356,7 @@ func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// managerDeployment creates a deployment for the Tigera Secure manager component.
+// daemonset creates a daemon set for the Tigera Secure fluentd component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)
@@ -595,6 +599,21 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		if c.filters.DNS != "" {
 			envs = append(envs,
 				corev1.EnvVar{Name: "FLUENTD_DNS_FILTERS", Value: "true"})
+		}
+	}
+
+	// For Calico Cloud (flag enabled) we would like to disable log forwarding to Elasticsearch
+	// TODO: Use flag value here to determine whether or not this is Calico Cloud
+	if true {
+		// Disable specifically for management clusters
+		if c.managementCluster != nil {
+			envs = append(envs,
+				corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
+				corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
+				corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
+				corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
+				corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
+			)
 		}
 	}
 

@@ -416,6 +416,16 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
+	envs = setManagerCloudEnvs(envs)
+	return envs
+}
+
+// Do this as a separate function to try to make updates in the future easier.
+func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
+	envs = append(envs,
+		v1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
+		v1.EnvVar{Name: "CNX_CALICO_CLOUD_EDITION", Value: "true"},
+	)
 	return envs
 }
 

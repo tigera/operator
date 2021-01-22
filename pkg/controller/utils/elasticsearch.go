@@ -20,8 +20,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 
@@ -31,6 +33,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -372,4 +375,76 @@ func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {
 		}
 	}
 	return totalEsStorage
+}
+
+// EnsureCertificateKeySecret ensures that the certificate in the provided
+// secrets has the expected DNS names. If no key secret is provided, a new key
+// secret is created and returned. If the key secret provided does have the
+// right DNS name, then that given key secret is returned.
+// Otherwise a new key secret is created and returned.
+func EnsureCertificateKeySecret(ctx context.Context, keySecretName string, keySecret *corev1.Secret, pubSecret *corev1.Secret, svcDNSNames ...string) (*corev1.Secret, error) {
+	var err error
+	secret := &corev1.Secret{}
+
+	// Create the key secret if it doesn't exist.
+	if keySecret == nil {
+		secret, err = render.CreateOperatorTLSSecret(nil,
+			keySecretName, "tls.key", "tls.crt",
+			render.DefaultCertificateDuration, nil, svcDNSNames...,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return secret, nil
+	}
+
+	// Now check to see if the cert exists. If the cert's DNS
+	// names have changed then we need to recreate the key secret.
+	// If we don't have a pub secret yet then just return the key secret
+	if pubSecret == nil {
+		return secret, nil
+	}
+
+	// If we do have the pub secret then we need to check that its DNS names are expected
+	ok, err := secretHasExpectedDNSNames(pubSecret, svcDNSNames)
+
+	if err != nil {
+		return nil, err
+	}
+	// DNS names on the cert do not match expected values; create a new cert.
+	if !ok {
+		return render.CreateOperatorTLSSecret(nil,
+			keySecret.Name, "tls.key", "tls.crt",
+			render.DefaultCertificateDuration, nil, svcDNSNames...,
+		)
+	}
+
+	// Finally return just the key secret.
+	return secret, nil
+}
+
+func secretHasExpectedDNSNames(secret *corev1.Secret, expectedDNSNames []string) (bool, error) {
+	if secret.Data == nil {
+		return false, nil
+	}
+
+	certBytes := secret.Data["tls.crt"]
+	pemBlock, _ := pem.Decode(certBytes)
+	cert, err := x509.ParseCertificate(pemBlock.Bytes)
+	if err != nil {
+		return false, err
+	}
+
+	return reflect.DeepEqual(cert.DNSNames, expectedDNSNames), nil
+}
+
+func GetCertificateSecret(ctx context.Context, client client.Client, name string, ns string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, secret); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return secret, nil
 }

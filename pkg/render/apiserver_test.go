@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("API server rendering tests", func() {
@@ -724,7 +725,7 @@ func verifyCert(secret *corev1.Secret, clusterDomain string) {
 	Expect(secret.Data).To(HaveKey("apiserver.crt"))
 	Expect(secret.Data).To(HaveKey("apiserver.key"))
 
-	verifyCertSANs(secret.Data["apiserver.crt"], clusterDomain)
+	test.VerifyCertSANs(secret.Data["apiserver.crt"], "tigera-api", "tigera-system", clusterDomain)
 }
 
 func verifyCertSANs(certBytes []byte, clusterDomain string) {

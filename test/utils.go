@@ -16,6 +16,8 @@ package test
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -93,4 +95,17 @@ func RunOperator(mgr manager.Manager, stopChan chan struct{}) (doneChan chan str
 	synced := mgr.GetCache().WaitForCacheSync(stopChan)
 	Expect(synced).To(BeTrue(), "manager cache failed to sync")
 	return doneChan
+}
+
+func VerifyCertSANs(certBytes []byte, svcName, ns, clusterDomain string) {
+	pemBlock, _ := pem.Decode(certBytes)
+	cert, err := x509.ParseCertificate(pemBlock.Bytes)
+	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
+	expectedDNSNames := []string{
+		svcName,
+		fmt.Sprintf("%s.%s", svcName, ns),
+		fmt.Sprintf("%s.%s.svc", svcName, ns),
+		fmt.Sprintf("%s.%s.svc.%s", svcName, ns, clusterDomain),
+	}
+	Expect(cert.DNSNames).To(ConsistOf(expectedDNSNames), "Expect cert SAN's to match service DNS names")
 }

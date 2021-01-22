@@ -106,9 +106,21 @@ var (
 		Version: "master",
 		Image:   "tigera/kibana",
 	}
+	// This should not be added to the EnterpriseComponents below, it is the same
+	// image as the standard kibana but with a different Version/Tag
+	ComponentKibanaCustom = component{
+		Version: "tesla-master",
+		Image:   "tigera/kibana",
+	}
 
 	ComponentManager = component{
 		Version: "master",
+		Image:   "tigera/cnx-manager",
+	}
+	// This should not be added to the EnterpriseComponents below, it is the same
+	// image as the standard cnx-manager but with a different Version/Tag
+	ComponentManagerCustom = component{
+		Version: "tesla-master",
 		Image:   "tigera/cnx-manager",
 	}
 

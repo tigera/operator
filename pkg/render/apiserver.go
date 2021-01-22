@@ -108,7 +108,6 @@ type apiServerComponent struct {
 	tlsAnnotations              map[string]string
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
-	isManagement                bool
 	clusterDomain               string
 	apiServerImage              string
 	queryServerImage            string

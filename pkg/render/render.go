@@ -76,7 +76,7 @@ type TyphaNodeTLS struct {
 
 func Calico(
 	k8sServiceEp k8sapi.ServiceEndpoint,
-	cr *operator.InstallationSpec,
+	ii *common.InstallationInternal,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
@@ -88,14 +88,13 @@ func Calico(
 	p operator.Provider,
 	aci *operator.AmazonCloudIntegration,
 	up bool,
-	nodeAppArmorProfile string,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 ) (Renderer, error) {
 	var tcms []*corev1.ConfigMap
 	var tss []*corev1.Secret
 
-	if cr.CertificateManagement != nil {
+	if ii.Spec.CertificateManagement != nil {
 		typhaNodeTLS = &TyphaNodeTLS{
 			CAConfigMap: &corev1.ConfigMap{
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -104,7 +103,7 @@ func Calico(
 					Namespace: OperatorNamespace(),
 				},
 				Data: map[string]string{
-					TyphaCABundleName: string(cr.CertificateManagement.CACert),
+					TyphaCABundleName: string(ii.Spec.CertificateManagement.CACert),
 				},
 			},
 		}
@@ -135,7 +134,7 @@ func Calico(
 	// Create copy to go into Calico Namespace
 	tcms = append(tcms, copyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
-	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
+	if managerInternalTLSSecret == nil && ii.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
 		// The certificate will be issued for the FQDN manager service names and
 		// localhost.
@@ -160,7 +159,7 @@ func Calico(
 
 	return calicoRenderer{
 		k8sServiceEp:                k8sServiceEp,
-		installation:                cr,
+		installation:                ii,
 		logStorageExists:            logStorageExists,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
@@ -174,7 +173,6 @@ func Calico(
 		amazonCloudInt:              aci,
 		upgrade:                     up,
 		authentication:              authentication,
-		nodeAppArmorProfile:         nodeAppArmorProfile,
 		esLicenseType:               esLicenseType,
 		clusterDomain:               clusterDomain,
 	}, nil
@@ -238,7 +236,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	k8sServiceEp                k8sapi.ServiceEndpoint
-	installation                *operator.InstallationSpec
+	installation                *common.InstallationInternal
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
@@ -252,7 +250,6 @@ type calicoRenderer struct {
 	amazonCloudInt              *operator.AmazonCloudIntegration
 	upgrade                     bool
 	authentication              *operator.Authentication
-	nodeAppArmorProfile         string
 	clusterDomain               string
 	esLicenseType               ElasticsearchLicenseType
 }
@@ -260,12 +257,12 @@ type calicoRenderer struct {
 func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, PriorityClassDefinitions())
-	components = appendNotNil(components, Namespaces(r.installation, r.pullSecrets))
+	components = appendNotNil(components, Namespaces(r.installation.Spec, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
-	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain))
-	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication, r.esLicenseType))
+	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation.Spec, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation.Spec, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication, r.esLicenseType))
 	return components
 }
 

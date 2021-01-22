@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
 )
@@ -360,7 +361,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			&render.ElasticsearchClusterConfig{},
 			nil, nil, false,
-			i,
+			&common.InstallationInternal{Spec: i},
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -425,7 +426,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		tlsSecret,
 		nil,
 		false,
-		&operator.InstallationSpec{},
+		&common.InstallationInternal{Spec: &operator.InstallationSpec{}},
 		managementCluster,
 		tunnelSecret,
 		internalTraffic,

@@ -195,7 +195,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -273,7 +273,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
-		network,
+		network.Spec,
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,

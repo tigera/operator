@@ -211,7 +211,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -330,7 +330,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.Spec.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
@@ -375,7 +375,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		filters,
 		eksConfig,
 		pullSecrets,
-		installation,
+		installation.Spec,
 		r.clusterDomain,
 		render.OSTypeLinux,
 	)
@@ -407,7 +407,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			filters,
 			eksConfig,
 			pullSecrets,
-			installation,
+			installation.Spec,
 			r.clusterDomain,
 			render.OSTypeWindows,
 		)

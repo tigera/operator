@@ -78,7 +78,7 @@ func Manager(
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *operator.InstallationSpec,
+	installation *common.InstallationInternal,
 	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
@@ -115,9 +115,10 @@ func Manager(
 		pullSecrets:                pullSecrets,
 		openshift:                  openshift,
 		clusterDomain:              clusterDomain,
-		installation:               installation,
+		installation:               installation.Spec,
 		managementCluster:          managementCluster,
 		esLicenseType:              esLicenseType,
+		tigeraCustom:               installation.TigeraCustom,
 	}, nil
 }
 
@@ -135,6 +136,7 @@ type managerComponent struct {
 	installation               *operator.InstallationSpec
 	managementCluster          *operator.ManagementCluster
 	esLicenseType              ElasticsearchLicenseType
+	tigeraCustom               bool
 	managerImage               string
 	proxyImage                 string
 	esProxyImage               string
@@ -144,7 +146,11 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, is)
+	managerComponent := components.ComponentManager
+	if c.tigeraCustom {
+		managerComponent = components.ComponentManagerCustom
+	}
+	c.managerImage, err = components.GetReference(managerComponent, reg, path, is)
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -413,6 +419,12 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
+	if c.tigeraCustom {
+		envs = append(envs,
+			v1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
+			v1.EnvVar{Name: "CNX_CALICO_CLOUD_EDITION", Value: "true"},
+		)
+	}
 	return envs
 }
 

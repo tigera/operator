@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -1057,9 +1058,11 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	By("creating all the components needed for LogStorage to be available")
 	component := render.LogStorage(
 		ls,
-		&operatorv1.InstallationSpec{
-			KubernetesProvider: operatorv1.ProviderNone,
-			Registry:           "testregistry.com/",
+		&common.InstallationInternal{
+			Spec: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
+			},
 		},
 		nil, managementClusterConnection,
 		&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},

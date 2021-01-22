@@ -180,7 +180,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	var tlsSecret *v1.Secret
-	if network.CertificateManagement == nil {
+	if network.Spec.CertificateManagement == nil {
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
@@ -236,7 +236,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -260,7 +260,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(k8sapi.Endpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(k8sapi.Endpoint, network.Spec, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

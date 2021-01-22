@@ -155,7 +155,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 	r.status.OnCRFound()
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(instl.Spec, r.Client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -178,7 +178,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		managementClusterConnection.Spec.ManagementClusterAddr,
 		pullSecrets,
 		r.Provider == operatorv1.ProviderOpenShift,
-		instl,
+		instl.Spec,
 		tunnelSecret,
 	)
 

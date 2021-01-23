@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -264,10 +265,13 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 
 	var managerInternalTLSSecret *corev1.Secret
 	if managementCluster != nil {
+		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
+			render.ManagerInternalSecretCertName,
+			svcDNSNames...,
 		)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
@@ -276,10 +280,12 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
+	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
 	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
 		render.ComplianceServerCertSecret,
-		render.ComplianceServerCertName,
 		render.ComplianceServerKeyName,
+		render.ComplianceServerCertName,
+		svcDNSNames...,
 	)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))

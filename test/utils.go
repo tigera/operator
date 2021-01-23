@@ -16,6 +16,8 @@ package test
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/dns"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -93,4 +96,19 @@ func RunOperator(mgr manager.Manager, stopChan chan struct{}) (doneChan chan str
 	synced := mgr.GetCache().WaitForCacheSync(stopChan)
 	Expect(synced).To(BeTrue(), "manager cache failed to sync")
 	return doneChan
+}
+
+func VerifyCert(secret *v1.Secret, privKey string, pubKey string, serviceName string, serviceNs string, clusterDomain string) {
+	Expect(secret.Data).To(HaveKey(privKey))
+	Expect(secret.Data).To(HaveKey(pubKey))
+
+	expectedDNSNames := dns.GetServiceDNSNames(serviceName, serviceNs, clusterDomain)
+	VerifyCertSANs(secret.Data[pubKey], expectedDNSNames...)
+}
+
+func VerifyCertSANs(certBytes []byte, expectedSANs ...string) {
+	pemBlock, _ := pem.Decode(certBytes)
+	cert, err := x509.ParseCertificate(pemBlock.Bytes)
+	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
+	Expect(cert.DNSNames).To(ConsistOf(expectedSANs), "Expect cert SAN's to match expected service DNS names")
 }

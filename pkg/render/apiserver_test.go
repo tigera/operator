@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("API server rendering tests", func() {
@@ -123,11 +124,11 @@ var _ = Describe("API server rendering tests", func() {
 
 		operatorCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		verifyCert(operatorCert, clusterDomain)
+		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", render.APIServiceName, render.APIServerNamespace, clusterDomain)
 
 		tigeraCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		verifyCert(tigeraCert, clusterDomain)
+		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", render.APIServiceName, render.APIServerNamespace, clusterDomain)
 
 		apiService, ok := GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
@@ -717,27 +718,13 @@ func verifyAPIService(service *v1beta1.APIService, clusterDomain string) {
 	Expect(service.Spec.InsecureSkipTLSVerify).To(BeFalse())
 
 	ca := service.Spec.CABundle
-	verifyCertSANs(ca, clusterDomain)
-}
-
-func verifyCert(secret *corev1.Secret, clusterDomain string) {
-	Expect(secret.Data).To(HaveKey("apiserver.crt"))
-	Expect(secret.Data).To(HaveKey("apiserver.key"))
-
-	verifyCertSANs(secret.Data["apiserver.crt"], clusterDomain)
-}
-
-func verifyCertSANs(certBytes []byte, clusterDomain string) {
-	pemBlock, _ := pem.Decode(certBytes)
-	cert, err := x509.ParseCertificate(pemBlock.Bytes)
-	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
 	expectedDNSNames := []string{
 		"tigera-api",
 		"tigera-api.tigera-system",
 		"tigera-api.tigera-system.svc",
 		"tigera-api.tigera-system.svc." + clusterDomain,
 	}
-	Expect(cert.DNSNames).To(ConsistOf(expectedDNSNames), "Expect cert SAN's to match extension API server service DNS names")
+	test.VerifyCertSANs(ca, expectedDNSNames...)
 }
 
 func validateTunnelSecret(voltronSecret *corev1.Secret) {

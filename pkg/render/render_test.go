@@ -28,12 +28,14 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -166,6 +168,14 @@ var _ = Describe("Rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+
+		secret := GetResource(resources, render.ManagerInternalTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
+		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+		expectedDNSNames = append(expectedDNSNames, "localhost")
+		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+
+		secret = GetResource(resources, render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret").(*corev1.Secret)
+		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {

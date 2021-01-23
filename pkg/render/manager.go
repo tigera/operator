@@ -25,6 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/dns"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -38,6 +39,7 @@ import (
 const (
 	managerPort                      = 9443
 	managerTargetPort                = 9443
+	ManagerServiceName               = "tigera-manager"
 	ManagerNamespace                 = "tigera-manager"
 	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc.%s"
 	ManagerServiceIP                 = "localhost"
@@ -89,12 +91,15 @@ func Manager(
 
 	if tlsKeyPair == nil {
 		var err error
+		svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
+		svcDNSNames = append(svcDNSNames, "localhost")
 		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
 			ManagerTLSSecretName,
 			ManagerSecretKeyName,
 			ManagerSecretCertName,
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
+			svcDNSNames...,
 		)
 		if err != nil {
 			return nil, err

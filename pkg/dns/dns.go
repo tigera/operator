@@ -59,8 +59,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	return clusterDomain, nil
 }
 
-// GetServiceDNSNames parses the fully-qualified domain service name and
-// returns a list of its service names.
+// GetServiceDNSNames returns a list of a service's DNS names.
 // We return:
 // - <svc_name>
 // - <svc_name>.<ns>

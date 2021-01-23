@@ -40,13 +40,13 @@ const (
 	APIServerTLSSecretName  = "tigera-apiserver-certs"
 	APIServerSecretKeyName  = "apiserver.key"
 	APIServerSecretCertName = "apiserver.crt"
-	apiServiceName          = "tigera-api"
+	APIServiceName          = "tigera-api"
 )
 
 func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
-	svcDNSNames := dns.GetServiceDNSNames(apiServiceName, APIServerNamespace, clusterDomain)
+	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, clusterDomain)
 
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
@@ -215,7 +215,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *v1beta1.APISer
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &v1beta1.ServiceReference{
-				Name:      apiServiceName,
+				Name:      APIServiceName,
 				Namespace: APIServerNamespace,
 			},
 			Version:  "v3",
@@ -631,7 +631,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 			APIServerTLSSecretName, TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(apiServiceName, APIServerNamespace, c.clusterDomain),
+			dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, c.clusterDomain),
 			APIServerNamespace))
 	}
 

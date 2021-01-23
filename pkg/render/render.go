@@ -27,6 +27,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/dns"
 )
 
 var (
@@ -136,17 +137,20 @@ func Calico(
 
 	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
-		// The certificate will be issued for ManagerServiceDNS and localhost
+		// The certificate will be issued for the FQDN manager service names and
+		// localhost.
 		log.Info("Creating secret for internal manager credentials")
 		var err error
+		svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
+		svcDNSNames = append(svcDNSNames, ManagerServiceIP)
+
 		managerInternalTLSSecret, err = CreateOperatorTLSSecret(nil,
 			ManagerInternalTLSSecretName,
 			ManagerInternalSecretKeyName,
 			ManagerInternalSecretCertName,
 			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 			nil,
-			ManagerServiceIP,
-			fmt.Sprintf(ManagerServiceDNS, clusterDomain),
+			svcDNSNames...,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("generating certificates for manager was not finalized due to %v", err)

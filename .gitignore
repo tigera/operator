@@ -103,3 +103,5 @@ build/_test
 hack/bin
 operator-sdk*
 *-release-notes.md
+# Test reports
+pkg/report

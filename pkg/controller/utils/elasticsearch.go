@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
-
 	"github.com/olivere/elastic/v7"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
@@ -66,12 +64,10 @@ type policyDetail struct {
 	policy       map[string]interface{}
 }
 
-type logrWrappedESLogger struct {
-	l logr.Logger
-}
+type logrWrappedESLogger struct{}
 
 func (l logrWrappedESLogger) Printf(format string, v ...interface{}) {
-	l.l.Error(nil, fmt.Sprintf(format, v...))
+	log.Error(nil, fmt.Sprintf(format, v...))
 }
 
 // ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch

@@ -122,13 +122,14 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
+		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, render.APIServerNamespace, clusterDomain)
 		operatorCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", render.APIServiceName, render.APIServerNamespace, clusterDomain)
+		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
 
 		tigeraCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", render.APIServiceName, render.APIServerNamespace, clusterDomain)
+		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
 
 		apiService, ok := GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")

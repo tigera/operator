@@ -575,13 +575,13 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 
 	// Get the secret - might be nil
-	secret, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchCertSecret, render.OperatorNamespace())
+	secret, err := render.GetSecret(ctx, r.client, render.TigeraElasticsearchCertSecret, render.OperatorNamespace())
 	if err != nil {
 		return nil, err
 	}
 
 	// Ensure that secret is valid.
-	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, svcDNSNames...)
+	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -589,7 +589,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	secrets = append(secrets, secret, render.CopySecrets(render.ElasticsearchNamespace, secret)[0])
 
 	// Get the pub secret - might be nil
-	pubSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace)
+	pubSecret, err := render.GetSecret(ctx, r.client, render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -622,13 +622,13 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 
 	// Get the secret - might be nil
-	secret, err := utils.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, render.OperatorNamespace())
+	secret, err := render.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, render.OperatorNamespace())
 	if err != nil {
 		return nil, err
 	}
 
 	// Ensure that key secret is valid.
-	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, svcDNSNames...)
+	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +636,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	secrets = append(secrets, secret, render.CopySecrets(render.KibanaNamespace, secret)[0])
 
 	// Get the pub secret - might be nil
-	pubSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, render.KibanaNamespace)
+	pubSecret, err := render.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, render.KibanaNamespace)
 	if err != nil {
 		return nil, err
 	}

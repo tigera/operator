@@ -15,6 +15,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -69,23 +70,16 @@ func Compliance(
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
 ) (Component, error) {
-	var complianceServerCertSecrets []*corev1.Secret
-	if complianceServerCertSecret == nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
-		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
-			ComplianceServerCertSecret,
-			"tls.key",
-			"tls.crt",
-			DefaultCertificateDuration,
-			nil, svcDNSNames...,
-		)
-		if err != nil {
-			return nil, err
-		}
-		complianceServerCertSecrets = []*corev1.Secret{complianceServerCertSecret}
+	ctx := context.Background()
+	svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
+	complianceServerCertSecret, err := EnsureCertificateSecret(
+		ctx, ComplianceServerCertSecret, complianceServerCertSecret, ComplianceServerKeyName, ComplianceServerCertName, DefaultCertificateDuration, svcDNSNames...,
+	)
+	if err != nil {
+		return nil, err
 	}
 
+	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 
 	return &complianceComponent{

@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"reflect"
 
 	"github.com/tigera/operator/pkg/render"
@@ -59,7 +60,7 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 	}
 
 	// If the cert's DNS names have changed then we need to recreate the secret.
-	ok, err := secretHasExpectedDNSNames(secret, svcDNSNames)
+	ok, err := certSecretHasExpectedDNSNames(secret, "tls.crt", svcDNSNames)
 
 	if err != nil {
 		return nil, err
@@ -76,9 +77,12 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 	return secret, nil
 }
 
-func secretHasExpectedDNSNames(secret *corev1.Secret, expectedDNSNames []string) (bool, error) {
-	certBytes := secret.Data["tls.crt"]
+func certSecretHasExpectedDNSNames(secret *corev1.Secret, certKey string, expectedDNSNames []string) (bool, error) {
+	certBytes := secret.Data[certKey]
 	pemBlock, _ := pem.Decode(certBytes)
+	if pemBlock == nil {
+		return false, fmt.Errorf("cert %q has no PEM data", secret.Name)
+	}
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	if err != nil {
 		return false, err

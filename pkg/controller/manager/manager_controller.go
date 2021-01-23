@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -226,10 +227,13 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
+	svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+	svcDNSNames = append(svcDNSNames, "localhost")
 	tlsSecret, err := utils.ValidateCertPair(r.client,
 		render.ManagerTLSSecretName,
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
+		svcDNSNames...,
 	)
 
 	// An error is returned in case the read cannot be performed of the secret does not match the expected format
@@ -303,11 +307,14 @@ func (r *ReconcileManager) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
+	svcDNSNames = dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
 	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
 		render.ComplianceServerCertSecret,
 		render.ComplianceServerCertName,
 		render.ComplianceServerKeyName,
+		svcDNSNames...,
 	)
+
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
 		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())

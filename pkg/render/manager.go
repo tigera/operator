@@ -20,10 +20,6 @@ import (
 	"strings"
 	"time"
 
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/dns"
 	appsv1 "k8s.io/api/apps/v1"
@@ -32,8 +28,12 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 )
 
 const (
@@ -191,8 +191,8 @@ func (c *managerComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	objs := []runtime.Object{
+func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
+	objs := []client.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
@@ -714,8 +714,8 @@ func (c *managerComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 	}
 }
 
-func (c *managerComponent) getTLSObjects() []runtime.Object {
-	objs := []runtime.Object{}
+func (c *managerComponent) getTLSObjects() []client.Object {
+	objs := []client.Object{}
 	for _, s := range c.tlsSecrets {
 		objs = append(objs, s)
 	}

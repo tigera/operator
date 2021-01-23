@@ -19,10 +19,6 @@ import (
 	"strings"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +26,11 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 )
 
 const (
@@ -44,7 +44,7 @@ const (
 )
 
 func IntrusionDetection(
-	lc *operatorv1.LogCollector,
+	lc *operator.LogCollector,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
 	installation *operator.InstallationSpec,
@@ -68,7 +68,7 @@ func IntrusionDetection(
 }
 
 type intrusionDetectionComponent struct {
-	lc                *operatorv1.LogCollector
+	lc                *operator.LogCollector
 	esSecrets         []*corev1.Secret
 	kibanaCertSecret  *corev1.Secret
 	installation      *operator.InstallationSpec
@@ -106,8 +106,8 @@ func (c *intrusionDetectionComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (c *intrusionDetectionComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	objs := []runtime.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
+func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
+	objs := []client.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
@@ -494,7 +494,7 @@ func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
 			if syslog.LogTypes != nil {
 				for _, t := range syslog.LogTypes {
 					switch t {
-					case operatorv1.SyslogLogIDSEvents:
+					case operator.SyslogLogIDSEvents:
 						return true
 					}
 				}
@@ -511,8 +511,8 @@ func syslogEventsForwardingVolumeMount() corev1.VolumeMount {
 	}
 }
 
-func (c *intrusionDetectionComponent) imagePullSecrets() []runtime.Object {
-	secrets := []runtime.Object{}
+func (c *intrusionDetectionComponent) imagePullSecrets() []client.Object {
+	secrets := []client.Object{}
 	for _, s := range c.pullSecrets {
 		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: IntrusionDetectionNamespace}
 
@@ -521,8 +521,8 @@ func (c *intrusionDetectionComponent) imagePullSecrets() []runtime.Object {
 	return secrets
 }
 
-func (c *intrusionDetectionComponent) globalAlertTemplates() []runtime.Object {
-	return []runtime.Object{
+func (c *intrusionDetectionComponent) globalAlertTemplates() []client.Object {
+	return []client.Object{
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "GlobalAlertTemplate",

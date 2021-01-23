@@ -24,8 +24,8 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -107,8 +107,8 @@ func (c *typhaComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (c *typhaComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	objs := []runtime.Object{
+func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
+	objs := []client.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),

@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -715,10 +716,14 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
+
+	svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+	svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
 	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		render.ManagerInternalTLSSecretName,
 		render.ManagerInternalSecretCertName,
 		render.ManagerInternalSecretKeyName,
+		svcDNSNames...,
 	)
 
 	var managementCluster *operator.ManagementCluster

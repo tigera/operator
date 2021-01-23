@@ -29,6 +29,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
@@ -100,6 +101,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
+
+		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+		expectedDNSNames = append(expectedDNSNames, "localhost")
+		secret := GetResource(resources, render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
+		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+		secret = GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
+		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {

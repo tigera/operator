@@ -189,7 +189,7 @@ func CheckLicenseKey(ctx context.Context, cli client.Client) error {
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
-func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
+func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName string, dnsNames ...string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      certPairSecretName,
@@ -212,6 +212,16 @@ func ValidateCertPair(client client.Client, certPairSecretName, keyName, certNam
 	}
 	if val, ok := secret.Data[certName]; !ok || len(val) == 0 {
 		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, certName)
+	}
+
+	if len(dnsNames) > 0 {
+		valid, err := certSecretHasExpectedDNSNames(secret, certName, dnsNames)
+		if err != nil {
+			return secret, fmt.Errorf("Failed to verify DNS names on cert %q", certName)
+		}
+		if !valid {
+			return nil, nil
+		}
 	}
 
 	return secret, nil

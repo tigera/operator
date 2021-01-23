@@ -38,15 +38,15 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 	return secret, nil
 }
 
-// EnsureCertificateKeySecret ensures that the certificate in the provided
+// EnsureCertificateSecret ensures that the certificate in the provided
 // secrets has the expected DNS names. If no key secret is provided, a new key
 // secret is created and returned. If the key secret provided does have the
 // right DNS name, then that given key secret is returned.
 // Otherwise a new key secret is created and returned.
-func EnsureCertificateKeySecret(ctx context.Context, secretName string, secret *corev1.Secret, svcDNSNames ...string) (*corev1.Secret, error) {
+func EnsureCertificateSecret(ctx context.Context, secretName string, secret *corev1.Secret, svcDNSNames ...string) (*corev1.Secret, error) {
 	var err error
 
-	// Create the key secret if it doesn't exist.
+	// Create the secret if it doesn't exist.
 	if secret == nil {
 		secret, err = render.CreateOperatorTLSSecret(nil,
 			secretName, "tls.key", "tls.crt",
@@ -77,10 +77,6 @@ func EnsureCertificateKeySecret(ctx context.Context, secretName string, secret *
 }
 
 func secretHasExpectedDNSNames(secret *corev1.Secret, expectedDNSNames []string) (bool, error) {
-	if secret.Data == nil {
-		return false, nil
-	}
-
 	certBytes := secret.Data["tls.crt"]
 	pemBlock, _ := pem.Decode(certBytes)
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)

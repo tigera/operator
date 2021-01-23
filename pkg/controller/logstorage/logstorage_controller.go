@@ -581,7 +581,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	}
 
 	// Ensure that secret is valid.
-	secret, err = utils.EnsureCertificateKeySecret(ctx, render.TigeraElasticsearchCertSecret, secret, svcDNSNames...)
+	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +628,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	}
 
 	// Ensure that key secret is valid.
-	secret, err = utils.EnsureCertificateKeySecret(ctx, render.TigeraKibanaCertSecret, secret, svcDNSNames...)
+	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}

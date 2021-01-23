@@ -515,26 +515,17 @@ var _ = Describe("LogStorage controller", func() {
 								},
 							},
 							render.NewElasticsearchClusterConfig("cluster", 1, 1, 1).ConfigMap(),
-							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-								Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
-							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-								Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-								Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
-							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-								Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
 							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 							&corev1.ConfigMap{
 								ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 								Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 							},
-							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
-							&corev1.Secret{ObjectMeta: kbPublicCertObjMeta},
 							&corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta},
 							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 								Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace}},
-							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}},
 						}
+						resources = append(resources, createESSecrets()...)
+						resources = append(resources, createKibanaSecrets()...)
 
 						for _, rec := range resources {
 							Expect(cli.Create(ctx, rec)).ShouldNot(HaveOccurred())
@@ -747,6 +738,8 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
+					//mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
+
 					result, err := r.Reconcile(reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
@@ -840,22 +833,14 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 		&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		render.NewElasticsearchClusterConfig("cluster", 1, 1, 1),
-		[]*corev1.Secret{
-			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
-			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
-		},
-		[]*corev1.Secret{
-			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
-			{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-			{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
-		},
+		toSecrets(createESSecrets()),
+		toSecrets(createKibanaSecrets()),
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		}, operatorv1.ProviderNone,
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
-			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
+			//{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
 		},
 		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic,
 		&corev1.ConfigMap{
@@ -895,6 +880,46 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			ObjectMeta: curatorUsrSecretObjMeta,
 		}),
 	).ShouldNot(HaveOccurred())
+}
+
+func toSecrets(objs []runtime.Object) []*corev1.Secret {
+	var secrets []*corev1.Secret
+	for _, o := range objs {
+		secrets = append(secrets, o.(*corev1.Secret))
+	}
+	return secrets
+}
+
+func createESSecrets() []runtime.Object {
+	dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+	esSecret, err := utils.EnsureCertificateSecret(context.TODO(), render.TigeraElasticsearchCertSecret, nil, dnsNames...)
+	Expect(err).ShouldNot(HaveOccurred())
+	esOperNsSecret := render.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
+
+	return []runtime.Object{
+		esSecret,
+		esOperNsSecret,
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}},
+	}
+}
+
+func createKibanaSecrets() []runtime.Object {
+	dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	kibanaSecret, err := utils.EnsureCertificateSecret(context.TODO(), render.TigeraKibanaCertSecret, nil, dnsNames...)
+	Expect(err).ShouldNot(HaveOccurred())
+	kibanaOperNsSecret := render.CopySecrets(render.KibanaNamespace, kibanaSecret)[0]
+
+	return []runtime.Object{
+		kibanaSecret,
+		kibanaOperNsSecret,
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: render.KibanaPublicCertSecret, Namespace: render.ElasticsearchNamespace}},
+	}
 }
 
 var _ = Describe("LogStorage w/ Certificate management", func() {

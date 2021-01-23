@@ -1,15 +1,15 @@
-title: master
+title: v3.17.1
 components:
   typha:
-    version: master
+    version: v3.17.1
   calico/node:
-    version: master
+    version: v3.17.1
   calico/cni:
-    version: master
+    version: v3.17.1
   calico/kube-controllers:
-    version: master
+    version: v3.17.1
   flexvol:
-    version: master
+    version: v3.17.1
   rdtigera/init-container:
     image: rdtigera/init-container
-    version: master
+    version: v3.17.1

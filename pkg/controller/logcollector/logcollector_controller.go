@@ -413,6 +413,12 @@ func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.
 			render.OSTypeWindows,
 		)
 
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+			reqLogger.Error(err, "Error with images from ImageSet")
+			r.status.SetDegraded("Error with images from ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
 		// Create a component handler to manage the rendered component.
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
 

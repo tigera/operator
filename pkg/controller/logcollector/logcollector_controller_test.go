@@ -158,6 +158,15 @@ var _ = Describe("LogCollector controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
+			Expect(c.Create(ctx, &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "windows-node",
+					Labels: map[string]string{
+						"kubernetes.io/os": "windows",
+					},
+				},
+			})).ToNot(HaveOccurred())
+
 			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -176,6 +185,16 @@ var _ = Describe("LogCollector controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentFluentd.Image,
 					"sha256:fluentdhash")))
+
+			ds.Name = "fluentd-node-windows"
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			node = ds.Spec.Template.Spec.Containers[0]
+			Expect(node).ToNot(BeNil())
+			Expect(node.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentFluentdWindows.Image,
+					"sha256:fluentdwindowshash")))
 		})
 	})
 })

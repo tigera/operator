@@ -19,6 +19,7 @@ import (
 	"strconv"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -98,7 +99,7 @@ func Fluentd(
 	f *FluentdFilters,
 	eksConfig *EksCloudwatchLogConfig,
 	pullSecrets []*corev1.Secret,
-	installation *operatorv1.InstallationSpec,
+	installation *common.InstallationInternal,
 	clusterDomain string,
 	osType OSType,
 ) Component {
@@ -137,16 +138,15 @@ type fluentdComponent struct {
 	filters           *FluentdFilters
 	eksConfig         *EksCloudwatchLogConfig
 	pullSecrets       []*corev1.Secret
-	installation      *operatorv1.InstallationSpec
+	installation      *common.InstallationInternal
 	clusterDomain     string
 	osType            OSType
 	image             string
-	// TODO: Add a flag field here to determine whether or not this is Calico Cloud installation
 }
 
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
+	reg := c.installation.Spec.Registry
+	path := c.installation.Spec.ImagePath
 
 	if c.osType == OSTypeWindows {
 		var err error
@@ -235,7 +235,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs,
 		createNamespace(
 			LogCollectorNamespace,
-			c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
+			c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift))
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, LogCollectorNamespace)...)
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())
@@ -249,7 +249,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	if c.eksConfig != nil {
 		// Windows PSP does not support allowedHostPaths yet.
 		// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
+		if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
 				c.eksLogForwarderClusterRoleBinding(),
@@ -262,7 +262,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-	if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
+	if c.installation.Spec.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
 		objs = append(objs,
 			c.fluentdClusterRole(),
 			c.fluentdClusterRoleBinding(),
@@ -458,7 +458,7 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	isPrivileged := false
 	//On OpenShift Fluentd needs privileged access to access logs on host path volume
-	if c.installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.installation.Spec.KubernetesProvider == operatorv1.ProviderOpenShift {
 		isPrivileged = true
 	}
 
@@ -602,10 +602,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	// For Calico Cloud (flag enabled) we would like to disable log forwarding to Elasticsearch
-	// TODO: Use flag value here to determine whether or not this is Calico Cloud
-	if true {
-		// Disable specifically for management clusters
+	// For the TigeraCustom flag we disable log forwarding to Elasticsearch.
+	// This means the logs for this cluster are not stored anywhere.
+	if c.installation.TigeraCustom {
+		// Disable only for management clusters
 		if c.managementCluster != nil {
 			envs = append(envs,
 				corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
@@ -833,7 +833,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
-					Tolerations:        c.installation.ControlPlaneTolerations,
+					Tolerations:        c.installation.Spec.ControlPlaneTolerations,
 					ServiceAccountName: c.eksLogForwarderName(),
 					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{

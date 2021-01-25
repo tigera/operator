@@ -214,6 +214,7 @@ func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[s
 				// If policy doesn't exist, create one
 				return applyILMPolicy(ctx, es.client, indexName, pd.policy)
 			}
+			es.client = nil
 			return err
 		}
 

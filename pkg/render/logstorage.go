@@ -21,14 +21,13 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/common"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 
 	"gopkg.in/inf.v0"
@@ -140,7 +139,7 @@ echo "Keystore initialization successful."
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
-	installation *operatorv1.InstallationSpec,
+	installation *common.InstallationInternal,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,
@@ -162,7 +161,7 @@ func LogStorage(
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
-		installation:                installation,
+		installation:                installation.Spec,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		elasticsearch:               elasticsearch,
@@ -181,6 +180,7 @@ func LogStorage(
 		elasticLicenseType:          elasticLicenseType,
 		oidcUserConfigMap:           oidcUserConfigMap,
 		oidcUserSecret:              oidcUserSecret,
+		tigeraCustom:                installation.TigeraCustom,
 	}
 }
 
@@ -205,6 +205,7 @@ type elasticsearchComponent struct {
 	elasticLicenseType          ElasticsearchLicenseType
 	oidcUserConfigMap           *corev1.ConfigMap
 	oidcUserSecret              *corev1.Secret
+	tigeraCustom                bool
 	esImage                     string
 	esOperatorImage             string
 	kibanaImage                 string
@@ -226,7 +227,11 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, is)
+	kibanaComponent := components.ComponentKibana
+	if es.tigeraCustom {
+		kibanaComponent = components.ComponentKibanaCustom
+	}
+	es.kibanaImage, err = components.GetReference(kibanaComponent, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

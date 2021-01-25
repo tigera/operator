@@ -383,7 +383,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		filters,
 		eksConfig,
 		pullSecrets,
-		installation.Spec,
+		installation,
 		r.clusterDomain,
 		render.OSTypeLinux,
 	)
@@ -416,7 +416,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			filters,
 			eksConfig,
 			pullSecrets,
-			installation.Spec,
+			installation,
 			r.clusterDomain,
 			render.OSTypeWindows,
 		)

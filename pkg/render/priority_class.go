@@ -15,7 +15,7 @@
 package render
 
 import (
-	schedv1beta "k8s.io/api/scheduling/v1beta1"
+	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -50,9 +50,9 @@ func (c *priorityClassComponent) Ready() bool {
 	return true
 }
 
-func (c *priorityClassComponent) calicoPriority() *schedv1beta.PriorityClass {
-	return &schedv1beta.PriorityClass{
-		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1beta1"},
+func (c *priorityClassComponent) calicoPriority() *schedv1.PriorityClass {
+	return &schedv1.PriorityClass{
+		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: PriorityClassName,
 		},

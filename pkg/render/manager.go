@@ -15,6 +15,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -87,26 +88,19 @@ func Manager(
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 ) (Component, error) {
-	tlsSecrets := []*corev1.Secret{}
+	ctx := context.Background()
+	svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
+	svcDNSNames = append(svcDNSNames, "localhost")
+	certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 
-	if tlsKeyPair == nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
-		svcDNSNames = append(svcDNSNames, "localhost")
-		tlsKeyPair, err = CreateOperatorTLSSecret(nil,
-			ManagerTLSSecretName,
-			ManagerSecretKeyName,
-			ManagerSecretCertName,
-			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-			nil,
-			svcDNSNames...,
-		)
-		if err != nil {
-			return nil, err
-		}
-		tlsSecrets = []*corev1.Secret{tlsKeyPair}
+	tlsKeyPair, err := EnsureCertificateSecret(
+		ctx, ManagerTLSSecretName, tlsKeyPair, ManagerSecretKeyName, ManagerSecretCertName, certDur, svcDNSNames...,
+	)
+	if err != nil {
+		return nil, err
 	}
 
+	tlsSecrets := []*corev1.Secret{tlsKeyPair}
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
 	tlsAnnotations := make(map[string]string)
 

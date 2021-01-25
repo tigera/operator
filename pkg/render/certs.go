@@ -61,10 +61,13 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 
 	// If the cert's DNS names have changed or if the cert is invalid, create
 	// a new one.
-	ok, err := secretHasExpectedDNSNames(secret, svcDNSNames)
+	ok, err := secretHasExpectedDNSNames(secret, certName, svcDNSNames)
+	if err != nil {
+		return nil, err
+	}
 	if !ok || err != nil {
 		return CreateOperatorTLSSecret(nil,
-			secretName, "tls.key", "tls.crt",
+			secretName, keyName, certName,
 			DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}
@@ -73,8 +76,8 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 	return secret, nil
 }
 
-func secretHasExpectedDNSNames(secret *corev1.Secret, expectedDNSNames []string) (bool, error) {
-	certBytes := secret.Data["tls.crt"]
+func secretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) (bool, error) {
+	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {
 		return false, fmt.Errorf("cert has no PEM data")

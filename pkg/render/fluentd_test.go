@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	apps "k8s.io/api/apps/v1"
@@ -31,7 +32,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var s3Creds *render.S3Credential
 	var filters *render.FluentdFilters
 	var eksConfig *render.EksCloudwatchLogConfig
-	var installation *operatorv1.InstallationSpec
+	var installation *common.InstallationInternal
 	var esConfigMap *render.ElasticsearchClusterConfig
 	var splkCreds *render.SplunkCredential
 
@@ -39,8 +40,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		instance = &operatorv1.LogCollector{}
-		installation = &operatorv1.InstallationSpec{
-			KubernetesProvider: operatorv1.ProviderNone,
+		installation = &common.InstallationInternal{
+			Spec: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+			},
 		}
 		s3Creds = nil
 		filters = nil
@@ -562,9 +565,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		installation = &operatorv1.InstallationSpec{
-			KubernetesProvider:      operatorv1.ProviderEKS,
-			ControlPlaneTolerations: []corev1.Toleration{t},
+		installation = &common.InstallationInternal{
+			Spec: &operatorv1.InstallationSpec{
+				KubernetesProvider:      operatorv1.ProviderEKS,
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			},
 		}
 		component := render.Fluentd(instance, nil, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, render.OSTypeLinux)
 		resources, _ := component.Objects()

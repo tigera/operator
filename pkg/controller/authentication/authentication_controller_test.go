@@ -119,7 +119,7 @@ var _ = Describe("authentication controller tests", func() {
 
 			// Reconcile
 			r := NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
-			_, err := r.Reconcile(reconcile.Request{})
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
 			Expect(err).NotTo(HaveOccurred())
@@ -170,7 +170,7 @@ var _ = Describe("authentication controller tests", func() {
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
 			}
-			_, err := r.Reconcile(reconcile.Request{})
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{
@@ -205,7 +205,7 @@ var _ = Describe("authentication controller tests", func() {
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
 			}
-			_, err := r.Reconcile(reconcile.Request{})
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{

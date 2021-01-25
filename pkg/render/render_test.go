@@ -126,7 +126,7 @@ var _ = Describe("Rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{render.PriorityClassName, "", "scheduling.k8s.io", "v1beta1", "PriorityClass"},
+			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
 			{render.DexObjectName, "", "", "v1", "Namespace"},
 			{render.TyphaCAConfigMapName, render.OperatorNamespace(), "", "v1", "ConfigMap"},

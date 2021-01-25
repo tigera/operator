@@ -892,7 +892,7 @@ func toSecrets(objs []runtime.Object) []*corev1.Secret {
 
 func createESSecrets() []runtime.Object {
 	dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	esSecret, err := utils.EnsureCertificateSecret(context.TODO(), render.TigeraElasticsearchCertSecret, nil, dnsNames...)
+	esSecret, err := render.EnsureCertificateSecret(context.TODO(), render.TigeraElasticsearchCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
 	Expect(err).ShouldNot(HaveOccurred())
 	esOperNsSecret := render.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
 
@@ -908,7 +908,7 @@ func createESSecrets() []runtime.Object {
 
 func createKibanaSecrets() []runtime.Object {
 	dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-	kibanaSecret, err := utils.EnsureCertificateSecret(context.TODO(), render.TigeraKibanaCertSecret, nil, dnsNames...)
+	kibanaSecret, err := render.EnsureCertificateSecret(context.TODO(), render.TigeraKibanaCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
 	Expect(err).ShouldNot(HaveOccurred())
 	kibanaOperNsSecret := render.CopySecrets(render.KibanaNamespace, kibanaSecret)[0]
 

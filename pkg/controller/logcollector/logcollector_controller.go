@@ -151,10 +151,9 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 // and what is in the LogCollector.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileLogCollector) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogCollector")
-	ctx := context.Background()
 	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
 	isModified := false
 	// Keep track of which fields were modified (helpful for error messages)

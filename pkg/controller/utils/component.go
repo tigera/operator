@@ -16,10 +16,8 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"reflect"
-
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/render"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -35,6 +33,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/render"
 )
 
 type ComponentHandler interface {
@@ -85,11 +86,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		}
 
 		logCtx := ContextLoggerForResource(c.log, obj)
-		var old runtime.Object = obj.DeepCopyObject()
-		key, err := client.ObjectKeyFromObject(obj)
-		if err != nil {
-			return err
-		}
+		key := client.ObjectKeyFromObject(obj)
 
 		// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
 		// system as specified by the osType.
@@ -107,8 +104,13 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			cronJobs = append(cronJobs, key)
 		}
 
+		cur, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			logCtx.V(2).Info("Failed converting object", "obj", obj)
+			return fmt.Errorf("Failed converting object %+v", obj)
+		}
 		// Check to see if the object exists or not.
-		err = c.client.Get(ctx, key, old)
+		err := c.client.Get(ctx, key, cur)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				// Anything other than "Not found" we should retry.
@@ -125,14 +127,14 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 		}
 
 		// The object exists. Update it, unless the user has marked it as "ignored".
-		if IgnoreObject(old) {
+		if IgnoreObject(cur) {
 			logCtx.Info("Ignoring annotated object")
 			continue
 		}
 		logCtx.V(1).Info("Resource already exists, update it")
 
 		// if mergeState returns nil we don't want to update the object
-		if mobj := mergeState(obj, old); mobj != nil {
+		if mobj := mergeState(obj, cur); mobj != nil {
 			switch obj.(type) {
 			case *batchv1.Job:
 				// Jobs can't be updated, they can't only be deleted then created
@@ -169,7 +171,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			return err
 		}
 
-		key, err := client.ObjectKeyFromObject(obj)
+		key := client.ObjectKeyFromObject(obj)
 		if status != nil {
 			switch obj.(type) {
 			case *apps.Deployment:
@@ -189,7 +191,7 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
-func mergeState(desired, current runtime.Object) runtime.Object {
+func mergeState(desired client.Object, current runtime.Object) client.Object {
 	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
@@ -286,7 +288,7 @@ func mergeState(desired, current runtime.Object) runtime.Object {
 // ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osType is not OSTypeAny that a
 // node selector is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
 // on a node running an operating system as specified by osType.
-func ensureOSSchedulingRestrictions(obj runtime.Object, osType render.OSType) {
+func ensureOSSchedulingRestrictions(obj client.Object, osType render.OSType) {
 	if osType == render.OSTypeAny {
 		return
 	}

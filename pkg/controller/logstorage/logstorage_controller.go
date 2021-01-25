@@ -143,16 +143,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// the utils folder where the other watch logic is.
 	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			_, hasLabel := e.Meta.GetLabels()[tigeraElasticsearchUserSecretLabel]
-			return e.Meta.GetNamespace() == render.OperatorNamespace() && hasLabel
+			_, hasLabel := e.Object.GetLabels()[tigeraElasticsearchUserSecretLabel]
+			return e.Object.GetNamespace() == render.OperatorNamespace() && hasLabel
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, hasLabel := e.MetaNew.GetLabels()[tigeraElasticsearchUserSecretLabel]
-			return e.MetaNew.GetNamespace() == render.OperatorNamespace() && hasLabel
+			_, hasLabel := e.ObjectNew.GetLabels()[tigeraElasticsearchUserSecretLabel]
+			return e.ObjectNew.GetNamespace() == render.OperatorNamespace() && hasLabel
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			_, hasLabel := e.Meta.GetLabels()[tigeraElasticsearchUserSecretLabel]
-			return e.Meta.GetNamespace() == render.OperatorNamespace() && hasLabel
+			_, hasLabel := e.Object.GetLabels()[tigeraElasticsearchUserSecretLabel]
+			return e.Object.GetNamespace() == render.OperatorNamespace() && hasLabel
 		},
 	})
 	if err != nil {
@@ -280,11 +280,9 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
-
-	ctx := context.Background()
 
 	ls, err := GetLogStorage(ctx, r.client)
 	if err != nil {
@@ -316,21 +314,21 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
-		log.Error(err, "Error reading ManagementCluster")
+		reqLogger.Error(err, "Error reading ManagementCluster")
 		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if err != nil {
-		log.Error(err, "Error reading ManagementClusterConnection")
+		reqLogger.Error(err, "Error reading ManagementClusterConnection")
 		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if managementClusterConnection != nil && managementCluster != nil {
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-		log.Error(err, "")
+		reqLogger.Error(err, "")
 		r.status.SetDegraded(err.Error(), "")
 		return reconcile.Result{}, err
 	}
@@ -340,33 +338,33 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	} else if ls == nil && managementClusterConnection == nil {
-		log.Info("LogStorage must exist for management and standalone clusters that require storage.")
+		reqLogger.Info("LogStorage must exist for management and standalone clusters that require storage.")
 		return reconcile.Result{}, nil
 	} else if ls != nil && ls.DeletionTimestamp == nil && managementClusterConnection != nil {
 		// Note that we check if the DeletionTimestamp is set as the render function is responsible for any cleanup needed
 		// before the LogStorage CR can be deleted, and removing the finalizers from that CR
-		log.Error(err, "cluster type is managed but LogStorage CR still exists")
+		reqLogger.Error(err, "cluster type is managed but LogStorage CR still exists")
 		r.status.SetDegraded("LogStorage validation failed", "cluster type is managed but LogStorage CR still exists")
 		return reconcile.Result{}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
-		log.Error(err, "error retrieving pull secrets")
+		reqLogger.Error(err, "error retrieving pull secrets")
 		r.status.SetDegraded("An error occurring while retrieving the pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	esService, err := r.getElasticsearchService(ctx)
 	if err != nil {
-		log.Error(err, "failed to retrieve Elasticsearch service")
+		reqLogger.Error(err, "failed to retrieve Elasticsearch service")
 		r.status.SetDegraded("Failed to retrieve the Elasticsearch service", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	kbService, err := r.getKibanaService(ctx)
 	if err != nil {
-		log.Error(err, "failed to retrieve Kibana service")
+		reqLogger.Error(err, "failed to retrieve Kibana service")
 		r.status.SetDegraded("Failed to retrieve the Kibana service", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -387,24 +385,24 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
 				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
-				log.Error(err, err.Error())
+				reqLogger.Error(err, err.Error())
 				r.status.SetDegraded("Failed to get storage class", err.Error())
 				return reconcile.Result{}, nil
 			}
 
-			log.Error(err, err.Error())
+			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get storage class", err.Error())
 			return reconcile.Result{}, nil
 		}
 
 		if elasticsearchSecrets, err = r.elasticsearchSecrets(ctx); err != nil {
-			log.Error(err, err.Error())
+			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
 			return reconcile.Result{}, err
 		}
 
 		if kibanaSecrets, err = r.kibanaSecrets(ctx); err != nil {
-			log.Error(err, err.Error())
+			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -424,7 +422,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
 			if errors.IsNotFound(err) {
-				log.Info("%s ConfigMap not found yet", render.ECKLicenseConfigMapName)
+				reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
 			} else {
 				r.status.SetDegraded("Failed to get elastic license", err.Error())
 				return reconcile.Result{}, err
@@ -444,14 +442,14 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 
 	elasticsearch, err := r.getElasticsearch(ctx)
 	if err != nil {
-		log.Error(err, err.Error())
+		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("An error occurred trying to retrieve Elasticsearch", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	kibana, err := r.getKibana(ctx)
 	if err != nil {
-		log.Error(err, err.Error())
+		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -460,9 +458,9 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
 	if ls != nil {
-		hdler = utils.NewComponentHandler(log, r.client, r.scheme, ls)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 	} else {
-		hdler = utils.NewComponentHandler(log, r.client, r.scheme, managementClusterConnection)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
@@ -519,13 +517,13 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		log.Error(err, "Error with images from ImageSet")
+		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdate(ctx, component, r.status); err != nil {
-		log.Error(err, err.Error())
+		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -542,7 +540,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		if len(curatorSecrets) == 0 {
-			log.Info("waiting for curator secrets to become available")
+			reqLogger.Info("waiting for curator secrets to become available")
 			r.status.SetDegraded("Waiting for curator secrets to become available", "")
 			return reconcile.Result{}, nil
 		}
@@ -550,7 +548,7 @@ func (r *ReconcileLogStorage) Reconcile(request reconcile.Request) (reconcile.Re
 		// ES should be in ready phase when execution reaches here, apply ILM polices
 		esEndpoint := fmt.Sprintf(render.ElasticsearchHTTPSEndpoint, r.clusterDomain)
 		if err = r.esClient.SetILMPolicies(r.client, ctx, ls, esEndpoint); err != nil {
-			log.Error(err, "failed to create or update Elasticsearch lifecycle policies")
+			reqLogger.Error(err, "failed to create or update Elasticsearch lifecycle policies")
 			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
 			return reconcile.Result{}, err
 		}

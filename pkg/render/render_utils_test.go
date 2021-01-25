@@ -19,13 +19,15 @@ import (
 	"fmt"
 
 	. "github.com/onsi/gomega"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 )
 
 func ExpectResource(resource runtime.Object, name, ns, group, version, kind string) {
@@ -37,7 +39,7 @@ func ExpectResource(resource runtime.Object, name, ns, group, version, kind stri
 	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), fmt.Sprintf("Rendered resource %s does not match expected GVK", name))
 }
 
-func GetResource(resources []runtime.Object, name, ns, group, version, kind string) runtime.Object {
+func GetResource(resources []client.Object, name, ns, group, version, kind string) client.Object {
 	for _, resource := range resources {
 		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 		if name == resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() &&

@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
@@ -145,6 +146,16 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "operator-lock",
+		// We should test this again in the future to see if the problem with LicenseKey updates
+		// being missed is resolved. Prior to controller-runtime 0.7 we observed Test failures
+		// where LicenseKey updates would be missed and the client cache did not have the LicenseKey.
+		// The controller-runtime was updated and we made use of this ClientDisableCacheFor feature
+		// for the LicenseKey. We should test again in the future to see if the cache issue is fixed
+		// and we can remove this. Here is a link to the upstream issue
+		// https://github.com/kubernetes-sigs/controller-runtime/issues/1316
+		ClientDisableCacheFor: []client.Object{
+			&v3.LicenseKey{},
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

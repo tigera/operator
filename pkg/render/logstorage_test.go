@@ -21,6 +21,7 @@ import (
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -1481,7 +1482,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 	}
 }
 
-func compareResources(resources []runtime.Object, expectedResources []resourceTestObj) {
+func compareResources(resources []client.Object, expectedResources []resourceTestObj) {
 	Expect(len(resources)).To(Equal(len(expectedResources)))
 	for i, expectedResource := range expectedResources {
 		resource := resources[i]
@@ -1497,7 +1498,7 @@ func compareResources(resources []runtime.Object, expectedResources []resourceTe
 	}
 }
 
-func getElasticsearch(resources []runtime.Object) *esv1.Elasticsearch {
+func getElasticsearch(resources []client.Object) *esv1.Elasticsearch {
 	resource := GetResource(resources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch")
 	Expect(resource).ShouldNot(BeNil())
 

@@ -30,8 +30,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -218,8 +218,8 @@ func ParseHostPort(hostport string) (string, string, error) {
 
 }
 
-func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []runtime.Object {
-	secrets := []runtime.Object{}
+func copyImagePullSecrets(pullSecrets []*v1.Secret, ns string) []client.Object {
+	secrets := []client.Object{}
 	for _, s := range pullSecrets {
 		x := s.DeepCopy()
 		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
@@ -240,7 +240,7 @@ func CopySecrets(ns string, oSecrets ...*v1.Secret) []*v1.Secret {
 	return secrets
 }
 
-func CopyConfigMaps(ns string, oConfigMaps ...*v1.ConfigMap) []*v1.ConfigMap {
+func copyConfigMaps(ns string, oConfigMaps ...*v1.ConfigMap) []*v1.ConfigMap {
 	var configMaps []*v1.ConfigMap
 	for _, s := range oConfigMaps {
 		x := s.DeepCopy()
@@ -307,8 +307,8 @@ func securityContext() *v1.SecurityContext {
 	}
 }
 
-func secretsToRuntimeObjects(secrets ...*v1.Secret) []runtime.Object {
-	objs := make([]runtime.Object, len(secrets))
+func secretsToRuntimeObjects(secrets ...*v1.Secret) []client.Object {
+	objs := make([]client.Object, len(secrets))
 	for i, secret := range secrets {
 		objs[i] = secret
 	}

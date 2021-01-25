@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package render
 
 import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"reflect"
+	"time"
 
-	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,19 +39,19 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 	return secret, nil
 }
 
-// EnsureCertificateSecret ensures that the certificate in the provided
-// secrets has the expected DNS names. If no key secret is provided, a new key
-// secret is created and returned. If the key secret provided does have the
-// right DNS name, then that given key secret is returned.
-// Otherwise a new key secret is created and returned.
-func EnsureCertificateSecret(ctx context.Context, secretName string, secret *corev1.Secret, svcDNSNames ...string) (*corev1.Secret, error) {
+// EnsureCertificateSecret ensures that the certificate in the
+// secret has the expected DNS names. If no secret is provided, a new
+// secret is created and returned. If the secret does have the
+// right DNS name then the secret is returned.
+// Otherwise a new secret is created and returned.
+func EnsureCertificateSecret(ctx context.Context, secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, error) {
 	var err error
 
 	// Create the secret if it doesn't exist.
 	if secret == nil {
-		secret, err = render.CreateOperatorTLSSecret(nil,
-			secretName, "tls.key", "tls.crt",
-			render.DefaultCertificateDuration, nil, svcDNSNames...,
+		secret, err = CreateOperatorTLSSecret(nil,
+			secretName, keyName, certName,
+			certDuration, nil, svcDNSNames...,
 		)
 		if err != nil {
 			return nil, err
@@ -58,17 +59,16 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 		return secret, nil
 	}
 
-	// If the cert's DNS names have changed then we need to recreate the secret.
-	ok, err := secretHasExpectedDNSNames(secret, svcDNSNames)
-
+	// If the cert's DNS names have changed or if the cert is invalid, create
+	// a new one.
+	ok, err := secretHasExpectedDNSNames(secret, certName, svcDNSNames)
 	if err != nil {
 		return nil, err
 	}
-	// DNS names on the cert do not match expected values; create a new cert.
-	if !ok {
-		return render.CreateOperatorTLSSecret(nil,
-			secretName, "tls.key", "tls.crt",
-			render.DefaultCertificateDuration, nil, svcDNSNames...,
+	if !ok || err != nil {
+		return CreateOperatorTLSSecret(nil,
+			secretName, keyName, certName,
+			DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}
 
@@ -76,9 +76,12 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 	return secret, nil
 }
 
-func secretHasExpectedDNSNames(secret *corev1.Secret, expectedDNSNames []string) (bool, error) {
-	certBytes := secret.Data["tls.crt"]
+func secretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) (bool, error) {
+	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
+	if pemBlock == nil {
+		return false, fmt.Errorf("cert has no PEM data")
+	}
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	if err != nil {
 		return false, err

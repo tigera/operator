@@ -157,7 +157,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil, render.ElasticsearchLicenseTypeBasic)
+		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, internalManagerTLSSecret, nil, render.ElasticsearchLicenseTypeBasic)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))

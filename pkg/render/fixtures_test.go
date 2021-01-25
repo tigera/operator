@@ -15,51 +15,28 @@
 package render_test
 
 import (
+	"time"
+
+	"github.com/openshift/library-go/pkg/crypto"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var internalManagerTLSSecret = v1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.ManagerInternalTLSSecretName,
-		Namespace: render.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		"cert": []byte("cert"),
-		"key":  []byte("key"),
-	},
-}
+var complianceServerCertSecret *v1.Secret
+var internalManagerTLSSecret *v1.Secret
+var voltronTunnelSecret *v1.Secret
 
-var complianceServerCertSecret = v1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.ComplianceServerCertSecret,
-		Namespace: render.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		"cert": []byte("cert"),
-		"key":  []byte("key"),
-	},
-}
-var voltronTunnelSecret = v1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.VoltronTunnelSecretName,
-		Namespace: render.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		render.VoltronTunnelSecretCertName: []byte("cert"),
-		render.VoltronTunnelSecretKeyName:  []byte("key"),
-	},
+func init() {
+	dnsNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, dns.DefaultClusterDomain)
+	complianceServerCertSecret, _ = render.CreateOperatorTLSSecret(
+		nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+
+	dnsNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+	dnsNames = append(dnsNames, render.ManagerServiceIP)
+	internalManagerTLSSecret, _ = render.CreateOperatorTLSSecret(
+		nil, render.ManagerInternalTLSSecretName, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, 825*24*time.Hour, nil, dnsNames...)
+
+	voltronTunnelSecret, _ = render.CreateOperatorTLSSecret(
+		nil, render.VoltronTunnelSecretName, render.VoltronTunnelSecretKeyName, render.VoltronTunnelSecretCertName, crypto.DefaultCACertificateLifetimeInDays, nil, render.VoltronDnsName)
 }

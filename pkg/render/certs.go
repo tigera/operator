@@ -64,7 +64,7 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 	ok, err := secretHasExpectedDNSNames(secret, svcDNSNames)
 	if !ok || err != nil {
 		return CreateOperatorTLSSecret(nil,
-			secretName, "tls.key", "tls.crt",
+			secretName, keyName, certName,
 			DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}

@@ -20,7 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	schedv1beta "k8s.io/api/scheduling/v1beta1"
+	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -304,7 +304,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(schedv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.

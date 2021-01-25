@@ -240,7 +240,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 		}
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -258,7 +258,7 @@ func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcil
 	component := render.Dex(
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
-		install,
+		install.Spec,
 		dexCfg,
 	)
 

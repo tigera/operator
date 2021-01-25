@@ -201,7 +201,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Failed to retrieve pull secrets")
 		r.status.SetDegraded("Failed to retrieve pull secrets", err.Error())
@@ -314,7 +314,7 @@ func (r *ReconcileCompliance) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network.Spec, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

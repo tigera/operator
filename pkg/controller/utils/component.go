@@ -16,6 +16,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -103,7 +104,11 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 			cronJobs = append(cronJobs, key)
 		}
 
-		cur := reflect.New(reflect.ValueOf(obj).Elem().Type()).Interface().(client.Object)
+		cur, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			logCtx.V(2).Info("Failed converting object", "obj", obj)
+			return fmt.Errorf("Failed converting object %+v", obj)
+		}
 		// Check to see if the object exists or not.
 		err := c.client.Get(ctx, key, cur)
 		if err != nil {

@@ -147,7 +147,12 @@ func main() {
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "operator-lock",
 		// We should test this again in the future to see if the problem with LicenseKey updates
-		// being missed is resolved.
+		// being missed is resolved. Prior to controller-runtime 0.7 we observed Test failures
+		// where LicenseKey updates would be missed and the client cache did not have the LicenseKey.
+		// The controller-runtime was updated and we made use of this ClientDisableCacheFor feature
+		// for the LicenseKey. We should test again in the future to see if the cache issue is fixed
+		// and we can remove this. Here is a link to the upstream issue
+		// https://github.com/kubernetes-sigs/controller-runtime/issues/1316
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},

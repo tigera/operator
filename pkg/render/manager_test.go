@@ -445,7 +445,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	return resources
 }
 
-func verifyManagerCerts(resources []runtime.Object, expectedDNSNames ...string) {
+func verifyManagerCerts(resources []client.Object, expectedDNSNames ...string) {
 	secret := GetResource(resources, render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
 	test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 	secret = GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)

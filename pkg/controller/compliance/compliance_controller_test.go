@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/test"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -63,10 +64,11 @@ var _ = Describe("Compliance controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileCompliance{
-			client:   c,
-			scheme:   scheme,
-			provider: operatorv1.ProviderNone,
-			status:   status.New(c, "compliance"),
+			client:        c,
+			scheme:        scheme,
+			provider:      operatorv1.ProviderNone,
+			status:        status.New(c, "compliance"),
+			clusterDomain: dns.DefaultClusterDomain,
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -143,6 +145,33 @@ var _ = Describe("Compliance controller tests", func() {
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceControllerName))
 
+	})
+
+	It("should generate certificates", func() {
+		By("reconciling when clustertype is Standalone")
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Requeue).NotTo(BeTrue())
+
+		By("creating the compliance server cert secret")
+		assertExpectedCertDNSNames(c)
+
+		By("replacing the cert with one that has the wrong DNS names")
+		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
+			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
+
+		oldDNSNames := []string{"compliance.tigera-compliance.svc"}
+		newSecret := &corev1.Secret{}
+		newSecret, err = render.EnsureCertificateSecret(ctx, render.ComplianceServerCertSecret, nil, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, oldDNSNames...)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
+
+		By("replacing the invalid cert")
+		result, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Requeue).NotTo(BeTrue())
+
+		assertExpectedCertDNSNames(c)
 	})
 
 	It("should remove the compliance server in managed clusters", func() {
@@ -381,3 +410,19 @@ var _ = Describe("Compliance controller tests", func() {
 		})
 	})
 })
+
+func assertExpectedCertDNSNames(c client.Client) {
+	ctx := context.Background()
+	secret := &corev1.Secret{}
+	expectedDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, dns.DefaultClusterDomain)
+
+	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
+		Namespace: render.OperatorNamespace(),
+	}, secret)).NotTo(HaveOccurred())
+	test.VerifyCertSANs(secret.Data[render.ComplianceServerCertName], expectedDNSNames...)
+
+	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
+		Namespace: render.ComplianceNamespace,
+	}, secret)).NotTo(HaveOccurred())
+	test.VerifyCertSANs(secret.Data[render.ComplianceServerCertName], expectedDNSNames...)
+}

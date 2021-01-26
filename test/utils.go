@@ -96,6 +96,11 @@ func RunOperator(mgr manager.Manager, ctx context.Context) (doneChan chan struct
 	return doneChan
 }
 
+func VerifyPublicCert(secret *v1.Secret, pubKey string, expectedSANs ...string) {
+	Expect(secret.Data).To(HaveKey(pubKey))
+	VerifyCertSANs(secret.Data[pubKey], expectedSANs...)
+}
+
 func VerifyCert(secret *v1.Secret, privKey string, pubKey string, expectedSANs ...string) {
 	Expect(secret.Data).To(HaveKey(privKey))
 	Expect(secret.Data).To(HaveKey(pubKey))

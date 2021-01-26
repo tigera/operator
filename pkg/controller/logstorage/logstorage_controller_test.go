@@ -619,9 +619,11 @@ var _ = Describe("LogStorage controller", func() {
 					By("confirming public ES and KB certs in the ES/KB namespace are deleted")
 					err = cli.Get(ctx, esCertPubSecretKey, secret)
 					Expect(err).Should(HaveOccurred())
+					Expect(errors.IsNotFound(err)).To(BeTrue())
 
 					err = cli.Get(ctx, kbCertPubSecretKey, secret)
 					Expect(err).Should(HaveOccurred())
+					Expect(errors.IsNotFound(err)).To(BeTrue())
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})

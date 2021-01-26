@@ -573,7 +573,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
-					result, err := r.Reconcile(reconcile.Request{})
+					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
 					Expect(result).Should(Equal(reconcile.Result{}))

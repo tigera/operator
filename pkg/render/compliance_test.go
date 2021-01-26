@@ -24,7 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("compliance rendering tests", func() {
@@ -394,7 +394,7 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 })
 
-func verifyComplianceCerts(resources []runtime.Object, expectedDNSNames ...string) {
+func verifyComplianceCerts(resources []client.Object, expectedDNSNames ...string) {
 	secret := GetResource(resources, render.ComplianceServerCertSecret, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
 	test.VerifyCert(secret, render.ComplianceServerKeyName, render.ComplianceServerCertName, expectedDNSNames...)
 	secret = GetResource(resources, render.ComplianceServerCertSecret, render.ComplianceNamespace, "", "v1", "Secret").(*corev1.Secret)

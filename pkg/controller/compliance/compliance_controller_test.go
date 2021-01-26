@@ -149,7 +149,7 @@ var _ = Describe("Compliance controller tests", func() {
 
 	It("should generate certificates", func() {
 		By("reconciling when clustertype is Standalone")
-		result, err := r.Reconcile(reconcile.Request{})
+		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 
@@ -167,7 +167,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
 		By("replacing the invalid cert")
-		result, err = r.Reconcile(reconcile.Request{})
+		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 

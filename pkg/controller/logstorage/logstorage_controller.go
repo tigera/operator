@@ -395,13 +395,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if elasticsearchSecrets, err = r.elasticsearchSecrets(ctx); err != nil {
+		if elasticsearchSecrets, err = r.getSecrets(ctx, render.ElasticsearchServiceName, render.ElasticsearchNamespace, render.TigeraElasticsearchCertSecret, render.ElasticsearchPublicCertSecret); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		if kibanaSecrets, err = r.kibanaSecrets(ctx); err != nil {
+		if kibanaSecrets, err = r.getSecrets(ctx, render.KibanaServiceName, render.KibanaNamespace, render.TigeraKibanaCertSecret, render.KibanaPublicCertSecret); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
@@ -568,57 +568,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*corev1.Secret, error) {
-	var secrets []*corev1.Secret
-	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-
-	// Get the secret - might be nil
-	secret, err := render.GetSecret(ctx, r.client, render.TigeraElasticsearchCertSecret, render.OperatorNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure that cert is valid.
-	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
-	if err != nil {
-		return nil, err
-	}
-
-	secrets = append(secrets, secret, render.CopySecrets(render.ElasticsearchNamespace, secret)[0])
-
-	// Get the pub secret - might be nil
-	pubSecret, err := render.GetSecret(ctx, r.client, render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace)
-	if err != nil {
-		return nil, err
-	}
-
-	if pubSecret != nil {
-		var ok bool
-		ok, err = render.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
-		if err != nil {
-			return nil, err
-		}
-		// If the cert was updated and the public cert already exists, delete it so
-		// it is recreated by eck operator.
-		if !ok {
-			obj := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace},
-			}
-			log.Info(fmt.Sprintf("cert secret %q not valid, deleting %q", render.TigeraElasticsearchCertSecret, render.ElasticsearchPublicCertSecret))
-			err = r.client.Delete(ctx, obj)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
-		}
-	} else {
-		log.Info(fmt.Sprintf("public cert secret %q not found yet", render.ElasticsearchPublicCertSecret))
-	}
-
-	return secrets, nil
-}
-
 // Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.
 // Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
 // installs a valid Elastic license, the trial will be ignored.
@@ -633,26 +582,27 @@ func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context)
 	return false, nil
 }
 
-func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secret, error) {
+// Gets the Elasticsearch or Kibana secrets to render.
+func (r *ReconcileLogStorage) getSecrets(ctx context.Context, svcName, svcNs, secretName, pubSecretName string) ([]*corev1.Secret, error) {
 	var secrets []*corev1.Secret
-	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+	svcDNSNames := dns.GetServiceDNSNames(svcName, svcNs, r.clusterDomain)
 
 	// Get the secret - might be nil
-	secret, err := render.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, render.OperatorNamespace())
+	secret, err := render.GetSecret(ctx, r.client, secretName, render.OperatorNamespace())
 	if err != nil {
 		return nil, err
 	}
 
 	// Ensure that cert is valid.
-	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
+	secret, err = render.EnsureCertificateSecret(ctx, secretName, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
 
-	secrets = append(secrets, secret, render.CopySecrets(render.KibanaNamespace, secret)[0])
+	secrets = append(secrets, secret, render.CopySecrets(svcNs, secret)[0])
 
 	// Get the pub secret - might be nil
-	pubSecret, err := render.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, render.KibanaNamespace)
+	pubSecret, err := render.GetSecret(ctx, r.client, pubSecretName, svcNs)
 	if err != nil {
 		return nil, err
 	}
@@ -665,11 +615,8 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		}
 		// If the public cert is invalid, delete it so it is recreated by eck operator.
 		if !ok {
-			obj := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace},
-			}
-			log.Info(fmt.Sprintf("cert secret %q not valid, deleting %q", render.TigeraKibanaCertSecret, render.KibanaPublicCertSecret))
-			err = r.client.Delete(ctx, obj)
+			log.Info(fmt.Sprintf("cert secret %q not valid, deleting", pubSecretName))
+			err = r.client.Delete(ctx, pubSecret)
 			if err != nil {
 				return nil, err
 			}
@@ -677,7 +624,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
 		}
 	} else {
-		log.Info(fmt.Sprintf("public cert secret %q not found yet", render.KibanaPublicCertSecret))
+		log.Info(fmt.Sprintf("public cert secret %q not found yet", pubSecretName))
 	}
 
 	return secrets, nil

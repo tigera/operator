@@ -20,21 +20,25 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var _ = Describe("compliance rendering tests", func() {
 	ns := "tigera-compliance"
 	rbac := "rbac.authorization.k8s.io"
+	clusterDomain := dns.DefaultClusterDomain
+	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, clusterDomain)
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, dns.DefaultClusterDomain)
+			}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -123,16 +127,32 @@ var _ = Describe("compliance rendering tests", func() {
 			for _, expected := range expectedEnvs {
 				Expect(envs).To(ContainElement(expected))
 			}
+
+			verifyComplianceCerts(resources, svcDNSNames...)
+		})
+
+		It("should render new server cert if existing cert has invalid DNS names", func() {
+			oldCert, err := render.CreateOperatorTLSSecret(
+				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
+
+			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
+			}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 	})
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, &internalManagerTLSSecret,
+			component, err := render.Compliance(nil, internalManagerTLSSecret,
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
-				}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, dns.DefaultClusterDomain)
+				}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -234,6 +254,24 @@ var _ = Describe("compliance rendering tests", func() {
 					ResourceNames: []string{"compliance-server"},
 				},
 			}))
+
+			verifyComplianceCerts(resources, svcDNSNames...)
+		})
+
+		It("should render new server cert if existing cert has invalid DNS names", func() {
+			oldCert, err := render.CreateOperatorTLSSecret(
+				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			component, err := render.Compliance(nil, internalManagerTLSSecret,
+				&operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
+				}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 	})
 
@@ -242,7 +280,7 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, dns.DefaultClusterDomain)
+			}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, clusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -318,7 +356,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Describe("node selection & affinity", func() {
 		var renderCompliance = func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
-			component, err := render.Compliance(nil, nil, i, nil, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, dns.DefaultClusterDomain)
+			component, err := render.Compliance(nil, nil, i, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 			server = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -355,3 +393,10 @@ var _ = Describe("compliance rendering tests", func() {
 		})
 	})
 })
+
+func verifyComplianceCerts(resources []runtime.Object, expectedDNSNames ...string) {
+	secret := GetResource(resources, render.ComplianceServerCertSecret, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
+	test.VerifyCert(secret, render.ComplianceServerKeyName, render.ComplianceServerCertName, expectedDNSNames...)
+	secret = GetResource(resources, render.ComplianceServerCertSecret, render.ComplianceNamespace, "", "v1", "Secret").(*corev1.Secret)
+	test.VerifyCert(secret, render.ComplianceServerKeyName, render.ComplianceServerCertName, expectedDNSNames...)
+}

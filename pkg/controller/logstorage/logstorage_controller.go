@@ -578,7 +578,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 		return nil, err
 	}
 
-	// Ensure that secret is valid.
+	// Ensure that cert is valid.
 	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, err
@@ -593,9 +593,27 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	}
 
 	if pubSecret != nil {
-		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+		var ok bool
+		ok, err = render.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err != nil {
+			return nil, err
+		}
+		// If the cert was updated and the public cert already exists, delete it so
+		// it is recreated by eck operator.
+		if !ok {
+			obj := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace},
+			}
+			log.Info(fmt.Sprintf("cert secret %q not valid, deleting %q", render.TigeraElasticsearchCertSecret, render.ElasticsearchPublicCertSecret))
+			err = r.client.Delete(ctx, obj)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+		}
 	} else {
-		log.Info(fmt.Sprintf("%q public cert secret not found yet", render.ElasticsearchPublicCertSecret))
+		log.Info(fmt.Sprintf("public cert secret %q not found yet", render.ElasticsearchPublicCertSecret))
 	}
 
 	return secrets, nil
@@ -625,7 +643,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		return nil, err
 	}
 
-	// Ensure that key secret is valid.
+	// Ensure that cert is valid.
 	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, err
@@ -640,9 +658,26 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	}
 
 	if pubSecret != nil {
-		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+		var ok bool
+		ok, err := render.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err != nil {
+			return nil, err
+		}
+		// If the public cert is invalid, delete it so it is recreated by eck operator.
+		if !ok {
+			obj := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace},
+			}
+			log.Info(fmt.Sprintf("cert secret %q not valid, deleting %q", render.TigeraKibanaCertSecret, render.KibanaPublicCertSecret))
+			err = r.client.Delete(ctx, obj)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+		}
 	} else {
-		log.Info(fmt.Sprintf("%q public cert secret not found yet", render.KibanaPublicCertSecret))
+		log.Info(fmt.Sprintf("public cert secret %q not found yet", render.KibanaPublicCertSecret))
 	}
 
 	return secrets, nil

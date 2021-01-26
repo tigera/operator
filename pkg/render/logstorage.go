@@ -21,15 +21,10 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/common"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,8 +35,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 )
 
 type ElasticsearchLicenseType string
@@ -246,8 +245,8 @@ func (es *elasticsearchComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (es *elasticsearchComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	var toCreate, toDelete []runtime.Object
+func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
+	var toCreate, toDelete []client.Object
 
 	if es.logStorage != nil {
 		if !stringsutil.StringInSlice(LogStorageFinalizer, es.logStorage.GetFinalizers()) {
@@ -1438,8 +1437,8 @@ func (es *elasticsearchComponent) supportsOIDC() bool {
 		es.dexCfg != nil
 }
 
-func (es elasticsearchComponent) oidcUserRole() []runtime.Object {
-	return []runtime.Object{
+func (es elasticsearchComponent) oidcUserRole() []client.Object {
+	return []client.Object{
 		&rbacv1.Role{
 			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -1485,8 +1484,8 @@ func (es elasticsearchComponent) oidcUserRole() []runtime.Object {
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRoleBinding() []runtime.Object {
-	return []runtime.Object{
+func (es elasticsearchComponent) oidcUserRoleBinding() []client.Object {
+	return []client.Object{
 		&rbacv1.RoleBinding{
 			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{

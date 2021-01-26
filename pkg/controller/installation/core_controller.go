@@ -171,7 +171,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 					return true
 				}
 				// Otherwise, ignore updates to objects when metadata.Generation does not change.
-				return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
+				return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
 			},
 		}
 		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
@@ -212,8 +212,8 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 // secondaryResources returns a list of the secondary resources that this controller
 // monitors for changes. Add resources here which correspond to the resources created by
 // this controller.
-func secondaryResources() []runtime.Object {
-	return []runtime.Object{
+func secondaryResources() []client.Object {
+	return []client.Object{
 		&apps.DaemonSet{},
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
@@ -558,11 +558,9 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 // Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
 // and what is in the Installation.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
-
-	ctx := context.Background()
 
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.

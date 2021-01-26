@@ -165,7 +165,7 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 		})
 		It("should use builtin images", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{
@@ -208,7 +208,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},

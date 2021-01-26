@@ -26,8 +26,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -78,8 +78,8 @@ func (*dexComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{
+func (c *dexComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	objs := []runtime.Object{
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),
@@ -105,7 +105,7 @@ func (c *dexComponent) serviceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (c *dexComponent) clusterRole() client.Object {
+func (c *dexComponent) clusterRole() runtime.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -126,7 +126,7 @@ func (c *dexComponent) clusterRole() client.Object {
 	}
 }
 
-func (c *dexComponent) clusterRoleBinding() client.Object {
+func (c *dexComponent) clusterRoleBinding() runtime.Object {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,7 +147,7 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 	}
 }
 
-func (c *dexComponent) deployment() client.Object {
+func (c *dexComponent) deployment() runtime.Object {
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -209,7 +209,7 @@ func (c *dexComponent) deployment() client.Object {
 	}
 }
 
-func (c *dexComponent) service() client.Object {
+func (c *dexComponent) service() runtime.Object {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

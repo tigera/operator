@@ -118,9 +118,10 @@ type ReconcileConnection struct {
 // state read and what is in the ManagementClusterConnection.Spec. The Controller will requeue the Request to be
 // processed again if the returned error is non-nil or Result.Requeue is true, otherwise upon completion it will
 // remove the work from the queue.
-func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConnection) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling the management cluster connection")
+	ctx := context.Background()
 	result := reconcile.Result{}
 
 	variant, instl, err := installation.GetInstallation(ctx, r.Client)

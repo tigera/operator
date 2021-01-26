@@ -22,7 +22,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -82,8 +82,8 @@ func (c *kubeControllersComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) {
-	kubeControllerObjects := []client.Object{
+func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	kubeControllerObjects := []runtime.Object{
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),

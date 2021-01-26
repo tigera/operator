@@ -22,7 +22,7 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -52,13 +52,13 @@ type Component interface {
 
 	// Objects returns the lists of objects in this component that should be created and/or deleted during
 	// rendering.
-	Objects() (objsToCreate, objsToDelete []client.Object)
+	Objects() (objsToCreate, objsToDelete []runtime.Object)
 
 	// Ready returns true if the component is ready to be created.
 	Ready() bool
 
 	// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
-	// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
+	// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on runtime.Objects
 	// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
 	SupportedOSType() OSType
 }
@@ -133,7 +133,7 @@ func Calico(
 		tss = append(tss, CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
 	}
 	// Create copy to go into Calico Namespace
-	tcms = append(tcms, copyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
+	tcms = append(tcms, CopyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
 	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster

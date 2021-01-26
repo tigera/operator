@@ -18,14 +18,13 @@ import (
 	"fmt"
 	"strings"
 
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -99,8 +98,8 @@ func ConvertSecretToCredential(s *corev1.Secret) (*AmazonCredential, error) {
 	return &AmazonCredential{KeyId: kId, KeySecret: kSecret}, nil
 }
 
-func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{
+func (c *amazonCloudIntegrationComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	objs := []runtime.Object{
 		createNamespace(AmazonCloudIntegrationNamespace, c.openshift),
 	}
 	secrets := copyImagePullSecrets(c.pullSecrets, AmazonCloudIntegrationNamespace)

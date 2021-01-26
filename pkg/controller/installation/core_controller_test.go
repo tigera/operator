@@ -360,7 +360,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should use builtin images", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{
@@ -452,7 +452,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{

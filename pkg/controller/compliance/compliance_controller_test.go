@@ -115,7 +115,7 @@ var _ = Describe("Compliance controller tests", func() {
 	It("should create resources for standalone clusters", func() {
 
 		By("reconciling when clustertype is Standalone")
-		result, err := r.Reconcile(ctx, reconcile.Request{})
+		result, err := r.Reconcile(reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 
@@ -148,7 +148,7 @@ var _ = Describe("Compliance controller tests", func() {
 	It("should remove the compliance server in managed clusters", func() {
 
 		By("reconciling when clustertype is Standalone")
-		result, err := r.Reconcile(ctx, reconcile.Request{})
+		result, err := r.Reconcile(reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 
@@ -168,7 +168,7 @@ var _ = Describe("Compliance controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 		By("reconciling after the cluster type changes")
-		_, err = r.Reconcile(ctx, reconcile.Request{})
+		_, err = r.Reconcile(reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 
 		By("removing one unnecessary deployment")
@@ -194,7 +194,7 @@ var _ = Describe("Compliance controller tests", func() {
 
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			//components.ComponentComplianceBenchmarker
@@ -296,7 +296,7 @@ var _ = Describe("Compliance controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			d := appsv1.Deployment{

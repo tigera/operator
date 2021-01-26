@@ -17,16 +17,15 @@
 package render
 
 import (
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -79,8 +78,8 @@ func (c *GuardianComponent) SupportedOSType() OSType {
 	return OSTypeLinux
 }
 
-func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{
+func (c *GuardianComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	objs := []runtime.Object{
 		createNamespace(GuardianNamespace, c.openshift),
 	}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, GuardianNamespace)...)
@@ -139,14 +138,14 @@ func (c *GuardianComponent) service() *corev1.Service {
 	}
 }
 
-func (c *GuardianComponent) serviceAccount() client.Object {
+func (c *GuardianComponent) serviceAccount() runtime.Object {
 	return &v1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace},
 	}
 }
 
-func (c *GuardianComponent) clusterRole() client.Object {
+func (c *GuardianComponent) clusterRole() runtime.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -162,7 +161,7 @@ func (c *GuardianComponent) clusterRole() client.Object {
 	}
 }
 
-func (c *GuardianComponent) clusterRoleBinding() client.Object {
+func (c *GuardianComponent) clusterRoleBinding() runtime.Object {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -183,7 +182,7 @@ func (c *GuardianComponent) clusterRoleBinding() client.Object {
 	}
 }
 
-func (c *GuardianComponent) deployment() client.Object {
+func (c *GuardianComponent) deployment() runtime.Object {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{

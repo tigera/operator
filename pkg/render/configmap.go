@@ -16,7 +16,7 @@ package render
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -38,8 +38,8 @@ func (c *configMapComponent) SupportedOSType() OSType {
 	return OSTypeAny
 }
 
-func (c *configMapComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{}
+func (c *configMapComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	objs := []runtime.Object{}
 	for _, cm := range c.configMaps {
 		objs = append(objs, cm)
 	}

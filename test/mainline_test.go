@@ -118,9 +118,9 @@ var _ = Describe("Mainline component function tests", func() {
 		})
 
 		It("Should install resources for a CRD", func() {
-			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-			installResourceCRD(c, mgr, ctx)
+			stopChan := make(chan struct{})
+			defer close(stopChan)
+			installResourceCRD(c, mgr, stopChan)
 
 			instance := &operator.Installation{
 				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
@@ -163,9 +163,9 @@ var _ = Describe("Mainline component function tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			}
 
-			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-			installResourceCRD(c, mgr, ctx)
+			stopChan := make(chan struct{})
+			defer close(stopChan)
+			installResourceCRD(c, mgr, stopChan)
 
 			By("Deleting CR after its tigera status becomes available")
 			err := c.Delete(context.Background(), instance)
@@ -207,9 +207,9 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Running the operator")
-		ctx, cancel := context.WithCancel(context.TODO())
-		defer cancel()
-		RunOperator(mgr, ctx)
+		stopChan := make(chan struct{})
+		defer close(stopChan)
+		RunOperator(mgr, stopChan)
 
 		By("Verifying resources were not created")
 		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
@@ -273,7 +273,7 @@ func setupManager() (client.Client, manager.Manager) {
 	return mgr.GetClient(), mgr
 }
 
-func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Context) {
+func installResourceCRD(c client.Client, mgr manager.Manager, stopChan chan struct{}) {
 	By("Creating a CRD")
 	instance := &operator.Installation{
 		TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
@@ -283,7 +283,7 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 	Expect(err).NotTo(HaveOccurred())
 
 	By("Running the operator")
-	RunOperator(mgr, ctx)
+	RunOperator(mgr, stopChan)
 
 	By("Verifying the resources were created")
 	ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}

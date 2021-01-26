@@ -17,7 +17,7 @@ package render
 import (
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -42,8 +42,8 @@ func (c *priorityClassComponent) SupportedOSType() OSType {
 	return OSTypeAny
 }
 
-func (c *priorityClassComponent) Objects() ([]client.Object, []client.Object) {
-	return []client.Object{c.calicoPriority()}, nil
+func (c *priorityClassComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	return []runtime.Object{c.calicoPriority()}, nil
 }
 
 func (c *priorityClassComponent) Ready() bool {

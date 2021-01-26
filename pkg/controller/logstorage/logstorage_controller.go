@@ -395,13 +395,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if elasticsearchSecrets, err = r.elasticsearchSecrets(ctx); err != nil {
+		if elasticsearchSecrets, err = r.getAndDeleteInvalidCertSecrets(ctx, render.ElasticsearchServiceName, render.ElasticsearchNamespace, render.TigeraElasticsearchCertSecret, render.ElasticsearchPublicCertSecret); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		if kibanaSecrets, err = r.kibanaSecrets(ctx); err != nil {
+		if kibanaSecrets, err = r.getAndDeleteInvalidCertSecrets(ctx, render.KibanaServiceName, render.KibanaNamespace, render.TigeraKibanaCertSecret, render.KibanaPublicCertSecret); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
@@ -568,39 +568,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*corev1.Secret, error) {
-	var secrets []*corev1.Secret
-	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-
-	// Get the secret - might be nil
-	secret, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchCertSecret, render.OperatorNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure that secret is valid.
-	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, svcDNSNames...)
-	if err != nil {
-		return nil, err
-	}
-
-	secrets = append(secrets, secret, render.CopySecrets(render.ElasticsearchNamespace, secret)[0])
-
-	// Get the pub secret - might be nil
-	pubSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace)
-	if err != nil {
-		return nil, err
-	}
-
-	if pubSecret != nil {
-		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
-	} else {
-		log.Info(fmt.Sprintf("%q public cert secret not found yet", render.ElasticsearchPublicCertSecret))
-	}
-
-	return secrets, nil
-}
-
 // Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.
 // Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
 // installs a valid Elastic license, the trial will be ignored.
@@ -615,34 +582,49 @@ func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context)
 	return false, nil
 }
 
-func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secret, error) {
+// Gets the Elasticsearch or Kibana secrets to render.
+func (r *ReconcileLogStorage) getAndDeleteInvalidCertSecrets(ctx context.Context, svcName, svcNs, secretName, pubSecretName string) ([]*corev1.Secret, error) {
 	var secrets []*corev1.Secret
-	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+	svcDNSNames := dns.GetServiceDNSNames(svcName, svcNs, r.clusterDomain)
 
 	// Get the secret - might be nil
-	secret, err := utils.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, render.OperatorNamespace())
+	secret, err := render.GetSecret(ctx, r.client, secretName, render.OperatorNamespace())
 	if err != nil {
 		return nil, err
 	}
 
-	// Ensure that key secret is valid.
-	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, svcDNSNames...)
+	// Ensure that cert is valid.
+	secret, err = render.EnsureCertificateSecret(ctx, secretName, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
 
-	secrets = append(secrets, secret, render.CopySecrets(render.KibanaNamespace, secret)[0])
+	secrets = append(secrets, secret, render.CopySecrets(svcNs, secret)[0])
 
 	// Get the pub secret - might be nil
-	pubSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, render.KibanaNamespace)
+	pubSecret, err := render.GetSecret(ctx, r.client, pubSecretName, svcNs)
 	if err != nil {
 		return nil, err
 	}
 
 	if pubSecret != nil {
-		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+		var ok bool
+		ok, err := render.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err != nil {
+			return nil, err
+		}
+		// If the public cert is invalid, delete it so it is recreated by eck operator.
+		if !ok {
+			log.Info(fmt.Sprintf("cert secret %q not valid, deleting", pubSecretName))
+			err = r.client.Delete(ctx, pubSecret)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+		}
 	} else {
-		log.Info(fmt.Sprintf("%q public cert secret not found yet", render.KibanaPublicCertSecret))
+		log.Info(fmt.Sprintf("public cert secret %q not found yet", pubSecretName))
 	}
 
 	return secrets, nil

@@ -21,7 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,7 +29,7 @@ import (
 
 var _ = Describe("Rendering tests", func() {
 	var g render.Component
-	var resources []runtime.Object
+	var resources []client.Object
 
 	var renderGuardian = func(i operator.InstallationSpec) {
 		addr := "127.0.0.1:1234"

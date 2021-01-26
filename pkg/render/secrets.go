@@ -16,7 +16,7 @@ package render
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -38,8 +38,8 @@ func (c *secretsComponent) SupportedOSType() OSType {
 	return OSTypeAny
 }
 
-func (c *secretsComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{}
+func (c *secretsComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	objs := []runtime.Object{}
 	for _, s := range c.secrets {
 		objs = append(objs, s)
 	}

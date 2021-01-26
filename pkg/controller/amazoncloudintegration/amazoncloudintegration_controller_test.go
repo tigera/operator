@@ -117,7 +117,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
 			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			_, err = utils.GetAmazonCloudIntegration(ctx, cli)
 			Expect(err).NotTo(HaveOccurred())
@@ -152,7 +152,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
 			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			_, err = utils.GetAmazonCloudIntegration(ctx, cli)
 			Expect(err).NotTo(HaveOccurred())

@@ -17,7 +17,7 @@ package render
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -44,8 +44,8 @@ func (c *namespaceComponent) SupportedOSType() OSType {
 	return OSTypeAny
 }
 
-func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
-	ns := []client.Object{
+func (c *namespaceComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	ns := []runtime.Object{
 		createNamespace(common.CalicoNamespace, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 	}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {

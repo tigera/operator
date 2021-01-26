@@ -18,16 +18,16 @@ import (
 	"fmt"
 	"strconv"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 )
 
 const (
@@ -226,8 +226,8 @@ func (c *fluentdComponent) path(path string) string {
 	return path
 }
 
-func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
-	var objs []client.Object
+func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
+	var objs []runtime.Object
 	objs = append(objs,
 		createNamespace(
 			LogCollectorNamespace,

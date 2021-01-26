@@ -128,7 +128,7 @@ var _ = Describe("LogCollector controller tests", func() {
 
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			ds := appsv1.DaemonSet{
@@ -167,7 +167,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			ds := appsv1.DaemonSet{

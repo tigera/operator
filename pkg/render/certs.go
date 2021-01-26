@@ -50,6 +50,7 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 
 	// Create the secret if it doesn't exist.
 	if secret == nil {
+		log.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
 		secret, err = CreateOperatorTLSSecret(nil,
 			secretName, keyName, certName,
 			certDuration, nil, svcDNSNames...,
@@ -60,24 +61,25 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 		return secret, nil
 	}
 
-	// If the cert's DNS names have changed or if the cert is invalid, create
-	// a new one.
-	ok, err := secretHasExpectedDNSNames(secret, certName, svcDNSNames)
+	// If the cert's DNS names have changed, create a new one.
+	ok, err := SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return CreateOperatorTLSSecret(nil,
+		log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
+		secret, err = CreateOperatorTLSSecret(nil,
 			secretName, keyName, certName,
 			DefaultCertificateDuration, nil, svcDNSNames...,
 		)
+		return secret, err
 	}
 
-	// Finally return just the secret.
+	// Return the original secret.
 	return secret, nil
 }
 
-func secretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) (bool, error) {
+func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) (bool, error) {
 	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {

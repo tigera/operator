@@ -395,13 +395,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if elasticsearchSecrets, err = r.getSecrets(ctx, render.ElasticsearchServiceName, render.ElasticsearchNamespace, render.TigeraElasticsearchCertSecret, render.ElasticsearchPublicCertSecret); err != nil {
+		if elasticsearchSecrets, err = r.getAndDeleteInvalidCertSecrets(ctx, render.ElasticsearchServiceName, render.ElasticsearchNamespace, render.TigeraElasticsearchCertSecret, render.ElasticsearchPublicCertSecret); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		if kibanaSecrets, err = r.getSecrets(ctx, render.KibanaServiceName, render.KibanaNamespace, render.TigeraKibanaCertSecret, render.KibanaPublicCertSecret); err != nil {
+		if kibanaSecrets, err = r.getAndDeleteInvalidCertSecrets(ctx, render.KibanaServiceName, render.KibanaNamespace, render.TigeraKibanaCertSecret, render.KibanaPublicCertSecret); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
@@ -583,7 +583,7 @@ func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context)
 }
 
 // Gets the Elasticsearch or Kibana secrets to render.
-func (r *ReconcileLogStorage) getSecrets(ctx context.Context, svcName, svcNs, secretName, pubSecretName string) ([]*corev1.Secret, error) {
+func (r *ReconcileLogStorage) getAndDeleteInvalidCertSecrets(ctx context.Context, svcName, svcNs, secretName, pubSecretName string) ([]*corev1.Secret, error) {
 	var secrets []*corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(svcName, svcNs, r.clusterDomain)
 

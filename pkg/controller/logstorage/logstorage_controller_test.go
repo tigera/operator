@@ -528,6 +528,104 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})
+				It("test certs are updated if DNS names are invalid", func() {
+					// Create the certs with old DNS names upfront so we can
+					// verify that the controller recreates them.
+					var err error
+					esSecret, err := render.EnsureCertificateSecret(
+						context.TODO(), render.TigeraElasticsearchCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, "tigera-secure-es-http.tigera-elasticsearch.svc")
+					Expect(err).ShouldNot(HaveOccurred())
+					esPublicSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
+					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
+					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
+
+					kbSecret, err := render.EnsureCertificateSecret(
+						context.TODO(), render.TigeraKibanaCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, "tigera-secure-kb-http.tigera-elasticsearch.svc")
+					Expect(err).ShouldNot(HaveOccurred())
+					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
+					Expect(cli.Create(ctx, kbSecret)).ShouldNot(HaveOccurred())
+					Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(ctx, &storagev1.StorageClass{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(ctx, &operatorv1.LogStorage{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+						Spec: operatorv1.LogStorageSpec{
+							Nodes: &operatorv1.Nodes{
+								Count: int64(1),
+							},
+							StorageClassName: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(ctx, &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
+					})).ShouldNot(HaveOccurred())
+
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
+					result, err := r.Reconcile(reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+					// Expect to be waiting for Elasticsearch and Kibana to be functional
+					Expect(result).Should(Equal(reconcile.Result{}))
+
+					By("asserting the finalizers have been set on the LogStorage CR")
+					ls := &operatorv1.LogStorage{}
+					Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
+					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
+					Expect(ls.Spec.StorageClassName).To(Equal(storageClassName))
+
+					Expect(cli.Get(ctx, eckOperatorObjKey, &appsv1.StatefulSet{})).ShouldNot(HaveOccurred())
+
+					es := &esv1.Elasticsearch{}
+					Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+
+					es.Status.Phase = esv1.ElasticsearchReadyPhase
+					Expect(cli.Update(ctx, es)).ShouldNot(HaveOccurred())
+
+					kb := &kbv1.Kibana{}
+					Expect(cli.Get(ctx, kbObjKey, kb)).ShouldNot(HaveOccurred())
+
+					kb.Status.AssociationStatus = cmnv1.AssociationEstablished
+					Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
+
+					By("confirming elasticsearch certs were updated")
+					esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+					secret := &corev1.Secret{}
+
+					Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
+					test.VerifyCert(secret, "tls.key", "tls.crt", esDNSNames...)
+
+					Expect(cli.Get(ctx, esCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
+					test.VerifyCert(secret, "tls.key", "tls.crt", esDNSNames...)
+
+					By("confirming kibana certs were updated")
+					kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
+					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
+
+					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
+					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
+
+					By("confirming public ES and KB certs in the ES/KB namespace are deleted")
+					err = cli.Get(ctx, esCertPubSecretKey, secret)
+					Expect(err).Should(HaveOccurred())
+
+					err = cli.Get(ctx, kbCertPubSecretKey, secret)
+					Expect(err).Should(HaveOccurred())
+
+					mockStatus.AssertExpectations(GinkgoT())
+				})
+
 				Context("checking rendered images", func() {
 					BeforeEach(func() {
 						mockStatus.On("ClearDegraded", mock.Anything)
@@ -953,7 +1051,8 @@ func createPubSecret(name string, ns string, bytes []byte, certName string) clie
 
 func createESSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	esSecret, err := render.EnsureCertificateSecret(context.TODO(), render.TigeraElasticsearchCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
+	esSecret, err := render.EnsureCertificateSecret(
+		context.TODO(), render.TigeraElasticsearchCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	esOperNsSecret := render.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
@@ -970,7 +1069,8 @@ func createESSecrets() []client.Object {
 
 func createKibanaSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-	kbSecret, err := render.EnsureCertificateSecret(context.TODO(), render.TigeraKibanaCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
+	kbSecret, err := render.EnsureCertificateSecret(
+		context.TODO(), render.TigeraKibanaCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	kbOperNsSecret := render.CopySecrets(render.KibanaNamespace, kbSecret)[0]

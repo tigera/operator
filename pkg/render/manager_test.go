@@ -40,6 +40,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 
 	const expectedResourcesNumber = 10
+
+	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+	expectedDNSNames = append(expectedDNSNames, "localhost")
+
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(false, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
@@ -102,12 +106,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 
-		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-		expectedDNSNames = append(expectedDNSNames, "localhost")
-		secret := GetResource(resources, render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
-		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
-		secret = GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
-		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+		verifyManagerCerts(resources, expectedDNSNames...)
+	})
+
+	It("should render new server cert if existing cert has invalid DNS names", func() {
+		oldCert, err := render.CreateOperatorTLSSecret(
+			nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
+		Expect(err).ShouldNot(HaveOccurred())
+
+		resources := renderObjects(false, nil, oldCert)
+		verifyManagerCerts(resources, expectedDNSNames...)
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
@@ -404,8 +412,8 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
 	if managementCluster != nil {
-		tunnelSecret = &voltronTunnelSecret
-		internalTraffic = &internalManagerTLSSecret
+		tunnelSecret = voltronTunnelSecret
+		internalTraffic = internalManagerTLSSecret
 	}
 	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(dexCfg,
@@ -435,4 +443,11 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	Expect(component.ResolveImages(nil)).To(BeNil())
 	resources, _ := component.Objects()
 	return resources
+}
+
+func verifyManagerCerts(resources []client.Object, expectedDNSNames ...string) {
+	secret := GetResource(resources, render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
+	test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+	secret = GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
+	test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 }

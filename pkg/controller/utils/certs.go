@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package utils
 
 import (
 	"context"
@@ -24,11 +24,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var certslogger = logf.Log.WithName("certs")
 
 func GetSecret(ctx context.Context, client client.Client, name string, ns string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
@@ -54,7 +58,7 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 	// Create the secret if it doesn't exist.
 	if secret == nil {
 		log.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
-		secret, err = CreateOperatorTLSSecret(nil,
+		secret, err = render.CreateOperatorTLSSecret(nil,
 			secretName, keyName, certName,
 			certDuration, nil, svcDNSNames...,
 		)
@@ -73,9 +77,9 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 		// component, then create a new secret to replace the invalid one.
 		if isOwnedByUID(secret, componentUID) {
 			log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
-			secret, err = CreateOperatorTLSSecret(nil,
+			secret, err = render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
-				DefaultCertificateDuration, nil, svcDNSNames...,
+				render.DefaultCertificateDuration, nil, svcDNSNames...,
 			)
 			return secret, err
 		}

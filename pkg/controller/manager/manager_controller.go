@@ -248,7 +248,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	svcDNSNames = append(svcDNSNames, "localhost")
 	certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 	tlsSecret, err = utils.EnsureCertificateSecret(
-		ctx, render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, instance.GetUID(), svcDNSNames...,
+		render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, instance.GetUID(), svcDNSNames...,
 	)
 
 	if err != nil {

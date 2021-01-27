@@ -596,7 +596,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context, logstora
 	}
 
 	// Ensure that cert is valid.
-	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, logstorageUID, svcDNSNames...)
+	secret, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, logstorageUID, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +650,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, logstorageUID t
 	}
 
 	// Ensure that cert is valid.
-	secret, err = utils.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, logstorageUID, svcDNSNames...)
+	secret, err = utils.EnsureCertificateSecret(render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, logstorageUID, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}

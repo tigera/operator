@@ -52,7 +52,7 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 // If the cert in the secret has invalid DNS names and the secret is owned by
 // the provided component, then a new secret is created and returned. Otherwise,
 // if the secret is user-supplied, an error is returned.
-func EnsureCertificateSecret(ctx context.Context, secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, componentUID types.UID, svcDNSNames ...string) (*corev1.Secret, error) {
+func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, componentUID types.UID, svcDNSNames ...string) (*corev1.Secret, error) {
 	var err error
 
 	// Create the secret if it doesn't exist.

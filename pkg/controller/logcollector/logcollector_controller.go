@@ -375,7 +375,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Render the fluentd component for Linux
 	component := render.Fluentd(
 		instance,
-		managementCluster,
+		managementCluster != nil,
 		esSecrets,
 		esClusterConfig,
 		s3Credential,
@@ -408,7 +408,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		component = render.Fluentd(
 			instance,
-			managementCluster,
+			managementCluster != nil,
 			esSecrets,
 			esClusterConfig,
 			s3Credential,

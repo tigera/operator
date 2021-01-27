@@ -58,7 +58,7 @@ var (
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
 	k8sServiceEp k8sapi.ServiceEndpoint,
-	cr *common.InstallationInternal,
+	cr *common.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,

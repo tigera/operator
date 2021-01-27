@@ -91,7 +91,7 @@ type SplunkCredential struct {
 
 func Fluentd(
 	lc *operatorv1.LogCollector,
-	mc *operatorv1.ManagementCluster,
+	isManagementCluster bool,
 	esSecrets []*corev1.Secret,
 	esClusterConfig *ElasticsearchClusterConfig,
 	s3C *S3Credential,
@@ -99,23 +99,23 @@ func Fluentd(
 	f *FluentdFilters,
 	eksConfig *EksCloudwatchLogConfig,
 	pullSecrets []*corev1.Secret,
-	installation *common.InstallationInternal,
+	installation *common.Installation,
 	clusterDomain string,
 	osType OSType,
 ) Component {
 	return &fluentdComponent{
-		lc:                lc,
-		managementCluster: mc,
-		esSecrets:         esSecrets,
-		esClusterConfig:   esClusterConfig,
-		s3Credential:      s3C,
-		splkCredential:    spC,
-		filters:           f,
-		eksConfig:         eksConfig,
-		pullSecrets:       pullSecrets,
-		installation:      installation,
-		clusterDomain:     clusterDomain,
-		osType:            osType,
+		lc:                  lc,
+		isManagementCluster: isManagementCluster,
+		esSecrets:           esSecrets,
+		esClusterConfig:     esClusterConfig,
+		s3Credential:        s3C,
+		splkCredential:      spC,
+		filters:             f,
+		eksConfig:           eksConfig,
+		pullSecrets:         pullSecrets,
+		installation:        installation,
+		clusterDomain:       clusterDomain,
+		osType:              osType,
 	}
 }
 
@@ -129,19 +129,19 @@ type EksCloudwatchLogConfig struct {
 }
 
 type fluentdComponent struct {
-	lc                *operatorv1.LogCollector
-	managementCluster *operatorv1.ManagementCluster
-	esSecrets         []*corev1.Secret
-	esClusterConfig   *ElasticsearchClusterConfig
-	s3Credential      *S3Credential
-	splkCredential    *SplunkCredential
-	filters           *FluentdFilters
-	eksConfig         *EksCloudwatchLogConfig
-	pullSecrets       []*corev1.Secret
-	installation      *common.InstallationInternal
-	clusterDomain     string
-	osType            OSType
-	image             string
+	lc                  *operatorv1.LogCollector
+	isManagementCluster bool
+	esSecrets           []*corev1.Secret
+	esClusterConfig     *ElasticsearchClusterConfig
+	s3Credential        *S3Credential
+	splkCredential      *SplunkCredential
+	filters             *FluentdFilters
+	eksConfig           *EksCloudwatchLogConfig
+	pullSecrets         []*corev1.Secret
+	installation        *common.Installation
+	clusterDomain       string
+	osType              OSType
+	image               string
 }
 
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -604,17 +604,15 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	// For the TigeraCustom flag we disable log forwarding to Elasticsearch.
 	// This means the logs for this cluster are not stored anywhere.
-	if c.installation.TigeraCustom {
-		// Disable only for management clusters
-		if c.managementCluster != nil {
-			envs = append(envs,
-				corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
-				corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
-				corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
-				corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
-				corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
-			)
-		}
+	// Disable only for management clusters
+	if c.installation.TigeraCustom && c.isManagementCluster {
+		envs = append(envs,
+			corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
+			corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
+			corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
+			corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
+			corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
+		)
 	}
 
 	envs = append(envs,

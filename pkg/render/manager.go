@@ -80,7 +80,7 @@ func Manager(
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *common.InstallationInternal,
+	installation *common.Installation,
 	managementCluster *operator.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,

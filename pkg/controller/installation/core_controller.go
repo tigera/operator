@@ -250,7 +250,7 @@ const TigeraCustom = "unsupported.operator.tigera.io/custom"
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.
-func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *common.InstallationInternal, error) {
+func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *common.Installation, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operator.Installation{}
 	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
@@ -269,14 +269,14 @@ func GetInstallation(ctx context.Context, client client.Client) (operator.Produc
 		spec = overrideInstallationSpec(spec, overlay.Spec)
 	}
 
-	// Only look at the annotations on the base Installation for the purposes of InstallationInternal
-	ii := getInstallationInternal(&spec, instance.Annotations)
+	// Only look at the annotations on the base Installation for the purposes of common.Installation
+	ii := getCommonInstallation(&spec, instance.Annotations)
 
 	return instance.Status.Variant, &ii, nil
 }
 
-func getInstallationInternal(inst *operator.InstallationSpec, annotations map[string]string) common.InstallationInternal {
-	ii := common.InstallationInternal{Spec: inst}
+func getCommonInstallation(inst *operator.InstallationSpec, annotations map[string]string) common.Installation {
+	ii := common.Installation{Spec: inst}
 
 	ii.NodeAppArmorProfile = annotations[techPreviewFeatureSeccompApparmor]
 
@@ -840,7 +840,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	ii := getInstallationInternal(&instance.Spec, instance.GetObjectMeta().GetAnnotations())
+	ii := getCommonInstallation(&instance.Spec, instance.GetObjectMeta().GetAnnotations())
 
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.

@@ -76,7 +76,7 @@ type TyphaNodeTLS struct {
 
 func Calico(
 	k8sServiceEp k8sapi.ServiceEndpoint,
-	ii *common.InstallationInternal,
+	installation *common.Installation,
 	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
@@ -94,7 +94,7 @@ func Calico(
 	var tcms []*corev1.ConfigMap
 	var tss []*corev1.Secret
 
-	if ii.Spec.CertificateManagement != nil {
+	if installation.Spec.CertificateManagement != nil {
 		typhaNodeTLS = &TyphaNodeTLS{
 			CAConfigMap: &corev1.ConfigMap{
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -103,7 +103,7 @@ func Calico(
 					Namespace: OperatorNamespace(),
 				},
 				Data: map[string]string{
-					TyphaCABundleName: string(ii.Spec.CertificateManagement.CACert),
+					TyphaCABundleName: string(installation.Spec.CertificateManagement.CACert),
 				},
 			},
 		}
@@ -134,7 +134,7 @@ func Calico(
 	// Create copy to go into Calico Namespace
 	tcms = append(tcms, copyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
-	if managerInternalTLSSecret == nil && ii.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
+	if managerInternalTLSSecret == nil && installation.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
 		// The certificate will be issued for the FQDN manager service names and
 		// localhost.
@@ -159,7 +159,7 @@ func Calico(
 
 	return calicoRenderer{
 		k8sServiceEp:                k8sServiceEp,
-		installation:                ii,
+		installation:                installation,
 		logStorageExists:            logStorageExists,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
@@ -236,7 +236,7 @@ func createTLS() (*TyphaNodeTLS, error) {
 
 type calicoRenderer struct {
 	k8sServiceEp                k8sapi.ServiceEndpoint
-	installation                *common.InstallationInternal
+	installation                *common.Installation
 	logStorageExists            bool
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection

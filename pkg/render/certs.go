@@ -64,14 +64,13 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 		return secret, nil
 	}
 
-	// If the cert's DNS names have changed, create a new one.
 	ok, err := SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		// If the secret is owned by the component (i.e. the operator), then
-		// create a new secret to replace the invalid one.
+		// If the cert's DNS names are invalid and the secret is owned by the
+		// component, then create a new secret to replace the invalid one.
 		if isOwnedByUID(secret, componentUID) {
 			log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
 			secret, err = CreateOperatorTLSSecret(nil,

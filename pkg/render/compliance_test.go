@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -32,13 +33,14 @@ var _ = Describe("compliance rendering tests", func() {
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
 	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, clusterDomain)
+	cr := &operatorv1.Compliance{}
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
+			}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, cr.GetUID())
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -131,17 +133,35 @@ var _ = Describe("compliance rendering tests", func() {
 			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 
-		It("should render new server cert if existing cert has invalid DNS names", func() {
+		It("should return an error if user-supplied cert has invalid DNS names", func() {
 			oldCert, err := render.CreateOperatorTLSSecret(
 				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
 
-			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
+			_, err = render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
+			}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, cr.GetUID())
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(Equal(`Expected cert "tigera-compliance-server-tls" to have DNS names: compliance, compliance.tigera-compliance, compliance.tigera-compliance.svc, compliance.tigera-compliance.svc.cluster.local`))
+		})
+
+		It("should render new server cert if existing cert owned by Compliance CR has invalid DNS names", func() {
+			oldCert, err := render.CreateOperatorTLSSecret(
+				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			oldCert.SetOwnerReferences([]metav1.OwnerReference{
+				{UID: cr.GetUID()},
+			})
+			component, err := render.Compliance(nil, internalManagerTLSSecret,
+				&operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "testregistry.com/",
+				}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain, cr.GetUID())
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
+			// Verify the cert has valid DNS names
 			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 	})
@@ -152,7 +172,7 @@ var _ = Describe("compliance rendering tests", func() {
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
-				}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain)
+				}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain, cr.GetUID())
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -258,19 +278,36 @@ var _ = Describe("compliance rendering tests", func() {
 			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 
-		It("should render new server cert if existing cert has invalid DNS names", func() {
+		It("should return an error if user-supplied cert has invalid DNS names", func() {
+			oldCert, err := render.CreateOperatorTLSSecret(
+				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
+
+			_, err = render.Compliance(nil, nil, &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
+			}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, cr.GetUID())
+			Expect(err).Should(HaveOccurred())
+
+			Expect(err.Error()).To(Equal(`Expected cert "tigera-compliance-server-tls" to have DNS names: compliance, compliance.tigera-compliance, compliance.tigera-compliance.svc, compliance.tigera-compliance.svc.cluster.local`))
+		})
+
+		It("should render new server cert if existing cert owned by Compliance CR has invalid DNS names", func() {
 			oldCert, err := render.CreateOperatorTLSSecret(
 				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
 			Expect(err).ShouldNot(HaveOccurred())
 
+			oldCert.SetOwnerReferences([]metav1.OwnerReference{
+				{UID: cr.GetUID()},
+			})
 			component, err := render.Compliance(nil, internalManagerTLSSecret,
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
-				}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain)
+				}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain, cr.GetUID())
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
+			// Verify the cert has valid DNS names
 			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 	})
@@ -280,7 +317,7 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
-			}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, clusterDomain)
+			}, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, clusterDomain, cr.GetUID())
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -356,7 +393,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Describe("node selection & affinity", func() {
 		var renderCompliance = func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
-			component, err := render.Compliance(nil, nil, i, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
+			component, err := render.Compliance(nil, nil, i, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, cr.GetUID())
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 			server = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)

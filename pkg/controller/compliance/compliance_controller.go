@@ -291,7 +291,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	// operator, the cert is recreated and returned. If the invalid cert is supplied by
 	// the user, set the component degraded.
 	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
-	complianceServerCertSecret, err = render.EnsureCertificateSecret(
+	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
 		ctx, render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, instance.GetUID(), svcDNSNames...,
 	)
 

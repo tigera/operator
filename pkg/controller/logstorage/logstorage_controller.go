@@ -395,13 +395,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if elasticsearchSecrets, err = r.elasticsearchSecrets(ctx); err != nil {
+		if elasticsearchSecrets, err = r.elasticsearchSecrets(ctx, ls.GetUID()); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		if kibanaSecrets, err = r.kibanaSecrets(ctx); err != nil {
+		if kibanaSecrets, err = r.kibanaSecrets(ctx, ls.GetUID()); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
@@ -584,7 +584,7 @@ func (r *ReconcileLogStorage) deleteInvalidECKManagedPublicCertSecret(ctx contex
 	return false, nil
 }
 
-func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*corev1.Secret, error) {
+func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context, logstorageUID types.UID) ([]*corev1.Secret, error) {
 	var secrets []*corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 
@@ -595,7 +595,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	}
 
 	// Ensure that cert is valid.
-	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
+	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraElasticsearchCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, logstorageUID, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +638,7 @@ func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context)
 	return false, nil
 }
 
-func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secret, error) {
+func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, logstorageUID types.UID) ([]*corev1.Secret, error) {
 	var secrets []*corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 
@@ -649,7 +649,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 	}
 
 	// Ensure that cert is valid.
-	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, svcDNSNames...)
+	secret, err = render.EnsureCertificateSecret(ctx, render.TigeraKibanaCertSecret, secret, "tls.key", "tls.crt", render.DefaultCertificateDuration, logstorageUID, svcDNSNames...)
 	if err != nil {
 		return nil, err
 	}

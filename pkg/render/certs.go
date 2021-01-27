@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -44,8 +45,10 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 // secret has the expected DNS names. If no secret is provided, a new
 // secret is created and returned. If the secret does have the
 // right DNS name then the secret is returned.
-// Otherwise a new secret is created and returned.
-func EnsureCertificateSecret(ctx context.Context, secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, error) {
+// If the cert in the secret has invalid DNS names and the secret is owned by
+// the provided component, then a new secret is created and returned. Otherwise,
+// if the secret is user-supplied, an error is returned.
+func EnsureCertificateSecret(ctx context.Context, secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, componentUID types.UID, svcDNSNames ...string) (*corev1.Secret, error) {
 	var err error
 
 	// Create the secret if it doesn't exist.
@@ -67,16 +70,33 @@ func EnsureCertificateSecret(ctx context.Context, secretName string, secret *cor
 		return nil, err
 	}
 	if !ok {
-		log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
-		secret, err = CreateOperatorTLSSecret(nil,
-			secretName, keyName, certName,
-			DefaultCertificateDuration, nil, svcDNSNames...,
-		)
-		return secret, err
+		// If the secret is owned by the component (i.e. the operator), then
+		// create a new secret to replace the invalid one.
+		if isOwnedByUID(secret, componentUID) {
+			log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
+			secret, err = CreateOperatorTLSSecret(nil,
+				secretName, keyName, certName,
+				DefaultCertificateDuration, nil, svcDNSNames...,
+			)
+			return secret, err
+		}
+		// Otherwise, the secret was supplied so return an error.
+		return nil, fmt.Errorf("Expected cert %q to have DNS names: %v", secretName, strings.Join(svcDNSNames, ", "))
 	}
 
 	// Return the original secret.
 	return secret, nil
+}
+
+// Check if object is owned by the resource with given UID.
+func isOwnedByUID(obj client.Object, uid types.UID) bool {
+	ownerRefs := obj.GetOwnerReferences()
+	for _, ref := range ownerRefs {
+		if ref.UID == uid {
+			return true
+		}
+	}
+	return false
 }
 
 func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) (bool, error) {

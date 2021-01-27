@@ -29,6 +29,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -87,6 +88,7 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	managerUID types.UID,
 ) (Component, error) {
 	ctx := context.Background()
 	svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
@@ -94,7 +96,7 @@ func Manager(
 	certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 
 	tlsKeyPair, err := EnsureCertificateSecret(
-		ctx, ManagerTLSSecretName, tlsKeyPair, ManagerSecretKeyName, ManagerSecretCertName, certDur, svcDNSNames...,
+		ctx, ManagerTLSSecretName, tlsKeyPair, ManagerSecretKeyName, ManagerSecretCertName, certDur, managerUID, svcDNSNames...,
 	)
 	if err != nil {
 		return nil, err

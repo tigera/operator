@@ -36,7 +36,7 @@ import (
 )
 
 var _ = Describe("Rendering tests", func() {
-	var instance *common.InstallationInternal
+	var instance *common.Installation
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -47,7 +47,7 @@ var _ = Describe("Rendering tests", func() {
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &common.InstallationInternal{
+		instance = &common.Installation{
 			Spec: &operator.InstallationSpec{
 				CNI: &operator.CNISpec{
 					Type: operator.PluginCalico,

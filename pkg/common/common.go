@@ -26,7 +26,7 @@ const (
 	TigeraPrometheusNamespace = "tigera-prometheus"
 )
 
-type InstallationInternal struct {
+type Installation struct {
 	Spec                *operator.InstallationSpec
 	TigeraCustom        bool
 	NodeAppArmorProfile string

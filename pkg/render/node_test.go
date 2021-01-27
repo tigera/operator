@@ -44,7 +44,7 @@ var (
 )
 
 var _ = Describe("Node rendering tests", func() {
-	var defaultInstance *common.InstallationInternal
+	var defaultInstance *common.Installation
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
@@ -55,7 +55,7 @@ var _ = Describe("Node rendering tests", func() {
 		ff := true
 		hp := operator.HostPortsEnabled
 		miMode := operator.MultiInterfaceModeNone
-		defaultInstance = &common.InstallationInternal{
+		defaultInstance = &common.Installation{
 			Spec: &operator.InstallationSpec{
 				CNI: &operator.CNISpec{
 					Type: "Calico",
@@ -700,7 +700,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := &common.InstallationInternal{
+		amazonVPCInstalllation := &common.Installation{
 			Spec: &operator.InstallationSpec{
 				KubernetesProvider: operator.ProviderEKS,
 				CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
@@ -850,7 +850,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	DescribeTable("should properly render configuration using non-Calico CNI plugin",
 		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType, expectedEnvs []v1.EnvVar) {
-			installlation := &common.InstallationInternal{
+			installlation := &common.Installation{
 				Spec: &operator.InstallationSpec{
 					CNI: &operator.CNISpec{
 						Type: cni,
@@ -1137,7 +1137,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := &common.InstallationInternal{
+		amazonVPCInstalllation := &common.Installation{
 			Spec: &operator.InstallationSpec{
 				KubernetesProvider: operator.ProviderEKS,
 				CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},

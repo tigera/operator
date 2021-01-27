@@ -348,7 +348,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&render.ElasticsearchClusterConfig{},
 			CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
 			nil, false,
-			&common.InstallationInternal{Spec: i},
+			&common.Installation{Spec: i},
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -403,7 +403,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 		CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
 		nil,
 		false,
-		&common.InstallationInternal{Spec: &operator.InstallationSpec{}},
+		&common.Installation{Spec: &operator.InstallationSpec{}},
 		managementCluster,
 		tunnelSecret,
 		internalTraffic,

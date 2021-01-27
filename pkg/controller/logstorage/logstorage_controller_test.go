@@ -1058,7 +1058,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	By("creating all the components needed for LogStorage to be available")
 	component := render.LogStorage(
 		ls,
-		&common.InstallationInternal{
+		&common.Installation{
 			Spec: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",

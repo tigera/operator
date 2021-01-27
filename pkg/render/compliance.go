@@ -15,6 +15,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -68,24 +70,18 @@ func Compliance(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
+	complianceUID types.UID,
 ) (Component, error) {
-	var complianceServerCertSecrets []*corev1.Secret
-	if complianceServerCertSecret == nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
-		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
-			ComplianceServerCertSecret,
-			"tls.key",
-			"tls.crt",
-			DefaultCertificateDuration,
-			nil, svcDNSNames...,
-		)
-		if err != nil {
-			return nil, err
-		}
-		complianceServerCertSecrets = []*corev1.Secret{complianceServerCertSecret}
+	ctx := context.Background()
+	svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
+	complianceServerCertSecret, err := EnsureCertificateSecret(
+		ctx, ComplianceServerCertSecret, complianceServerCertSecret, ComplianceServerKeyName, ComplianceServerCertName, DefaultCertificateDuration, complianceUID, svcDNSNames...,
+	)
+	if err != nil {
+		return nil, err
 	}
 
+	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 
 	return &complianceComponent{

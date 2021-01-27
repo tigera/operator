@@ -393,8 +393,8 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
 	if managementCluster != nil {
-		tunnelSecret = voltronTunnelSecret
-		internalTraffic = internalManagerTLSSecret
+		tunnelSecret = &voltronTunnelSecret
+		internalTraffic = &internalManagerTLSSecret
 	}
 	if cr == nil {
 		cr = &operator.Manager{}

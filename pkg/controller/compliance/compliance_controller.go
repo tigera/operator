@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -282,6 +283,20 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
 		r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// Create the cert if doesn't exist. If the cert exists, check that the cert
+	// has the expected DNS names. If the cert doesn't and the cert is managed by the
+	// operator, the cert is recreated and returned. If the invalid cert is supplied by
+	// the user, set the component degraded.
+	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
+	complianceServerCertSecret, err = render.EnsureCertificateSecret(
+		ctx, render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, instance.GetUID(), svcDNSNames...,
+	)
+
+	if err != nil {
+		r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
 		return reconcile.Result{}, err
 	}
 

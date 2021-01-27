@@ -531,16 +531,18 @@ var _ = Describe("LogStorage controller", func() {
 				It("test certs are updated if DNS names are invalid", func() {
 					// Create the certs with old DNS names upfront so we can
 					// verify that the controller recreates them.
-					var err error
-					esSecret, err := render.EnsureCertificateSecret(
-						context.TODO(), render.TigeraElasticsearchCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, "tigera-secure-es-http.tigera-elasticsearch.svc")
+					esSecret, err := render.CreateOperatorTLSSecret(nil,
+						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
+					)
 					Expect(err).ShouldNot(HaveOccurred())
+
 					esPublicSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
-					kbSecret, err := render.EnsureCertificateSecret(
-						context.TODO(), render.TigeraKibanaCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, "tigera-secure-kb-http.tigera-elasticsearch.svc")
+					kbSecret, err := render.CreateOperatorTLSSecret(nil,
+						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+					)
 					Expect(err).ShouldNot(HaveOccurred())
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, kbSecret)).ShouldNot(HaveOccurred())
@@ -1053,8 +1055,9 @@ func createPubSecret(name string, ns string, bytes []byte, certName string) clie
 
 func createESSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	esSecret, err := render.EnsureCertificateSecret(
-		context.TODO(), render.TigeraElasticsearchCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
+	esSecret, err := render.CreateOperatorTLSSecret(nil,
+		render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
+	)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	esOperNsSecret := render.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
@@ -1071,8 +1074,9 @@ func createESSecrets() []client.Object {
 
 func createKibanaSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-	kbSecret, err := render.EnsureCertificateSecret(
-		context.TODO(), render.TigeraKibanaCertSecret, nil, "tls.key", "tls.crt", render.DefaultCertificateDuration, dnsNames...)
+	kbSecret, err := render.CreateOperatorTLSSecret(nil,
+		render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
+	)
 	Expect(err).ShouldNot(HaveOccurred())
 
 	kbOperNsSecret := render.CopySecrets(render.KibanaNamespace, kbSecret)[0]

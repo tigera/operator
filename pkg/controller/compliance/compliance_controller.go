@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -285,6 +286,20 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Create the cert if doesn't exist. If the cert exists, check that the cert
+	// has the expected DNS names. If the cert doesn't and the cert is managed by the
+	// operator, the cert is recreated and returned. If the invalid cert is supplied by
+	// the user, set the component degraded.
+	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
+	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
+		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, instance.GetUID(), svcDNSNames...,
+	)
+
+	if err != nil {
+		r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -312,7 +327,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain, instance.GetUID())
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

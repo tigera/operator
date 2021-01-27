@@ -24,13 +24,13 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -68,24 +68,9 @@ func Compliance(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
+	complianceUID types.UID,
 ) (Component, error) {
-	var complianceServerCertSecrets []*corev1.Secret
-	if complianceServerCertSecret == nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
-		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
-			ComplianceServerCertSecret,
-			"tls.key",
-			"tls.crt",
-			DefaultCertificateDuration,
-			nil, svcDNSNames...,
-		)
-		if err != nil {
-			return nil, err
-		}
-		complianceServerCertSecrets = []*corev1.Secret{complianceServerCertSecret}
-	}
-
+	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 
 	return &complianceComponent{

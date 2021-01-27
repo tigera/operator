@@ -161,8 +161,9 @@ var _ = Describe("Compliance controller tests", func() {
 			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
 
 		oldDNSNames := []string{"compliance.tigera-compliance.svc"}
-		newSecret := &corev1.Secret{}
-		newSecret, err = render.EnsureCertificateSecret(ctx, render.ComplianceServerCertSecret, nil, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, oldDNSNames...)
+		newSecret, err := render.CreateOperatorTLSSecret(nil,
+			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, oldDNSNames...,
+		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 

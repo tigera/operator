@@ -578,8 +578,9 @@ func (r *ReconcileLogStorage) deleteInvalidECKManagedPublicCertSecret(ctx contex
 		log.Info(fmt.Sprintf("Deleting invalid cert secret %q in %q namespace", secret.Name, secret.Namespace))
 		err = r.client.Delete(ctx, secret)
 		if err != nil {
-			return true, nil
+			return false, err
 		}
+		return true, nil
 	}
 	return false, nil
 }

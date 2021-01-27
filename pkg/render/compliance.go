@@ -15,7 +15,6 @@
 package render
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -32,7 +31,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -72,15 +70,6 @@ func Compliance(
 	clusterDomain string,
 	complianceUID types.UID,
 ) (Component, error) {
-	ctx := context.Background()
-	svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
-	complianceServerCertSecret, err := EnsureCertificateSecret(
-		ctx, ComplianceServerCertSecret, complianceServerCertSecret, ComplianceServerKeyName, ComplianceServerCertName, DefaultCertificateDuration, complianceUID, svcDNSNames...,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 

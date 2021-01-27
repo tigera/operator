@@ -20,19 +20,17 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("compliance rendering tests", func() {
 	ns := "tigera-compliance"
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
-	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, clusterDomain)
+	complianceServerCertSecret := CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace())
+
 	cr := &operatorv1.Compliance{}
 
 	Context("Standalone cluster", func() {
@@ -129,46 +127,12 @@ var _ = Describe("compliance rendering tests", func() {
 			for _, expected := range expectedEnvs {
 				Expect(envs).To(ContainElement(expected))
 			}
-
-			verifyComplianceCerts(resources, svcDNSNames...)
-		})
-
-		It("should return an error if user-supplied cert has invalid DNS names", func() {
-			oldCert, err := render.CreateOperatorTLSSecret(
-				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
-
-			_, err = render.Compliance(nil, nil, &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
-			}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, cr.GetUID())
-			Expect(err).Should(HaveOccurred())
-			Expect(err.Error()).To(Equal(`Expected cert "tigera-compliance-server-tls" to have DNS names: compliance, compliance.tigera-compliance, compliance.tigera-compliance.svc, compliance.tigera-compliance.svc.cluster.local`))
-		})
-
-		It("should render new server cert if existing cert owned by Compliance CR has invalid DNS names", func() {
-			oldCert, err := render.CreateOperatorTLSSecret(
-				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
-			Expect(err).ShouldNot(HaveOccurred())
-
-			oldCert.SetOwnerReferences([]metav1.OwnerReference{
-				{UID: cr.GetUID()},
-			})
-			component, err := render.Compliance(nil, internalManagerTLSSecret,
-				&operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderNone,
-					Registry:           "testregistry.com/",
-				}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain, cr.GetUID())
-			Expect(err).ShouldNot(HaveOccurred())
-			resources, _ := component.Objects()
-
-			// Verify the cert has valid DNS names
-			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 	})
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, internalManagerTLSSecret,
+			component, err := render.Compliance(nil, &internalManagerTLSSecret,
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",
@@ -274,41 +238,6 @@ var _ = Describe("compliance rendering tests", func() {
 					ResourceNames: []string{"compliance-server"},
 				},
 			}))
-
-			verifyComplianceCerts(resources, svcDNSNames...)
-		})
-
-		It("should return an error if user-supplied cert has invalid DNS names", func() {
-			oldCert, err := render.CreateOperatorTLSSecret(
-				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
-
-			_, err = render.Compliance(nil, nil, &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
-			}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, cr.GetUID())
-			Expect(err).Should(HaveOccurred())
-
-			Expect(err.Error()).To(Equal(`Expected cert "tigera-compliance-server-tls" to have DNS names: compliance, compliance.tigera-compliance, compliance.tigera-compliance.svc, compliance.tigera-compliance.svc.cluster.local`))
-		})
-
-		It("should render new server cert if existing cert owned by Compliance CR has invalid DNS names", func() {
-			oldCert, err := render.CreateOperatorTLSSecret(
-				nil, render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, "compliance.tigera-compliance.svc")
-			Expect(err).ShouldNot(HaveOccurred())
-
-			oldCert.SetOwnerReferences([]metav1.OwnerReference{
-				{UID: cr.GetUID()},
-			})
-			component, err := render.Compliance(nil, internalManagerTLSSecret,
-				&operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderNone,
-					Registry:           "testregistry.com/",
-				}, oldCert, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain, cr.GetUID())
-			Expect(err).ShouldNot(HaveOccurred())
-			resources, _ := component.Objects()
-
-			// Verify the cert has valid DNS names
-			verifyComplianceCerts(resources, svcDNSNames...)
 		})
 	})
 
@@ -430,10 +359,3 @@ var _ = Describe("compliance rendering tests", func() {
 		})
 	})
 })
-
-func verifyComplianceCerts(resources []client.Object, expectedDNSNames ...string) {
-	secret := GetResource(resources, render.ComplianceServerCertSecret, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
-	test.VerifyCert(secret, render.ComplianceServerKeyName, render.ComplianceServerCertName, expectedDNSNames...)
-	secret = GetResource(resources, render.ComplianceServerCertSecret, render.ComplianceNamespace, "", "v1", "Secret").(*corev1.Secret)
-	test.VerifyCert(secret, render.ComplianceServerKeyName, render.ComplianceServerCertName, expectedDNSNames...)
-}

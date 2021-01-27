@@ -20,6 +20,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -48,6 +49,7 @@ var _ = Describe("Compliance controller tests", func() {
 	var ctx context.Context
 	var cr *operatorv1.Compliance
 	var r ReconcileCompliance
+	var mockStatus *status.MockStatus
 	var scheme *runtime.Scheme
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, dns.DefaultClusterDomain)
@@ -63,13 +65,23 @@ var _ = Describe("Compliance controller tests", func() {
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
 
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("AddDaemonsets", mock.Anything).Return()
+		mockStatus.On("AddDeployments", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
+		mockStatus.On("AddStatefulSets", mock.Anything).Return()
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ClearDegraded")
+
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileCompliance{
 			client:        c,
 			scheme:        scheme,
 			provider:      operatorv1.ProviderNone,
-			status:        status.New(c, "compliance"),
+			status:        mockStatus,
 			clusterDomain: dns.DefaultClusterDomain,
 		}
 
@@ -206,6 +218,11 @@ var _ = Describe("Compliance controller tests", func() {
 		assertExpectedCertDNSNames(c, oldDNSName)
 
 		By("checking that an error occurred and the cert didn't change")
+		mockStatus.On(
+			"SetDegraded",
+			"Error ensuring compliance TLS certificate \"tigera-compliance-server-tls\" exists and has valid DNS names",
+			"Expected cert \"tigera-compliance-server-tls\" to have DNS names: compliance, compliance.tigera-compliance, compliance.tigera-compliance.svc, compliance.tigera-compliance.svc.cluster.local",
+		).Return()
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).To(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())

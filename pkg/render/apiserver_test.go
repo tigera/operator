@@ -585,7 +585,7 @@ var _ = Describe("API server rendering tests", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, voltronTunnelSecret, dns.DefaultClusterDomain)
+		component, err := render.APIServer(k8sServiceEp, instance, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 

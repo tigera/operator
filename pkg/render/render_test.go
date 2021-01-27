@@ -36,7 +36,7 @@ import (
 )
 
 var _ = Describe("Rendering tests", func() {
-	var instance *operator.InstallationSpec
+	var instance *common.Installation
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -47,21 +47,23 @@ var _ = Describe("Rendering tests", func() {
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operator.InstallationSpec{
-			CNI: &operator.CNISpec{
-				Type: operator.PluginCalico,
-				IPAM: &operator.IPAMSpec{
-					Type: operator.IPAMPluginCalico,
+		instance = &common.Installation{
+			Spec: &operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{
+						Type: operator.IPAMPluginCalico,
+					},
 				},
-			},
-			CalicoNetwork: &operator.CalicoNetworkSpec{
-				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
-				MultiInterfaceMode: &miMode,
-			},
-			Registry: "test-reg/",
-			NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-					MaxUnavailable: &one,
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+					MultiInterfaceMode: &miMode,
+				},
+				Registry: "test-reg/",
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &one,
+					},
 				},
 			},
 		}
@@ -87,7 +89,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 5 + 1 + 1))
 	})
@@ -98,9 +100,9 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 Service to expose calico/node metrics.
 		// - 1 ns (tigera-dex)
 		var nodeMetricsPort int32 = 9081
-		instance.Variant = operator.TigeraSecureEnterprise
-		instance.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.NodeMetricsPort = &nodeMetricsPort
+		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1))
 	})
@@ -110,10 +112,10 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config for EE
 		// - pass in internalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
-		instance.Variant = operator.TigeraSecureEnterprise
-		instance.NodeMetricsPort = &nodeMetricsPort
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -177,7 +179,8 @@ var _ = Describe("Rendering tests", func() {
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
 		apparmorProf := "foobar"
-		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, apparmorProf, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+		instance.NodeAppArmorProfile = apparmorProf
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		comps := r.Render()
 		var cn *appsv1.DaemonSet

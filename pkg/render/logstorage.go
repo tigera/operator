@@ -139,7 +139,7 @@ echo "Keystore initialization successful."
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
-	installation *operatorv1.InstallationSpec,
+	installation *common.Installation,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,
@@ -161,7 +161,7 @@ func LogStorage(
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
-		installation:                installation,
+		installation:                installation.Spec,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		elasticsearch:               elasticsearch,
@@ -180,6 +180,7 @@ func LogStorage(
 		elasticLicenseType:          elasticLicenseType,
 		oidcUserConfigMap:           oidcUserConfigMap,
 		oidcUserSecret:              oidcUserSecret,
+		tigeraCustom:                installation.TigeraCustom,
 	}
 }
 
@@ -204,6 +205,7 @@ type elasticsearchComponent struct {
 	elasticLicenseType          ElasticsearchLicenseType
 	oidcUserConfigMap           *corev1.ConfigMap
 	oidcUserSecret              *corev1.Secret
+	tigeraCustom                bool
 	esImage                     string
 	esOperatorImage             string
 	kibanaImage                 string
@@ -225,7 +227,11 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, is)
+	kibanaComponent := components.ComponentKibana
+	if es.tigeraCustom {
+		kibanaComponent = components.ComponentKibanaCustom
+	}
+	es.kibanaImage, err = components.GetReference(kibanaComponent, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

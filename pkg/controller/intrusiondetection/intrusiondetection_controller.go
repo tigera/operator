@@ -90,7 +90,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch installer job: %v", err)
 	}
 
-	// Watch for changes to to primary resource LogCollector, to determine if syslog forwarding is
+	// Watch for changes to primary resource LogCollector, to determine if syslog forwarding is
 	// turned on or off.
 	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -195,7 +195,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(network.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -273,7 +273,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
-		network,
+		network.Spec,
 		esClusterConfig,
 		pullSecrets,
 		r.provider == operatorv1.ProviderOpenShift,

@@ -199,6 +199,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error querying for ManagementCluster")
+		r.status.SetDegraded("Error querying for ManagementCluster", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -211,7 +218,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation.Spec, r.client)
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
@@ -330,7 +337,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.Spec.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
@@ -368,6 +375,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Render the fluentd component for Linux
 	component := render.Fluentd(
 		instance,
+		managementCluster != nil,
 		esSecrets,
 		esClusterConfig,
 		s3Credential,
@@ -400,6 +408,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		component = render.Fluentd(
 			instance,
+			managementCluster != nil,
 			esSecrets,
 			esClusterConfig,
 			s3Credential,

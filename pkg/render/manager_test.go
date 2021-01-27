@@ -24,12 +24,10 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
@@ -65,7 +63,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "", kind: ""},
+			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -106,49 +104,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
-
-		verifyManagerCerts(resources, expectedDNSNames...)
-	})
-
-	It("should render a new manager cert if existing cert has invalid DNS names and the cert is owned by the Manager CR", func() {
-		oldCert, err := render.CreateOperatorTLSSecret(
-			nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
-		Expect(err).ShouldNot(HaveOccurred())
-
-		cr := &operator.Manager{}
-		oldCert.SetOwnerReferences([]metav1.OwnerReference{
-			{UID: cr.GetUID()},
-		})
-
-		resources := renderObjects(false, nil, oldCert, cr)
-		verifyManagerCerts(resources, expectedDNSNames...)
-	})
-
-	It("should return an error if the cert if existing cert has invalid DNS names and the cert is owned by the Manager CR", func() {
-		oldCert, err := render.CreateOperatorTLSSecret(
-			nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
-		Expect(err).ShouldNot(HaveOccurred())
-
-		cr := &operator.Manager{}
-		_, err = render.Manager(
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			oldCert,
-			nil,
-			false,
-			&operator.InstallationSpec{},
-			nil,
-			nil,
-			nil,
-			dns.DefaultClusterDomain,
-			render.ElasticsearchLicenseTypeEnterpriseTrial,
-			cr.GetUID(),
-		)
-		Expect(err).Should(HaveOccurred())
-		Expect(err.Error()).To(Equal(`Expected cert "manager-tls" to have DNS names: localhost, tigera-manager, tigera-manager.tigera-manager, tigera-manager.tigera-manager.svc, tigera-manager.tigera-manager.svc.cluster.local`))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
@@ -260,7 +215,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerInternalTLSSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
+			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -390,18 +345,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
 		cr := &operator.Manager{}
 		component, err := render.Manager(nil, nil, nil,
-			&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ComplianceServerCertSecret,
-					Namespace: render.OperatorNamespace(),
-				},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			},
+			CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
 			&render.ElasticsearchClusterConfig{},
-			nil, nil, false,
+			CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+			nil, false,
 			i,
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown, cr.GetUID())
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -456,18 +403,9 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ComplianceServerCertSecret,
-				Namespace: render.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("crt"),
-				"tls.key": []byte("crt"),
-			},
-		},
+		CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
 		esConfigMap,
-		tlsSecret,
+		CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
 		nil,
 		false,
 		&operator.InstallationSpec{},
@@ -482,11 +420,4 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 	Expect(component.ResolveImages(nil)).To(BeNil())
 	resources, _ := component.Objects()
 	return resources
-}
-
-func verifyManagerCerts(resources []client.Object, expectedDNSNames ...string) {
-	secret := GetResource(resources, render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
-	test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
-	secret = GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
-	test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 }

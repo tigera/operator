@@ -15,14 +15,11 @@
 package render
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	ocsv1 "github.com/openshift/api/security/v1"
-	"github.com/tigera/operator/pkg/dns"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -90,18 +87,6 @@ func Manager(
 	esLicenseType ElasticsearchLicenseType,
 	managerUID types.UID,
 ) (Component, error) {
-	ctx := context.Background()
-	svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
-	svcDNSNames = append(svcDNSNames, "localhost")
-	certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-
-	tlsKeyPair, err := EnsureCertificateSecret(
-		ctx, ManagerTLSSecretName, tlsKeyPair, ManagerSecretKeyName, ManagerSecretCertName, certDur, managerUID, svcDNSNames...,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	tlsSecrets := []*corev1.Secret{tlsKeyPair}
 	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
 	tlsAnnotations := make(map[string]string)

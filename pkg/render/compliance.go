@@ -24,7 +24,6 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -68,7 +67,6 @@ func Compliance(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
-	complianceUID types.UID,
 ) (Component, error) {
 	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)

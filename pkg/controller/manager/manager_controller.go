@@ -432,7 +432,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret,
 		r.clusterDomain,
 		elasticLicenseType,
-		instance.GetUID(),
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

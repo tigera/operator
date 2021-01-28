@@ -75,10 +75,19 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
-	// ControlPlaneNodeSelector is used to select control plane nodes on which to run specific Calico
-	// components. This currently only applies to kube-controllers and the apiserver.
+	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
+	// +optional
+	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
+
+	// ControlPlaneNodeSelector is used to select control plane nodes on which to run Calico
+	// components. This is globally applied to all resources created by the operator excluding daemonsets.
 	// +optional
 	ControlPlaneNodeSelector map[string]string `json:"controlPlaneNodeSelector,omitempty"`
+
+	// ControlPlaneTolerations specify tolerations which are then globally applied to all resources
+	// created by the operator.
+	// +optional
+	ControlPlaneTolerations []v1.Toleration `json:"controlPlaneTolerations,omitempty"`
 
 	// NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
 	// If specified, this overrides any FelixConfiguration resources which may exist. If omitted, then
@@ -100,6 +109,23 @@ type InstallationSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
+}
+
+// TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.
+type TyphaAffinity struct {
+	// NodeAffinity describes node affinity scheduling rules for typha.
+	// +optional
+	NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
+}
+
+// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option,
+// which ensures a pod will still be scheduled even when all the nodes it matches are unschedulable.
+type PreferredNodeAffinity struct {
+	// The scheduler will prefer to schedule pods to nodes that satisfy
+	// the affinity expressions specified by this field, but it may choose
+	// a node that violates one or more of the expressions.
+	// +optional
+	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
 // ComponentName CRD enum

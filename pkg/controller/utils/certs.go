@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	certslogger             = logf.Log.WithName("certs")
+	certsLogger             = logf.Log.WithName("certs")
 	ErrInvalidCertDNSNames  = errors.New("cert has the wrong DNS names")
 	ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 )
@@ -62,7 +62,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 
 	// Create the secret if it doesn't exist.
 	if secret == nil {
-		log.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
+		certsLogger.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
 		return render.CreateOperatorTLSSecret(nil,
 			secretName, keyName, certName,
 			certDuration, nil, svcDNSNames...,
@@ -74,7 +74,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		// If the cert's DNS names are invalid and the secret is owned by the
 		// component, then create a new secret to replace the invalid one.
 		if isOwnedByUID(secret, componentUID) {
-			log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
+			certsLogger.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
 			return render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
 				render.DefaultCertificateDuration, nil, svcDNSNames...,

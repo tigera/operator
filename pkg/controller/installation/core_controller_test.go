@@ -538,4 +538,16 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
 		})
 	})
+
+	Context("Docker Enterprise defaults", func() {
+		It("Sets the default ipv4 autodetection method to skipInterface", func() {
+			installation := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderDockerEE,
+				},
+			}
+			Expect(mergeAndFillDefaults(installation, nil, nil, nil)).To(BeNil())
+			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
+		})
+	})
 })

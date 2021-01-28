@@ -11,7 +11,7 @@ if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	exit 1
 fi	
 
-if [[ ! "$(git branch --show-current)" =~ (release-v*.*|master) ]]; then
+if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master) ]]; then
 	echo "not on 'master' or 'release-vX.Y'"
 	exit 0
 fi

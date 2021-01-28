@@ -20,8 +20,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -73,7 +72,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 	if err == ErrInvalidCertDNSNames {
 		// If the cert's DNS names are invalid and the secret is owned by the
 		// component, then create a new secret to replace the invalid one.
-		if isOwnedByUID(secret, componentUID) {
+		if IsOwnedByUID(secret, componentUID) {
 			certsLogger.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
 			return render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
@@ -89,7 +88,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 }
 
 // Check if object is owned by the resource with given UID.
-func isOwnedByUID(obj client.Object, uid types.UID) bool {
+func IsOwnedByUID(obj client.Object, uid types.UID) bool {
 	ownerRefs := obj.GetOwnerReferences()
 	for _, ref := range ownerRefs {
 		if ref.UID == uid {
@@ -99,6 +98,7 @@ func isOwnedByUID(obj client.Object, uid types.UID) bool {
 	return false
 }
 
+// Check that the cert in the secret has the expected DNS names.
 func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) error {
 	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
@@ -110,10 +110,9 @@ func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedD
 		return err
 	}
 
-	sort.Strings(cert.DNSNames)
-	sort.Strings(expectedDNSNames)
-	if !reflect.DeepEqual(cert.DNSNames, expectedDNSNames) {
-		return ErrInvalidCertDNSNames
+	dnsNames := sets.NewString(cert.DNSNames...)
+	if dnsNames.HasAll(expectedDNSNames...) {
+		return nil
 	}
-	return nil
+	return ErrInvalidCertDNSNames
 }

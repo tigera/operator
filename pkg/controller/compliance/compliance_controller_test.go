@@ -235,7 +235,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 
-		By("replacing the server certs with ones that have the wrong DNS names")
+		By("replacing the server certs with ones that include the expected DNS names")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
 			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,

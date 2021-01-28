@@ -230,7 +230,8 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		It("should reconcile if existing user-supplied cert has the expected DNS names", func() {
-			// Create a manager cert secret with invalid DNS name
+			// Create a manager cert secret with DNS names that include the
+			// expected DNS names.
 			dnsNames := append(expectedDNSNames, "manager.example.com", "192.168.10.22")
 			secret, err := render.CreateOperatorTLSSecret(
 				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)

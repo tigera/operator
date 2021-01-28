@@ -341,7 +341,8 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   c.tolerations(),
+					Tolerations:                   tolerateAll,
+					Affinity:                      toAffinity(c.installation.TyphaAffinity),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -357,17 +358,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		migration.SetTyphaAntiAffinity(&d)
 	}
 	return &d
-}
-
-// tolerations creates the typha's tolerations.
-func (c *typhaComponent) tolerations() []v1.Toleration {
-	tolerations := []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
-		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
-
-	return tolerations
 }
 
 // volumes creates the typha's volumes.
@@ -556,4 +546,19 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
 	psp.Spec.HostNetwork = true
 	return psp
+}
+
+// toAffinity converts a typha affinity to a k8s affinity.
+func toAffinity(t *operator.TyphaAffinity) *v1.Affinity {
+	if t == nil {
+		return nil
+	}
+	if t.NodeAffinity == nil {
+		return nil
+	}
+	return &v1.Affinity{
+		NodeAffinity: &v1.NodeAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: t.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+		},
+	}
 }

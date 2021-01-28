@@ -153,10 +153,106 @@ var _ = Describe("core handler", func() {
 				}
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
+			It("should error for unexpected affinities", func() {
+				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{}
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("shouldn't error for aks affinity on aks", func() {
+				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "type",
+									Operator: v1.NodeSelectorOpNotIn,
+									Values:   []string{"virtual-kubelet"},
+								}},
+							}},
+						},
+					},
+				}
+				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should error for other affinities on aks", func() {
+				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "type",
+									Operator: v1.NodeSelectorOpExists,
+								}},
+							}},
+						},
+					},
+				}
+				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
 		})
 		Describe("typha", func() {
 			TestNodeSelectors(func(nodeSelectors map[string]string) {
 				comps.typha.Spec.Template.Spec.NodeSelector = nodeSelectors
+			})
+
+			Context("affinities", func() {
+				It("should not error if no affinity is set", func() {
+					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				})
+				It("should migrate a Preferred nodeAffinity", func() {
+					terms := []v1.PreferredSchedulingTerm{{
+						Weight: 100,
+						Preference: v1.NodeSelectorTerm{
+							MatchExpressions: []v1.NodeSelectorRequirement{{
+								Key:      "foo",
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{"foo", "bar"},
+							}},
+						},
+					}}
+					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: terms,
+						},
+					}
+					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+					Expect(i.Spec.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution).To(Equal(terms))
+				})
+				It("should error for a Required nodeAffinity", func() {
+					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{{
+									MatchFields: []v1.NodeSelectorRequirement{{
+										Key: "foo",
+									}},
+								}},
+							},
+						},
+					}
+					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+				})
+				It("should error if podAffinity is set", func() {
+					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
+						PodAffinity: &v1.PodAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
+								LabelSelector: nil,
+							}},
+						},
+					}
+					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+				})
+				It("should error if podAntiAffinity is set", func() {
+					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
+						PodAntiAffinity: &v1.PodAntiAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
+								LabelSelector: nil,
+							}},
+						},
+					}
+					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+				})
 			})
 		})
 

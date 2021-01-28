@@ -24,12 +24,10 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
@@ -40,8 +38,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 
 	const expectedResourcesNumber = 10
+
+	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+	expectedDNSNames = append(expectedDNSNames, "localhost")
+
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(false, nil, nil)
+		cr := &operator.Manager{}
+		resources := renderObjects(false, nil, nil, cr)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resources.
@@ -60,7 +63,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "", kind: ""},
+			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -101,17 +104,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
-
-		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-		expectedDNSNames = append(expectedDNSNames, "localhost")
-		secret := GetResource(resources, render.ManagerTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
-		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
-		secret = GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
-		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(false, nil, nil)
+		resources := renderObjects(false, nil, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -189,7 +185,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(true, nil, nil)
+		resources := renderObjects(true, nil, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
 		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -199,7 +195,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(false, &operator.ManagementCluster{}, nil)
+		resources := renderObjects(false, &operator.ManagementCluster{}, nil, nil)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -219,7 +215,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerInternalTLSSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "", kind: ""},
+			{name: render.ComplianceServerCertSecret, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Deployment"},
 		}
 
@@ -347,21 +343,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// renderManager passes in as few parameters as possible to render.Manager without it
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
+		cr := &operator.Manager{}
 		component, err := render.Manager(nil, nil, nil,
-			&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ComplianceServerCertSecret,
-					Namespace: render.OperatorNamespace(),
-				},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			},
+			CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
 			&render.ElasticsearchClusterConfig{},
-			nil, nil, false,
+			CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+			nil, false,
 			i,
-			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
+			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown, cr.GetUID())
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
 		return GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
@@ -389,7 +378,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 })
 
 func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
-	tlsSecret *corev1.Secret) []client.Object {
+	tlsSecret *corev1.Secret, cr *operator.Manager) []client.Object {
 	var dexCfg render.DexKeyValidatorConfig
 	if oidc {
 		var authentication *operator.Authentication
@@ -407,22 +396,16 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		tunnelSecret = &voltronTunnelSecret
 		internalTraffic = &internalManagerTLSSecret
 	}
+	if cr == nil {
+		cr = &operator.Manager{}
+	}
 	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ComplianceServerCertSecret,
-				Namespace: render.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("crt"),
-				"tls.key": []byte("crt"),
-			},
-		},
+		CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
 		esConfigMap,
-		tlsSecret,
+		CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
 		nil,
 		false,
 		&operator.InstallationSpec{},
@@ -430,7 +413,9 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster,
 		tunnelSecret,
 		internalTraffic,
 		dns.DefaultClusterDomain,
-		render.ElasticsearchLicenseTypeEnterpriseTrial)
+		render.ElasticsearchLicenseTypeEnterpriseTrial,
+		cr.GetUID(),
+	)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	Expect(component.ResolveImages(nil)).To(BeNil())
 	resources, _ := component.Objects()

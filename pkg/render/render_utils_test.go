@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -91,3 +92,30 @@ func ExpectEnv(env []v1.EnvVar, key, value string) {
 	}
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected environment variable %s", key))
 }
+
+var (
+	tolerateMaster = corev1.Toleration{
+		Key:    "node-role.kubernetes.io/master",
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+
+	tolerateCriticalAddonsOnly = corev1.Toleration{
+		Key:      "CriticalAddonsOnly",
+		Operator: v1.TolerationOpExists,
+	}
+
+	tolerateAll = []corev1.Toleration{
+		{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		},
+		{
+			Effect:   corev1.TaintEffectNoSchedule,
+			Operator: corev1.TolerationOpExists,
+		},
+		{
+			Effect:   corev1.TaintEffectNoExecute,
+			Operator: corev1.TolerationOpExists,
+		},
+	}
+)

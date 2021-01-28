@@ -30,7 +30,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 )
 
 const (
@@ -69,23 +68,7 @@ func Compliance(
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
 ) (Component, error) {
-	var complianceServerCertSecrets []*corev1.Secret
-	if complianceServerCertSecret == nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, clusterDomain)
-		complianceServerCertSecret, err = CreateOperatorTLSSecret(nil,
-			ComplianceServerCertSecret,
-			"tls.key",
-			"tls.crt",
-			DefaultCertificateDuration,
-			nil, svcDNSNames...,
-		)
-		if err != nil {
-			return nil, err
-		}
-		complianceServerCertSecrets = []*corev1.Secret{complianceServerCertSecret}
-	}
-
+	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 
 	return &complianceComponent{

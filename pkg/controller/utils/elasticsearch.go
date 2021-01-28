@@ -149,6 +149,7 @@ func (es *esClient) createElasticClient(client client.Client, ctx context.Contex
 			elastic.SetHttpClient(h),
 			elastic.SetErrorLog(logrWrappedESLogger{}),
 			elastic.SetSniff(false),
+			elastic.SetHealthcheck(false),
 			elastic.SetBasicAuth(user, password),
 		}
 		retryInterval, err := time.ParseDuration(ElasticConnRetryInterval)

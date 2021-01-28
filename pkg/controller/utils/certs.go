@@ -63,14 +63,10 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 	// Create the secret if it doesn't exist.
 	if secret == nil {
 		log.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
-		secret, err = render.CreateOperatorTLSSecret(nil,
+		return render.CreateOperatorTLSSecret(nil,
 			secretName, keyName, certName,
 			certDuration, nil, svcDNSNames...,
 		)
-		if err != nil {
-			return nil, err
-		}
-		return secret, nil
 	}
 
 	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
@@ -79,17 +75,13 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		// component, then create a new secret to replace the invalid one.
 		if isOwnedByUID(secret, componentUID) {
 			log.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
-			secret, err = render.CreateOperatorTLSSecret(nil,
+			return render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
 				render.DefaultCertificateDuration, nil, svcDNSNames...,
 			)
-			return secret, err
 		}
 		// Otherwise, the secret was supplied so return an error.
 		return nil, fmt.Errorf("Expected cert %q to have DNS names: %v", secretName, strings.Join(svcDNSNames, ", "))
-
-	} else if err != nil {
-		return nil, err
 	}
 
 	// Return the original secret.

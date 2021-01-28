@@ -202,7 +202,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On(
 				"SetDegraded",
 				"Error ensuring manager TLS certificate \"manager-tls\" exists and has valid DNS names",
-				"Expected cert \"manager-tls\" to have DNS names: localhost, tigera-manager, tigera-manager.tigera-manager, tigera-manager.tigera-manager.svc, tigera-manager.tigera-manager.svc.some.domain",
+				"Expected cert \"manager-tls\" to have DNS names: tigera-manager, tigera-manager.tigera-manager, tigera-manager.tigera-manager.svc, tigera-manager.tigera-manager.svc.some.domain, localhost",
 			).Return()
 
 			// Create a manager cert secret with invalid DNS name

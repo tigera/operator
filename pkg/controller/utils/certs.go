@@ -20,8 +20,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -69,11 +68,20 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		)
 	}
 
-	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
+	// If the cert secret is owned by the component, then the cert should have
+	// only the expected service DNS names.
+	// But if the cert is supplied by the user, the cert could have any number
+	// of SANs - the cert in this case only needs to include the expected
+	// service DNS names
+	var isExactMatch bool
+	if IsOwnedByUID(secret, componentUID) {
+		isExactMatch = true
+	}
+	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames, isExactMatch)
 	if err == ErrInvalidCertDNSNames {
 		// If the cert's DNS names are invalid and the secret is owned by the
 		// component, then create a new secret to replace the invalid one.
-		if isOwnedByUID(secret, componentUID) {
+		if IsOwnedByUID(secret, componentUID) {
 			certsLogger.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
 			return render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
@@ -89,7 +97,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 }
 
 // Check if object is owned by the resource with given UID.
-func isOwnedByUID(obj client.Object, uid types.UID) bool {
+func IsOwnedByUID(obj client.Object, uid types.UID) bool {
 	ownerRefs := obj.GetOwnerReferences()
 	for _, ref := range ownerRefs {
 		if ref.UID == uid {
@@ -99,7 +107,11 @@ func isOwnedByUID(obj client.Object, uid types.UID) bool {
 	return false
 }
 
-func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) error {
+// Check that the cert in the secret has the expected DNS names.
+// If checking for an exact match, the cert must have only the specified DNS
+// names. If exact match is false, the cert only needs to include the DNS names
+// as a subset.
+func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string, isExactMatch bool) error {
 	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {
@@ -110,10 +122,18 @@ func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedD
 		return err
 	}
 
-	sort.Strings(cert.DNSNames)
-	sort.Strings(expectedDNSNames)
-	if !reflect.DeepEqual(cert.DNSNames, expectedDNSNames) {
+	dnsNames := sets.NewString(cert.DNSNames...)
+
+	if isExactMatch {
+		if dnsNames.HasAll(expectedDNSNames...) && len(cert.DNSNames) == len(expectedDNSNames) {
+			return nil
+		}
 		return ErrInvalidCertDNSNames
 	}
-	return nil
+
+	// For a subset match
+	if dnsNames.HasAll(expectedDNSNames...) {
+		return nil
+	}
+	return ErrInvalidCertDNSNames
 }

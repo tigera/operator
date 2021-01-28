@@ -240,9 +240,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// If the manager certpair secret exists but is not managed by the operator,
-	// then skip checking its DNS names.
-	if tlsSecret == nil || tlsSecret != nil && utils.IsOwnedByUID(tlsSecret, instance.GetUID()) {
+	// If the manager TLS secret exists but is not managed by the operator,
+	// then skip checking its DNS names. Validation of DNS names is not required
+	// for a user-provided manager TLS secret.
+	//
+	// If the secret does not exist or if the secret is owned by the Manager cr,
+	// then we ensure that the secret exists and that the cert has the correct DNS
+	// names.
+	if tlsSecret == nil || utils.IsOwnedByUID(tlsSecret, instance.GetUID()) {
 		// Create the cert if doesn't exist. If the cert exists, check that the cert
 		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
 		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)

@@ -58,22 +58,21 @@ var (
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(
 	k8sServiceEp k8sapi.ServiceEndpoint,
-	cr *operator.InstallationSpec,
+	cr *common.Installation,
 	bt map[string]string,
 	tnTLS *TyphaNodeTLS,
 	aci *operator.AmazonCloudIntegration,
 	migrate bool,
-	nodeAppArmorProfile string,
 	clusterDomain string,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:        k8sServiceEp,
-		cr:                  cr,
+		cr:                  cr.Spec,
 		birdTemplates:       bt,
 		typhaNodeTLS:        tnTLS,
 		amazonCloudInt:      aci,
 		migrationNeeded:     migrate,
-		nodeAppArmorProfile: nodeAppArmorProfile,
+		nodeAppArmorProfile: cr.NodeAppArmorProfile,
 		clusterDomain:       clusterDomain,
 	}
 }

@@ -14,6 +14,10 @@
 
 package common
 
+import (
+	operator "github.com/tigera/operator/api/v1"
+)
+
 const (
 	CalicoNamespace     = "calico-system"
 	TyphaDeploymentName = "calico-typha"
@@ -21,3 +25,9 @@ const (
 
 	TigeraPrometheusNamespace = "tigera-prometheus"
 )
+
+type Installation struct {
+	Spec                    *operator.InstallationSpec
+	CalicoCloudControlPlane bool
+	NodeAppArmorProfile     string
+}

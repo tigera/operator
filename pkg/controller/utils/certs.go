@@ -68,16 +68,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		)
 	}
 
-	// If the cert secret is owned by the component, then the cert should have
-	// only the expected service DNS names.
-	// But if the cert is supplied by the user, the cert could have any number
-	// of SANs - the cert in this case only needs to include the expected
-	// service DNS names
-	var isExactMatch bool
-	if IsOwnedByUID(secret, componentUID) {
-		isExactMatch = true
-	}
-	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames, isExactMatch)
+	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
 	if err == ErrInvalidCertDNSNames {
 		// If the cert's DNS names are invalid and the secret is owned by the
 		// component, then create a new secret to replace the invalid one.
@@ -108,10 +99,7 @@ func IsOwnedByUID(obj client.Object, uid types.UID) bool {
 }
 
 // Check that the cert in the secret has the expected DNS names.
-// If checking for an exact match, the cert must have only the specified DNS
-// names. If exact match is false, the cert only needs to include the DNS names
-// as a subset.
-func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string, isExactMatch bool) error {
+func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) error {
 	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {
@@ -123,15 +111,6 @@ func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedD
 	}
 
 	dnsNames := sets.NewString(cert.DNSNames...)
-
-	if isExactMatch {
-		if dnsNames.HasAll(expectedDNSNames...) && len(cert.DNSNames) == len(expectedDNSNames) {
-			return nil
-		}
-		return ErrInvalidCertDNSNames
-	}
-
-	// For a subset match
 	if dnsNames.HasAll(expectedDNSNames...) {
 		return nil
 	}

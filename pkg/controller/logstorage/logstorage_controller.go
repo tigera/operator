@@ -603,11 +603,7 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context, logstora
 		return secrets, nil
 	}
 
-	var isExactMatch bool
-	if utils.IsOwnedByUID(secret, logstorageUID) {
-		isExactMatch = true
-	}
-	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames, isExactMatch)
+	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
 	if err == utils.ErrInvalidCertDNSNames {
 		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
 			return nil, err
@@ -663,11 +659,7 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, logstorageUID t
 		return secrets, nil
 	}
 
-	var isExactMatch bool
-	if utils.IsOwnedByUID(secret, logstorageUID) {
-		isExactMatch = true
-	}
-	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames, isExactMatch)
+	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
 	if err == utils.ErrInvalidCertDNSNames {
 		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
 			return nil, err

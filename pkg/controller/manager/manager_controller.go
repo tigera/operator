@@ -244,9 +244,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// then skip checking its DNS names.
 	if tlsSecret != nil && utils.IsOwnedByUID(tlsSecret, instance.GetUID()) {
 		// Create the cert if doesn't exist. If the cert exists, check that the cert
-		// has the expected DNS names. If the cert doesn't and the cert is managed by the
-		// operator, the cert is recreated and returned. If the invalid cert is supplied by
-		// the user, set the component degraded.
+		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
 		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
 		svcDNSNames = append(svcDNSNames, "localhost")
 		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept

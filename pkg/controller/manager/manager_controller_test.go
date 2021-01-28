@@ -213,7 +213,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, secretOperNs)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
+			Expect(err).ShouldNot(HaveOccurred())
 
 			// Verify that the existing certs didn't change
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())

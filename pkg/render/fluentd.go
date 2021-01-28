@@ -602,10 +602,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	// For the TigeraCustom flag we disable log forwarding to Elasticsearch.
+	// For the calicoCloudControlPlane flag we disable log forwarding to Elasticsearch.
 	// This means the logs for this cluster are not stored anywhere.
 	// Disable only for management clusters
-	if c.installation.TigeraCustom && c.isManagementCluster {
+	if c.installation.CalicoCloudControlPlane && c.isManagementCluster {
 		envs = append(envs,
 			corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
 			corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},

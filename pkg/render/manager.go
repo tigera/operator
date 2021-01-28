@@ -118,7 +118,7 @@ func Manager(
 		installation:               installation.Spec,
 		managementCluster:          managementCluster,
 		esLicenseType:              esLicenseType,
-		tigeraCustom:               installation.TigeraCustom,
+		calicoCloudControlPlane:    installation.CalicoCloudControlPlane,
 	}, nil
 }
 
@@ -136,7 +136,7 @@ type managerComponent struct {
 	installation               *operator.InstallationSpec
 	managementCluster          *operator.ManagementCluster
 	esLicenseType              ElasticsearchLicenseType
-	tigeraCustom               bool
+	calicoCloudControlPlane    bool
 	managerImage               string
 	proxyImage                 string
 	esProxyImage               string
@@ -147,7 +147,7 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	path := c.installation.ImagePath
 	var err error
 	managerComponent := components.ComponentManager
-	if c.tigeraCustom {
+	if c.calicoCloudControlPlane {
 		managerComponent = components.ComponentManagerCustom
 	}
 	c.managerImage, err = components.GetReference(managerComponent, reg, path, is)
@@ -419,7 +419,7 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
-	if c.tigeraCustom {
+	if c.calicoCloudControlPlane {
 		envs = append(envs,
 			v1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
 			v1.EnvVar{Name: "CNX_CALICO_CLOUD_EDITION", Value: "true"},

@@ -180,7 +180,7 @@ func LogStorage(
 		elasticLicenseType:          elasticLicenseType,
 		oidcUserConfigMap:           oidcUserConfigMap,
 		oidcUserSecret:              oidcUserSecret,
-		tigeraCustom:                installation.TigeraCustom,
+		calicoCloudControlPlane:     installation.CalicoCloudControlPlane,
 	}
 }
 
@@ -205,7 +205,7 @@ type elasticsearchComponent struct {
 	elasticLicenseType          ElasticsearchLicenseType
 	oidcUserConfigMap           *corev1.ConfigMap
 	oidcUserSecret              *corev1.Secret
-	tigeraCustom                bool
+	calicoCloudControlPlane     bool
 	esImage                     string
 	esOperatorImage             string
 	kibanaImage                 string
@@ -228,7 +228,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	kibanaComponent := components.ComponentKibana
-	if es.tigeraCustom {
+	if es.calicoCloudControlPlane {
 		kibanaComponent = components.ComponentKibanaCustom
 	}
 	es.kibanaImage, err = components.GetReference(kibanaComponent, reg, path, is)

@@ -27,7 +27,7 @@ const (
 )
 
 type Installation struct {
-	Spec                *operator.InstallationSpec
-	TigeraCustom        bool
-	NodeAppArmorProfile string
+	Spec                    *operator.InstallationSpec
+	CalicoCloudControlPlane bool
+	NodeAppArmorProfile     string
 }

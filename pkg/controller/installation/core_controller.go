@@ -66,6 +66,11 @@ import (
 
 const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
 
+// This annotation is used to enable custom changes that are used in the Calico Cloud control plane.
+// This annotation should not be used on any clusters that a user wants support on. If you
+// set this annoation and contact support you should report that you are using this annotation.
+const calicoCloudControlPlane = "unsupported.operator.tigera.io/calico-cloud-control-plane"
+
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
 
@@ -245,8 +250,6 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 }
 
-const TigeraCustom = "unsupported.operator.tigera.io/custom"
-
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.
@@ -280,8 +283,8 @@ func getCommonInstallation(inst *operator.InstallationSpec, annotations map[stri
 
 	ii.NodeAppArmorProfile = annotations[techPreviewFeatureSeccompApparmor]
 
-	_, ok := annotations[TigeraCustom]
-	ii.TigeraCustom = ok
+	_, ok := annotations[calicoCloudControlPlane]
+	ii.CalicoCloudControlPlane = ok
 
 	return ii
 }

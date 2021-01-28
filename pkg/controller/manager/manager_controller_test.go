@@ -70,10 +70,14 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Context("certs with invalid DNS names", func() {
+	Context("cert tests", func() {
 		var r ReconcileManager
 		var cr *operatorv1.Manager
 		var mockStatus *status.MockStatus
+
+		clusterDomain := "some.domain"
+		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
+		expectedDNSNames = append(expectedDNSNames, "localhost")
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -90,7 +94,7 @@ var _ = Describe("Manager controller tests", func() {
 				scheme:        scheme,
 				provider:      operatorv1.ProviderNone,
 				status:        mockStatus,
-				clusterDomain: "some.domain",
+				clusterDomain: clusterDomain,
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -186,16 +190,13 @@ var _ = Describe("Manager controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-			dnsNames = append(dnsNames, "localhost")
 			secret := &corev1.Secret{}
-
 			// Verify that certs now have expected DNS names.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 		})
 
 		It("should set degraded if existing user-supplied cert has invalid DNS names", func() {
@@ -226,6 +227,30 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, oldDNSName)
+		})
+
+		It("should reconcile if existing user-supplied cert has the expected DNS names", func() {
+			// Create a manager cert secret with invalid DNS name
+			dnsNames := append(expectedDNSNames, "manager.example.com", "192.168.10.22")
+			secret, err := render.CreateOperatorTLSSecret(
+				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
+
+			// Copy the cert secret to the manager namespace as would have
+			// already been done by the controller.
+			secretOperNs := render.CopySecrets(render.ManagerNamespace, secret)[0]
+			Expect(c.Create(ctx, secretOperNs)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that the existing certs didn't change
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 		})
 	})
 

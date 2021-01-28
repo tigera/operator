@@ -72,7 +72,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 	if err == ErrInvalidCertDNSNames {
 		// If the cert's DNS names are invalid and the secret is owned by the
 		// component, then create a new secret to replace the invalid one.
-		if isOwnedByUID(secret, componentUID) {
+		if IsOwnedByUID(secret, componentUID) {
 			certsLogger.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
 			return render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
@@ -88,7 +88,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 }
 
 // Check if object is owned by the resource with given UID.
-func isOwnedByUID(obj client.Object, uid types.UID) bool {
+func IsOwnedByUID(obj client.Object, uid types.UID) bool {
 	ownerRefs := obj.GetOwnerReferences()
 	for _, ref := range ownerRefs {
 		if ref.UID == uid {

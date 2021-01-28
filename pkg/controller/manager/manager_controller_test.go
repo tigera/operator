@@ -199,17 +199,11 @@ var _ = Describe("Manager controller tests", func() {
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 		})
 
-		It("should set degraded if existing user-supplied cert has invalid DNS names", func() {
-			mockStatus.On(
-				"SetDegraded",
-				"Error ensuring manager TLS certificate \"manager-tls\" exists and has valid DNS names",
-				"Expected cert \"manager-tls\" to have DNS names: tigera-manager, tigera-manager.tigera-manager, tigera-manager.tigera-manager.svc, tigera-manager.tigera-manager.svc.some.domain, localhost",
-			).Return()
-
+		It("should reconcile if user supplied a manager TLS cert", func() {
 			// Create a manager cert secret with invalid DNS name
-			oldDNSName := "tigera-manager.tigera-manager.svc"
+			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			secret, err := render.CreateOperatorTLSSecret(
-				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, oldDNSName)
+				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
 
@@ -223,10 +217,10 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Verify that the existing certs didn't change
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, oldDNSName)
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, oldDNSName)
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 		})
 
 		It("should reconcile if existing user-supplied cert has the expected DNS names", func() {

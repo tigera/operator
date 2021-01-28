@@ -6,7 +6,7 @@ if ! tag=$(git describe --exact-match --tags HEAD); then
 	exit 0
 fi
 
-if [[ ! "$(git branch --show-current)" =~ (release-v*.*|master) ]]; then
+if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master) ]]; then
 	echo "not on 'master' or 'release-vX.Y'"
 	exit 0
 fi

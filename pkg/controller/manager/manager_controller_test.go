@@ -23,9 +23,11 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -66,6 +68,165 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		instance, err = GetManager(ctx, c)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Context("certs with invalid DNS names", func() {
+		var r ReconcileManager
+		var cr *operatorv1.Manager
+		var mockStatus *status.MockStatus
+
+		BeforeEach(func() {
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			r = ReconcileManager{
+				client:        c,
+				scheme:        scheme,
+				provider:      operatorv1.ProviderNone,
+				status:        mockStatus,
+				clusterDomain: "some.domain",
+			}
+
+			Expect(c.Create(ctx, &operatorv1.APIServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Status: operatorv1.APIServerStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.LicenseKey{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(
+				ctx,
+				&operatorv1.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec: operatorv1.InstallationSpec{
+						Variant:  operatorv1.TigeraSecureEnterprise,
+						Registry: "some.registry.org/",
+					},
+					Status: operatorv1.InstallationStatus{
+						Variant: operatorv1.TigeraSecureEnterprise,
+						Computed: &operatorv1.InstallationSpec{
+							Registry: "some.registry.org/",
+							// The test is provider agnostic.
+							KubernetesProvider: operatorv1.ProviderNone,
+						},
+					},
+				},
+			)).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.Compliance{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Status: operatorv1.ComplianceStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchPublicCertSecret,
+					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchManagerUserSecret,
+					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.KibanaPublicCertSecret,
+					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceServerCertSecret,
+					Namespace: render.OperatorNamespace(),
+				},
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				Data: map[string][]byte{
+					"tls.crt": []byte("crt"),
+					"tls.key": []byte("crt"),
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ECKLicenseConfigMapName,
+					Namespace: render.ECKOperatorNamespace,
+				},
+				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
+			})).NotTo(HaveOccurred())
+
+			cr = &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+			}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+		})
+
+		It("should render a new manager cert if existing cert has invalid DNS names and the cert is owned by the Manager CR", func() {
+			// Create a manager cert that is owned by the CR.
+			oldCert, err := render.CreateOperatorTLSSecret(
+				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			oldCert.SetOwnerReferences([]metav1.OwnerReference{
+				{UID: cr.GetUID()},
+			})
+			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+			dnsNames = append(dnsNames, "localhost")
+			secret := &corev1.Secret{}
+
+			// Verify that certs now have expected DNS names.
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+		})
+
+		It("should set degraded if existing user-supplied cert has invalid DNS names", func() {
+			mockStatus.On(
+				"SetDegraded",
+				"Error ensuring manager TLS certificate \"manager-tls\" exists and has valid DNS names",
+				"Expected cert \"manager-tls\" to have DNS names: localhost, tigera-manager, tigera-manager.tigera-manager, tigera-manager.tigera-manager.svc, tigera-manager.tigera-manager.svc.some.domain",
+			).Return()
+
+			// Create a manager cert secret with invalid DNS name
+			oldDNSName := "tigera-manager.tigera-manager.svc"
+			secret, err := render.CreateOperatorTLSSecret(
+				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, oldDNSName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
+
+			// Copy the cert secret to the manager namespace as would have
+			// already been done by the controller.
+			secretOperNs := render.CopySecrets(render.ManagerNamespace, secret)[0]
+			Expect(c.Create(ctx, secretOperNs)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+
+			// Verify that the existing certs didn't change
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, oldDNSName)
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, oldDNSName)
+		})
 	})
 
 	Context("image reconciliation", func() {

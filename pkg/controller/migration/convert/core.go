@@ -281,10 +281,24 @@ func removeExpectedAnnotations(existing, ignore map[string]string) map[string]st
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		return ErrIncompatibleCluster{
-			err:       "node affinity not supported for calico-node daemonset",
-			component: ComponentCalicoNode,
-			fix:       "remove the affinity",
+		if install.Spec.KubernetesProvider != operatorv1.ProviderAKS || !reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: corev1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-kubelet"},
+						}},
+					}},
+				},
+			},
+		}) {
+			return ErrIncompatibleCluster{
+				err:       "node affinity not supported for calico-node daemonset",
+				component: ComponentCalicoNode,
+				fix:       "remove the affinity",
+			}
 		}
 	}
 	nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector)
@@ -303,11 +317,28 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 
 	// check typha nodeSelectors
 	if c.typha != nil {
-		if c.typha.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for typha deployment",
-				component: ComponentTypha,
-				fix:       "remove the affinity",
+		// we can migrate typha affinities provided they are a NodeAffinity for Preferred.
+		if aff := c.typha.Spec.Template.Spec.Affinity; aff != nil {
+			if aff.PodAffinity != nil || aff.PodAntiAffinity != nil {
+				return ErrIncompatibleCluster{
+					err:       "pod affinity and antiAffinity not supported for typha deployment",
+					component: ComponentTypha,
+					fix:       "remove the affinity",
+				}
+			}
+			if aff.NodeAffinity != nil {
+				if aff.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+					return ErrIncompatibleCluster{
+						err:       "nodeAffinity 'RequiredDuringSchedulingIgnoredDuringExecution' not supported on Typha.",
+						component: ComponentTypha,
+						fix:       "remove the affinity",
+					}
+				}
+				install.Spec.TyphaAffinity = &operatorv1.TyphaAffinity{
+					NodeAffinity: &operatorv1.PreferredNodeAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+					},
+				}
 			}
 		}
 		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {

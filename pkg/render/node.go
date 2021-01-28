@@ -524,6 +524,23 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
+	var affinity *v1.Affinity
+	if c.cr.KubernetesProvider == operator.ProviderAKS {
+		affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-kubelet"},
+						}},
+					}},
+				},
+			},
+		}
+	}
+
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -540,7 +557,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   c.nodeTolerations(),
+					Tolerations:                   tolerateAll,
+					Affinity:                      affinity,
 					ImagePullSecrets:              c.cr.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -563,15 +581,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}
 	return &ds
-}
-
-// nodeTolerations creates the node's tolerations.
-func (c *nodeComponent) nodeTolerations() []v1.Toleration {
-	return []v1.Toleration{
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule},
-		{Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoExecute},
-		{Operator: v1.TolerationOpExists, Key: "CriticalAddonsOnly"},
-	}
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.

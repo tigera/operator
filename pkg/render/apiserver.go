@@ -800,10 +800,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	tolerations := []corev1.Toleration{
-		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
-	}
-	return tolerations
+	return append(c.installation.ControlPlaneTolerations, tolerateMaster)
 }
 
 func (c *apiServerComponent) getTLSObjects() []runtime.Object {

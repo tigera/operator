@@ -172,16 +172,8 @@ func (c *dexComponent) deployment() runtime.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
-					Tolerations: []corev1.Toleration{
-						{
-							Key:               "node-role.kubernetes.io/master",
-							Operator:          "",
-							Value:             "",
-							Effect:            corev1.TaintEffectNoSchedule,
-							TolerationSeconds: nil,
-						},
-					},
-					ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster),
+					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,

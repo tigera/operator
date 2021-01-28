@@ -95,6 +95,20 @@ func ExpectEnv(env []v1.EnvVar, key, value string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected environment variable %s", key))
 }
 
+func CreateCertSecret(name, namespace string) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			"tls.crt": []byte("crt"),
+			"tls.key": []byte("crt"),
+		},
+	}
+}
+
 var (
 	tolerateMaster = corev1.Toleration{
 		Key:    "node-role.kubernetes.io/master",

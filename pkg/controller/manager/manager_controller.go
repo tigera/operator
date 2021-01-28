@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -236,6 +237,22 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// cluster types. For management cluster, we also need to check if the secret was created before hand.
 	if err != nil {
 		r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// Create the cert if doesn't exist. If the cert exists, check that the cert
+	// has the expected DNS names. If the cert doesn't and the cert is managed by the
+	// operator, the cert is recreated and returned. If the invalid cert is supplied by
+	// the user, set the component degraded.
+	svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+	svcDNSNames = append(svcDNSNames, "localhost")
+	certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+	tlsSecret, err = utils.EnsureCertificateSecret(
+		render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, instance.GetUID(), svcDNSNames...,
+	)
+
+	if err != nil {
+		r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
 		return reconcile.Result{}, err
 	}
 

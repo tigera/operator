@@ -568,21 +568,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	return reconcile.Result{}, nil
 }
 
-// Checks if public cert secret managed by ECK is valid. If not valid, the cert is deleted. Returns true if the cert was deleted.
-func (r *ReconcileLogStorage) deleteInvalidECKManagedPublicCertSecret(ctx context.Context, secret *corev1.Secret, certKey string, svcDNSNames []string) (bool, error) {
-	ok, err := utils.SecretHasExpectedDNSNames(secret, certKey, svcDNSNames)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		log.Info(fmt.Sprintf("Deleting invalid cert secret %q in %q namespace", secret.Name, secret.Namespace))
-		err = r.client.Delete(ctx, secret)
-		if err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-	return false, nil
+// Deletes the given ECK managed cert secret.
+func (r *ReconcileLogStorage) deleteInvalidECKManagedPublicCertSecret(ctx context.Context, secret *corev1.Secret) error {
+	log.Info(fmt.Sprintf("Deleting invalid cert secret %q in %q namespace", secret.Name, secret.Namespace))
+	return r.client.Delete(ctx, secret)
 }
 
 func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context, logstorageUID types.UID) ([]*corev1.Secret, error) {
@@ -609,17 +598,19 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context, logstora
 		return nil, err
 	}
 
-	if pubSecret != nil {
-		deleted, err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret, "tls.crt", svcDNSNames)
-		if err != nil {
+	if pubSecret == nil {
+		log.Info(fmt.Sprintf("Public cert secret %q not found yet", render.ElasticsearchPublicCertSecret))
+		return secrets, nil
+	}
+
+	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+	if err == utils.ErrInvalidCertDNSNames {
+		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
 			return nil, err
 		}
-		// If the cert was not deleted, copy the valid cert to operator namespace.
-		if !deleted {
-			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
-		}
 	} else {
-		log.Info(fmt.Sprintf("public cert secret %q not found yet", render.ElasticsearchPublicCertSecret))
+		// If the cert was not deleted, copy the valid cert to operator namespace.
+		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
 	}
 
 	return secrets, nil
@@ -663,16 +654,19 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, logstorageUID t
 		return nil, err
 	}
 
-	if pubSecret != nil {
-		deleted, err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret, "tls.crt", svcDNSNames)
-		if err != nil {
+	if pubSecret == nil {
+		log.Info(fmt.Sprintf("Public cert secret %q not found yet", render.KibanaPublicCertSecret))
+		return secrets, nil
+	}
+
+	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+	if err == utils.ErrInvalidCertDNSNames {
+		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
 			return nil, err
 		}
-		if !deleted {
-			secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
-		}
 	} else {
-		log.Info(fmt.Sprintf("public cert secret %q not found yet", render.KibanaPublicCertSecret))
+		// If the cert was not deleted, copy the valid cert to operator namespace.
+		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
 	}
 
 	return secrets, nil

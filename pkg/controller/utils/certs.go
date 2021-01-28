@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -26,18 +27,22 @@ import (
 
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var certslogger = logf.Log.WithName("certs")
+var (
+	certslogger             = logf.Log.WithName("certs")
+	ErrInvalidCertDNSNames  = errors.New("cert has the wrong DNS names")
+	ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
+)
 
 func GetSecret(ctx context.Context, client client.Client, name string, ns string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, secret); err != nil {
-		if !errors.IsNotFound(err) {
+		if !kerrors.IsNotFound(err) {
 			return nil, err
 		}
 		return nil, nil
@@ -68,11 +73,8 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		return secret, nil
 	}
 
-	ok, err := SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
+	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
+	if err == ErrInvalidCertDNSNames {
 		// If the cert's DNS names are invalid and the secret is owned by the
 		// component, then create a new secret to replace the invalid one.
 		if isOwnedByUID(secret, componentUID) {
@@ -85,6 +87,9 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		}
 		// Otherwise, the secret was supplied so return an error.
 		return nil, fmt.Errorf("Expected cert %q to have DNS names: %v", secretName, strings.Join(svcDNSNames, ", "))
+
+	} else if err != nil {
+		return nil, err
 	}
 
 	// Return the original secret.
@@ -102,18 +107,21 @@ func isOwnedByUID(obj client.Object, uid types.UID) bool {
 	return false
 }
 
-func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) (bool, error) {
+func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) error {
 	certBytes := secret.Data[certName]
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {
-		return false, fmt.Errorf("cert has no PEM data")
+		return ErrInvalidCertNoPEMData
 	}
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	sort.Strings(cert.DNSNames)
 	sort.Strings(expectedDNSNames)
-	return reflect.DeepEqual(cert.DNSNames, expectedDNSNames), nil
+	if !reflect.DeepEqual(cert.DNSNames, expectedDNSNames) {
+		return ErrInvalidCertDNSNames
+	}
+	return nil
 }

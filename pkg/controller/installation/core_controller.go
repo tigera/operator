@@ -901,6 +901,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	if instance.Spec.CertificateManagement != nil && instance.Spec.Variant == operator.Calico {
+		r.SetDegraded("This version does not support certificate management for product variant Calico", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})

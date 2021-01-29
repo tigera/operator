@@ -43,11 +43,6 @@ var (
 		Version: "v3.17.1",
 		Image:   "calico/pod2daemon-flexvol",
 	}
-
-	ComponentCSRInitContainer = component{
-		Version: "v3.17.1",
-		Image:   "rdtigera/init-container",
-	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -59,7 +54,6 @@ var (
 		ComponentCalicoNode,
 		ComponentCalicoTypha,
 		ComponentFlexVolume,
-		ComponentCSRInitContainer,
 		ComponentOperatorInit,
 	}
 )

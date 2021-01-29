@@ -447,7 +447,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
-						{Image: "rdtigera/init-container", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

@@ -46,7 +46,7 @@ var (
 
 	ComponentCSRInitContainer = component{
 		Version: "master",
-		Image:   "rdtigera/init-container",
+		Image:   "calico/key-cert-provisioner",
 	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,

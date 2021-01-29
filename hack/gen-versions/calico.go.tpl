@@ -48,12 +48,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "rdtigera/init-container" }}
-	ComponentCSRInitContainer = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -65,7 +59,6 @@ var (
 		ComponentCalicoNode,
 		ComponentCalicoTypha,
 		ComponentFlexVolume,
-		ComponentCSRInitContainer,
 		ComponentOperatorInit,
 	}
 )

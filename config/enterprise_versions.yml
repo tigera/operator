@@ -82,3 +82,6 @@ components:
   cloud-controllers:
     image: tigera/cloud-controllers
     version: release-calient-v3.5
+  key-cert-provisioner:
+    image: tigera/key-cert-provisioner
+    version: release-calient-v3.5

@@ -10,6 +10,3 @@ components:
     version: v3.17.1
   flexvol:
     version: v3.17.1
-  rdtigera/init-container:
-    image: rdtigera/init-container
-    version: v3.17.1

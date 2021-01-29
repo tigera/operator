@@ -152,6 +152,11 @@ var (
 		Image:   "tigera/cloud-controllers",
 	}
 
+	ComponentCSRInitContainer = component{
+		Version: "release-calient-v3.5",
+		Image:   "tigera/key-cert-provisioner",
+	}
+
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -180,5 +185,6 @@ var (
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
+		ComponentCSRInitContainer,
 	}
 )

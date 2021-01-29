@@ -48,7 +48,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "rdtigera/init-container" }}
+{{ with index .Components "calico/key-cert-provisioner" }}
 	ComponentCSRInitContainer = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

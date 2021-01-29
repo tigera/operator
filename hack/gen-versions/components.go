@@ -24,19 +24,19 @@ import (
 )
 
 var defaultImages = map[string]string{
-	"calico/cni":              "calico/cni",
-	"calico/dikastes":         "calico/dikastes",
-	"calico/kube-controllers": "calico/kube-controllers",
-	"calico/node":             "calico/node",
-	"calicoctl":               "calico/ctl",
-	"flannel":                 "coreos/flannel",
-	"flexvol":                 "calico/pod2daemon-flexvol",
-	"typha":                   "calico/typha",
-	"eck-elasticsearch":       "tigera/elasticsearch",
-	"eck-kibana":              "tigera/kibana",
-	"guardian":                "tigera/guardian",
-	"tigera-cni":              "tigera/cni",
-	"rdtigera/init-container": "rdtigera/init-container",
+	"calico/cni":                  "calico/cni",
+	"calico/dikastes":             "calico/dikastes",
+	"calico/kube-controllers":     "calico/kube-controllers",
+	"calico/node":                 "calico/node",
+	"calicoctl":                   "calico/ctl",
+	"flannel":                     "coreos/flannel",
+	"flexvol":                     "calico/pod2daemon-flexvol",
+	"typha":                       "calico/typha",
+	"eck-elasticsearch":           "tigera/elasticsearch",
+	"eck-kibana":                  "tigera/kibana",
+	"guardian":                    "tigera/guardian",
+	"tigera-cni":                  "tigera/cni",
+	"calico/key-cert-provisioner": "calico/key-cert-provisioner",
 }
 
 type Release struct {

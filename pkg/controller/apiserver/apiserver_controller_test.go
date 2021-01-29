@@ -139,7 +139,7 @@ var _ = Describe("apiserver controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
 						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
-						{Image: "rdtigera/init-container", Digest: "sha256:calicocsrinithash"},
+						{Image: "calico/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

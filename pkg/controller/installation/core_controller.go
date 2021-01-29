@@ -455,10 +455,18 @@ func fillDefaults(instance *operator.Installation) error {
 				v4pool.NodeSelector = operator.NodeSelectorDefault
 			}
 			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-				// Default IPv4 address detection to "first found" if not specified.
-				t := true
-				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-					FirstFound: &t,
+				if instance.Spec.KubernetesProvider == operator.ProviderDockerEE {
+					// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
+					// node address, so instead skip the interface br-.
+					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+						SkipInterface: "^br-.*",
+					}
+				} else {
+					// Default IPv4 address detection to "first found" if not specified.
+					t := true
+					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+						FirstFound: &t,
+					}
 				}
 			}
 			if v4pool.BlockSize == nil {

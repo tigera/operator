@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -32,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -113,7 +113,13 @@ var _ = Describe("Rendering tests", func() {
 		instance.Variant = operator.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+		internalManagerTLSSecret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: render.ManagerInternalTLSSecretName, Namespace: render.OperatorNamespace(),
+			},
+		}
+		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -165,14 +171,6 @@ var _ = Describe("Rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
-
-		secret := GetResource(resources, render.ManagerInternalTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
-		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-		expectedDNSNames = append(expectedDNSNames, "localhost")
-		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
-
-		secret = GetResource(resources, render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret").(*corev1.Secret)
-		test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {

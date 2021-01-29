@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -720,13 +721,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	var managerInternalTLSSecret *corev1.Secret
-	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-		render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretCertName,
-		render.ManagerInternalSecretKeyName,
-	)
-
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logStorageExists bool
@@ -774,6 +768,33 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	var managerInternalTLSSecret *corev1.Secret
+	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+		render.ManagerInternalTLSSecretName,
+		render.ManagerInternalSecretCertName,
+		render.ManagerInternalSecretKeyName,
+	)
+
+	// Ensure that CA and TLS certificate for tigera-manager for internal
+	// traffic within the K8s cluster exists and has valid FQDN manager service
+	// names and localhost.
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
+		log.Info("Creating secret for internal manager credentials")
+		var err error
+		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
+		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+
+		managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
+			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, instance.GetUID(), svcDNSNames...,
+		)
+
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
 	}

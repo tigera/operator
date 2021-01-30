@@ -533,9 +533,10 @@ var _ = Describe("LogStorage controller", func() {
 				It("test that LogStorage is degraded if the user-supplied certs have invalid DNS names", func() {
 					// Create the certs with old DNS names upfront so we can
 					// verify that the controller sets the degraded bit.
-					// These certs are not owned by LogStorage. The user must
+					// These certs are not operator-managed. The user must
 					// update these certs.
-					esSecret, err := render.CreateOperatorTLSSecret(nil,
+					testCA := test.MakeTestCA("logstorage-test")
+					esSecret, err := render.CreateOperatorTLSSecret(testCA,
 						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -544,7 +545,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
-					kbSecret, err := render.CreateOperatorTLSSecret(nil,
+					kbSecret, err := render.CreateOperatorTLSSecret(testCA,
 						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -589,7 +590,8 @@ var _ = Describe("LogStorage controller", func() {
 					// and KB cert secrets.
 
 					dnsNames := append(esDNSNames, "es.example.com", "192.168.10.10")
-					esSecret, err := render.CreateOperatorTLSSecret(nil,
+					testCA := test.MakeTestCA("logstorage-test")
+					esSecret, err := render.CreateOperatorTLSSecret(testCA,
 						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -599,7 +601,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 					dnsNames = append(kbDNSNames, "kb.example.com", "192.168.10.11")
-					kbSecret, err := render.CreateOperatorTLSSecret(nil,
+					kbSecret, err := render.CreateOperatorTLSSecret(testCA,
 						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -639,7 +641,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 
-				It("test that LogStorage creates new certs if the LogStorage owned certs have invalid DNS names", func() {
+				It("test that LogStorage creates new certs if operator managed certs have invalid DNS names", func() {
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: storageClassName,

@@ -44,6 +44,12 @@ const (
 	OSTypeAny     OSType = "any"
 	OSTypeLinux   OSType = "linux"
 	OSTypeWindows OSType = "windows"
+
+	// The name prefix used for the CA issuer, which is used for self-signed
+	// certificates issued for operator-managed certificates.
+	// NOTE: Do not change this field since we use this value to identify
+	// certificates managed by this operator.
+	TigeraOperatorCAIssuerPrefix = "tigera-operator-signer"
 )
 
 // This type helps ensure that we only use defined os types
@@ -90,7 +96,7 @@ func envVarSourceFromSecret(secretName, key string, optional bool) *v1.EnvVarSou
 }
 
 func makeCA() (*crypto.CA, error) {
-	signerName := fmt.Sprintf("%s-signer@%d", "tigera-operator", time.Now().Unix())
+	signerName := fmt.Sprintf("%s@%d", TigeraOperatorCAIssuerPrefix, time.Now().Unix())
 
 	caConfig, err := crypto.MakeSelfSignedCAConfigForDuration(
 		signerName,

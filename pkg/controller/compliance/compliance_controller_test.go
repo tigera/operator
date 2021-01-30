@@ -179,9 +179,6 @@ var _ = Describe("Compliance controller tests", func() {
 		newSecret, err := render.CreateOperatorTLSSecret(nil,
 			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, oldDNSName,
 		)
-		newSecret.SetOwnerReferences([]metav1.OwnerReference{
-			{UID: cr.GetUID()},
-		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
@@ -205,9 +202,10 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
 			Namespace: render.ComplianceNamespace}})).NotTo(HaveOccurred())
 
-		oldDNSName := "compliance.tigera-compliance.svc"
-		newSecret, err := render.CreateOperatorTLSSecret(nil,
-			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, oldDNSName,
+		oldDNSNames := []string{"compliance.example.com", "compliance.tigera-compliance.svc"}
+		testCA := test.MakeTestCA("compliance-test")
+		newSecret, err := render.CreateOperatorTLSSecret(testCA,
+			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, oldDNSNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -215,7 +213,7 @@ var _ = Describe("Compliance controller tests", func() {
 		newSecret = render.CopySecrets(render.ComplianceNamespace, newSecret)[0]
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
-		assertExpectedCertDNSNames(c, oldDNSName)
+		assertExpectedCertDNSNames(c, oldDNSNames...)
 
 		By("checking that an error occurred and the cert didn't change")
 		mockStatus.On(
@@ -226,7 +224,7 @@ var _ = Describe("Compliance controller tests", func() {
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).To(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
-		assertExpectedCertDNSNames(c, oldDNSName)
+		assertExpectedCertDNSNames(c, oldDNSNames...)
 	})
 
 	It("should reconcile if the compliance server cert is user-supplied and has the expected DNS names", func() {
@@ -241,6 +239,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
 			Namespace: render.ComplianceNamespace}})).NotTo(HaveOccurred())
 
+		// Custom cert has the compliance svc DNS names as well as other DNS names
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
 		newSecret, err := render.CreateOperatorTLSSecret(nil,
 			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, dnsNames...,

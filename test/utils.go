@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/openshift/library-go/pkg/crypto"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,4 +114,16 @@ func VerifyCertSANs(certBytes []byte, expectedSANs ...string) {
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
 	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
 	Expect(cert.DNSNames).To(ConsistOf(expectedSANs), "Expect cert SAN's to match expected service DNS names")
+}
+
+func MakeTestCA(signer string) *crypto.CA {
+	caConfig, err := crypto.MakeSelfSignedCAConfigForDuration(
+		signer,
+		100*365*24*time.Hour, //100years*365days*24hours
+	)
+	Expect(err).To(BeNil(), "Error creating CA config")
+	return &crypto.CA{
+		SerialGenerator: &crypto.RandomSerialGenerator{},
+		Config:          caConfig,
+	}
 }

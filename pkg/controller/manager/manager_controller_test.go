@@ -176,8 +176,8 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 		})
 
-		It("should render a new manager cert if existing cert has invalid DNS names and the cert is owned by the Manager CR", func() {
-			// Create a manager cert that is owned by the CR.
+		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
+			// Create a manager cert managed by the operator.
 			oldCert, err := render.CreateOperatorTLSSecret(
 				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())

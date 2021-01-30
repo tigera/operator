@@ -790,7 +790,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 
 		managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, instance.GetUID(), svcDNSNames...,
+			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
 		)
 
 		if err != nil {

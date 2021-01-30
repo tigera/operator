@@ -20,6 +20,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -36,6 +37,8 @@ var (
 	certsLogger             = logf.Log.WithName("certs")
 	ErrInvalidCertDNSNames  = errors.New("cert has the wrong DNS names")
 	ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
+
+	operatorIssuedCertRegexp = regexp.MustCompile(fmt.Sprintf(`%s@\d+`, render.TigeraOperatorCAIssuerPrefix))
 )
 
 func GetSecret(ctx context.Context, client client.Client, name string, ns string) (*corev1.Secret, error) {
@@ -52,11 +55,11 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 // EnsureCertificateSecret ensures that the certificate in the
 // secret has the expected DNS names. If no secret is provided, a new
 // secret is created and returned. If the secret does have the
-// right DNS name then the secret is returned.
-// If the cert in the secret has invalid DNS names and the secret is owned by
-// the provided component, then a new secret is created and returned. Otherwise,
+// right DNS names then the secret is returned.
+// If the cert in the secret has invalid DNS names and the secret is operator
+// managed, then a new secret is created and returned. Otherwise,
 // if the secret is user-supplied, an error is returned.
-func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, componentUID types.UID, svcDNSNames ...string) (*corev1.Secret, error) {
+func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, error) {
 	var err error
 
 	// Create the secret if it doesn't exist.
@@ -70,10 +73,14 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 
 	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
 	if err == ErrInvalidCertDNSNames {
-		// If the cert's DNS names are invalid and the secret is owned by the
-		// component, then create a new secret to replace the invalid one.
-		if IsOwnedByUID(secret, componentUID) {
-			certsLogger.Info(fmt.Sprintf("cert %q has wrong DNS names, recreating it", secretName))
+		// If the cert's DNS names are invalid and the cert secret is managed
+		// by the operator, then create a new secret to replace the invalid one.
+		operatorManaged, err := IsOperatorManaged(secret, certName)
+		if err != nil {
+			return nil, err
+		}
+		if operatorManaged {
+			certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
 			return render.CreateOperatorTLSSecret(nil,
 				secretName, keyName, certName,
 				render.DefaultCertificateDuration, nil, svcDNSNames...,
@@ -87,25 +94,33 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 	return secret, nil
 }
 
-// Check if object is owned by the resource with given UID.
-func IsOwnedByUID(obj client.Object, uid types.UID) bool {
-	ownerRefs := obj.GetOwnerReferences()
-	for _, ref := range ownerRefs {
-		if ref.UID == uid {
-			return true
-		}
+// Check if the cert secret is created and managed by the operator.
+func IsOperatorManaged(certSecret *corev1.Secret, certKeyName string) (bool, error) {
+	cert, err := parseCertificate(certSecret, certKeyName)
+	if err != nil {
+		certsLogger.Info(fmt.Sprintf("Parsing certificate error: %v", err))
+		return false, err
 	}
-	return false
+
+	return operatorIssuedCertRegexp.MatchString(cert.Issuer.CommonName), nil
+}
+
+func parseCertificate(secret *corev1.Secret, certKeyName string) (*x509.Certificate, error) {
+	certBytes := secret.Data[certKeyName]
+	pemBlock, _ := pem.Decode(certBytes)
+	if pemBlock == nil {
+		return nil, ErrInvalidCertNoPEMData
+	}
+	cert, err := x509.ParseCertificate(pemBlock.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return cert, nil
 }
 
 // Check that the cert in the secret has the expected DNS names.
-func SecretHasExpectedDNSNames(secret *corev1.Secret, certName string, expectedDNSNames []string) error {
-	certBytes := secret.Data[certName]
-	pemBlock, _ := pem.Decode(certBytes)
-	if pemBlock == nil {
-		return ErrInvalidCertNoPEMData
-	}
-	cert, err := x509.ParseCertificate(pemBlock.Bytes)
+func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expectedDNSNames []string) error {
+	cert, err := parseCertificate(secret, certKeyName)
 	if err != nil {
 		return err
 	}

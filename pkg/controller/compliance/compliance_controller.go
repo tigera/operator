@@ -292,7 +292,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	// the user, set the component degraded.
 	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
 	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
-		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, instance.GetUID(), svcDNSNames...,
+		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, svcDNSNames...,
 	)
 
 	if err != nil {

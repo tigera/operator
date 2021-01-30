@@ -240,21 +240,29 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// If the manager TLS secret exists but is not managed by the operator,
-	// then skip checking its DNS names. Validation of DNS names is not required
-	// for a user-provided manager TLS secret.
-	//
-	// If the secret does not exist or if the secret is owned by the Manager cr,
-	// then we ensure that the secret exists and that the cert has the correct DNS
-	// names.
-	if tlsSecret == nil || utils.IsOwnedByUID(tlsSecret, instance.GetUID()) {
+	// If the manager TLS secret exists, check whether it is managed by the
+	// operator.
+	var certOperatorManaged bool
+	if tlsSecret != nil {
+		certOperatorManaged, err = utils.IsOperatorManaged(tlsSecret, render.ManagerInternalSecretCertName)
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	// If the secret does not exist, then create one.
+	// If the secret exists but is operator managed, then check that it has the
+	// right DNS names and update it if necessary.
+	if tlsSecret == nil || certOperatorManaged {
 		// Create the cert if doesn't exist. If the cert exists, check that the cert
 		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
+		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
 		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
 		svcDNSNames = append(svcDNSNames, "localhost")
 		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 		tlsSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, instance.GetUID(), svcDNSNames...,
+			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
 		)
 
 		if err != nil {

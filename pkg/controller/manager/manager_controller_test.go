@@ -181,10 +181,6 @@ var _ = Describe("Manager controller tests", func() {
 			oldCert, err := render.CreateOperatorTLSSecret(
 				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
-
-			oldCert.SetOwnerReferences([]metav1.OwnerReference{
-				{UID: cr.GetUID()},
-			})
 			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -200,17 +196,13 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		It("should reconcile if user supplied a manager TLS cert", func() {
-			// Create a manager cert secret with invalid DNS name
+			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
+			testCA := test.MakeTestCA("manager-test")
 			secret, err := render.CreateOperatorTLSSecret(
-				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
-
-			// Copy the cert secret to the manager namespace as would have
-			// already been done by the controller.
-			secretOperNs := render.CopySecrets(render.ManagerNamespace, secret)[0]
-			Expect(c.Create(ctx, secretOperNs)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -223,19 +215,33 @@ var _ = Describe("Manager controller tests", func() {
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 		})
 
-		It("should reconcile if existing user-supplied cert has the expected DNS names", func() {
-			// Create a manager cert secret with DNS names that include the
-			// expected DNS names.
-			dnsNames := append(expectedDNSNames, "manager.example.com", "192.168.10.22")
-			secret, err := render.CreateOperatorTLSSecret(
-				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+		It("should reconcile if operator-managed cert exists and user supplied a custom cert", func() {
+			// Reconcile and check that the operator managed cert was created
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
 
-			// Copy the cert secret to the manager namespace as would have
-			// already been done by the controller.
-			secretOperNs := render.CopySecrets(render.ManagerNamespace, secret)[0]
-			Expect(c.Create(ctx, secretOperNs)).NotTo(HaveOccurred())
+			secret := &corev1.Secret{}
+			// Verify that the operator managed cert secrets exist. These cert
+			// secrets should have the manager service DNS names plus localhost only.
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
+			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+
+			// Create a custom manager cert secret.
+			dnsNames := []string{"manager.example.com", "192.168.10.22"}
+			testCA := test.MakeTestCA("manager-test")
+			customSecret, err := render.CreateOperatorTLSSecret(
+				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Update the existing operator managed cert secret with bytes from
+			// the custom manager cert secret.
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			secret.Data[render.ManagerSecretCertName] = customSecret.Data[render.ManagerSecretCertName]
+			secret.Data[render.ManagerSecretKeyName] = customSecret.Data[render.ManagerSecretKeyName]
+			Expect(c.Update(ctx, secret)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

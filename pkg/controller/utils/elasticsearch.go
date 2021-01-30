@@ -114,38 +114,31 @@ type ElasticClient interface {
 }
 
 type esClient struct {
-	client *elastic.Client
-	lock   sync.Mutex
+	esClnt               *elastic.Client
+	elasticHTTPSEndpoint string
+	sync.Mutex
 }
 
 func NewElasticClient() ElasticClient {
 	return &esClient{}
 }
 
-// SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
-func (es *esClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage, elasticHTTPSEndpoint string) error {
-	es.lock.Lock()
-	if err := es.createElasticClient(client, ctx, elasticHTTPSEndpoint); err != nil {
-		es.lock.Unlock()
-		return err
-	}
-	es.lock.Unlock()
-	policyList := es.listILMPolicies(ls)
-	return es.createOrUpdatePolicies(ctx, policyList)
-}
+// client returns Elasticsearch client if available, else creates one.
+func (es *esClient) client(ctx context.Context, client client.Client) (*elastic.Client, error) {
+	es.Lock()
+	defer es.Unlock()
 
-func (es *esClient) createElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) error {
-	if es.client == nil {
+	if es.esClnt == nil {
 		user, password, root, err := getClientCredentials(client, ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		h := &http.Client{
 			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
 		}
 
 		options := []elastic.ClientOptionFunc{
-			elastic.SetURL(elasticHTTPSEndpoint),
+			elastic.SetURL(es.elasticHTTPSEndpoint),
 			elastic.SetHttpClient(h),
 			elastic.SetErrorLog(logrWrappedESLogger{}),
 			elastic.SetSniff(false),
@@ -154,7 +147,7 @@ func (es *esClient) createElasticClient(client client.Client, ctx context.Contex
 		}
 		retryInterval, err := time.ParseDuration(ElasticConnRetryInterval)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		var eserr error
@@ -163,15 +156,31 @@ func (es *esClient) createElasticClient(client client.Client, ctx context.Contex
 
 			esClient, eserr = elastic.NewClient(options...)
 			if eserr == nil {
-				es.client = esClient
-				return nil
+				es.esClnt = esClient
+				return es.esClnt, nil
 			}
 			log.Error(eserr, "Elastic connect failed, retrying")
 			time.Sleep(retryInterval)
 		}
-		return eserr
+		return nil, eserr
 	}
-	return nil
+	return es.esClnt, nil
+}
+
+// resetClient reset the Elasticsearch esClnt .
+// This will handle cases where Elasticsearch gets recreated or Elasticsearch credential gets recreated.
+func (es *esClient) resetClient() {
+	es.Lock()
+	defer es.Unlock()
+	es.esClnt = nil
+}
+
+// SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
+func (es *esClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage, elasticHTTPSEndpoint string) error {
+
+	es.elasticHTTPSEndpoint = elasticHTTPSEndpoint
+	policyList := es.listILMPolicies(ls)
+	return es.createOrUpdatePolicies(ctx, client, policyList)
 }
 
 // listILMPolicies generates ILM policies based on disk space and retention in LogStorage
@@ -205,21 +214,23 @@ func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policy
 	}
 }
 
-func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[string]policyDetail) error {
+func (es *esClient) createOrUpdatePolicies(ctx context.Context, client client.Client, listPolicy map[string]policyDetail) error {
 	for indexName, pd := range listPolicy {
 		policyName := indexName + "_policy"
+		var clnt *elastic.Client
+		var err error
 
-		res, err := es.client.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
+		if clnt, err = es.client(ctx, client); err != nil {
+			return err
+		}
+
+		res, err := clnt.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
 		if err != nil {
-			if elastic.IsConnErr(err) {
-				// If connection error, reset elasticsearch client
-				es.lock.Lock()
-				es.client = nil
-				es.lock.Unlock()
-			} else if elastic.IsNotFound(err) {
+			if elastic.IsNotFound(err) {
 				// If policy doesn't exist, create one
-				return applyILMPolicy(ctx, es.client, indexName, pd.policy)
+				return es.applyILMPolicy(ctx, client, indexName, pd.policy)
 			}
+			es.resetClient()
 			return err
 		}
 
@@ -231,8 +242,25 @@ func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[s
 		if currentMaxAge != pd.rolloverAge ||
 			currentMaxSize != pd.rolloverSize ||
 			currentMinAge != pd.deleteAge {
-			return applyILMPolicy(ctx, es.client, indexName, pd.policy)
+			return es.applyILMPolicy(ctx, client, indexName, pd.policy)
 		}
+	}
+	return nil
+}
+
+func (es *esClient) applyILMPolicy(ctx context.Context, client client.Client, indexName string, policy map[string]interface{}) error {
+	policyName := indexName + "_policy"
+	var clnt *elastic.Client
+	var err error
+
+	if clnt, err = es.client(ctx, client); err != nil {
+		return err
+	}
+
+	_, err = clnt.XPackIlmPutLifecycle().Policy(policyName).BodyJson(policy).Do(ctx)
+	if err != nil {
+		log.Error(err, "Error applying Ilm Policy")
+		return err
 	}
 	return nil
 }
@@ -275,16 +303,6 @@ func buildILMPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOf
 		},
 	}
 	return pd
-}
-
-func applyILMPolicy(ctx context.Context, esClient *elastic.Client, indexName string, policy map[string]interface{}) error {
-	policyName := indexName + "_policy"
-	_, err := esClient.XPackIlmPutLifecycle().Policy(policyName).BodyJson(policy).Do(ctx)
-	if err != nil {
-		log.Error(err, "Error applying Ilm Policy")
-		return err
-	}
-	return nil
 }
 
 // calculateRolloverSize returns max_size to rollover

@@ -660,10 +660,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				render.ManagerInternalTLSSecretName, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
 			)
 			Expect(err).ShouldNot(HaveOccurred())
-
-			oldSecret.SetOwnerReferences([]metav1.OwnerReference{
-				{UID: cr.GetUID()},
-			})
 			Expect(c.Create(ctx, oldSecret)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})

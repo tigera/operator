@@ -25,8 +25,8 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.19.6
-	github.com/olivere/elastic/v7 v7.0.6
+	github.com/aws/aws-sdk-go v1.35.20
+	github.com/olivere/elastic/v7 v7.0.22
 	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5 // indirect
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/operator-framework/operator-sdk v1.0.1 // indirect

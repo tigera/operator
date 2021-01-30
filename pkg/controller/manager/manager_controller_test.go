@@ -199,23 +199,24 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			secret, err := render.CreateOperatorTLSSecret(
+			userSecret, err := render.CreateOperatorTLSSecret(
 				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Verify that the existing certs didn't change
+			// Verify that the existing cert didn't change
+			secret := &corev1.Secret{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+			Expect(secret.Data).To(Equal(userSecret.Data))
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+			Expect(secret.Data).To(Equal(userSecret.Data))
 		})
 
-		It("should reconcile if operator-managed cert exists and user supplied a custom cert", func() {
+		It("should reconcile if operator-managed cert exists and user replaces it with a custom cert", func() {
 			// Reconcile and check that the operator managed cert was created
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -246,7 +247,8 @@ var _ = Describe("Manager controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Verify that the existing certs didn't change
+			// Verify that the existing certs have changed - check that the
+			// certs have the DNS names in the user-supplied cert.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 

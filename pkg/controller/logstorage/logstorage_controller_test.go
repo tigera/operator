@@ -418,10 +418,6 @@ var _ = Describe("LogStorage controller", func() {
 					By("confirming curator job is created")
 					Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
 
-					By("confirming elastic user ConfigMap is not available")
-					Expect(cli.Get(ctx,
-						types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersConfigMapName},
-						&corev1.ConfigMap{})).Should(HaveOccurred())
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 				It("test LogStorage reconciles successfully for elasticsearch basic license", func() {
@@ -518,14 +514,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					By("confirming curator job is created")
 					Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
-
-					By("confirming elastic user ConfigMap is created")
-					Expect(cli.Get(ctx,
-						types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersConfigMapName},
-						&corev1.ConfigMap{})).ShouldNot(HaveOccurred())
-					Expect(cli.Get(ctx,
-						types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersEsSecreteName},
-						&corev1.Secret{})).ShouldNot(HaveOccurred())
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})
@@ -1130,19 +1118,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic,
-		&corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.OIDCUsersConfigMapName,
-				Namespace: render.ElasticsearchNamespace,
-			}},
-		&corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.OIDCUsersEsSecreteName,
-				Namespace: render.ElasticsearchNamespace,
-			}})
+		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic)
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {

@@ -211,15 +211,15 @@ func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[s
 
 		res, err := es.client.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
 		if err != nil {
-			if elastic.IsConnErr(err) {
-				// If connection error, reset elasticsearch client
-				es.lock.Lock()
-				es.client = nil
-				es.lock.Unlock()
-			} else if elastic.IsNotFound(err) {
+			if elastic.IsNotFound(err) {
 				// If policy doesn't exist, create one
 				return applyILMPolicy(ctx, es.client, indexName, pd.policy)
 			}
+			// Reset the Elasticsearch client for all other errors.
+			// This will handle cases where Elasticsearch gets recreated or Elasticsearch credential gets recreated.
+			es.lock.Lock()
+			es.client = nil
+			es.lock.Unlock()
 			return err
 		}
 

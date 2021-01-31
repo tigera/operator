@@ -56,6 +56,8 @@ const (
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
 	ManagerInternalTLSHashAnnotation = "hash.operator.tigera.io/internal-tls-secret"
+
+	KibanaTLSHashAnnotation = "hash.operator.tigera.io/kibana-secrets"
 )
 
 // ManagementClusterConnection configuration constants
@@ -94,6 +96,7 @@ func Manager(
 		tlsAnnotations = dexCfg.RequiredAnnotations()
 	}
 	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+	tlsAnnotations[KibanaTLSHashAnnotation] = secretsAnnotationHash(kibanaSecrets...)
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets

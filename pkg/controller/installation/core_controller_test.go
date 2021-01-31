@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +40,8 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
 )
@@ -548,6 +551,124 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			Expect(mergeAndFillDefaults(installation, nil, nil, nil)).To(BeNil())
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
+		})
+	})
+
+	Context("management cluster exists", func() {
+		var c client.Client
+		var ctx context.Context
+		var r ReconcileInstallation
+		var cr *operator.Installation
+
+		var scheme *runtime.Scheme
+		var mockStatus *status.MockStatus
+
+		var internalManagerTLSSecret *corev1.Secret
+		var expectedDNSNames []string
+
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+			// Create a client that will have a crud interface of k8s objects.
+			c = fake.NewFakeClientWithScheme(scheme)
+			ctx = context.Background()
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+
+			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
+			r = ReconcileInstallation{
+				config:               nil, // there is no fake for config
+				client:               c,
+				scheme:               scheme,
+				autoDetectedProvider: operator.ProviderNone,
+				status:               mockStatus,
+				typhaAutoscaler:      newTyphaAutoscaler(c, mockStatus),
+				namespaceMigration:   &fakeNamespaceMigration{},
+				amazonCRDExists:      true,
+				enterpriseCRDsExist:  true,
+				migrationChecked:     true,
+				clusterDomain:        dns.DefaultClusterDomain,
+			}
+			r.typhaAutoscaler.start()
+
+			cr = &operator.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operator.InstallationSpec{
+					Variant:               operator.TigeraSecureEnterprise,
+					Registry:              "some.registry.org/",
+					CertificateManagement: &operator.CertificateManagement{},
+				},
+				Status: operator.InstallationStatus{
+					Variant: operator.TigeraSecureEnterprise,
+					Computed: &operator.InstallationSpec{
+						Registry: "my-reg",
+						// The test is provider agnostic.
+						KubernetesProvider: operator.ProviderNone,
+					},
+				},
+			}
+			// We start off with a 'standard' installation, with nothing special
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&operator.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+				})).NotTo(HaveOccurred())
+
+			internalManagerTLSSecret = &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ManagerInternalTLSSecretName,
+					Namespace: render.OperatorNamespace(),
+				},
+			}
+
+			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+			expectedDNSNames = append(expectedDNSNames, "localhost")
+		})
+
+		It("should create an internal manager TLS cert secret", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+			dnsNames = append(dnsNames, "localhost")
+			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
+			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
+		})
+
+		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
+			// Create a internal manager TLS secret with old DNS name.
+			oldSecret, err := render.CreateOperatorTLSSecret(nil,
+				render.ManagerInternalTLSSecretName, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, oldSecret)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+			dnsNames = append(dnsNames, "localhost")
+			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
+			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
 		})
 	})
 })

@@ -204,15 +204,6 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
-
-		// Watch for changes to Elasticsearch and Kibana secrets so we can update and
-		// restart kubecontrollers when the ES or Kibana secret changes.
-		if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchCertSecret, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch the Secret resource: %w", err)
-		}
-		if err = utils.AddSecretsWatch(c, render.TigeraKibanaCertSecret, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch the Secret resource: %w", err)
-		}
 	}
 
 	return nil

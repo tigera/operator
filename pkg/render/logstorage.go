@@ -109,6 +109,8 @@ const (
 	EsManagerRoleBinding        = "es-manager"
 	EsKubeControllerRole        = "es-calico-kube-controllers"
 	EsKubeControllerRoleBinding = "es-calico-kube-controllers"
+
+	KibanaTLSAnnotationHash = "hash.operator.tigera.io/tls-certificate-secret"
 )
 
 const (
@@ -1170,6 +1172,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			PodTemplate: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: KibanaNamespace,
+					Annotations: map[string]string{
+						KibanaTLSAnnotationHash: secretsAnnotationHash(es.kibanaSecrets...),
+					},
 					Labels: map[string]string{
 						"name":    KibanaName,
 						"k8s-app": KibanaName,

@@ -39,6 +39,8 @@ func KubeControllers(
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
+	elasticsearchSecret *v1.Secret,
+	kibanaSecret *v1.Secret,
 	authentication *operator.Authentication,
 	esLicenseType ElasticsearchLicenseType,
 ) *kubeControllersComponent {
@@ -47,6 +49,8 @@ func KubeControllers(
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		managerInternalSecret:       managerInternalSecret,
+		elasticsearchSecret:         elasticsearchSecret,
+		kibanaSecret:                kibanaSecret,
 		logStorageExists:            logStorageExists,
 		authentication:              authentication,
 		k8sServiceEp:                k8sServiceEp,
@@ -59,6 +63,8 @@ type kubeControllersComponent struct {
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
+	elasticsearchSecret         *v1.Secret
+	kibanaSecret                *v1.Secret
 	logStorageExists            bool
 	authentication              *operator.Authentication
 	k8sServiceEp                k8sapi.ServiceEndpoint
@@ -377,9 +383,17 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		return make(map[string]string)
 	}
 
-	return map[string]string{
+	am := map[string]string{
 		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
 	}
+
+	if c.elasticsearchSecret != nil {
+		am[tlsSecretHashAnnotation] = AnnotationHash(c.elasticsearchSecret.Data)
+	}
+	if c.kibanaSecret != nil {
+		am[KibanaTLSHashAnnotation] = AnnotationHash(c.kibanaSecret.Data)
+	}
+	return am
 }
 
 func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

@@ -84,6 +84,7 @@ func Calico(
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
+	elasticsearchSecret *corev1.Secret,
 	bt map[string]string,
 	p operator.Provider,
 	aci *operator.AmazonCloudIntegration,
@@ -247,6 +248,7 @@ type calicoRenderer struct {
 	tlsConfigMaps               []*corev1.ConfigMap
 	tlsSecrets                  []*corev1.Secret
 	managerInternalTLSecret     *corev1.Secret
+	elasticsearchSecret         *corev1.Secret
 	birdTemplates               map[string]string
 	provider                    operator.Provider
 	amazonCloudInt              *operator.AmazonCloudIntegration
@@ -265,7 +267,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain))
-	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.authentication, r.esLicenseType))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.authentication, r.esLicenseType))
 	return components
 }
 

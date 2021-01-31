@@ -66,7 +66,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -114,7 +114,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -157,7 +157,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, nil, render.ElasticsearchLicenseTypeBasic)
+		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, &internalManagerTLSSecret, &elasticsearchSecret, nil, render.ElasticsearchLicenseTypeBasic)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -217,7 +217,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 		instance.Variant = operator.TigeraSecureEnterprise
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -240,7 +240,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Value:    "bar",
 		}
 		instance.ControlPlaneTolerations = []v1.Toleration{t}
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
 		resources, _ := component.Objects()
 		d := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
@@ -265,7 +265,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -292,7 +292,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, authentication, render.ElasticsearchLicenseTypeUnknown)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, authentication, render.ElasticsearchLicenseTypeUnknown)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -320,7 +320,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add the Elasticsearch license type env variables", func() {
 		instance.Variant = operator.TigeraSecureEnterprise
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeBasic)
 		resources, _ := component.Objects()
 
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
@@ -345,7 +345,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 

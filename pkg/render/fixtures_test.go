@@ -35,6 +35,21 @@ var internalManagerTLSSecret = v1.Secret{
 	},
 }
 
+var elasticsearchSecret = v1.Secret{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "Secret",
+		APIVersion: "v1",
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      render.TigeraElasticsearchCertSecret,
+		Namespace: render.OperatorNamespace(),
+	},
+	Data: map[string][]byte{
+		"cert": []byte("cert"),
+		"key":  []byte("key"),
+	},
+}
+
 var voltronTunnelSecret = v1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",

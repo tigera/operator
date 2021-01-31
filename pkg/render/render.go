@@ -150,6 +150,8 @@ func Calico(
 		typhaNodeTLS:                typhaNodeTLS,
 		tlsConfigMaps:               tcms,
 		tlsSecrets:                  tss,
+		elasticsearchSecret:         elasticsearchSecret,
+		kibanaSecret:                kibanaSecret,
 		managerInternalTLSecret:     managerInternalTLSSecret,
 		birdTemplates:               bt,
 		provider:                    p,

@@ -379,14 +379,10 @@ func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequire
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
-	if c.managerInternalSecret == nil {
-		return make(map[string]string)
+	am := map[string]string{}
+	if c.managerInternalSecret != nil {
+		am[ManagerInternalTLSHashAnnotation] = AnnotationHash(c.managerInternalSecret.Data)
 	}
-
-	am := map[string]string{
-		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
-	}
-
 	if c.elasticsearchSecret != nil {
 		am[tlsSecretHashAnnotation] = AnnotationHash(c.elasticsearchSecret.Data)
 	}

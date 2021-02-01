@@ -803,7 +803,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
-	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+	managerInternalTLSSecret, err = utils.ValidateCertPairInNamespace(r.client,
+		common.CalicoNamespace,
 		render.ManagerInternalTLSSecretName,
 		render.ManagerInternalSecretCertName,
 		render.ManagerInternalSecretKeyName,

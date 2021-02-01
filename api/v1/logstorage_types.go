@@ -47,6 +47,11 @@ type LogStorageSpec struct {
 	// each of the indicated key-value pairs as labels as well as access to the specified StorageClassName.
 	// +optional
 	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
+
+	// ComponentResources can be used to customize the resource requirements for each component.
+	// Only ECKOperator is supported for this spec.
+	// +optional
+	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.

@@ -21,7 +21,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.2
-	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783
+	k8s.io/apiextensions-apiserver v0.17.0
 	k8s.io/apimachinery v0.18.2
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/cluster-bootstrap v0.18.2 // indirect
@@ -29,7 +29,7 @@ require (
 	k8s.io/kube-aggregator v0.0.0-20190404125450-f5e124c822d6
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.14.2
-	sigs.k8s.io/controller-runtime v0.4.0
+	sigs.k8s.io/controller-runtime v0.5.0
 )
 
 // Pinned to kubernetes-1.14.1

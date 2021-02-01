@@ -17,7 +17,6 @@ package render
 import (
 	"bytes"
 	"fmt"
-	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
@@ -27,7 +26,6 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/dns"
 )
 
 var (
@@ -135,26 +133,8 @@ func Calico(
 	// Create copy to go into Calico Namespace
 	tcms = append(tcms, copyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
-	if managerInternalTLSSecret == nil && cr.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		// Generate CA and TLS certificate for tigera-manager for internal traffic within the K8s cluster
-		// The certificate will be issued for the FQDN manager service names and
-		// localhost.
-		log.Info("Creating secret for internal manager credentials")
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, clusterDomain)
-		svcDNSNames = append(svcDNSNames, ManagerServiceIP)
-
-		managerInternalTLSSecret, err = CreateOperatorTLSSecret(nil,
-			ManagerInternalTLSSecretName,
-			ManagerInternalSecretKeyName,
-			ManagerInternalSecretCertName,
-			825*24*time.Hour, // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-			nil,
-			svcDNSNames...,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("generating certificates for manager was not finalized due to %v", err)
-		}
+	// If internal manager cert secret exists add it to the renderer.
+	if managerInternalTLSSecret != nil {
 		tss = append(tss, managerInternalTLSSecret)
 	}
 

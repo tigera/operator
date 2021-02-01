@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -47,6 +48,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -141,6 +143,24 @@ var _ = Describe("LogStorage controller", func() {
 			It("should default the spec.nodes structure", func() {
 				Expect(ls.Spec.Nodes).NotTo(BeNil())
 				Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
+			})
+
+			It("should set spec.componentResources to the default settings", func() {
+				limits := corev1.ResourceList{}
+				requests := corev1.ResourceList{}
+				limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+				requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+				expectedComponentResources := []operatorv1.ComponentResource{
+					{
+						ComponentName: operatorv1.ComponentNameECKOperator,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Limits:   limits,
+							Requests: requests,
+						},
+					},
+				}
+				Expect(ls.Spec.ComponentResources).NotTo(BeNil())
+				Expect(reflect.DeepEqual(expectedComponentResources, ls.Spec.ComponentResources)).To(BeTrue())
 			})
 		})
 
@@ -1075,6 +1095,88 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 			})
+		})
+	})
+	Context("LogStorageSpec, validateLogStorageSpec", func() {
+		ls := operatorv1.LogStorage{Spec: operatorv1.LogStorageSpec{}}
+
+		It("should return an error when Retention nil", func() {
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Retention Flows are nil", func() {
+			ls.Spec.Retention = &operatorv1.Retention{}
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Retention AuditReports are nil", func() {
+			var fr int32 = 8
+			ls.Spec.Retention.Flows = &fr
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Retention Snapshots are nil", func() {
+			var arr int32 = 91
+			ls.Spec.Retention.AuditReports = &arr
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Retention ComplianceReports are nil", func() {
+			var sr int32 = 91
+			ls.Spec.Retention.Snapshots = &sr
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Indices is nil", func() {
+			var crr int32 = 91
+			ls.Spec.Retention.ComplianceReports = &crr
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Indices Replicas are nil", func() {
+			ls.Spec.Indices = &operatorv1.Indices{}
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when StorageClasName is unset", func() {
+			var replicas int32 = render.DefaultElasticsearchReplicas
+			ls.Spec.Indices.Replicas = &replicas
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when Nodes is nil", func() {
+			ls.Spec.StorageClassName = DefaultElasticsearchStorageClass
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when ComponentResources is nil", func() {
+			ls.Spec.Nodes = &operatorv1.Nodes{Count: 1}
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when ComponentResources ComponentName is not ECKOperator", func() {
+			ls.Spec.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName: "Typha",
+				},
+			}
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when ComponentResources has more than one entry", func() {
+			ls.Spec.ComponentResources = append(ls.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName: "KubeControllers",
+			})
+			Expect(validateLogStorageSpec(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return nil when all spec fields are correctly initialized", func() {
+			ls.Spec.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameECKOperator,
+				},
+			}
+			Expect(validateLogStorageSpec(&ls.Spec)).To(BeNil())
 		})
 	})
 })

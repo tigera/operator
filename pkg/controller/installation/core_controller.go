@@ -202,7 +202,19 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 
 		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
+		}
+
+		if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchCertSecret, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.TigeraElasticsearchCertSecret, render.OperatorNamespace(), err)
+		}
+
+		if err = utils.AddSecretsWatch(c, render.TigeraKibanaCertSecret, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.TigeraKibanaCertSecret, render.OperatorNamespace(), err)
+		}
+
+		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, render.OperatorNamespace(), err)
 		}
 	}
 
@@ -732,6 +744,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var logStorageExists bool
 	var authentication *operator.Authentication
 	var esLicenseType render.ElasticsearchLicenseType
+	var elasticsearchSecret *corev1.Secret
+	var kibanaSecret *corev1.Secret
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -774,6 +788,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
+			return reconcile.Result{}, err
+		}
+		elasticsearchSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}, elasticsearchSecret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Elasticsearch cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		kibanaSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, kibanaSecret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Kibana cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -849,6 +877,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,
+		elasticsearchSecret,
+		kibanaSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		aci,

@@ -319,7 +319,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
 			},
-			Annotations: c.annotations(),
 		},
 		Spec: apps.DeploymentSpec{
 			Replicas: &replicas,
@@ -338,6 +337,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Labels: map[string]string{
 						"k8s-app": "calico-kube-controllers",
 					},
+					Annotations: c.annotations(),
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:       c.cr.ControlPlaneNodeSelector,

@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -47,6 +48,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -141,6 +143,24 @@ var _ = Describe("LogStorage controller", func() {
 			It("should default the spec.nodes structure", func() {
 				Expect(ls.Spec.Nodes).NotTo(BeNil())
 				Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
+			})
+
+			It("should set spec.componentResources to the default settings", func() {
+				limits := corev1.ResourceList{}
+				requests := corev1.ResourceList{}
+				limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+				requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+				expectedComponentResources := []operatorv1.ComponentResource{
+					{
+						ComponentName: operatorv1.ComponentNameECKOperator,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Limits:   limits,
+							Requests: requests,
+						},
+					},
+				}
+				Expect(ls.Spec.ComponentResources).NotTo(BeNil())
+				Expect(reflect.DeepEqual(expectedComponentResources, ls.Spec.ComponentResources)).To(BeTrue())
 			})
 		})
 

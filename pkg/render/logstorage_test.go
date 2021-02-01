@@ -202,7 +202,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(len(initContainers)).To(Equal(1))
 				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
 
-				// Verify that the default container limist/requests are set.
+				// Verify that the default container limits/requests are set.
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 				limits := esContainer.Resources.Limits
 				resources := esContainer.Resources.Requests
@@ -616,6 +616,105 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			oidcUserSecret := GetResource(createResources, render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, "", "v1", "Secret")
 			Expect(oidcUserSecret).ShouldNot(BeNil())
+		})
+
+		Context("ECKOperator memory requests/limits", func() {
+			When("LogStorage Spec contains an entry for ECKOperator in ComponentResources", func() {
+				It("should set matching memory requests/limits in the elastic-operator StatefulSet Spec, manager container", func() {
+					limits := corev1.ResourceList{}
+					requests := corev1.ResourceList{}
+					limits[corev1.ResourceMemory] = resource.MustParse("512Mi")
+					requests[corev1.ResourceMemory] = resource.MustParse("512Mi")
+					logStorage.Spec.ComponentResources = []operatorv1.ComponentResource{
+						{
+							ComponentName: operatorv1.ComponentNameECKOperator,
+							ResourceRequirements: &corev1.ResourceRequirements{
+								Limits:   limits,
+								Requests: requests,
+							},
+						},
+					}
+
+					limits[corev1.ResourceCPU] = resource.MustParse("1")
+					requests[corev1.ResourceCPU] = resource.MustParse("100m")
+					expectedResourcesRequirements := corev1.ResourceRequirements{
+						Limits:   limits,
+						Requests: requests,
+					}
+
+					expectedCreateResources := []resourceTestObj{
+						{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
+							ls := resource.(*operatorv1.LogStorage)
+							Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
+						}},
+						{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
+						{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+						{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
+						{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
+						{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
+						{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+						{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
+						{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
+						{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+						{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+						{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
+						{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+						{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, func(resource runtime.Object) {
+							statefulSet := resource.(*appsv1.StatefulSet)
+							Expect(statefulSet.Spec.Template.Spec.Containers).ToNot(BeEmpty())
+							for _, container := range statefulSet.Spec.Template.Spec.Containers {
+								if container.Name == "manager" {
+									Expect(container).NotTo(BeNil())
+									Expect(container.Resources).To(Equal(expectedResourcesRequirements))
+									break
+								}
+							}
+						}},
+						{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
+						{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+						{render.TigeraElasticsearchCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
+						{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+						{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+						{render.ElasticsearchConfigMapName, render.OperatorNamespace(), &corev1.ConfigMap{}, nil},
+						{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
+						{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
+						{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
+						{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
+						{render.TigeraKibanaCertSecret, render.OperatorNamespace(), &corev1.Secret{}, nil},
+						{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
+						{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
+						{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+						{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+						{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+						{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+						{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+					}
+					expectedDeleteResources := []resourceTestObj{
+						{render.OIDCUsersConfigMapName, render.ElasticsearchNamespace, &corev1.ConfigMap{}, nil},
+						{render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					}
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, oidcConfigMap, oidcSecret)
+
+					createResources, deleteResources := component.Objects()
+
+					compareResources(createResources, expectedCreateResources)
+					compareResources(deleteResources, expectedDeleteResources)
+				})
+			})
 		})
 	})
 

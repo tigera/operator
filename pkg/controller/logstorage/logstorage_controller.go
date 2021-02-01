@@ -35,6 +35,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,6 +55,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
+	defaultEckOperatorMemorySetting    = "512Mi"
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
 )
 
@@ -272,6 +274,22 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 
 	if opr.Spec.Nodes == nil {
 		opr.Spec.Nodes = &operatorv1.Nodes{Count: 1}
+	}
+
+	if opr.Spec.ComponentResources == nil {
+		limits := corev1.ResourceList{}
+		requests := corev1.ResourceList{}
+		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		opr.Spec.ComponentResources = []operatorv1.ComponentResource{
+			{
+				ComponentName: operatorv1.ComponentNameECKOperator,
+				ResourceRequirements: &corev1.ResourceRequirements{
+					Limits:   limits,
+					Requests: requests,
+				},
+			},
+		}
 	}
 }
 

@@ -732,6 +732,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var logStorageExists bool
 	var authentication *operator.Authentication
 	var esLicenseType render.ElasticsearchLicenseType
+	var elasticsearchSecret *corev1.Secret
+	var kibanaSecret *corev1.Secret
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -774,6 +776,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
+			return reconcile.Result{}, err
+		}
+		elasticsearchSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}, elasticsearchSecret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Elasticsearch cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		kibanaSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}, kibanaSecret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Kibana cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -849,6 +865,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,
+		elasticsearchSecret,
+		kibanaSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		aci,

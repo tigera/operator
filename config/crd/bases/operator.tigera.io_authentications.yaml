@@ -47,7 +47,8 @@ spec:
                   authentication.
                 properties:
                   groupSearch:
-                    description: Group search configuration.
+                    description: Group search configuration to find the groups that
+                      a user is in.
                     properties:
                       baseDN:
                         description: BaseDN to start the search from. For example
@@ -59,7 +60,8 @@ spec:
                         type: string
                       nameAttribute:
                         description: The attribute of the group that represents its
-                          name. This value can be used to apply RBAC to a user group.
+                          name. This attribute can be used to apply RBAC to a user
+                          group.
                         type: string
                       userMatchers:
                         description: Following list contains field pairs that are
@@ -67,6 +69,8 @@ spec:
                           to the filter that an attribute in the group must match
                           the user's attribute value.
                         items:
+                          description: UserMatch when the value of a UserAttribute
+                            and a GroupAttribute match, a user belongs to the group.
                           properties:
                             groupAttribute:
                               type: string
@@ -92,7 +96,8 @@ spec:
                       connections will use the ldaps:// protocol.
                     type: boolean
                   userSearch:
-                    description: User entry search configuration.
+                    description: User entry search configuration to match the credentials
+                      with a user.
                     properties:
                       baseDN:
                         description: BaseDN to start the search from. For example
@@ -103,9 +108,9 @@ spec:
                           For example "(objectClass=person)"
                         type: string
                       nameAttribute:
-                        description: 'A mapping of attributes to the user''s name.
-                          This value can be used to apply RBAC to a user. Default:
-                          uid'
+                        description: 'A mapping of the attribute that is used as the
+                          username. This attribute can be used to apply RBAC to a
+                          user. Default: uid'
                         type: string
                     required:
                     - baseDN

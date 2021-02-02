@@ -39,6 +39,8 @@ func KubeControllers(
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	managerInternalSecret *v1.Secret,
+	elasticsearchSecret *v1.Secret,
+	kibanaSecret *v1.Secret,
 	authentication *operator.Authentication,
 	esLicenseType ElasticsearchLicenseType,
 ) *kubeControllersComponent {
@@ -47,6 +49,8 @@ func KubeControllers(
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		managerInternalSecret:       managerInternalSecret,
+		elasticsearchSecret:         elasticsearchSecret,
+		kibanaSecret:                kibanaSecret,
 		logStorageExists:            logStorageExists,
 		authentication:              authentication,
 		k8sServiceEp:                k8sServiceEp,
@@ -59,6 +63,8 @@ type kubeControllersComponent struct {
 	managementCluster           *operator.ManagementCluster
 	managementClusterConnection *operator.ManagementClusterConnection
 	managerInternalSecret       *v1.Secret
+	elasticsearchSecret         *v1.Secret
+	kibanaSecret                *v1.Secret
 	logStorageExists            bool
 	authentication              *operator.Authentication
 	k8sServiceEp                k8sapi.ServiceEndpoint
@@ -313,7 +319,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
 			},
-			Annotations: c.annotations(),
 		},
 		Spec: apps.DeploymentSpec{
 			Replicas: &replicas,
@@ -332,6 +337,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					Labels: map[string]string{
 						"k8s-app": "calico-kube-controllers",
 					},
+					Annotations: c.annotations(),
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:       c.cr.ControlPlaneNodeSelector,
@@ -373,13 +379,17 @@ func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequire
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
-	if c.managerInternalSecret == nil {
-		return make(map[string]string)
+	am := map[string]string{}
+	if c.managerInternalSecret != nil {
+		am[ManagerInternalTLSHashAnnotation] = AnnotationHash(c.managerInternalSecret.Data)
 	}
-
-	return map[string]string{
-		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
+	if c.elasticsearchSecret != nil {
+		am[tlsSecretHashAnnotation] = AnnotationHash(c.elasticsearchSecret.Data)
 	}
+	if c.kibanaSecret != nil {
+		am[KibanaTLSHashAnnotation] = AnnotationHash(c.kibanaSecret.Data)
+	}
+	return am
 }
 
 func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

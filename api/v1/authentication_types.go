@@ -54,6 +54,10 @@ type AuthenticationSpec struct {
 	// Openshift contains the configuration needed to setup Openshift OAuth authentication.
 	// +optional
 	Openshift *AuthenticationOpenshift `json:"openshift,omitempty"`
+
+	// LDAP contains the configuration needed to setup LDAP authentication.
+	// +optional
+	LDAP *AuthenticationLDAP `json:"ldap,omitempty"`
 }
 
 // AuthenticationStatus defines the observed state of Authentication
@@ -74,7 +78,7 @@ type AuthenticationOIDC struct {
 
 	// RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, the following scopes are
 	// requested: ["openid", "email", "profile", "groups", "offline_access"].
-	// + optional
+	// +optional
 	RequestedScopes []string `json:"requestedScopes,omitempty"`
 
 	// Deprecated. Please use Authentication.Spec.UsernamePrefix instead.
@@ -103,6 +107,71 @@ type AuthenticationOpenshift struct {
 	// IssuerURL is the URL to the Openshift OAuth provider. Ex.: https://api.my-ocp-domain.com:6443
 	// +required
 	IssuerURL string `json:"issuerURL"`
+}
+
+// AuthenticationLDAP is the configuration needed to setup LDAP.
+type AuthenticationLDAP struct {
+	// The host and port of the LDAP server. Example: ad.example.com:636
+	// +required
+	Host string `json:"host"`
+
+	// StartTLS whether to enable the startTLS feature for establishing TLS on an existing LDAP session.
+	// If true, the ldap:// protocol is used and then issues a StartTLS command, otherwise, connections will use
+	// the ldaps:// protocol.
+	// +optional
+	StartTLS *bool `json:"startTLS,omitempty"`
+
+	// User entry search configuration to match the credentials with a user.
+	// +required
+	UserSearch *UserSearch `json:"userSearch"`
+
+	// Group search configuration to find the groups that a user is in.
+	// +optional
+	GroupSearch *GroupSearch `json:"groupSearch,omitempty"`
+}
+
+// User entry search configuration to match the credentials with a user.
+type UserSearch struct {
+	// BaseDN to start the search from. For example "cn=users,dc=example,dc=com"
+	// +required
+	BaseDN string `json:"baseDN"`
+
+	// Optional filter to apply when searching the directory. For example "(objectClass=person)"
+	// +optional
+	Filter string `json:"filter"`
+
+	// A mapping of the attribute that is used as the username. This attribute can be used to apply RBAC to a user.
+	// Default: uid
+	// +optional
+	NameAttribute string `json:"nameAttribute"`
+}
+
+// Group search configuration to find the groups that a user is in.
+type GroupSearch struct {
+	// BaseDN to start the search from. For example "cn=groups,dc=example,dc=com"
+	// +required
+	BaseDN string `json:"baseDN"`
+
+	// Optional filter to apply when searching the directory.
+	// For example "(objectClass=posixGroup)"
+	// +optional
+	Filter string `json:"filter"`
+
+	// The attribute of the group that represents its name. This attribute can be used to apply RBAC to a user group.
+	// +required
+	NameAttribute string `json:"nameAttribute"`
+
+	// Following list contains field pairs that are used to match a user to a group. It adds an additional
+	// requirement to the filter that an attribute in the group must match the user's
+	// attribute value.
+	// +required
+	UserMatchers []UserMatch `json:"userMatchers"`
+}
+
+// UserMatch when the value of a UserAttribute and a GroupAttribute match, a user belongs to the group.
+type UserMatch struct {
+	UserAttribute  string `json:"userAttribute"`
+	GroupAttribute string `json:"groupAttribute"`
 }
 
 // +kubebuilder:object:root=true

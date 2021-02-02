@@ -30,6 +30,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -203,7 +204,20 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 
 		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
+		}
+
+		if err = utils.AddSecretsWatch(c, render.ElasticsearchPublicCertSecret, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.ElasticsearchPublicCertSecret, render.OperatorNamespace(), err)
+		}
+
+		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, render.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, render.OperatorNamespace(), err)
+		}
+
+		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
+		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, render.OperatorNamespace(), err)
 		}
 	}
 
@@ -726,6 +740,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var logStorageExists bool
 	var authentication *operator.Authentication
 	var esLicenseType render.ElasticsearchLicenseType
+	var elasticsearchSecret *corev1.Secret
+	var kibanaSecret *corev1.Secret
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
@@ -770,10 +786,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
 			return reconcile.Result{}, err
 		}
+		elasticsearchSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, elasticsearchSecret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		kibanaSecret = &corev1.Secret{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaSecret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
-	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+	managerInternalTLSSecret, err = utils.ValidateCertPairInNamespace(r.client,
+		common.CalicoNamespace,
 		render.ManagerInternalTLSSecretName,
 		render.ManagerInternalSecretCertName,
 		render.ManagerInternalSecretKeyName,
@@ -783,7 +814,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// traffic within the K8s cluster exists and has valid FQDN manager service
 	// names and localhost.
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		log.Info("Creating secret for internal manager credentials")
 		var err error
 		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
 		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
@@ -870,6 +900,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,
+		elasticsearchSecret,
+		kibanaSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		aci,

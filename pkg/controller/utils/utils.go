@@ -194,6 +194,7 @@ func ValidateCertPair(client client.Client, certPairSecretName, keyName, certNam
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
+// TODO: Replace this with version of ValidateCertPair taking in a ns.
 func ValidateCertPairInNamespace(client client.Client, namespace, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{

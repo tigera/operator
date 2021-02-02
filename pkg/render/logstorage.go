@@ -110,7 +110,8 @@ const (
 	EsKubeControllerRole        = "es-calico-kube-controllers"
 	EsKubeControllerRoleBinding = "es-calico-kube-controllers"
 
-	KibanaTLSAnnotationHash = "hash.operator.tigera.io/tls-certificate-secret"
+	KibanaTLSAnnotationHash        = "hash.operator.tigera.io/kb-secrets"
+	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
 )
 
 const (
@@ -565,7 +566,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-	annotations := map[string]string{}
+	annotations := map[string]string{
+		ElasticsearchTLSHashAnnotation: secretsAnnotationHash(es.elasticsearchSecrets...),
+	}
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",

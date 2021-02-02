@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package authentication
+package authentication_test
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
 	"github.com/stretchr/testify/mock"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -49,6 +47,7 @@ var _ = Describe("authentication controller tests", func() {
 		ctx        context.Context
 		mockStatus *status.MockStatus
 		idpSecret  *corev1.Secret
+		auth       *operatorv1.Authentication
 	)
 
 	BeforeEach(func() {
@@ -70,6 +69,7 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
 
 		idpSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -81,44 +81,44 @@ var _ = Describe("authentication controller tests", func() {
 				"clientID":     []byte("a.b.com"),
 				"clientSecret": []byte("my-secret"),
 			}}
+		// Apply prerequisites for the basic reconcile to succeed.
+		Expect(cli.Create(ctx, &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+			Status: operatorv1.InstallationStatus{
+				Variant:  operatorv1.TigeraSecureEnterprise,
+				Computed: &operatorv1.InstallationSpec{},
+			},
+			Spec: operatorv1.InstallationSpec{
+				Variant: operatorv1.TigeraSecureEnterprise,
+			},
+		})).ToNot(HaveOccurred())
+
+		auth = &operatorv1.Authentication{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.AuthenticationSpec{
+				ManagerDomain: "https://example.com",
+			},
+		}
 	})
 
 	Context("OIDC connector config options", func() {
 		It("should set oidc defaults ", func() {
-			// Apply prerequisites for the basic reconcile to succeed.
-			Expect(cli.Create(ctx, &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{},
-				},
-				Spec: operatorv1.InstallationSpec{
-					Variant: operatorv1.TigeraSecureEnterprise,
-				},
-			})).ToNot(HaveOccurred())
-
 			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
-
+			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
+				IssuerURL:      "https://example.com",
+				UsernameClaim:  "email",
+				GroupsClaim:    "group",
+				GroupsPrefix:   "g",
+				UsernamePrefix: "u",
+			}
 			// Apply an authentication spec that triggers all the logic in the updateAuthenticationWithDefaults() func.
-			Expect(cli.Create(ctx, &operatorv1.Authentication{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.AuthenticationSpec{
-					ManagerDomain: "https://example.com",
-					OIDC: &operatorv1.AuthenticationOIDC{
-						IssuerURL:      "https://example.com",
-						UsernameClaim:  "email",
-						GroupsClaim:    "group",
-						GroupsPrefix:   "g",
-						UsernamePrefix: "u",
-					},
-				},
-			})).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -130,99 +130,102 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(authentication.Spec.GroupsPrefix).To(Equal("g"))
 		})
 	})
-	Context("image reconciliation", func() {
-		BeforeEach(func() {
-			Expect(cli.Create(ctx, &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{},
-				},
-				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
-				},
-			})).To(BeNil())
-			Expect(cli.Create(ctx, &operatorv1.Authentication{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.AuthenticationSpec{
-					ManagerDomain: "https://example.com",
-					OIDC: &operatorv1.AuthenticationOIDC{
-						IssuerURL:      "https://example.com",
-						UsernameClaim:  "email",
-						GroupsClaim:    "group",
-						GroupsPrefix:   "g",
-						UsernamePrefix: "u",
-					},
-				},
-			})).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
-		})
 
-		It("should use builtin images", func() {
+	const (
+		validCA       = "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----"
+		validPW       = "dc=example,dc=com"
+		validDN       = "dc=example,dc=com"
+		invalidDN     = "dc=example,dc=com,pancake"
+		validFilter   = "(objectClass=posixGroup)"
+		invalidFilter = "(objectClass=posixGroup)pancake"
+		attribute     = "uid"
+	)
+	DescribeTable("LDAP connector config options should be validated", func(ldap *operatorv1.AuthenticationLDAP, secretDN, secretPW, secretCA []byte, expectReconcilePass bool) {
+		nameAttrEmpty := ldap.UserSearch.NameAttribute == ""
+		auth.Spec.LDAP = ldap
+		idpSecret.Name = render.LDAPSecretName
+		idpSecret.Data = map[string][]byte{
+			render.BindDNSecretField: secretDN,
+			render.BindPWSecretField: secretPW,
+			render.RootCASecretField: secretCA,
+		}
+		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+		Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
+		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
+		r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		if expectReconcilePass {
+			Expect(err).ToNot(HaveOccurred())
+		} else {
+			Expect(err).To(HaveOccurred())
+		}
 
-			r := ReconcileAuthentication{
-				client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
-			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DexObjectName,
-					Namespace: render.DexNamespace,
-				},
-			}
-			Expect(test.GetResource(cli, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
-			Expect(dexC).ToNot(BeNil())
-			Expect(dexC.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentDex.Image,
-					components.ComponentDex.Version)))
-		})
-		It("should use images from imageset", func() {
-			Expect(cli.Create(ctx, &operatorv1.ImageSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/dex", Digest: "sha256:dexhash"},
-					},
-				},
-			})).ToNot(HaveOccurred())
-
-			r := ReconcileAuthentication{
-				client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
-			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DexObjectName,
-					Namespace: render.DexNamespace,
-				},
-			}
-			Expect(test.GetResource(cli, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
-			Expect(apiserver).ToNot(BeNil())
-			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentDex.Image,
-					"sha256:dexhash")))
-		})
-	})
+		if nameAttrEmpty {
+			err = cli.Get(ctx, client.ObjectKey{Name: auth.GetName()}, auth)
+			Expect(auth.Spec.LDAP.UserSearch.NameAttribute).To(Equal(authentication.DefaultNameAttribute))
+		}
+	},
+		Entry("Proper configuration",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			true),
+		Entry("Proper configuration w/o name attribute",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			true),
+		Entry("Proper configuration w/o groupSearch",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			true),
+		Entry("Wrong DN in secret",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
+			[]byte(invalidDN), []byte(validPW), []byte(validCA),
+			false),
+		Entry("Missing PW in secret",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
+			[]byte(validDN), []byte(""), []byte(validCA),
+			false),
+		Entry("Missing CA field in secret",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
+			[]byte(validDN), []byte(validPW), []byte(""),
+			false),
+		Entry("Wrong DN in LDAP spec",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(invalidDN), []byte(validPW), []byte(validCA),
+			false),
+		Entry("Wrong filter in LDAP userSearch spec",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: invalidFilter, NameAttribute: attribute},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			false),
+		Entry("Proper spec, filter omitted in userSearch spec",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, NameAttribute: attribute},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			true),
+		Entry("Wrong filter in LDAP groupSearch spec",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: invalidFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			false),
+		Entry("Proper spec, filter omitted in groupSearch spec",
+			&operatorv1.AuthenticationLDAP{
+				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
+			[]byte(validDN), []byte(validPW), []byte(validCA),
+			true),
+	)
 })

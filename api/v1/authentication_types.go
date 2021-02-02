@@ -109,6 +109,7 @@ type AuthenticationOpenshift struct {
 	IssuerURL string `json:"issuerURL"`
 }
 
+// AuthenticationLDAP is the configuration needed to setup LDAP.
 type AuthenticationLDAP struct {
 	// The host and port of the LDAP server. Example: ad.example.com:636
 	// +required
@@ -120,15 +121,16 @@ type AuthenticationLDAP struct {
 	// +optional
 	StartTLS *bool `json:"startTLS,omitempty"`
 
-	// User entry search configuration.
+	// User entry search configuration to match the credentials with a user.
 	// +required
 	UserSearch *UserSearch `json:"userSearch"`
 
-	// Group search configuration.
+	// Group search configuration to find the groups that a user is in.
 	// +optional
 	GroupSearch *GroupSearch `json:"groupSearch,omitempty"`
 }
 
+// User entry search configuration to match the credentials with a user.
 type UserSearch struct {
 	// BaseDN to start the search from. For example "cn=users,dc=example,dc=com"
 	// +required
@@ -138,12 +140,13 @@ type UserSearch struct {
 	// +optional
 	Filter string `json:"filter"`
 
-	// A mapping of attributes to the user's name. This value can be used to apply RBAC to a user.
+	// A mapping of the attribute that is used as the username. This attribute can be used to apply RBAC to a user.
 	// Default: uid
 	// +optional
 	NameAttribute string `json:"nameAttribute"`
 }
 
+// Group search configuration to find the groups that a user is in.
 type GroupSearch struct {
 	// BaseDN to start the search from. For example "cn=groups,dc=example,dc=com"
 	// +required
@@ -154,7 +157,7 @@ type GroupSearch struct {
 	// +optional
 	Filter string `json:"filter"`
 
-	// The attribute of the group that represents its name. This value can be used to apply RBAC to a user group.
+	// The attribute of the group that represents its name. This attribute can be used to apply RBAC to a user group.
 	// +required
 	NameAttribute string `json:"nameAttribute"`
 
@@ -165,6 +168,7 @@ type GroupSearch struct {
 	UserMatchers []UserMatch `json:"userMatchers"`
 }
 
+// UserMatch when the value of a UserAttribute and a GroupAttribute match, a user belongs to the group.
 type UserMatch struct {
 	UserAttribute  string `json:"userAttribute"`
 	GroupAttribute string `json:"groupAttribute"`

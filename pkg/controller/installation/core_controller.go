@@ -814,7 +814,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// traffic within the K8s cluster exists and has valid FQDN manager service
 	// names and localhost.
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		log.Info("Creating secret for internal manager credentials")
 		var err error
 		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
 		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)

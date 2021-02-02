@@ -42,7 +42,6 @@ var _ = Describe("Elasticsearch tests", func() {
 	Context("ILM", func() {
 		var (
 			eClient     *esClient
-			ctx         context.Context
 			rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
 		)
 		BeforeEach(func() {
@@ -50,7 +49,6 @@ var _ = Describe("Elasticsearch tests", func() {
 				Transport: http.RoundTripper(&testRoundTripper{}),
 			}
 			eClient = mockElasticClient(client, baseURI)
-			ctx = context.Background()
 		})
 
 		It("max rollover size should be set if ES disk is large", func() {
@@ -78,7 +76,7 @@ var _ = Describe("Elasticsearch tests", func() {
 			totalDiskSize := resource.MustParse("100Gi")
 			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 10)
 
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+			err := eClient.createOrUpdatePolicies(map[string]policyDetail{
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
@@ -87,7 +85,7 @@ var _ = Describe("Elasticsearch tests", func() {
 			newPolicies = false
 			totalDiskSize := resource.MustParse("100Gi")
 			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5)
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+			err := eClient.createOrUpdatePolicies(map[string]policyDetail{
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
@@ -202,6 +200,6 @@ func mockElasticClient(h *http.Client, url string) *esClient {
 	Expect(err).To(BeNil())
 
 	ecl := esClient{}
-	ecl.client = client
+	ecl.esClnt = client
 	return &ecl
 }

@@ -78,7 +78,7 @@ var _ = Describe("Elasticsearch tests", func() {
 			totalDiskSize := resource.MustParse("100Gi")
 			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 10)
 
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+			err := eClient.createOrUpdatePolicies(map[string]policyDetail{
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
@@ -87,7 +87,7 @@ var _ = Describe("Elasticsearch tests", func() {
 			newPolicies = false
 			totalDiskSize := resource.MustParse("100Gi")
 			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5)
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+			err := eClient.createOrUpdatePolicies(map[string]policyDetail{
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
@@ -202,6 +202,6 @@ func mockElasticClient(h *http.Client, url string) *esClient {
 	Expect(err).To(BeNil())
 
 	ecl := esClient{}
-	ecl.client = client
+	ecl.esClnt = client
 	return &ecl
 }

@@ -42,6 +42,78 @@ spec:
                   a groups prefix, so this prefix is removed from Kubernetes Groups
                   when translating log access ClusterRoleBindings into Elastic.
                 type: string
+              ldap:
+                description: LDAP contains the configuration needed to setup LDAP
+                  authentication.
+                properties:
+                  groupSearch:
+                    description: Group search configuration.
+                    properties:
+                      baseDN:
+                        description: BaseDN to start the search from. For example
+                          "cn=groups,dc=example,dc=com"
+                        type: string
+                      filter:
+                        description: Optional filter to apply when searching the directory.
+                          For example "(objectClass=posixGroup)"
+                        type: string
+                      nameAttribute:
+                        description: The attribute of the group that represents its
+                          name. This value can be used to apply RBAC to a user group.
+                        type: string
+                      userMatchers:
+                        description: Following list contains field pairs that are
+                          used to match a user to a group. It adds an additional requirement
+                          to the filter that an attribute in the group must match
+                          the user's attribute value.
+                        items:
+                          properties:
+                            groupAttribute:
+                              type: string
+                            userAttribute:
+                              type: string
+                          required:
+                          - groupAttribute
+                          - userAttribute
+                          type: object
+                        type: array
+                    required:
+                    - baseDN
+                    - nameAttribute
+                    - userMatchers
+                    type: object
+                  host:
+                    description: 'The host and port of the LDAP server. Example: ad.example.com:636'
+                    type: string
+                  startTLS:
+                    description: StartTLS whether to enable the startTLS feature for
+                      establishing TLS on an existing LDAP session. If true, the ldap://
+                      protocol is used and then issues a StartTLS command, otherwise,
+                      connections will use the ldaps:// protocol.
+                    type: boolean
+                  userSearch:
+                    description: User entry search configuration.
+                    properties:
+                      baseDN:
+                        description: BaseDN to start the search from. For example
+                          "cn=users,dc=example,dc=com"
+                        type: string
+                      filter:
+                        description: Optional filter to apply when searching the directory.
+                          For example "(objectClass=person)"
+                        type: string
+                      nameAttribute:
+                        description: 'A mapping of attributes to the user''s name.
+                          This value can be used to apply RBAC to a user. Default:
+                          uid'
+                        type: string
+                    required:
+                    - baseDN
+                    type: object
+                required:
+                - host
+                - userSearch
+                type: object
               managerDomain:
                 description: ManagerDomain is the domain name of the Manager
                 type: string

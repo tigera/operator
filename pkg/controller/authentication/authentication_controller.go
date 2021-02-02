@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-ldap/ldap"
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,9 +34,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -47,6 +47,8 @@ const (
 
 	// Common name to add to the Dex TLS secret.
 	dexCN = "tigera-dex.tigera-dex.svc.%s"
+
+	DefaultNameAttribute string = "uid"
 )
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -103,10 +105,6 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		}
 	}
 
-	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch ImageSet: %w", ControllerName, err)
-	}
-
 	return nil
 }
 
@@ -126,9 +124,11 @@ type ReconcileAuthentication struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileAuthentication) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling ", "controller", ControllerName)
+
+	ctx := context.Background()
 
 	// Fetch the Authentication spec. If present, we deploy dex in the cluster.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
@@ -260,12 +260,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		dexCfg,
 	)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		log.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	if err := hlr.CreateOrUpdate(context.Background(), component, r.status); err != nil {
 		log.Error(err, "Error creating / updating resource")
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
@@ -290,11 +284,16 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 func getIdpSecret(ctx context.Context, client client.Client, authentication *oprv1.Authentication) (*corev1.Secret, error) {
 	var secretName string
-
+	var requiredFields []string
 	if authentication.Spec.OIDC != nil {
 		secretName = render.OIDCSecretName
-	} else {
+		requiredFields = append(requiredFields, render.ClientIDSecretField, render.ClientSecretSecretField)
+	} else if authentication.Spec.Openshift != nil {
 		secretName = render.OpenshiftSecretName
+		requiredFields = append(requiredFields, render.ClientIDSecretField, render.ClientSecretSecretField, render.RootCASecretField)
+	} else if authentication.Spec.LDAP != nil {
+		secretName = render.LDAPSecretName
+		requiredFields = append(requiredFields, render.BindDNSecretField, render.BindPWSecretField, render.RootCASecretField)
 	}
 
 	secret := &corev1.Secret{}
@@ -302,16 +301,17 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 		return nil, fmt.Errorf("missing secret %s/%s: %w", render.OperatorNamespace(), secretName, err)
 	}
 
-	if len(secret.Data[render.ClientIDSecretField]) == 0 {
-		return nil, fmt.Errorf("clientID is a required field for secret %s/%s", secret.Namespace, secret.Name)
-	}
+	for _, field := range requiredFields {
+		data := secret.Data[field]
+		if len(data) == 0 {
+			return nil, fmt.Errorf("%s is a required field for secret %s/%s", field, secret.Namespace, secret.Name)
+		}
 
-	if len(secret.Data[render.ClientSecretSecretField]) == 0 {
-		return nil, fmt.Errorf("clientSecret is a required field for secret %s/%s", secret.Namespace, secret.Name)
-	}
-
-	if authentication.Spec.Openshift != nil && len(secret.Data[render.RootCASecretField]) == 0 {
-		return nil, fmt.Errorf("rootCA is a required field for secret %s/%s", secret.Namespace, secret.Name)
+		if field == render.BindDNSecretField {
+			if _, err := ldap.ParseDN(string(data)); err != nil {
+				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", render.OperatorNamespace(), secretName, field)
+			}
+		}
 	}
 	return secret, nil
 }
@@ -330,19 +330,27 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 			authentication.Spec.OIDC.EmailVerification = &defaultVerification
 		}
 	}
+	ldap := authentication.Spec.LDAP
+	if ldap != nil {
+		if ldap.UserSearch.NameAttribute == "" {
+			ldap.UserSearch.NameAttribute = DefaultNameAttribute
+		}
+	}
 }
 
 // validateAuthentication makes sure that the authentication spec is ready for use.
 func validateAuthentication(authentication *oprv1.Authentication) error {
-	// We support using only one connector at once.
-	if authentication.Spec.OIDC != nil && authentication.Spec.Openshift != nil {
-		return fmt.Errorf("multiple identity provider connectors were specified, but only 1 is allowed in the Authentication spec")
-	} else if authentication.Spec.OIDC == nil && authentication.Spec.Openshift == nil {
+	oidc := authentication.Spec.OIDC != nil
+	ldp := authentication.Spec.LDAP
+	numConnectors := render.BoolToInt(oidc) + render.BoolToInt(authentication.Spec.Openshift != nil) + render.BoolToInt(ldp != nil)
+	if numConnectors == 0 {
 		return fmt.Errorf("no identity provider connector was specified, please add a connector to the Authentication spec")
+	} else if numConnectors > 1 {
+		return fmt.Errorf("multiple identity provider connectors were specified, but only 1 is allowed in the Authentication spec")
 	}
 
 	// If the user has specified the deprecated and the new prefix field, but with different values, we cannot proceed.
-	if authentication.Spec.OIDC != nil {
+	if oidc {
 		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix != "" && authentication.Spec.OIDC.UsernamePrefix != authentication.Spec.UsernamePrefix {
 			return fmt.Errorf("you set username prefix twice, but with different values, please remove Authentication.Spec.OIDC.UsernamePrefix")
 		}
@@ -352,5 +360,27 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 		}
 
 	}
+
+	if ldp != nil {
+		if _, err := ldap.ParseDN(ldp.UserSearch.BaseDN); err != nil {
+			return fmt.Errorf("invalid dn for LDAP user search: %w", err)
+		}
+		if ldp.GroupSearch != nil {
+			if _, err := ldap.ParseDN(ldp.GroupSearch.BaseDN); err != nil {
+				return fmt.Errorf("invalid dn for LDAP group search: %w", err)
+			}
+			if ldp.GroupSearch.Filter != "" {
+				if _, err := ldap.CompileFilter(ldp.GroupSearch.Filter); err != nil {
+					return fmt.Errorf("invalid filter for LDAP group search: %w", err)
+				}
+			}
+		}
+		if ldp.UserSearch.Filter != "" {
+			if _, err := ldap.CompileFilter(ldp.UserSearch.Filter); err != nil {
+				return fmt.Errorf("invalid filter for LDAP user search: %w", err)
+			}
+		}
+	}
+
 	return nil
 }

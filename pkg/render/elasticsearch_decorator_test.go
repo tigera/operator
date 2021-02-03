@@ -17,6 +17,7 @@ package render
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	. "github.com/onsi/gomega"
 
@@ -43,7 +44,7 @@ var _ = Describe("Elasticsearch decorator tests", func() {
 	})
 	Context("ElasticsearchContainerDecorate", func() {
 		DescribeTable("should decorate a container with the given cluster DNS used for the ES host name", func(clusterDNS, expectedESHost string) {
-			c := ElasticsearchContainerDecorate(container, "test-cluster", "secret", clusterDNS, OSTypeLinux)
+			c := ElasticsearchContainerDecorate(container, "test-cluster", "secret", clusterDNS, rcommon.OSTypeLinux)
 
 			expectedEnvs := []corev1.EnvVar{
 				{Name: "ELASTIC_HOST", Value: expectedESHost},

@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -94,7 +97,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateCriticalAddonsOnly, tolerateMaster))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateCriticalAddonsOnly, rcommon.TolerateMaster))
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
@@ -243,7 +246,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, nil, render.ElasticsearchLicenseTypeUnknown)
 		resources, _ := component.Objects()
 		d := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rcommon.TolerateMaster))
 	})
 
 	It("should render resourcerequirements", func() {
@@ -352,6 +355,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		depResource := GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*apps.Deployment)
-		expectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+		rtestutil.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 })

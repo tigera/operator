@@ -25,31 +25,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 )
-
-func ExpectResource(resource runtime.Object, name, ns, group, version, kind string) {
-	gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
-	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-	actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	Expect(actualName).To(Equal(name), fmt.Sprintf("Rendered %s resource in namespace %s has wrong name", kind, ns))
-	Expect(actualNS).To(Equal(ns), fmt.Sprintf("Rendered resource %s/%s has wrong namespace", kind, name))
-	Expect(resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), fmt.Sprintf("Rendered resource %s does not match expected GVK", name))
-}
-
-func GetResource(resources []client.Object, name, ns, group, version, kind string) client.Object {
-	for _, resource := range resources {
-		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
-		if name == resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() &&
-			ns == resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace() &&
-			gvk == resource.GetObjectKind().GroupVersionKind() {
-			return resource
-		}
-	}
-	return nil
-}
 
 func GetContainer(containers []v1.Container, name string) *v1.Container {
 	for _, container := range containers {

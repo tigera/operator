@@ -20,6 +20,7 @@ import (
 	"time"
 
 	rcommon "github.com/tigera/operator/pkg/render/common"
+	rdex "github.com/tigera/operator/pkg/render/dex"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -101,7 +102,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
+			render.ManagerInternalTLSSecretName, rdex.TLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -412,14 +413,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	var dexCfg render.DexKeyValidatorConfig
+	var dexCfg rdex.KeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rcommon.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: rdex.TLSSecretName, Namespace: rcommon.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+		dexCfg = rdex.NewKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
 	}
 
 	var elasticLicenseType render.ElasticsearchLicenseType

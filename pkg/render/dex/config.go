@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-package render
+
+package dex
 
 import (
 	"fmt"
@@ -65,14 +65,14 @@ const (
 	defaultUsernameClaim = "email"
 )
 
-// DexConfig is a config for DexIdP itself.
-type DexConfig interface {
+// Config is a config for DexIdP itself.
+type Config interface {
 	Connector() map[string]interface{}
-	DexKeyValidatorConfig
+	KeyValidatorConfig
 }
 
-// DexKeyValidatorConfig is a config for (backend) servers that validate JWTs issued by Dex.
-type DexKeyValidatorConfig interface {
+// KeyValidatorConfig is a config for (backend) servers that validate JWTs issued by Dex.
+type KeyValidatorConfig interface {
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
 	ManagerURI() string
 	// RequiredEnv returns env that is used to configure pods with dex options.
@@ -87,8 +87,8 @@ type DexKeyValidatorConfig interface {
 	RequiredVolumes() []corev1.Volume
 }
 
-// DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
-type DexRelyingPartyConfig interface {
+// RelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
+type RelyingPartyConfig interface {
 	// JWKSURI returns the endpoint for public keys
 	JWKSURI() string
 	// TokenURI returns the endpoint for exchanging tokens
@@ -103,31 +103,31 @@ type DexRelyingPartyConfig interface {
 	UsernameClaim() string
 	// GroupsClaim returns the part of the JWT that represents the list of user groups.
 	GroupsClaim() string
-	DexKeyValidatorConfig
+	KeyValidatorConfig
 }
 
-func NewDexRelyingPartyConfig(
+func NewRelyingPartyConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
-	clusterDomain string) DexRelyingPartyConfig {
+	clusterDomain string) RelyingPartyConfig {
 	return &dexRelyingPartyConfig{baseCfg(authentication, tlsSecret, dexSecret, nil, clusterDomain)}
 }
 
-func NewDexKeyValidatorConfig(
+func NewKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
-	clusterDomain string) DexKeyValidatorConfig {
+	clusterDomain string) KeyValidatorConfig {
 	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil, clusterDomain)}
 }
 
 // Create a new DexConfig.
-func NewDexConfig(
+func NewConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
-	clusterDomain string) DexConfig {
+	clusterDomain string) Config {
 	return &dexConfig{baseCfg(authentication, tlsSecret, dexSecret, idpSecret, clusterDomain)}
 }
 
@@ -281,7 +281,7 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
 		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556/", d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
-		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
+		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: ClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
@@ -313,11 +313,11 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 		{
 			Name: "config",
 			VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+				LocalObjectReference: corev1.LocalObjectReference{Name: ObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
 		},
 		{
 			Name:         "tls",
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: DexTLSSecretName}},
+			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: TLSSecretName}},
 		},
 	}
 
@@ -345,10 +345,10 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
-			Name: DexTLSSecretName,
+			Name: TLSSecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: DexTLSSecretName,
+					SecretName: TLSSecretName,
 					Items: []corev1.KeyToPath{
 						{Key: "tls.crt", Path: "tls-dex.crt"},
 					},
@@ -362,10 +362,10 @@ func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
-			Name: DexTLSSecretName,
+			Name: TLSSecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: DexTLSSecretName,
+					SecretName: TLSSecretName,
 					Items: []corev1.KeyToPath{
 						{Key: "tls.crt", Path: "tls-dex.crt"},
 					},
@@ -377,7 +377,7 @@ func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
 func (d *dexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"}}
+	return []corev1.VolumeMount{{Name: TLSSecretName, MountPath: "/etc/ssl/certs"}}
 }
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
@@ -413,7 +413,7 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
 func (d *dexRelyingPartyConfig) RequiredVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/usr/share/elasticsearch/config/dex/"}}
+	return []corev1.VolumeMount{{Name: TLSSecretName, MountPath: "/usr/share/elasticsearch/config/dex/"}}
 }
 
 func (d *dexRelyingPartyConfig) DexIssuer() string {

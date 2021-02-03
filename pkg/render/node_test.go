@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	rcommon "github.com/tigera/operator/pkg/render/common"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 )
 
 var (
@@ -107,11 +108,11 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -148,7 +149,7 @@ var _ = Describe("Node rendering tests", func() {
   ]
 }`))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -313,7 +314,7 @@ var _ = Describe("Node rendering tests", func() {
 		resources, _ := component.Objects()
 
 		// Make sure the configmap is populated correctly with the MTU.
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -351,7 +352,7 @@ var _ = Describe("Node rendering tests", func() {
 }`))
 
 		// Make sure daemonset has the MTU set as well.
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 		ds := dsResource.(*apps.DaemonSet)
 
@@ -392,12 +393,12 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		// The DaemonSet should have the correct configuration.
-		ds := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		ds := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
@@ -499,11 +500,11 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -540,7 +541,7 @@ var _ = Describe("Node rendering tests", func() {
   ]
 }`))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -711,15 +712,15 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(rtestutil.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// Should not render CNI configuration.
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).To(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -860,12 +861,12 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 
 			// Should render the correct resources.
-			Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// Should not render CNI configuration.
-			cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+			cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 			Expect(cniCmResource).To(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -933,11 +934,11 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -974,7 +975,7 @@ var _ = Describe("Node rendering tests", func() {
   ]
 }`))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -1144,15 +1145,15 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(5))
 
 		// Should render the correct resources.
-		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(rtestutil.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// Should not render CNI configuration.
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).To(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -1303,12 +1304,12 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		// The DaemonSet should have the correct configuration.
-		ds := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		ds := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
@@ -1434,12 +1435,12 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		// The DaemonSet should have the correct configuration.
-		ds := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		ds := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 
 		ExpectEnv(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
@@ -1545,12 +1546,12 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		// The DaemonSet should have the correct configuration.
-		ds := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		ds := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 		volumes := ds.Spec.Template.Spec.Volumes
 		//Expect(ds.Spec.Template.Spec.Volumes).To(Equal())
 		Expect(volumes).To(ContainElement(
@@ -1581,7 +1582,7 @@ var _ = Describe("Node rendering tests", func() {
 			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -1606,7 +1607,7 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -1622,7 +1623,7 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -1638,7 +1639,7 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -1654,7 +1655,7 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -1672,10 +1673,10 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources-1), fmt.Sprintf("resources are %v", resources))
 
 		// Should render the correct resources.
-		Expect(GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
-		Expect(GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 
-		crbResource := GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
+		crbResource := rtestutil.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
 		Expect(crbResource).ToNot(BeNil())
 		crb := crbResource.(*rbacv1.ClusterRoleBinding)
 		Expect(crb.Subjects).To(ContainElement(
@@ -1686,9 +1687,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 		))
 
-		Expect(GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -1707,7 +1708,7 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			// The DaemonSet should have the correct configuration.
@@ -1854,7 +1855,7 @@ var _ = Describe("Node rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		notExpectedEnvVar := v1.EnvVar{Name: "FELIX_PROMETHEUSMETRICSPORT"}
@@ -1875,7 +1876,7 @@ var _ = Describe("Node rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// Assert on expected env vars.
@@ -1900,7 +1901,7 @@ var _ = Describe("Node rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds).ToNot(BeNil())
@@ -1915,7 +1916,7 @@ var _ = Describe("Node rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds).ToNot(BeNil())
@@ -1950,11 +1951,11 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -1991,7 +1992,7 @@ var _ = Describe("Node rendering tests", func() {
 }`))
 
 		// The DaemonSet should have the correct configuration.
-		ds := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		ds := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
 
 		cniContainer := GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 		ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
@@ -2036,7 +2037,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
 		// Should render the correct resources.
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -2082,7 +2083,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
 		// Should render the correct resources.
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -2119,7 +2120,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
 		// Should render the correct resources.
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -2172,7 +2173,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 		ds := dsResource.(*apps.DaemonSet)
 		Expect(ds).ToNot(BeNil())
@@ -2191,7 +2192,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// Assert on expected env vars.
@@ -2228,7 +2229,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 		ds := dsResource.(*apps.DaemonSet)
 
@@ -2275,11 +2276,11 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		cniCmResource := GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		cniCmResource := rtestutil.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*v1.ConfigMap)
 		Expect(cniCm.Data["config"]).To(MatchJSON(`{
@@ -2315,7 +2316,7 @@ var _ = Describe("Node rendering tests", func() {
   ]
 }`))
 
-		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -2428,7 +2429,7 @@ var _ = Describe("Node rendering tests", func() {
 			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			Expect(dsResource).ToNot(BeNil())
 
 			ds := dsResource.(*apps.DaemonSet)
@@ -2456,7 +2457,7 @@ var _ = Describe("Node rendering tests", func() {
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
-			dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			dsResource := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			ds := dsResource.(*apps.DaemonSet)
 
 			// FIXME update gomega to include ContainElements
@@ -2511,12 +2512,12 @@ var _ = Describe("Node rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		dep := GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		dep := rtestutil.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*appsv1.DaemonSet)
 		Expect(ok).To(BeTrue())

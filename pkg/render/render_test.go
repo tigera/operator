@@ -35,6 +35,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
+	"github.com/tigera/operator/pkg/render/dex"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -133,7 +135,7 @@ var _ = Describe("Rendering tests", func() {
 		}{
 			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
-			{render.DexObjectName, "", "", "v1", "Namespace"},
+			{dex.ObjectName, "", "", "v1", "Namespace"},
 			{render.TyphaCAConfigMapName, rcommon.OperatorNamespace(), "", "v1", "ConfigMap"},
 			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{render.TyphaTLSSecretName, rcommon.OperatorNamespace(), "", "v1", "Secret"},
@@ -171,7 +173,7 @@ var _ = Describe("Rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -183,7 +185,7 @@ var _ = Describe("Rendering tests", func() {
 		var cn *appsv1.DaemonSet
 		for _, comp := range comps {
 			resources, _ := comp.Objects()
-			r := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			r := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			if r != nil {
 				cn = r.(*appsv1.DaemonSet)
 				break

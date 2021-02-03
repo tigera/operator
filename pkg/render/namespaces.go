@@ -17,6 +17,7 @@ package render
 import (
 	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
+	"github.com/tigera/operator/pkg/render/dex"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,7 +53,7 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
-		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
+		ns = append(ns, createNamespace(dex.ObjectName, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
 	}
 	if len(c.pullSecrets) > 0 {
 		ns = append(ns, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(common.CalicoNamespace, c.pullSecrets...)...)...)

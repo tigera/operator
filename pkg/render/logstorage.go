@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 
 	"github.com/tigera/operator/pkg/render/component"
+	"github.com/tigera/operator/pkg/render/dex"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -165,7 +166,7 @@ func LogStorage(
 	kbService *corev1.Service,
 	clusterDomain string,
 	applyTrial bool,
-	dexCfg DexRelyingPartyConfig,
+	dexCfg dex.RelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
 	oidcUserConfigMap *corev1.ConfigMap,
 	oidcUserSecret *corev1.Secret) component.Component {
@@ -211,7 +212,7 @@ type elasticsearchComponent struct {
 	kbService                   *corev1.Service
 	clusterDomain               string
 	applyTrial                  bool
-	dexCfg                      DexRelyingPartyConfig
+	dexCfg                      dex.RelyingPartyConfig
 	elasticLicenseType          ElasticsearchLicenseType
 	oidcUserConfigMap           *corev1.ConfigMap
 	oidcUserSecret              *corev1.Secret
@@ -854,7 +855,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	if es.supportsOIDC() {
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
-			"rp.client_id":                DexClientId,
+			"rp.client_id":                dex.ClientId,
 			"op.jwkset_path":              es.dexCfg.JWKSURI(),
 			"op.userinfo_endpoint":        es.dexCfg.UserInfoURI(),
 			"op.token_endpoint":           es.dexCfg.TokenURI(),

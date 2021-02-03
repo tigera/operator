@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	rcommon "github.com/tigera/operator/pkg/render/common"
+	rdex "github.com/tigera/operator/pkg/render/dex"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -441,8 +442,8 @@ var _ = Describe("LogStorage controller", func() {
 						Status: operatorv1.AuthenticationStatus{State: operatorv1.TigeraStatusReady},
 					})).ToNot(HaveOccurred())
 
-					Expect(cli.Create(ctx, render.CreateDexClientSecret())).ToNot(HaveOccurred())
-					Expect(cli.Create(ctx, render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local"))).ToNot(HaveOccurred())
+					Expect(cli.Create(ctx, rdex.CreateClientSecret())).ToNot(HaveOccurred())
+					Expect(cli.Create(ctx, rdex.CreateTLSSecret("tigera-dex.tigera-dex.svc.cluster.local"))).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{

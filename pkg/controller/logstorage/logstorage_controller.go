@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	rcommon "github.com/tigera/operator/pkg/render/common"
+	rdex "github.com/tigera/operator/pkg/render/dex"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -164,7 +165,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName} {
+		rdex.OIDCSecretName, rdex.ObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, rcommon.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
@@ -476,23 +477,23 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	var dexCfg render.DexRelyingPartyConfig
+	var dexCfg rdex.RelyingPartyConfig
 	if authentication != nil {
 		var dexTLSSecret *corev1.Secret
 		dexTLSSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rcommon.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: rdex.TLSSecretName, Namespace: rcommon.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
 		var dexSecret *corev1.Secret
 		if authentication != nil {
 			dexSecret = &corev1.Secret{}
-			if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rcommon.OperatorNamespace()}, dexSecret); err != nil {
+			if err := r.client.Get(ctx, types.NamespacedName{Name: rdex.ObjectName, Namespace: rcommon.OperatorNamespace()}, dexSecret); err != nil {
 				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 				return reconcile.Result{}, err
 			}
 		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
+		dexCfg = rdex.NewRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
 	}
 
 	component := render.LogStorage(

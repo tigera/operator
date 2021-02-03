@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-package render
+package dex
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/tigera/operator/pkg/ptr"
 
 	"github.com/tigera/operator/pkg/render/component"
 
@@ -35,20 +37,20 @@ import (
 
 const (
 	// Manifest object variables
-	DexNamespace     = "tigera-dex"
-	DexObjectName    = "tigera-dex"
-	DexPort          = 5556
-	DexTLSSecretName = "tigera-dex-tls"
+	Namespace     = "tigera-dex"
+	ObjectName    = "tigera-dex"
+	Port          = 5556
+	TLSSecretName = "tigera-dex-tls"
 
 	// Constants related to Dex configurations
-	DexClientId = "tigera-manager"
+	ClientId = "tigera-manager"
 )
 
-func Dex(
+func NewComponent(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	installation *oprv1.InstallationSpec,
-	dexConfig DexConfig,
+	dexConfig Config,
 ) component.Component {
 
 	return &dexComponent{
@@ -61,7 +63,7 @@ func Dex(
 }
 
 type dexComponent struct {
-	dexConfig    DexConfig
+	dexConfig    Config
 	pullSecrets  []*corev1.Secret
 	openshift    bool
 	installation *oprv1.InstallationSpec
@@ -91,8 +93,8 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.configMap(),
 	}
 	objs = append(objs, rcommon.SecretsToRuntimeObjects(c.dexConfig.RequiredSecrets(rcommon.OperatorNamespace())...)...)
-	objs = append(objs, rcommon.SecretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
-	objs = append(objs, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(DexNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(c.dexConfig.RequiredSecrets(Namespace)...)...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(Namespace, c.pullSecrets...)...)...)
 	return objs, nil
 }
 
@@ -104,7 +106,7 @@ func (c *dexComponent) Ready() bool {
 func (c *dexComponent) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: DexObjectName, Namespace: DexNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ObjectName, Namespace: Namespace},
 	}
 }
 
@@ -112,7 +114,7 @@ func (c *dexComponent) clusterRole() client.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: DexObjectName,
+			Name: ObjectName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -133,61 +135,60 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: DexObjectName,
+			Name: ObjectName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     DexObjectName,
+			Name:     ObjectName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      DexObjectName,
-				Namespace: DexNamespace,
+				Name:      ObjectName,
+				Namespace: Namespace,
 			},
 		},
 	}
 }
 
 func (c *dexComponent) deployment() client.Object {
-
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DexObjectName,
-			Namespace: DexNamespace,
+			Name:      ObjectName,
+			Namespace: Namespace,
 			Labels: map[string]string{
-				"k8s-app": DexObjectName,
+				"k8s-app": ObjectName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": DexObjectName,
+					"k8s-app": ObjectName,
 				},
 			},
-			Replicas: &replicas,
+			Replicas: ptr.Int32ToPtr(1),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      DexObjectName,
-					Namespace: DexNamespace,
+					Name:      ObjectName,
+					Namespace: Namespace,
 					Labels: map[string]string{
-						"k8s-app": DexObjectName,
+						"k8s-app": ObjectName,
 					},
 					Annotations: c.dexConfig.RequiredAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
-					ServiceAccountName: DexObjectName,
+					ServiceAccountName: ObjectName,
 					Tolerations:        append(c.installation.ControlPlaneTolerations, rcommon.TolerateMaster),
 					ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
-							Name:            DexObjectName,
+							Name:            ObjectName,
 							Image:           c.image,
 							Env:             c.dexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
@@ -198,7 +199,7 @@ func (c *dexComponent) deployment() client.Object {
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "https",
-									ContainerPort: DexPort,
+									ContainerPort: Port,
 								},
 							},
 
@@ -216,20 +217,20 @@ func (c *dexComponent) service() client.Object {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DexObjectName,
-			Namespace: DexNamespace,
+			Name:      ObjectName,
+			Namespace: Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
-				"k8s-app": DexObjectName,
+				"k8s-app": ObjectName,
 			},
 			Ports: []corev1.ServicePort{
 				{
-					Name: DexObjectName,
-					Port: DexPort,
+					Name: ObjectName,
+					Port: Port,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: DexPort,
+						IntVal: Port,
 					},
 					Protocol: corev1.ProtocolTCP,
 				},
@@ -244,7 +245,7 @@ func (c *dexComponent) probe() *corev1.Probe {
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/dex/.well-known/openid-configuration",
-				Port:   intstr.FromInt(DexPort),
+				Port:   intstr.FromInt(Port),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -288,7 +289,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		},
 		"staticClients": []map[string]interface{}{
 			{
-				"id":           DexClientId,
+				"id":           ClientId,
 				"redirectURIs": redirectURIs,
 				"name":         "Calico Enterprise Manager",
 				"secretEnv":    dexSecretEnv,
@@ -303,8 +304,8 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DexObjectName,
-			Namespace: DexNamespace,
+			Name:      ObjectName,
+			Namespace: Namespace,
 		},
 		Data: map[string]string{
 			"config.yaml": string(bytes),

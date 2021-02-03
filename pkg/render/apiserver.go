@@ -20,7 +20,7 @@ import (
 
 	"github.com/tigera/operator/pkg/ptr"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"github.com/tigera/operator/pkg/render/component"
 
@@ -64,11 +64,11 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
 			var err error
-			tlsKeyPair, err = rutil.CreateOperatorTLSSecret(nil,
+			tlsKeyPair, err = rcommon.CreateOperatorTLSSecret(nil,
 				APIServerTLSSecretName,
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
-				rutil.DefaultCertificateDuration,
+				rcommon.DefaultCertificateDuration,
 				nil,
 				svcDNSNames...,
 			)
@@ -78,7 +78,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			// We only need to add the tlsKeyPair if we created it, otherwise
 			// it already exists.
 			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[tlsSecretHashAnnotation] = rutil.AnnotationHash(tlsKeyPair.Data)
+			tlsHashAnnotations[tlsSecretHashAnnotation] = rcommon.AnnotationHash(tlsKeyPair.Data)
 		}
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
@@ -93,8 +93,8 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, rutil.CopySecrets(APIServerNamespace, tunnelCASecret)...)
-		tlsHashAnnotations[voltronTunnelHashAnnotation] = rutil.AnnotationHash(tunnelCASecret.Data)
+		tlsSecrets = append(tlsSecrets, rcommon.CopySecrets(APIServerNamespace, tunnelCASecret)...)
+		tlsHashAnnotations[voltronTunnelHashAnnotation] = rcommon.AnnotationHash(tunnelCASecret.Data)
 	}
 
 	return &apiServerComponent{
@@ -157,16 +157,16 @@ func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *apiServerComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *apiServerComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeLinux
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(APIServerNamespace, c.openshift),
 	}
-	secrets := rutil.CopySecrets(APIServerNamespace, c.pullSecrets...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(secrets...)...)
+	secrets := rcommon.CopySecrets(APIServerNamespace, c.pullSecrets...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.auditPolicyConfigMap(),
 		c.apiServerServiceAccount(),
@@ -680,7 +680,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+					ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
@@ -814,7 +814,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext: rutil.BaseSecurityContext(),
+		SecurityContext: rcommon.BaseSecurityContext(),
 	}
 	return container
 }
@@ -868,7 +868,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster)
+	return append(c.installation.ControlPlaneTolerations, rcommon.TolerateMaster)
 }
 
 func (c *apiServerComponent) getTLSObjects() []client.Object {
@@ -1163,7 +1163,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 }
 
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rcommon.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
 	psp.Spec.Privileged = false
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)

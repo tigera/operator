@@ -15,7 +15,7 @@
 package render
 
 import (
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,8 +36,8 @@ func (c *secretsComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *secretsComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeAny
+func (c *secretsComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeAny
 }
 
 func (c *secretsComponent) Objects() ([]client.Object, []client.Object) {

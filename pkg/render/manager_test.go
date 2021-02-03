@@ -17,7 +17,7 @@ package render_test
 import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -344,9 +344,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
 		component, err := render.Manager(nil, nil, nil,
-			CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace()),
+			CreateCertSecret(render.ComplianceServerCertSecret, rcommon.OperatorNamespace()),
 			&render.ElasticsearchClusterConfig{},
-			CreateCertSecret(render.ManagerTLSSecretName, rutil.OperatorNamespace()),
+			CreateCertSecret(render.ManagerTLSSecretName, rcommon.OperatorNamespace()),
 			nil, false,
 			i,
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
@@ -372,7 +372,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		deployment := renderManager(&operator.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
-		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster, rutil.TolerateCriticalAddonsOnly))
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, rcommon.TolerateMaster, rcommon.TolerateCriticalAddonsOnly))
 	})
 })
 
@@ -398,9 +398,9 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace()),
+		CreateCertSecret(render.ComplianceServerCertSecret, rcommon.OperatorNamespace()),
 		esConfigMap,
-		CreateCertSecret(render.ManagerTLSSecretName, rutil.OperatorNamespace()),
+		CreateCertSecret(render.ManagerTLSSecretName, rcommon.OperatorNamespace()),
 		nil,
 		false,
 		&operator.InstallationSpec{},

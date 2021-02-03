@@ -20,7 +20,7 @@ import (
 
 	"github.com/tigera/operator/pkg/ptr"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -69,8 +69,8 @@ func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) e
 	return err
 }
 
-func (c *amazonCloudIntegrationComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *amazonCloudIntegrationComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeLinux
 }
 
 type AmazonCredential struct {
@@ -108,8 +108,8 @@ func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.O
 	objs := []client.Object{
 		createNamespace(AmazonCloudIntegrationNamespace, c.openshift),
 	}
-	secrets := rutil.CopySecrets(AmazonCloudIntegrationNamespace, c.pullSecrets...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(secrets...)...)
+	secrets := rcommon.CopySecrets(AmazonCloudIntegrationNamespace, c.pullSecrets...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
@@ -224,7 +224,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	annotations := make(map[string]string)
-	annotations[credentialSecretHashAnnotation] = rutil.AnnotationHash(c.credentials)
+	annotations[credentialSecretHashAnnotation] = rcommon.AnnotationHash(c.credentials)
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -253,8 +253,8 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
-					Tolerations:        rutil.TolerateAll,
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        rcommon.TolerateAll,
+					ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
 					},

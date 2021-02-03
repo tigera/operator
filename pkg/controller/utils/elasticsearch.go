@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"github.com/olivere/elastic/v7"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -79,7 +79,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 		esUserSecret := &corev1.Secret{}
 		err := cli.Get(ctx, types.NamespacedName{
 			Name:      userSecretName,
-			Namespace: rutil.OperatorNamespace(),
+			Namespace: rcommon.OperatorNamespace(),
 		}, esUserSecret)
 		if err != nil {
 			return nil, err
@@ -91,7 +91,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 	esCertSecret := &corev1.Secret{}
 	err := cli.Get(ctx, types.NamespacedName{
 		Name:      render.ElasticsearchPublicCertSecret,
-		Namespace: rutil.OperatorNamespace(),
+		Namespace: rcommon.OperatorNamespace(),
 	}, esCertSecret)
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 // the cluster name and replica count.
 func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*render.ElasticsearchClusterConfig, error) {
 	configMap := &corev1.ConfigMap{}
-	if err := cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchConfigMapName, Namespace: rutil.OperatorNamespace()}, configMap); err != nil {
+	if err := cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchConfigMapName, Namespace: rcommon.OperatorNamespace()}, configMap); err != nil {
 		return nil, err
 	}
 
@@ -323,12 +323,12 @@ func calculateRolloverAge(retention int) string {
 
 func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: rutil.OperatorNamespace()}, esSecret); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: rcommon.OperatorNamespace()}, esSecret); err != nil {
 		return "", "", nil, err
 	}
 
 	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: rutil.OperatorNamespace()}, esPublicCert); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: rcommon.OperatorNamespace()}, esPublicCert); err != nil {
 		return "", "", nil, err
 	}
 

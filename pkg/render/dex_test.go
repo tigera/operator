@@ -10,7 +10,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -58,7 +58,7 @@ var _ = Describe("dex rendering tests", func() {
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.OIDCSecretName,
-					Namespace: rutil.OperatorNamespace(),
+					Namespace: rcommon.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -71,7 +71,7 @@ var _ = Describe("dex rendering tests", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pullSecretName,
-						Namespace: rutil.OperatorNamespace(),
+						Namespace: rcommon.OperatorNamespace(),
 					},
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				}}
@@ -97,9 +97,9 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, rutil.OperatorNamespace(), "", "v1", "Secret"},
-				{render.OIDCSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexTLSSecretName, rcommon.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexObjectName, rcommon.OperatorNamespace(), "", "v1", "Secret"},
+				{render.OIDCSecretName, rcommon.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
@@ -142,7 +142,7 @@ var _ = Describe("dex rendering tests", func() {
 			}, dexCfg)
 			resources, _ := component.Objects()
 			d := GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rcommon.TolerateMaster))
 		})
 	})
 })

@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -188,7 +188,7 @@ func CheckLicenseKey(ctx context.Context, cli client.Client) error {
 
 // ValidateCertPair validates the cert pair secret in the tigera-operator namespace.
 func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
-	return ValidateCertPairInNamespace(client, rutil.OperatorNamespace(), certPairSecretName, keyName, certName)
+	return ValidateCertPairInNamespace(client, rcommon.OperatorNamespace(), certPairSecretName, keyName, certName)
 }
 
 // ValidateCertPairInNamespace checks if the given secret exists in the given
@@ -229,7 +229,7 @@ func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) (
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.ImagePullSecrets {
 		s := &corev1.Secret{}
-		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: rutil.OperatorNamespace()}, s)
+		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: rcommon.OperatorNamespace()}, s)
 		if err != nil {
 			return nil, err
 		}

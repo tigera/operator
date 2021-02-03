@@ -20,7 +20,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,7 +39,7 @@ var _ = Describe("Rendering tests", func() {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.GuardianSecretName,
-				Namespace: rutil.OperatorNamespace(),
+				Namespace: rcommon.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"cert": []byte("foo"),
@@ -52,7 +52,7 @@ var _ = Describe("Rendering tests", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pull-secret",
-					Namespace: rutil.OperatorNamespace(),
+					Namespace: rcommon.OperatorNamespace(),
 				},
 			}},
 			false,
@@ -108,6 +108,6 @@ var _ = Describe("Rendering tests", func() {
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
 		deployment := GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rutil.TolerateCriticalAddonsOnly, rutil.TolerateMaster))
+		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rcommon.TolerateCriticalAddonsOnly, rcommon.TolerateMaster))
 	})
 })

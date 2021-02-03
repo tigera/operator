@@ -45,7 +45,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -252,8 +252,8 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (es *elasticsearchComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (es *elasticsearchComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeLinux
 }
 
 func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
@@ -300,7 +300,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			createNamespace(ECKOperatorNamespace, es.provider == operatorv1.ProviderOpenShift),
 		)
 
-		toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ECKOperatorNamespace, es.pullSecrets...)...)...)
+		toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(ECKOperatorNamespace, es.pullSecrets...)...)...)
 
 		toCreate = append(toCreate,
 			es.eckOperatorClusterRole(),
@@ -331,11 +331,11 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift))
 
 		if len(es.pullSecrets) > 0 {
-			toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ElasticsearchNamespace, es.pullSecrets...)...)...)
+			toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(ElasticsearchNamespace, es.pullSecrets...)...)...)
 		}
 
 		if len(es.elasticsearchSecrets) > 0 {
-			toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(es.elasticsearchSecrets...)...)
+			toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(es.elasticsearchSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
@@ -353,11 +353,11 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.pullSecrets) > 0 {
-			toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(KibanaNamespace, es.pullSecrets...)...)...)
+			toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(KibanaNamespace, es.pullSecrets...)...)...)
 		}
 
 		if len(es.kibanaSecrets) > 0 {
-			toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(es.kibanaSecrets...)...)
+			toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.kibanaCR())
@@ -365,7 +365,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// Curator CRs
 		// If we have the curator secrets then create curator
 		if len(es.curatorSecrets) > 0 {
-			toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ElasticsearchNamespace, es.curatorSecrets...)...)...)
+			toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(ElasticsearchNamespace, es.curatorSecrets...)...)...)
 			toCreate = append(toCreate, es.esCuratorServiceAccount())
 
 			// If the provider is not OpenShift apply the pod security policy for the curator.
@@ -416,7 +416,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.supportsOIDC() {
-		toCreate = append(toCreate, rutil.SecretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
+		toCreate = append(toCreate, rcommon.SecretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
 	return toCreate, toDelete
@@ -575,7 +575,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 	annotations := map[string]string{
-		ElasticsearchTLSHashAnnotation: rutil.SecretsAnnotationHash(es.elasticsearchSecrets...),
+		ElasticsearchTLSHashAnnotation: rcommon.SecretsAnnotationHash(es.elasticsearchSecrets...),
 	}
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
@@ -614,7 +614,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		Spec: corev1.PodSpec{
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
-			ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(es.pullSecrets),
+			ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(es.pullSecrets),
 			NodeSelector:       nodeSels,
 			Tolerations:        es.installation.ControlPlaneTolerations,
 			ServiceAccountName: "tigera-elasticsearch",
@@ -1071,7 +1071,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 				Spec: corev1.PodSpec{
 					DNSPolicy:          corev1.DNSClusterFirst,
 					ServiceAccountName: "elastic-operator",
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(es.pullSecrets),
+					ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(es.pullSecrets),
 					HostNetwork:        false,
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
@@ -1122,7 +1122,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 }
 
 func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rcommon.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(ECKOperatorName)
 	return psp
 }
@@ -1184,7 +1184,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: KibanaNamespace,
 					Annotations: map[string]string{
-						KibanaTLSAnnotationHash: rutil.SecretsAnnotationHash(es.kibanaSecrets...),
+						KibanaTLSAnnotationHash: rcommon.SecretsAnnotationHash(es.kibanaSecrets...),
 					},
 					Labels: map[string]string{
 						"name":    KibanaName,
@@ -1192,7 +1192,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					},
 				},
 				Spec: corev1.PodSpec{
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(es.pullSecrets),
+					ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(es.pullSecrets),
 					ServiceAccountName: "tigera-kibana",
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
@@ -1271,7 +1271,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 									},
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.clusterDomain, es.SupportedOSType()),
 							},
-							ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(es.pullSecrets),
+							ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(es.pullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
 							ServiceAccountName: EsCuratorServiceAccount,
 						}),
@@ -1331,7 +1331,7 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 }
 
 func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rcommon.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(EsCuratorName)
 	return psp
 }
@@ -1392,7 +1392,7 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	trueBool := true
 	ptrBoolTrue := &trueBool
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rcommon.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-elasticsearch")
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
@@ -1442,7 +1442,7 @@ func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleB
 }
 
 func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rcommon.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-kibana")
 	return psp
 }

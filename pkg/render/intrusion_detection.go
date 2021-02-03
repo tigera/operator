@@ -33,7 +33,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 )
 
 const (
@@ -105,15 +105,15 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error
 	return nil
 }
 
-func (c *intrusionDetectionComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *intrusionDetectionComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeLinux
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(IntrusionDetectionNamespace, c.pullSecrets...)...)...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(IntrusionDetectionNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
 	objs = append(objs, c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
@@ -148,10 +148,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Tolerations:      c.installation.ControlPlaneTolerations,
 			NodeSelector:     c.installation.ControlPlaneNodeSelector,
 			RestartPolicy:    v1.RestartPolicyOnFailure,
-			ImagePullSecrets: rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets: rcommon.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []v1.Container{
 				ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(),
-					ElasticsearchIntrusionDetectionJobUserSecret, c.clusterDomain, rutil.OSTypeLinux),
+					ElasticsearchIntrusionDetectionJobUserSecret, c.clusterDomain, rcommon.OSTypeLinux),
 			},
 			Volumes: []corev1.Volume{{
 				Name: "kibana-ca-cert-volume",
@@ -186,7 +186,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	kScheme, kHost, kPort, _ := rutil.ParseEndpoint(fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain))
+	kScheme, kHost, kPort, _ := rcommon.ParseEndpoint(fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain))
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
@@ -212,11 +212,11 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			},
 			{
 				Name:      "USER",
-				ValueFrom: rutil.EnvVarSourceFromSecret(secretName, "username", false),
+				ValueFrom: rcommon.EnvVarSourceFromSecret(secretName, "username", false),
 			},
 			{
 				Name:      "PASSWORD",
-				ValueFrom: rutil.EnvVarSourceFromSecret(secretName, "password", false),
+				ValueFrom: rcommon.EnvVarSourceFromSecret(secretName, "password", false),
 			},
 			{
 				Name:  "KB_CA_CERT",
@@ -409,7 +409,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	container := ElasticsearchContainerDecorateIndexCreator(
 		ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(),
-			ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain, rutil.OSTypeLinux),
+			ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain, rcommon.OSTypeLinux),
 		c.esClusterConfig.Replicas(), c.esClusterConfig.Shards())
 
 	if c.esLicenseType == ElasticsearchLicenseTypeBasic {
@@ -756,7 +756,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []client.Object {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rcommon.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("intrusion-detection")
 
 	if c.syslogForwardingIsEnabled() {

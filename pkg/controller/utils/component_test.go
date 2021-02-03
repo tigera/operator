@@ -35,7 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
 	v1 "k8s.io/api/core/v1"
 
@@ -86,7 +86,7 @@ var _ = Describe("Component handler tests", func() {
 
 	It("merges annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
-			supportedOSType: rutil.OSTypeLinux,
+			supportedOSType: rcommon.OSTypeLinux,
 			objs: []client.Object{&v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
@@ -132,7 +132,7 @@ var _ = Describe("Component handler tests", func() {
 		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
 		// to resource update conflicts.
 		fc = &fakeComponent{
-			supportedOSType: rutil.OSTypeLinux,
+			supportedOSType: rcommon.OSTypeLinux,
 			objs: []client.Object{&v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
@@ -181,7 +181,7 @@ var _ = Describe("Component handler tests", func() {
 		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
 		// to resource update conflicts.
 		fc = &fakeComponent{
-			supportedOSType: rutil.OSTypeLinux,
+			supportedOSType: rcommon.OSTypeLinux,
 			objs: []client.Object{&v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
@@ -242,7 +242,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a deployment when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -263,7 +263,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a deployment when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeWindows,
+					supportedOSType: rcommon.OSTypeWindows,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -284,7 +284,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a daemonset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
@@ -305,7 +305,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a daemonset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeWindows,
+					supportedOSType: rcommon.OSTypeWindows,
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
@@ -326,7 +326,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a statefulset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
@@ -347,7 +347,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a statefulset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeWindows,
+					supportedOSType: rcommon.OSTypeWindows,
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
@@ -368,7 +368,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a cronjob when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&batchv1beta.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
 						Spec: batchv1beta.CronJobSpec{
@@ -393,7 +393,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a cronjob when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeWindows,
+					supportedOSType: rcommon.OSTypeWindows,
 					objs: []client.Object{&batchv1beta.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
 						Spec: batchv1beta.CronJobSpec{
@@ -418,7 +418,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a job",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
@@ -440,7 +440,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a job",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeWindows,
+					supportedOSType: rcommon.OSTypeWindows,
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
@@ -462,7 +462,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "sets the required annotations for kibana",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
 						Spec: kbv1.KibanaSpec{
@@ -484,7 +484,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "sets the required annotations for an elasticsearch nodeset",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&esv1.Elasticsearch{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-elasticsearch"},
 						Spec: esv1.ElasticsearchSpec{
@@ -517,7 +517,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - leaves other annotations alone and sets the required ones",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeLinux,
+					supportedOSType: rcommon.OSTypeLinux,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -541,7 +541,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - leaves other annotations alone and sets the required ones",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: rutil.OSTypeWindows,
+					supportedOSType: rcommon.OSTypeWindows,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -567,7 +567,7 @@ var _ = Describe("Component handler tests", func() {
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.
 type fakeComponent struct {
 	objs            []client.Object
-	supportedOSType rutil.OSType
+	supportedOSType rcommon.OSType
 }
 
 func (c *fakeComponent) Ready() bool {
@@ -582,6 +582,6 @@ func (c *fakeComponent) Objects() ([]client.Object, []client.Object) {
 	return c.objs, nil
 }
 
-func (c *fakeComponent) SupportedOSType() rutil.OSType {
+func (c *fakeComponent) SupportedOSType() rcommon.OSType {
 	return c.supportedOSType
 }

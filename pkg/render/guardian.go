@@ -28,7 +28,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -77,22 +77,22 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return err
 }
 
-func (c *GuardianComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *GuardianComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeLinux
 }
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(GuardianNamespace, c.openshift),
 	}
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(GuardianNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, rcommon.SecretsToRuntimeObjects(rcommon.CopySecrets(GuardianNamespace, c.pullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		rutil.CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
+		rcommon.CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
 		// Add tigera-manager service account for impersonation
 		createNamespace(ManagerNamespace, c.openshift),
 		managerServiceAccount(),
@@ -216,8 +216,8 @@ func (c *GuardianComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster, rutil.TolerateCriticalAddonsOnly),
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        append(c.installation.ControlPlaneTolerations, rcommon.TolerateMaster, rcommon.TolerateCriticalAddonsOnly),
+					ImagePullSecrets:   rcommon.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
 				},
@@ -274,7 +274,7 @@ func (c *GuardianComponent) container() []v1.Container {
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       5,
 			},
-			SecurityContext: rutil.BaseSecurityContext(),
+			SecurityContext: rcommon.BaseSecurityContext(),
 		},
 	}
 }

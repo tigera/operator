@@ -23,7 +23,7 @@ import (
 
 	"github.com/tigera/operator/pkg/tls"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"github.com/tigera/operator/pkg/render/component"
 
@@ -89,7 +89,7 @@ func Calico(
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      TyphaCAConfigMapName,
-					Namespace: rutil.OperatorNamespace(),
+					Namespace: rcommon.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					TyphaCABundleName: string(cr.CertificateManagement.CACert),
@@ -118,10 +118,10 @@ func Calico(
 			}
 		}
 		// Create copy to go into Calico Namespace
-		tss = append(tss, rutil.CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
+		tss = append(tss, rcommon.CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
 	}
 	// Create copy to go into Calico Namespace
-	tcms = append(tcms, rutil.CopyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
+	tcms = append(tcms, rcommon.CopyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
 	// If internal manager cert secret exists add it to the renderer.
 	if managerInternalTLSSecret != nil {
@@ -154,7 +154,7 @@ func Calico(
 
 func createTLS() (*TyphaNodeTLS, error) {
 	// Make CA
-	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rutil.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
+	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rcommon.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
 	if err != nil {
 		return nil, err
 	}
@@ -172,17 +172,17 @@ func createTLS() (*TyphaNodeTLS, error) {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaCAConfigMapName,
-			Namespace: rutil.OperatorNamespace(),
+			Namespace: rcommon.OperatorNamespace(),
 		},
 		Data: data,
 	}
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.NodeSecret, err = rutil.CreateOperatorTLSSecret(ca,
+	tntls.NodeSecret, err = rcommon.CreateOperatorTLSSecret(ca,
 		NodeTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
-		rutil.DefaultCertificateDuration,
+		rcommon.DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
 		FelixCommonName)
 	if err != nil {
@@ -192,11 +192,11 @@ func createTLS() (*TyphaNodeTLS, error) {
 	tntls.NodeSecret.Data[CommonName] = []byte(FelixCommonName)
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.TyphaSecret, err = rutil.CreateOperatorTLSSecret(ca,
+	tntls.TyphaSecret, err = rcommon.CreateOperatorTLSSecret(ca,
 		TyphaTLSSecretName,
 		TLSSecretKeyName,
 		TLSSecretCertName,
-		rutil.DefaultCertificateDuration,
+		rcommon.DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
 		TyphaCommonName)
 	if err != nil {

@@ -29,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -74,7 +74,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 		Expect(cli.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.AmazonCloudIntegrationCredentialName,
-				Namespace: rutil.OperatorNamespace(),
+				Namespace: rcommon.OperatorNamespace(),
 			},
 
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

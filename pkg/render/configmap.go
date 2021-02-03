@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 )
 
 func ConfigMaps(cms []*corev1.ConfigMap) component.Component {
@@ -36,8 +36,8 @@ func (c *configMapComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *configMapComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeAny
+func (c *configMapComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeAny
 }
 
 func (c *configMapComponent) Objects() ([]client.Object, []client.Object) {

@@ -25,7 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/test"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -153,7 +153,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ComplianceServerCertSecret,
-					Namespace: rutil.OperatorNamespace(),
+					Namespace: rcommon.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -179,8 +179,8 @@ var _ = Describe("Manager controller tests", func() {
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
 			// Create a manager cert managed by the operator.
-			oldCert, err := rutil.CreateOperatorTLSSecret(
-				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, rutil.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
+			oldCert, err := rcommon.CreateOperatorTLSSecret(
+				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, rcommon.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
 
@@ -189,7 +189,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			secret := &corev1.Secret{}
 			// Verify that certs now have expected DNS names.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rutil.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rcommon.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -200,8 +200,8 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			userSecret, err := rutil.CreateOperatorTLSSecret(
-				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, rutil.DefaultCertificateDuration, nil, dnsNames...)
+			userSecret, err := rcommon.CreateOperatorTLSSecret(
+				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, rcommon.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -210,7 +210,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Verify that the existing cert didn't change
 			secret := &corev1.Secret{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rutil.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rcommon.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.Data).To(Equal(userSecret.Data))
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -225,7 +225,7 @@ var _ = Describe("Manager controller tests", func() {
 			secret := &corev1.Secret{}
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rutil.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rcommon.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -234,13 +234,13 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a custom manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			customSecret, err := rutil.CreateOperatorTLSSecret(
-				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, rutil.DefaultCertificateDuration, nil, dnsNames...)
+			customSecret, err := rcommon.CreateOperatorTLSSecret(
+				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, rcommon.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Update the existing operator managed cert secret with bytes from
 			// the custom manager cert secret.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rutil.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rcommon.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			secret.Data[render.ManagerSecretCertName] = customSecret.Data[render.ManagerSecretCertName]
 			secret.Data[render.ManagerSecretKeyName] = customSecret.Data[render.ManagerSecretKeyName]
 			Expect(c.Update(ctx, secret)).NotTo(HaveOccurred())
@@ -250,7 +250,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Verify that the existing certs have changed - check that the
 			// certs have the DNS names in the user-supplied cert.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rutil.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rcommon.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -332,7 +332,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ComplianceServerCertSecret,
-					Namespace: rutil.OperatorNamespace(),
+					Namespace: rcommon.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{

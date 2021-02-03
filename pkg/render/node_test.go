@@ -35,7 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 )
 
 var (
@@ -299,7 +299,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateAll))
 
 		verifyProbes(ds, false, false)
 	})
@@ -691,7 +691,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateAll))
 
 		// Verify readiness and liveness probes.
 
@@ -839,7 +839,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateAll))
 
 		// Verify readiness and liveness probes.
 		verifyProbes(ds, false, true)
@@ -1125,7 +1125,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateAll))
 
 		// Verify readiness and liveness probes.
 		verifyProbes(ds, false, false)
@@ -1272,7 +1272,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateAll))
 
 		// Verify readiness and liveness probes.
 		verifyProbes(ds, false, false)

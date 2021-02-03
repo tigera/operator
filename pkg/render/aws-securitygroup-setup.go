@@ -15,7 +15,7 @@
 package render
 
 import (
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,8 +37,8 @@ type awsSGSetupComponent struct {
 	image       string
 }
 
-func (c *awsSGSetupComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *awsSGSetupComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeLinux
 }
 
 func (c *awsSGSetupComponent) ResolveImages(is *operator.ImageSet) error {
@@ -67,7 +67,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "aws-security-group-setup-1",
-			Namespace: rutil.OperatorNamespace(),
+			Namespace: rcommon.OperatorNamespace(),
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
@@ -84,7 +84,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					ImagePullSecrets:   c.pullSecrets,
 					ServiceAccountName: TigeraAWSSGSetupName,
 					HostNetwork:        true,
-					Tolerations:        rutil.TolerateAll,
+					Tolerations:        rcommon.TolerateAll,
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
 						Image: c.image,
@@ -103,7 +103,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 								Value: "/etc/kubernetes/kubeconfig",
 							},
 						},
-						SecurityContext: rutil.BaseSecurityContext(),
+						SecurityContext: rcommon.BaseSecurityContext(),
 					}},
 				},
 			},
@@ -118,7 +118,7 @@ func (c *awsSGSetupComponent) serviceAccount() *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TigeraAWSSGSetupName,
-			Namespace: rutil.OperatorNamespace(),
+			Namespace: rcommon.OperatorNamespace(),
 		},
 	}
 }
@@ -141,7 +141,7 @@ func (c *awsSGSetupComponent) roleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      TigeraAWSSGSetupName,
-				Namespace: rutil.OperatorNamespace(),
+				Namespace: rcommon.OperatorNamespace(),
 			},
 		},
 	}

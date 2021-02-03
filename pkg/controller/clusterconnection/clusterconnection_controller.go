@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -90,7 +90,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to the secrets associated with the ManagementClusterConnection.
-	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, rutil.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, rcommon.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
@@ -166,7 +166,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
 	tunnelSecret := &corev1.Secret{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: rutil.OperatorNamespace()}, tunnelSecret)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: rcommon.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
 		r.status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
 		if !k8serrors.IsNotFound(err) {

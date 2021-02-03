@@ -39,7 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 	"github.com/tigera/operator/test"
 )
@@ -157,7 +157,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rcommon.TolerateMaster))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
@@ -395,7 +395,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rutil.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rcommon.TolerateMaster))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
@@ -545,7 +545,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: rutil.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: rcommon.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: render.APIServerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
@@ -567,7 +567,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		operatorTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, rutil.OperatorNamespace(), "", "v1", "Secret")
+		operatorTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, rcommon.OperatorNamespace(), "", "v1", "Secret")
 		apiServerTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))

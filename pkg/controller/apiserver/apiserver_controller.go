@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -88,11 +88,11 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, rutil.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, rcommon.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
-	for _, namespace := range []string{rutil.OperatorNamespace(), render.APIServerNamespace} {
+	for _, namespace := range []string{rcommon.OperatorNamespace(), render.APIServerNamespace} {
 		if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}

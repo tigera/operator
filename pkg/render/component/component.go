@@ -16,7 +16,7 @@ package component
 
 import (
 	operator "github.com/tigera/operator/api/v1"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -37,5 +37,5 @@ type Component interface {
 	// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
 	// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
 	// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
-	SupportedOSType() rutil.OSType
+	SupportedOSType() rcommon.OSType
 }

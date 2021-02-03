@@ -15,7 +15,7 @@
 package render
 
 import (
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
 	v1 "k8s.io/api/core/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
@@ -45,8 +45,8 @@ func (c *priorityClassComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *priorityClassComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeAny
+func (c *priorityClassComponent) SupportedOSType() rcommon.OSType {
+	return rcommon.OSTypeAny
 }
 
 func (c *priorityClassComponent) Objects() ([]client.Object, []client.Object) {

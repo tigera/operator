@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strconv"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -93,14 +93,14 @@ func (c ElasticsearchClusterConfig) FlowShards() int {
 }
 
 func (c ElasticsearchClusterConfig) Annotation() string {
-	return rutil.AnnotationHash(c)
+	return rcommon.AnnotationHash(c)
 }
 
 func (c ElasticsearchClusterConfig) ConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchConfigMapName,
-			Namespace: rutil.OperatorNamespace(),
+			Namespace: rcommon.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			"clusterName": c.clusterName,

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rcommon "github.com/tigera/operator/pkg/render/common"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -116,12 +116,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
 		render.KibanaPublicCertSecret,
 	} {
-		if err = utils.AddSecretsWatch(c, secretName, rutil.OperatorNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, rcommon.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, rutil.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, rcommon.OperatorNamespace()); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
@@ -246,7 +246,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rutil.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rcommon.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err

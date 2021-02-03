@@ -26,12 +26,12 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/component"
 )
 
 // ApplyImageSet gets the appropriate ImageSet, validates the ImageSet, and calls ResolveImages
 // passing in the ImageSet on each of the comps.
-func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVariant, comps ...render.Component) error {
+func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVariant, comps ...component.Component) error {
 	imageSet, err := GetImageSet(ctx, c, v)
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 	return fmt.Errorf("ImageSet %s: %s", is.Name, strings.Join(errMsgs, "; "))
 }
 
-func ResolveImages(is *operator.ImageSet, comps ...render.Component) error {
+func ResolveImages(is *operator.ImageSet, comps ...component.Component) error {
 	errMsgs := []string{}
 	for _, comp := range comps {
 		err := comp.ResolveImages(is)

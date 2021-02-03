@@ -1,5 +1,5 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
-//
+// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package testutil
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func expectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
+func ExpectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
 	for _, c := range podSpec.Containers {
 		ExpectWithOffset(1, c.Env).To(ContainElements(
 			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: host},

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	rutil "github.com/tigera/operator/pkg/render/common"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -94,7 +96,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch the given secrets in each both the compliance and operator namespaces
-	for _, namespace := range []string{render.OperatorNamespace(), render.ComplianceNamespace} {
+	for _, namespace := range []string{rutil.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
 			render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
@@ -106,7 +108,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, rutil.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -292,7 +294,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	// the user, set the component degraded.
 	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
 	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
-		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, svcDNSNames...,
+		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, rutil.DefaultCertificateDuration, svcDNSNames...,
 	)
 
 	if err != nil {
@@ -317,7 +319,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rutil.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}

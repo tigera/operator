@@ -15,6 +15,9 @@
 package render
 
 import (
+	rutil "github.com/tigera/operator/pkg/render/common"
+	"github.com/tigera/operator/pkg/render/component"
+	v1 "k8s.io/api/core/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +29,11 @@ const (
 	PriorityClassName = "calico-priority"
 )
 
-func PriorityClassDefinitions() Component {
+func setCriticalPod(t *v1.PodTemplateSpec) {
+	t.Spec.PriorityClassName = PriorityClassName
+}
+
+func PriorityClassDefinitions() component.Component {
 	return &priorityClassComponent{}
 }
 
@@ -38,8 +45,8 @@ func (c *priorityClassComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *priorityClassComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *priorityClassComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeAny
 }
 
 func (c *priorityClassComponent) Objects() ([]client.Object, []client.Object) {

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	rutil "github.com/tigera/operator/pkg/render/common"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -59,19 +61,19 @@ var (
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
 
 	esCertSecretKey        = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}
+	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: rutil.OperatorNamespace()}
 	esCertPubSecretKey     = client.ObjectKey{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertPubSecretOperKey = client.ObjectKey{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}
+	esCertPubSecretOperKey = client.ObjectKey{Name: render.ElasticsearchPublicCertSecret, Namespace: rutil.OperatorNamespace()}
 
 	kbCertSecretKey        = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
-	kbCertSecretOperKey    = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}
+	kbCertSecretOperKey    = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: rutil.OperatorNamespace()}
 	kbCertPubSecretKey     = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}
+	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: rutil.OperatorNamespace()}
 
 	esPublicCertObjMeta      = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
 	kbPublicCertObjMeta      = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
-	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}
+	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rutil.OperatorNamespace()}
+	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: rutil.OperatorNamespace()}
 	storageClassName         = "test-storage-class"
 
 	esDNSNames = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
@@ -536,8 +538,8 @@ var _ = Describe("LogStorage controller", func() {
 					// These certs are not operator-managed. The user must
 					// update these certs.
 					testCA := test.MakeTestCA("logstorage-test")
-					esSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
+					esSecret, err := rutil.CreateOperatorTLSSecret(testCA,
+						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -545,8 +547,8 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
-					kbSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+					kbSecret, err := rutil.CreateOperatorTLSSecret(testCA,
+						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
@@ -591,8 +593,8 @@ var _ = Describe("LogStorage controller", func() {
 
 					dnsNames := append(esDNSNames, "es.example.com", "192.168.10.10")
 					testCA := test.MakeTestCA("logstorage-test")
-					esSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
+					esSecret, err := rutil.CreateOperatorTLSSecret(testCA,
+						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, dnsNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -601,8 +603,8 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 					dnsNames = append(kbDNSNames, "kb.example.com", "192.168.10.11")
-					kbSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
+					kbSecret, err := rutil.CreateOperatorTLSSecret(testCA,
+						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, dnsNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
@@ -698,7 +700,7 @@ var _ = Describe("LogStorage controller", func() {
 					esSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.TigeraElasticsearchCertSecret,
-							Namespace: render.OperatorNamespace(),
+							Namespace: rutil.OperatorNamespace(),
 						},
 					}
 					Expect(cli.Delete(ctx, esSecret)).NotTo(HaveOccurred())
@@ -706,19 +708,19 @@ var _ = Describe("LogStorage controller", func() {
 					kbSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.TigeraKibanaCertSecret,
-							Namespace: render.OperatorNamespace(),
+							Namespace: rutil.OperatorNamespace(),
 						},
 					}
 					Expect(cli.Delete(ctx, kbSecret)).NotTo(HaveOccurred())
 
 					By("creating new ES and KB secrets with an old invalid DNS name")
-					esSecret, err = render.CreateOperatorTLSSecret(nil,
-						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
+					esSecret, err = rutil.CreateOperatorTLSSecret(nil,
+						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					kbSecret, err = render.CreateOperatorTLSSecret(nil,
-						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+					kbSecret, err = rutil.CreateOperatorTLSSecret(nil,
+						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -1130,7 +1132,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		}, operatorv1.ProviderNone,
 		[]*corev1.Secret{
-			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rutil.OperatorNamespace()}},
 		},
 		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic,
 		&corev1.ConfigMap{
@@ -1193,14 +1195,14 @@ func createPubSecret(name string, ns string, bytes []byte, certName string) clie
 
 func createESSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	esSecret, err := render.CreateOperatorTLSSecret(nil,
-		render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
+	esSecret, err := rutil.CreateOperatorTLSSecret(nil,
+		render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, dnsNames...,
 	)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	esOperNsSecret := render.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
+	esOperNsSecret := rutil.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
 
-	esPublicOperNsSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.OperatorNamespace(), esSecret.Data["tls.crt"], "tls.crt")
+	esPublicOperNsSecret := createPubSecret(render.ElasticsearchPublicCertSecret, rutil.OperatorNamespace(), esSecret.Data["tls.crt"], "tls.crt")
 	esPublicSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		esSecret,
@@ -1212,14 +1214,14 @@ func createESSecrets() []client.Object {
 
 func createKibanaSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-	kbSecret, err := render.CreateOperatorTLSSecret(nil,
-		render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
+	kbSecret, err := rutil.CreateOperatorTLSSecret(nil,
+		render.TigeraKibanaCertSecret, "tls.key", "tls.crt", rutil.DefaultCertificateDuration, nil, dnsNames...,
 	)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	kbOperNsSecret := render.CopySecrets(render.KibanaNamespace, kbSecret)[0]
+	kbOperNsSecret := rutil.CopySecrets(render.KibanaNamespace, kbSecret)[0]
 
-	kbPublicOperNsSecret := createPubSecret(render.KibanaPublicCertSecret, render.OperatorNamespace(), kbSecret.Data["tls.crt"], "tls.crt")
+	kbPublicOperNsSecret := createPubSecret(render.KibanaPublicCertSecret, rutil.OperatorNamespace(), kbSecret.Data["tls.crt"], "tls.crt")
 	kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		kbSecret,

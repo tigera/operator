@@ -17,6 +17,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -201,7 +202,7 @@ func (c *GuardianComponent) deployment() client.Object {
 					"k8s-app": GuardianName,
 				},
 			},
-			Replicas: &replicas,
+			Replicas: ptr.Int32ToPtr(1),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

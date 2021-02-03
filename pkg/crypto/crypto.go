@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptr
+package crypto
 
-func BoolToPtr(b bool) *bool {
-	return &b
-}
+import (
+	mrand "math/rand"
+	"strings"
+	"time"
+)
 
-func Int32ToPtr(i int32) *int32 {
-	return &i
-}
-
-func Int64ToPtr(i int64) *int64 {
-	return &i
+func GeneratePassword(length int) string {
+	mrand.Seed(time.Now().UnixNano())
+	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+	var b strings.Builder
+	for i := 0; i < length; i++ {
+		b.WriteRune(chars[mrand.Intn(len(chars))])
+	}
+	return b.String()
 }

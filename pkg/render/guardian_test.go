@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rutil "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/pkg/render/component"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -91,10 +92,10 @@ var _ = Describe("Rendering tests", func() {
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		deployment := GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtestutil.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
 	})
 
@@ -107,7 +108,7 @@ var _ = Describe("Rendering tests", func() {
 		renderGuardian(operator.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
-		deployment := GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtestutil.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rutil.TolerateCriticalAddonsOnly, rutil.TolerateMaster))
 	})
 })

@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptr
+package dex
 
-func BoolToPtr(b bool) *bool {
-	return &b
-}
+import (
+	"testing"
 
-func Int32ToPtr(i int32) *int32 {
-	return &i
-}
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
-func Int64ToPtr(i int64) *int64 {
-	return &i
+	"github.com/onsi/ginkgo/reporters"
+)
+
+func TestRender(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../../report/render_dex_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/dex Suite", []Reporter{junitReporter})
 }

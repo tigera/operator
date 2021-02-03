@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 )
 
 var _ = Describe("Typha rendering tests", func() {
@@ -80,11 +81,11 @@ var _ = Describe("Typha rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtestutil.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
 		tc := d.Spec.Template.Spec.Containers[0]
@@ -116,7 +117,7 @@ var _ = Describe("Typha rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtestutil.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -158,7 +159,7 @@ var _ = Describe("Typha rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		deploymentResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		deploymentResource := rtestutil.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
 		d := deploymentResource.(*apps.Deployment)
 		tc := d.Spec.Template.Spec.Containers[0]
@@ -196,7 +197,7 @@ var _ = Describe("Typha rendering tests", func() {
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
 		resources, _ := component.Objects()
 
-		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		depResource := rtestutil.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*apps.Deployment)
 
@@ -228,7 +229,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
 		resources, _ := component.Objects()
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtestutil.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
@@ -262,11 +263,11 @@ var _ = Describe("Typha rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		dep := GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment")
+		dep := rtestutil.GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*apps.Deployment)
 		Expect(ok).To(BeTrue())

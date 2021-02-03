@@ -113,31 +113,31 @@ var _ = Describe("API server rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		ns := GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
-		ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
+		ns := rtestutil.GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
+		rtestutil.ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
 		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, render.APIServerNamespace, clusterDomain)
-		operatorCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
+		operatorCert, ok := rtestutil.GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
 
-		tigeraCert, ok := GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
+		tigeraCert, ok := rtestutil.GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
 
-		apiService, ok := GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
+		apiService, ok := rtestutil.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
 		verifyAPIService(apiService, clusterDomain)
 
-		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+		d := rtestutil.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
 		Expect(len(d.Labels)).To(Equal(2))
@@ -226,10 +226,10 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
 		Expect(len(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items)).To(Equal(1))
 
-		clusterRole := GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtestutil.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
 
-		clusterRole = GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole = rtestutil.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
@@ -277,8 +277,8 @@ var _ = Describe("API server rendering tests", func() {
 		// Expect same number as above
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		dep := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
-		ExpectResource(dep, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		dep := rtestutil.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		rtestutil.ExpectResource(dep, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 		d := dep.(*v1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
@@ -324,14 +324,14 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		cr := GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		cr := rtestutil.GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(cr.Rules)).To(Equal(1))
 		Expect(len(cr.Rules[0].Resources)).To(Equal(1))
 		Expect(cr.Rules[0].Resources[0]).To(Equal("tiers"))
 		Expect(len(cr.Rules[0].Verbs)).To(Equal(1))
 		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
 
-		crb := GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		crb := rtestutil.GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
 		Expect(crb.RoleRef.Name).To(Equal("tigera-tier-getter"))
 		Expect(len(crb.Subjects)).To(Equal(1))
@@ -379,7 +379,7 @@ var _ = Describe("API server rendering tests", func() {
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+		d := rtestutil.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
@@ -394,7 +394,7 @@ var _ = Describe("API server rendering tests", func() {
 		component, err := render.APIServer(k8sServiceEp, instance, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
-		d := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+		d := rtestutil.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rutil.TolerateMaster))
 	})
 
@@ -438,7 +438,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		cr := GetResource(resources, "tigera-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		cr := rtestutil.GetResource(resources, "tigera-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(cr.Rules)).To(Equal(1))
 		Expect(len(cr.Rules[0].Resources)).To(Equal(2))
 		Expect(cr.Rules[0].Resources[0]).To(Equal("mutatingwebhookconfigurations"))
@@ -448,7 +448,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(cr.Rules[0].Verbs[1]).To(Equal("list"))
 		Expect(cr.Rules[0].Verbs[2]).To(Equal("watch"))
 
-		crb := GetResource(resources, "tigera-apiserver-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		crb := rtestutil.GetResource(resources, "tigera-apiserver-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
 		Expect(crb.RoleRef.Name).To(Equal("tigera-webhook-reader"))
 		Expect(len(crb.Subjects)).To(Equal(1))
@@ -469,7 +469,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		deploymentResource := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		deploymentResource := rtestutil.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
 
 		d := deploymentResource.(*v1.Deployment)
@@ -496,7 +496,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		deploymentResource := GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		deploymentResource := rtestutil.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
 
 		deployment := deploymentResource.(*v1.Deployment)
@@ -561,18 +561,18 @@ var _ = Describe("API server rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		operatorTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, rutil.OperatorNamespace(), "", "v1", "Secret")
-		apiServerTunnelSec := GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
+		operatorTunnelSec := rtestutil.GetResource(resources, render.VoltronTunnelSecretName, rutil.OperatorNamespace(), "", "v1", "Secret")
+		apiServerTunnelSec := rtestutil.GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
 
-		dep := GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		dep := rtestutil.GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 
 		By("Validating startup args")
@@ -643,11 +643,11 @@ var _ = Describe("API server rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		dep := GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		dep := rtestutil.GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 
 		By("Validating startup args")
@@ -697,11 +697,11 @@ var _ = Describe("API server rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
-		dep := GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		dep := rtestutil.GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())

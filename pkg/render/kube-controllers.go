@@ -17,6 +17,8 @@ package render
 import (
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,8 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	rutil "github.com/tigera/operator/pkg/render/common"
 )
-
-var replicas int32 = 1
 
 func KubeControllers(
 	k8sServiceEp k8sapi.ServiceEndpoint,
@@ -312,7 +312,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	env = append(env, v1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
 
 	defaultMode := int32(420)
-
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -323,7 +322,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			},
 		},
 		Spec: apps.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: ptr.Int32ToPtr(1),
 			Strategy: apps.DeploymentStrategy{
 				Type: apps.RecreateDeploymentStrategyType,
 			},

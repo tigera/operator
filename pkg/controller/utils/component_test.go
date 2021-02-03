@@ -128,6 +128,20 @@ var _ = Describe("Component handler tests", func() {
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: render.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Annotations: map[string]string{
+						fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+					},
+				},
+			}},
+		}
+
 		By("initiating a merge with Openshift SCC annotations")
 		err = handler.CreateOrUpdate(ctx, fc, sm)
 		Expect(err).To(BeNil())
@@ -162,6 +176,20 @@ var _ = Describe("Component handler tests", func() {
 		ns = &v1.Namespace{}
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
+
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: render.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Annotations: map[string]string{
+						fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+					},
+				},
+			}},
+		}
 
 		By("initiating a merge with namespace containing modified desired annotation")
 		err = handler.CreateOrUpdate(ctx, fc, sm)

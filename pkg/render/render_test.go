@@ -33,6 +33,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
+	"github.com/tigera/operator/pkg/render/component"
+	"github.com/tigera/operator/pkg/render/dex"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -116,7 +120,7 @@ var _ = Describe("Rendering tests", func() {
 		internalManagerTLSSecret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: render.ManagerInternalTLSSecretName, Namespace: render.OperatorNamespace(),
+				Name: render.ManagerInternalTLSSecretName, Namespace: rutil.OperatorNamespace(),
 			},
 		}
 		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
@@ -131,14 +135,14 @@ var _ = Describe("Rendering tests", func() {
 		}{
 			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
-			{render.DexObjectName, "", "", "v1", "Namespace"},
-			{render.TyphaCAConfigMapName, render.OperatorNamespace(), "", "v1", "ConfigMap"},
+			{dex.ObjectName, "", "", "v1", "Namespace"},
+			{render.TyphaCAConfigMapName, rutil.OperatorNamespace(), "", "v1", "ConfigMap"},
 			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{render.TyphaTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
-			{render.NodeTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
+			{render.NodeTLSSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
@@ -169,7 +173,7 @@ var _ = Describe("Rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -181,7 +185,7 @@ var _ = Describe("Rendering tests", func() {
 		var cn *appsv1.DaemonSet
 		for _, comp := range comps {
 			resources, _ := comp.Objects()
-			r := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			r := rtestutil.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			if r != nil {
 				cn = r.(*appsv1.DaemonSet)
 				break
@@ -192,7 +196,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 })
 
-func componentCount(components []render.Component) int {
+func componentCount(components []component.Component) int {
 	count := 0
 	for _, c := range components {
 		objsToCreate, _ := c.Objects()

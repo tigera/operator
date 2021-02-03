@@ -28,7 +28,8 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
+	rdex "github.com/tigera/operator/pkg/render/dex"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -73,8 +74,8 @@ var _ = Describe("authentication controller tests", func() {
 
 		idpSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.OIDCSecretName,
-				Namespace: render.OperatorNamespace(),
+				Name:      rdex.OIDCSecretName,
+				Namespace: rutil.OperatorNamespace(),
 			},
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data: map[string][]byte{
@@ -176,13 +177,13 @@ var _ = Describe("authentication controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DexObjectName,
-					Namespace: render.DexNamespace,
+					Name:      rdex.ObjectName,
+					Namespace: rdex.Namespace,
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
+			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, rdex.ObjectName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -211,13 +212,13 @@ var _ = Describe("authentication controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DexObjectName,
-					Namespace: render.DexNamespace,
+					Name:      rdex.ObjectName,
+					Namespace: rdex.Namespace,
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
+			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, rdex.ObjectName)
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	rutil "github.com/tigera/operator/pkg/render/common"
+	rdex "github.com/tigera/operator/pkg/render/dex"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/compliance"
@@ -94,12 +97,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch the given secrets in each both the manager and operator namespaces
-	for _, namespace := range []string{render.OperatorNamespace(), render.ManagerNamespace} {
+	for _, namespace := range []string{rutil.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
 			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
+			render.ManagerInternalTLSSecretName, rdex.TLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -107,11 +110,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, rutil.OperatorNamespace()); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", render.ManagerOIDCConfig, err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, rutil.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -328,7 +331,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rutil.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
@@ -376,7 +379,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret = &corev1.Secret{}
-		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
+		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: rutil.OperatorNamespace()}, tunnelSecret)
 		if err != nil {
 			r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
 			return reconcile.Result{}, nil
@@ -387,14 +390,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret = &corev1.Secret{}
 		err = r.client.Get(ctx, client.ObjectKey{
 			Name:      render.ManagerInternalTLSSecretName,
-			Namespace: render.OperatorNamespace(),
+			Namespace: rutil.OperatorNamespace(),
 		}, internalTrafficSecret)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, render.OperatorNamespace()), "")
+				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, rutil.OperatorNamespace()), "")
 				return reconcile.Result{}, nil
 			}
-			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, render.OperatorNamespace()), err.Error())
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, rutil.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -410,14 +413,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	var dexCfg render.DexKeyValidatorConfig
+	var dexCfg rdex.KeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: rdex.TLSSecretName, Namespace: rutil.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+		dexCfg = rdex.NewKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
 	}
 
 	var elasticLicenseType render.ElasticsearchLicenseType

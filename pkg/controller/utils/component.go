@@ -19,6 +19,12 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/pkg/render"
+
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
@@ -32,10 +38,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/render"
 )
 
 type ComponentHandler interface {
@@ -294,8 +298,8 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 // ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osType is not OSTypeAny that a
 // node selector is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
 // on a node running an operating system as specified by osType.
-func ensureOSSchedulingRestrictions(obj client.Object, osType render.OSType) {
-	if osType == render.OSTypeAny {
+func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
+	if osType == rmeta.OSTypeAny {
 		return
 	}
 

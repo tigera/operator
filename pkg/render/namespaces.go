@@ -15,6 +15,8 @@
 package render
 
 import (
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,8 +42,8 @@ func (c *namespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *namespaceComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
 }
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
@@ -53,7 +55,7 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
 	}
 	if len(c.pullSecrets) > 0 {
-		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
+		ns = append(ns, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(common.CalicoNamespace, c.pullSecrets...)...)...)
 	}
 
 	return ns, nil

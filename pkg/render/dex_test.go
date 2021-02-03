@@ -3,6 +3,8 @@ package render_test
 import (
 	"fmt"
 
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -10,6 +12,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -57,7 +60,7 @@ var _ = Describe("dex rendering tests", func() {
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.OIDCSecretName,
-					Namespace: render.OperatorNamespace(),
+					Namespace: rmeta.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -70,7 +73,7 @@ var _ = Describe("dex rendering tests", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pullSecretName,
-						Namespace: render.OperatorNamespace(),
+						Namespace: rmeta.OperatorNamespace(),
 					},
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				}}
@@ -96,9 +99,9 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, render.OperatorNamespace(), "", "v1", "Secret"},
-				{render.OIDCSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexObjectName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.OIDCSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
@@ -107,7 +110,7 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 		})
 
@@ -140,8 +143,8 @@ var _ = Describe("dex rendering tests", func() {
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			}, dexCfg)
 			resources, _ := component.Objects()
-			d := GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+			d := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
 		})
 	})
 })

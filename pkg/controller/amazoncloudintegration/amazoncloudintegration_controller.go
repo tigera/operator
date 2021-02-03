@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -85,7 +87,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.AmazonCloudIntegrationCredentialName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.AmazonCloudIntegrationCredentialName, rmeta.OperatorNamespace()); err != nil {
 		log.V(5).Info("amazoncloudintegration-controller failed to watch Secret", "err", err, "resource", render.AmazonCloudIntegrationCredentialName)
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch the Secret resource(%s): %v", render.AmazonCloudIntegrationCredentialName, err)
 	}
@@ -228,7 +230,7 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      render.AmazonCloudIntegrationCredentialName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		return nil, fmt.Errorf("Failed to read secret %q: %s", render.AmazonCloudIntegrationCredentialName, err)

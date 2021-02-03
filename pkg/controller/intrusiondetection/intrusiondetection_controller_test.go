@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -111,10 +113,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchPublicCertSecret,
+				Name:      relasticsearch.PublicCertSecret,
 				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

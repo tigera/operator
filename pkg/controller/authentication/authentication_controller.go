@@ -19,13 +19,15 @@ import (
 	"fmt"
 	"time"
 
+	rcommon "github.com/tigera/operator/pkg/render/common"
+	rdex "github.com/tigera/operator/pkg/render/dex"
+
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -93,9 +95,9 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
 	}
 
-	for _, namespace := range []string{render.OperatorNamespace(), render.DexNamespace} {
+	for _, namespace := range []string{rcommon.OperatorNamespace(), rdex.Namespace} {
 		for _, secretName := range []string{
-			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
+			rdex.TLSSecretName, rdex.OIDCSecretName, rdex.OpenshiftSecretName, rdex.ObjectName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", ControllerName, secretName, namespace, err)
@@ -178,7 +180,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Make sure the tigera-dex namespace exists, before rendering any objects there.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: render.DexObjectName}, &corev1.Namespace{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: rdex.ObjectName}, &corev1.Namespace{}); err != nil {
 		if errors.IsNotFound(err) {
 			log.Error(err, "Waiting for namespace tigera-dex to be created")
 			r.status.SetDegraded("Waiting for namespace tigera-dex to be created", err.Error())
@@ -204,10 +206,10 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
 	tlsSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, tlsSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: rdex.TLSSecretName, Namespace: rcommon.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.clusterDomain))
+			tlsSecret = rdex.CreateTLSSecret(fmt.Sprintf(dexCN, r.clusterDomain))
 		} else {
 			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
 			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
@@ -224,13 +226,13 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Set namespace for secrets so they can be used in the namespace of dex.
-	idpSecret = render.CopySecrets(render.DexNamespace, idpSecret)[0]
+	idpSecret = rcommon.CopySecrets(rdex.Namespace, idpSecret)[0]
 
 	dexSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: render.OperatorNamespace()}, dexSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: rdex.ObjectName, Namespace: rcommon.OperatorNamespace()}, dexSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
-			dexSecret = render.CreateDexClientSecret()
+			dexSecret = rdex.CreateClientSecret()
 		} else {
 			log.Error(err, "Failed to read tigera-operator/tigera-dex secret")
 			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex secret", err.Error())
@@ -246,14 +248,14 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg := rdex.NewConfig(authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component := render.Dex(
+	component := rdex.NewComponent(
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
 		install,
@@ -292,25 +294,25 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 	var secretName string
 
 	if authentication.Spec.OIDC != nil {
-		secretName = render.OIDCSecretName
+		secretName = rdex.OIDCSecretName
 	} else {
-		secretName = render.OpenshiftSecretName
+		secretName = rdex.OpenshiftSecretName
 	}
 
 	secret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: render.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("missing secret %s/%s: %w", render.OperatorNamespace(), secretName, err)
+	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rcommon.OperatorNamespace()}, secret); err != nil {
+		return nil, fmt.Errorf("missing secret %s/%s: %w", rcommon.OperatorNamespace(), secretName, err)
 	}
 
-	if len(secret.Data[render.ClientIDSecretField]) == 0 {
+	if len(secret.Data[rdex.ClientIDSecretField]) == 0 {
 		return nil, fmt.Errorf("clientID is a required field for secret %s/%s", secret.Namespace, secret.Name)
 	}
 
-	if len(secret.Data[render.ClientSecretSecretField]) == 0 {
+	if len(secret.Data[rdex.ClientSecretSecretField]) == 0 {
 		return nil, fmt.Errorf("clientSecret is a required field for secret %s/%s", secret.Namespace, secret.Name)
 	}
 
-	if authentication.Spec.Openshift != nil && len(secret.Data[render.RootCASecretField]) == 0 {
+	if authentication.Spec.Openshift != nil && len(secret.Data[rdex.RootCASecretField]) == 0 {
 		return nil, fmt.Errorf("rootCA is a required field for secret %s/%s", secret.Namespace, secret.Name)
 	}
 	return secret, nil

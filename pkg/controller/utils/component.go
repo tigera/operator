@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"reflect"
 
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	rcommon "github.com/tigera/operator/pkg/render/common"
+
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
@@ -32,14 +36,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/component"
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdate(context.Context, component.Component, status.StatusManager) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -58,7 +61,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c componentHandler) CreateOrUpdate(ctx context.Context, component component.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -294,8 +297,8 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 // ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osType is not OSTypeAny that a
 // node selector is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
 // on a node running an operating system as specified by osType.
-func ensureOSSchedulingRestrictions(obj client.Object, osType render.OSType) {
-	if osType == render.OSTypeAny {
+func ensureOSSchedulingRestrictions(obj client.Object, osType rcommon.OSType) {
+	if osType == rcommon.OSTypeAny {
 		return
 	}
 

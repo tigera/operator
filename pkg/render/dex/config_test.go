@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package dex_test
 
 import (
 	"reflect"
@@ -22,7 +22,9 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
+
+	rcommon "github.com/tigera/operator/pkg/render/common"
+	"github.com/tigera/operator/pkg/render/dex"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,8 +58,8 @@ var _ = Describe("dex config tests", func() {
 	// Create the necessary secrets.
 	idpSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.OIDCSecretName,
-			Namespace: render.OperatorNamespace(),
+			Name:      dex.OIDCSecretName,
+			Namespace: rcommon.OperatorNamespace(),
 		},
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		Data: map[string][]byte{
@@ -67,12 +69,12 @@ var _ = Describe("dex config tests", func() {
 			"serviceAccountSecret": []byte("my-secret2"),
 		},
 	}
-	dexSecret := render.CreateDexClientSecret()
-	tlsSecret := render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
+	dexSecret := dex.CreateClientSecret()
+	tlsSecret := dex.CreateTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {
-			connector := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
+			connector := dex.NewConfig(authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
 		})
@@ -80,9 +82,9 @@ var _ = Describe("dex config tests", func() {
 
 	Context("Hashes should be consistent and not be affected by fields with pointers", func() {
 		It("should produce consistent hashes for dex config", func() {
-			hashes1 := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexConfig(authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexConfig(authenticationDiff, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := dex.NewConfig(authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := dex.NewConfig(authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := dex.NewConfig(authenticationDiff, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(4))
 			Expect(hashes2).To(HaveLen(4))
 			Expect(hashes3).To(HaveLen(4))
@@ -91,9 +93,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for rp's", func() {
-			hashes1 := render.NewDexRelyingPartyConfig(authentication, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexRelyingPartyConfig(authentication.DeepCopy(), tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexRelyingPartyConfig(authenticationDiff, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := dex.NewRelyingPartyConfig(authentication, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := dex.NewRelyingPartyConfig(authentication.DeepCopy(), tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := dex.NewRelyingPartyConfig(authenticationDiff, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(3))
 			Expect(hashes2).To(HaveLen(3))
 			Expect(hashes3).To(HaveLen(3))
@@ -102,9 +104,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for verifiers", func() {
-			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := dex.NewKeyValidatorConfig(authentication, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := dex.NewKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := dex.NewKeyValidatorConfig(authenticationDiff, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(2))
 			Expect(hashes2).To(HaveLen(2))
 			Expect(hashes3).To(HaveLen(2))

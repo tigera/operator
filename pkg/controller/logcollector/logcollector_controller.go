@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/url"
 )
 
 var log = logf.Log.WithName("controller_logcollector")
@@ -92,15 +95,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
-		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
 	}
 
-	for _, configMapName := range []string{render.FluentdFilterConfigMapName, render.ElasticsearchConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, render.OperatorNamespace()); err != nil {
+	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, configMapName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}
@@ -137,7 +140,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
-			_, _, _, err := render.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint)
+			_, _, _, err := url.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint)
 			if err != nil {
 				return nil, fmt.Errorf("Syslog config has invalid Endpoint: %s", err)
 			}
@@ -199,7 +202,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
+	esClusterConfig, err := utils.GetClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
@@ -377,7 +380,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		pullSecrets,
 		installation,
 		r.clusterDomain,
-		render.OSTypeLinux,
+		rmeta.OSTypeLinux,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -409,7 +412,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			pullSecrets,
 			installation,
 			r.clusterDomain,
-			render.OSTypeWindows,
+			rmeta.OSTypeWindows,
 		)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -458,7 +461,7 @@ func getS3Credential(client client.Client) (*render.S3Credential, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      render.S3FluentdSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {
@@ -491,7 +494,7 @@ func getSplunkCredential(client client.Client) (*render.SplunkCredential, error)
 	tokenSecret := &corev1.Secret{}
 	tokenNamespacedName := types.NamespacedName{
 		Name:      render.SplunkFluentdTokenSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), tokenNamespacedName, tokenSecret); err != nil {
 		if errors.IsNotFound(err) {
@@ -512,7 +515,7 @@ func getSplunkCredential(client client.Client) (*render.SplunkCredential, error)
 	certificateSecret := &corev1.Secret{}
 	certificateNamespacedName := types.NamespacedName{
 		Name:      render.SplunkFluentdCertificateSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 
 	if err := client.Get(context.Background(), certificateNamespacedName, certificateSecret); err != nil {
@@ -539,7 +542,7 @@ func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.FluentdFilterConfigMapName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if errors.IsNotFound(err) {
@@ -574,7 +577,7 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      render.EksLogForwarderSecret,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {

@@ -27,6 +27,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -75,22 +77,22 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return err
 }
 
-func (c *GuardianComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(GuardianNamespace, c.openshift),
 	}
-	objs = append(objs, copyImagePullSecrets(c.pullSecrets, GuardianNamespace)...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(GuardianNamespace, c.pullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
+		rdata.CopySecrets(GuardianNamespace, c.tunnelSecret)[0],
 		// Add tigera-manager service account for impersonation
 		createNamespace(ManagerNamespace, c.openshift),
 		managerServiceAccount(),
@@ -214,8 +216,8 @@ func (c *GuardianComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly),
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+					ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
 				},
@@ -272,7 +274,7 @@ func (c *GuardianComponent) container() []v1.Container {
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       5,
 			},
-			SecurityContext: securityContext(),
+			SecurityContext: rdata.BaseSecurityContext(),
 		},
 	}
 }

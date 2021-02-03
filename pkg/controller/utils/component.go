@@ -196,13 +196,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
 	// Merge common metadata fields if not present on the desired state.
-	if desiredMeta.GetResourceVersion() != "" {
+	if desiredMeta.GetResourceVersion() == "" {
+		log.Info("Merging revision from active instance")
 		desiredMeta.SetResourceVersion(currentMeta.GetResourceVersion())
 	}
-	if desiredMeta.GetUID() != "" {
+	if desiredMeta.GetUID() == "" {
+		log.Info("Merging UID from active instance")
 		desiredMeta.SetUID(currentMeta.GetUID())
 	}
-	if !reflect.DeepEqual(desiredMeta.GetCreationTimestamp(), metav1.Time{}) {
+	if reflect.DeepEqual(desiredMeta.GetCreationTimestamp(), metav1.Time{}) {
 		desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
 	}
 

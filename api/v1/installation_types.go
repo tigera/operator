@@ -141,6 +141,7 @@ const (
 	ComponentNameNode            ComponentName = "Node"
 	ComponentNameTypha           ComponentName = "Typha"
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
+	ComponentNameECKOperator     ComponentName = "ECKOperator"
 )
 
 // The ComponentResource struct associates a ResourceRequirements with a component by name

@@ -108,30 +108,3 @@ func CreateCertSecret(name, namespace string) *corev1.Secret {
 		},
 	}
 }
-
-var (
-	tolerateMaster = corev1.Toleration{
-		Key:    "node-role.kubernetes.io/master",
-		Effect: corev1.TaintEffectNoSchedule,
-	}
-
-	tolerateCriticalAddonsOnly = corev1.Toleration{
-		Key:      "CriticalAddonsOnly",
-		Operator: v1.TolerationOpExists,
-	}
-
-	tolerateAll = []corev1.Toleration{
-		{
-			Key:      "CriticalAddonsOnly",
-			Operator: corev1.TolerationOpExists,
-		},
-		{
-			Effect:   corev1.TaintEffectNoSchedule,
-			Operator: corev1.TolerationOpExists,
-		},
-		{
-			Effect:   corev1.TaintEffectNoExecute,
-			Operator: corev1.TolerationOpExists,
-		},
-	}
-)

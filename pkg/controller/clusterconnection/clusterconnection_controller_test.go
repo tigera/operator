@@ -81,7 +81,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.GuardianSecretName,
-				Namespace: render.OperatorNamespace(),
+				Namespace: rutil.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"cert": []byte("foo"),

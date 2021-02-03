@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package component
 
 import (
+	rutil "github.com/tigera/operator/pkg/render/util"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -34,8 +35,8 @@ func (c *secretsComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *secretsComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *secretsComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeAny
 }
 
 func (c *secretsComponent) Objects() ([]client.Object, []client.Object) {

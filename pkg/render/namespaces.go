@@ -15,6 +15,8 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/render/component"
+	rutil "github.com/tigera/operator/pkg/render/util"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 )
 
-func Namespaces(installation *operatorv1.InstallationSpec, pullSecrets []*corev1.Secret) Component {
+func Namespaces(installation *operatorv1.InstallationSpec, pullSecrets []*corev1.Secret) component.Component {
 	return &namespaceComponent{
 		installation: installation,
 		pullSecrets:  pullSecrets,
@@ -40,8 +42,8 @@ func (c *namespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *namespaceComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *namespaceComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeAny
 }
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
@@ -53,7 +55,7 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
 	}
 	if len(c.pullSecrets) > 0 {
-		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
+		ns = append(ns, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(common.CalicoNamespace, c.pullSecrets...)...)...)
 	}
 
 	return ns, nil

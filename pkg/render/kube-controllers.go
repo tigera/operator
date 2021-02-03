@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	rutil "github.com/tigera/operator/pkg/render/util"
 )
 
 var replicas int32 = 1
@@ -84,8 +85,8 @@ func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
 	return err
 }
 
-func (c *kubeControllersComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *kubeControllersComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeLinux
 }
 
 func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) {
@@ -96,7 +97,8 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersDeployment(),
 	}
 	if c.managerInternalSecret != nil {
-		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
+		kubeControllerObjects = append(kubeControllerObjects, rutil.SecretsToRuntimeObjects(
+			rutil.CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
 	}
 
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
@@ -341,7 +343,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					NodeSelector:       c.cr.ControlPlaneNodeSelector,
-					Tolerations:        append(c.cr.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly),
+					Tolerations:        append(c.cr.ControlPlaneTolerations, rutil.TolerateMaster, rutil.TolerateCriticalAddonsOnly),
 					ImagePullSecrets:   c.cr.ImagePullSecrets,
 					ServiceAccountName: "calico-kube-controllers",
 					Containers: []v1.Container{
@@ -375,25 +377,25 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 // kubeControllerResources creates the kube-controller's resource requirements.
 func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.cr, operator.ComponentNameKubeControllers)
+	return rutil.GetResourceRequirements(c.cr, operator.ComponentNameKubeControllers)
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
 	am := map[string]string{}
 	if c.managerInternalSecret != nil {
-		am[ManagerInternalTLSHashAnnotation] = AnnotationHash(c.managerInternalSecret.Data)
+		am[ManagerInternalTLSHashAnnotation] = rutil.AnnotationHash(c.managerInternalSecret.Data)
 	}
 	if c.elasticsearchSecret != nil {
-		am[tlsSecretHashAnnotation] = AnnotationHash(c.elasticsearchSecret.Data)
+		am[tlsSecretHashAnnotation] = rutil.AnnotationHash(c.elasticsearchSecret.Data)
 	}
 	if c.kibanaSecret != nil {
-		am[KibanaTLSHashAnnotation] = AnnotationHash(c.kibanaSecret.Data)
+		am[KibanaTLSHashAnnotation] = rutil.AnnotationHash(c.kibanaSecret.Data)
 	}
 	return am
 }
 
 func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := rutil.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("calico-kube-controllers")
 	return psp
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,10 @@ package compliance
 import (
 	"context"
 	"fmt"
+
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -108,7 +112,7 @@ var _ = Describe("Compliance controller tests", func() {
 		// prerequisites. Without them, compliance will not even start creating objects. Let's create them now.
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchConfigMapName, Namespace: render.OperatorNamespace()},
+		Expect(c.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: rmeta.OperatorNamespace()},
 			Data: map[string]string{
 				"clusterName": "cluster",
 				"shards":      "2",
@@ -122,7 +126,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceReporterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceSnapshotterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceServerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
@@ -173,11 +177,12 @@ var _ = Describe("Compliance controller tests", func() {
 
 		By("replacing the cert with one that has the wrong DNS names")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
+			Namespace: rmeta.OperatorNamespace()}})).NotTo(HaveOccurred())
 
 		oldDNSName := "compliance.tigera-compliance.svc"
-		newSecret, err := render.CreateOperatorTLSSecret(nil,
-			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, oldDNSName,
+		newSecret, err := secret.CreateTLSSecret(nil,
+			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), render.ComplianceServerKeyName,
+			render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, nil, oldDNSName,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -198,19 +203,20 @@ var _ = Describe("Compliance controller tests", func() {
 
 		By("replacing the server certs with ones that have the wrong DNS names")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
+			Namespace: rmeta.OperatorNamespace()}})).NotTo(HaveOccurred())
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
 			Namespace: render.ComplianceNamespace}})).NotTo(HaveOccurred())
 
 		oldDNSNames := []string{"compliance.example.com", "compliance.tigera-compliance.svc"}
 		testCA := test.MakeTestCA("compliance-test")
-		newSecret, err := render.CreateOperatorTLSSecret(testCA,
-			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, oldDNSNames...,
+		newSecret, err := secret.CreateTLSSecret(testCA,
+			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), render.ComplianceServerKeyName,
+			render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, nil, oldDNSNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
-		newSecret = render.CopySecrets(render.ComplianceNamespace, newSecret)[0]
+		newSecret = secret.CopyToNamespace(render.ComplianceNamespace, newSecret)[0]
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
 		assertExpectedCertDNSNames(c, oldDNSNames...)
@@ -235,19 +241,20 @@ var _ = Describe("Compliance controller tests", func() {
 
 		By("replacing the server certs with ones that include the expected DNS names")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
+			Namespace: rmeta.OperatorNamespace()}})).NotTo(HaveOccurred())
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
 			Namespace: render.ComplianceNamespace}})).NotTo(HaveOccurred())
 
 		// Custom cert has the compliance svc DNS names as well as other DNS names
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
-		newSecret, err := render.CreateOperatorTLSSecret(nil,
-			render.ComplianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, nil, dnsNames...,
+		newSecret, err := secret.CreateTLSSecret(nil,
+			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), render.ComplianceServerKeyName,
+			render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
-		newSecret = render.CopySecrets(render.ComplianceNamespace, newSecret)[0]
+		newSecret = secret.CopyToNamespace(render.ComplianceNamespace, newSecret)[0]
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
 
 		assertExpectedCertDNSNames(c, dnsNames...)
@@ -501,7 +508,7 @@ func assertExpectedCertDNSNames(c client.Client, expectedDNSNames ...string) {
 	secret := &corev1.Secret{}
 
 	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}, secret)).NotTo(HaveOccurred())
 	test.VerifyCertSANs(secret.Data[render.ComplianceServerCertName], expectedDNSNames...)
 

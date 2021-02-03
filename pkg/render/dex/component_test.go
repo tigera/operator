@@ -1,7 +1,11 @@
-package render_test
+package dex_test
 
 import (
 	"fmt"
+
+	"github.com/tigera/operator/pkg/render/testutil"
+
+	"github.com/tigera/operator/pkg/render/dex"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -9,7 +13,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,12 +56,12 @@ var _ = Describe("dex rendering tests", func() {
 				},
 			}
 
-			tlsSecret = render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
-			dexSecret = render.CreateDexClientSecret()
+			tlsSecret = dex.CreateTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
+			dexSecret = dex.CreateClientSecret()
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCSecretName,
-					Namespace: render.OperatorNamespace(),
+					Name:      dex.OIDCSecretName,
+					Namespace: rutil.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -70,7 +74,7 @@ var _ = Describe("dex rendering tests", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pullSecretName,
-						Namespace: render.OperatorNamespace(),
+						Namespace: rutil.OperatorNamespace(),
 					},
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				}}
@@ -78,9 +82,9 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a OIDC setup", func() {
 
-			dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
+			dexCfg := dex.NewConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg)
+			component := dex.NewComponent(pullSecrets, false, installation, dexCfg)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -90,36 +94,36 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
-				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
-				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},
-				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
-				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
-				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, render.OperatorNamespace(), "", "v1", "Secret"},
-				{render.OIDCSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
-				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
-				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
-				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{dex.ObjectName, dex.Namespace, "", "v1", "ServiceAccount"},
+				{dex.ObjectName, dex.Namespace, "apps", "v1", "Deployment"},
+				{dex.ObjectName, dex.Namespace, "", "v1", "Service"},
+				{dex.ObjectName, "", rbac, "v1", "ClusterRole"},
+				{dex.ObjectName, "", rbac, "v1", "ClusterRoleBinding"},
+				{dex.ObjectName, dex.Namespace, "", "v1", "ConfigMap"},
+				{dex.TLSSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
+				{dex.ObjectName, rutil.OperatorNamespace(), "", "v1", "Secret"},
+				{dex.OIDCSecretName, rutil.OperatorNamespace(), "", "v1", "Secret"},
+				{dex.TLSSecretName, dex.Namespace, "", "v1", "Secret"},
+				{dex.ObjectName, dex.Namespace, "", "v1", "Secret"},
+				{dex.OIDCSecretName, dex.Namespace, "", "v1", "Secret"},
+				{pullSecretName, dex.Namespace, "", "v1", "Secret"},
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				testutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 		})
 
 		DescribeTable("should render the cluster name properly in the validator and rp configs", func(clusterDomain string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret, clusterDomain)
+			validatorConfig := dex.NewKeyValidatorConfig(authentication, tlsSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
 			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)
 			Expect(validatorEnv[2].Value).To(Equal(expectedUrl + "/"))
 			Expect(validatorEnv[3].Value).To(Equal(expectedUrl + "/dex/keys"))
 
-			rpConfig := render.NewDexRelyingPartyConfig(authentication, tlsSecret, dexSecret, clusterDomain)
+			rpConfig := dex.NewRelyingPartyConfig(authentication, tlsSecret, dexSecret, clusterDomain)
 			Expect(rpConfig.UserInfoURI()).To(Equal(expectedUrl + "/dex/userinfo"))
 			Expect(rpConfig.TokenURI()).To(Equal(expectedUrl + "/dex/token"))
 		},
@@ -135,13 +139,13 @@ var _ = Describe("dex rendering tests", func() {
 				Effect:   corev1.TaintEffectNoExecute,
 			}
 
-			dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
-			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
+			dexCfg := dex.NewConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
+			component := dex.NewComponent(pullSecrets, false, &operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			}, dexCfg)
 			resources, _ := component.Objects()
-			d := GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
+			d := testutil.GetResource(resources, dex.ObjectName, dex.Namespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
 		})
 	})
 })

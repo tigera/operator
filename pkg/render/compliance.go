@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/dex"
+
 	"github.com/tigera/operator/pkg/render/component"
 
 	ocsv1 "github.com/openshift/api/security/v1"
@@ -68,7 +70,7 @@ func Compliance(
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
-	dexCfg DexKeyValidatorConfig,
+	dexCfg dex.KeyValidatorConfig,
 	clusterDomain string,
 ) (component.Component, error) {
 	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
@@ -100,7 +102,7 @@ type complianceComponent struct {
 	clusterDomain               string
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
-	dexCfg                      DexKeyValidatorConfig
+	dexCfg                      dex.KeyValidatorConfig
 	benchmarkerImage            string
 	snapshotterImage            string
 	serverImage                 string

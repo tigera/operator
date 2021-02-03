@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tigera/operator/pkg/render"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 )
 
 var _ = Describe("Namespace rendering tests", func() {
@@ -33,7 +34,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
-		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+		rtestutil.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("calico-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -45,7 +46,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
-		ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+		rtestutil.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["openshift.io/run-level"]).To(Equal("0"))
 		Expect(meta.GetAnnotations()["openshift.io/node-selector"]).To(Equal(""))
@@ -56,7 +57,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
-		ExpectResource(resources[1], "tigera-dex", "", "", "v1", "Namespace")
+		rtestutil.ExpectResource(resources[1], "tigera-dex", "", "", "v1", "Namespace")
 		meta := resources[1].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-dex"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -69,7 +70,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
-		ExpectResource(resources[1], "tigera-dex", "", "", "v1", "Namespace")
+		rtestutil.ExpectResource(resources[1], "tigera-dex", "", "", "v1", "Namespace")
 		meta := resources[1].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["openshift.io/run-level"]).To(Equal("0"))
 		Expect(meta.GetAnnotations()["openshift.io/node-selector"]).To(Equal(""))

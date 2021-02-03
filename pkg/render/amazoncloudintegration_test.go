@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/testutil"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
@@ -25,6 +27,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
 )
 
 const (
@@ -65,7 +68,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		}, credential, nil, false)
 		Expect(err).ToNot(HaveOccurred())
 		resources, _ := component.Objects()
-		resource := GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
+		resource := testutil.GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
 		d := resource.(*v1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
@@ -102,11 +105,11 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			testutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		resource := GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
+		resource := testutil.GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
 		d := resource.(*v1.Deployment)
 
 		Expect(d.Name).To(Equal(AwsCIName))
@@ -127,7 +130,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal(AwsCIName))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.ObjectMeta.Annotations).To(HaveKey("hash.operator.tigera.io/credential-secret"))
@@ -189,7 +192,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		resources, _ := component.Objects()
 
-		resource := GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
+		resource := testutil.GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
 		Expect(resource).ToNot(BeNil())
 		d := resource.(*v1.Deployment)
 

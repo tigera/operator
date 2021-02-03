@@ -18,6 +18,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
+	"github.com/tigera/operator/pkg/render/component"
+
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -33,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/dns"
+	rutil "github.com/tigera/operator/pkg/render/common"
 )
 
 const (
@@ -54,7 +59,7 @@ func Typha(
 	aci *operator.AmazonCloudIntegration,
 	migrationNeeded bool,
 	clusterDomain string,
-) Component {
+) component.Component {
 	return &typhaComponent{
 		k8sServiceEp:       k8sServiceEp,
 		installation:       installation,
@@ -103,8 +108,8 @@ func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *typhaComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *typhaComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeLinux
 }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
@@ -348,11 +353,11 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 
 	var initContainers []v1.Container
 	annotations := make(map[string]string)
-	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
+	annotations[typhaCAHashAnnotation] = rutil.AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	if c.installation.CertificateManagement == nil {
-		annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
+		annotations[typhaCertHashAnnotation] = rutil.AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
 	} else {
-		annotations[typhaCertHashAnnotation] = AnnotationHash(c.installation.CertificateManagement.CACert)
+		annotations[typhaCertHashAnnotation] = rutil.AnnotationHash(c.installation.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
 			c.certSignReqImage,
@@ -393,7 +398,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   tolerateAll,
+					Tolerations:                   rutil.TolerateAll,
 					Affinity:                      toAffinity(c.installation.TyphaAffinity),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
@@ -473,7 +478,7 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.installation, operator.ComponentNameTypha)
+	return rutil.GetResourceRequirements(c.installation, operator.ComponentNameTypha)
 }
 
 // typhaEnvVars creates the typha's envvars.
@@ -491,7 +496,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 						Name: NodeTLSSecretName,
 					},
 					Key:      CommonName,
-					Optional: Bool(true),
+					Optional: ptr.BoolToPtr(true),
 				},
 			},
 		}
@@ -517,7 +522,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 					Name: NodeTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: Bool(true),
+				Optional: ptr.BoolToPtr(true),
 			},
 		}},
 	}
@@ -597,7 +602,7 @@ func (c *typhaComponent) typhaService() *v1.Service {
 }
 
 func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := rutil.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
 	psp.Spec.HostNetwork = true
 	return psp

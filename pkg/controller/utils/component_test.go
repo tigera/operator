@@ -212,6 +212,8 @@ var _ = Describe("Component handler tests", func() {
 
 		var nodeSelectors map[string]string
 		switch obj.(type) {
+		case *v1.PodTemplate:
+			nodeSelectors = obj.(*v1.PodTemplate).Template.Spec.NodeSelector
 		case *apps.Deployment:
 			nodeSelectors = obj.(*apps.Deployment).Spec.Template.Spec.NodeSelector
 		case *apps.DaemonSet:
@@ -237,6 +239,44 @@ var _ = Describe("Component handler tests", func() {
 
 		Expect(nodeSelectors).Should(Equal(expectedNodeSelectors))
 	},
+		TableEntry{
+			Description: "linux - sets the required annotations for a podtemplate when they're not set",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeLinux,
+					objs: []client.Object{&v1.PodTemplate{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								NodeSelector: map[string]string{},
+							},
+						},
+					}},
+				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "windows - sets the required annotations for a podtemplate when they're not set",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: render.OSTypeWindows,
+					objs: []client.Object{&v1.PodTemplate{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+							Template: v1.PodTemplateSpec{
+								Spec: v1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+					}},
+				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				map[string]string{
+					"kubernetes.io/os": "windows",
+				},
+			},
+		},
 		TableEntry{
 			Description: "linux - sets the required annotations for a deployment when they're not set",
 			Parameters: []interface{}{

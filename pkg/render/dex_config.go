@@ -19,7 +19,8 @@ import (
 	"strconv"
 	"strings"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -227,13 +228,13 @@ func (d *dexBaseCfg) RequestedScopes() []string {
 
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	secrets := []*corev1.Secret{
-		rutil.CopySecrets(namespace, d.tlsSecret)[0],
+		rdata.CopySecrets(namespace, d.tlsSecret)[0],
 	}
 	if d.dexSecret != nil {
-		secrets = append(secrets, rutil.CopySecrets(namespace, d.dexSecret)...)
+		secrets = append(secrets, rdata.CopySecrets(namespace, d.dexSecret)...)
 	}
 	if d.idpSecret != nil {
-		secrets = append(secrets, rutil.CopySecrets(namespace, d.idpSecret)...)
+		secrets = append(secrets, rdata.CopySecrets(namespace, d.idpSecret)...)
 	}
 	return secrets
 }
@@ -241,14 +242,14 @@ func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 // RequiredAnnotations returns the annotations that are relevant for a Dex deployment.
 func (d *dexConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		dexConfigMapAnnotation: rutil.AnnotationHash(d.Connector()),
-		dexTLSSecretAnnotation: rutil.AnnotationHash(d.tlsSecret.Data),
+		dexConfigMapAnnotation: rmeta.AnnotationHash(d.Connector()),
+		dexTLSSecretAnnotation: rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.idpSecret != nil {
-		annotations[dexIdpSecretAnnotation] = rutil.AnnotationHash(d.idpSecret.Data)
+		annotations[dexIdpSecretAnnotation] = rmeta.AnnotationHash(d.idpSecret.Data)
 	}
 	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = rutil.AnnotationHash(d.dexSecret.Data)
+		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
 	}
 	return annotations
 }
@@ -256,11 +257,11 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rutil.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
-		dexTLSSecretAnnotation:   rutil.AnnotationHash(d.tlsSecret.Data),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = rutil.AnnotationHash(d.dexSecret.Data)
+		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
 	}
 	return annotations
 }
@@ -268,8 +269,8 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rutil.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
-		dexTLSSecretAnnotation:   rutil.AnnotationHash(d.tlsSecret.Data),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
+		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations
 }

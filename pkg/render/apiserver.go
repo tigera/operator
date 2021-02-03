@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"strings"
 
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	"github.com/tigera/operator/pkg/tls"
+
 	"github.com/tigera/operator/pkg/ptr"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
-
-	"github.com/tigera/operator/pkg/render/component"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,19 +57,23 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	aci *operator.AmazonCloudIntegration,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
-	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (component.Component, error) {
+	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, clusterDomain)
 
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
-			var err error
-			tlsKeyPair, err = rutil.CreateOperatorTLSSecret(nil,
+			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			if err != nil {
+				return nil, err
+			}
+			tlsKeyPair, err = rdata.CreateTLSSecret(ca,
 				APIServerTLSSecretName,
+				rmeta.OperatorNamespace(),
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
-				rutil.DefaultCertificateDuration,
+				rmeta.DefaultCertificateDuration,
 				nil,
 				svcDNSNames...,
 			)
@@ -78,7 +83,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			// We only need to add the tlsKeyPair if we created it, otherwise
 			// it already exists.
 			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[tlsSecretHashAnnotation] = rutil.AnnotationHash(tlsKeyPair.Data)
+			tlsHashAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
 		}
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
@@ -93,8 +98,8 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, rutil.CopySecrets(APIServerNamespace, tunnelCASecret)...)
-		tlsHashAnnotations[voltronTunnelHashAnnotation] = rutil.AnnotationHash(tunnelCASecret.Data)
+		tlsSecrets = append(tlsSecrets, rdata.CopySecrets(APIServerNamespace, tunnelCASecret)...)
+		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelCASecret.Data)
 	}
 
 	return &apiServerComponent{
@@ -157,16 +162,16 @@ func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *apiServerComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(APIServerNamespace, c.openshift),
 	}
-	secrets := rutil.CopySecrets(APIServerNamespace, c.pullSecrets...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(secrets...)...)
+	secrets := rdata.CopySecrets(APIServerNamespace, c.pullSecrets...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.auditPolicyConfigMap(),
 		c.apiServerServiceAccount(),
@@ -680,7 +685,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+					ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
@@ -814,7 +819,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext: rutil.BaseSecurityContext(),
+		SecurityContext: rdata.BaseSecurityContext(),
 	}
 	return container
 }
@@ -868,7 +873,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster)
+	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster)
 }
 
 func (c *apiServerComponent) getTLSObjects() []client.Object {
@@ -1163,7 +1168,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 }
 
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
 	psp.Spec.Privileged = false
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)

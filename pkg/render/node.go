@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render/component"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -39,7 +38,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/dns"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -69,7 +69,7 @@ func Node(
 	migrate bool,
 	nodeAppArmorProfile string,
 	clusterDomain string,
-) component.Component {
+) Component {
 	return &nodeComponent{
 		k8sServiceEp:        k8sServiceEp,
 		cr:                  cr,
@@ -138,8 +138,8 @@ func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *nodeComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *nodeComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
@@ -552,13 +552,13 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 	annotations := make(map[string]string)
 	if len(c.birdTemplates) != 0 {
-		annotations[birdTemplateHashAnnotation] = rutil.AnnotationHash(c.birdTemplates)
+		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.birdTemplates)
 	}
-	annotations[typhaCAHashAnnotation] = rutil.AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
+	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	if c.cr.CertificateManagement == nil {
-		annotations[nodeCertHashAnnotation] = rutil.AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 	} else {
-		annotations[nodeCertHashAnnotation] = rutil.AnnotationHash(c.cr.CertificateManagement.CACert)
+		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cr,
 			c.certSignReqImage,
@@ -571,7 +571,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	}
 
 	if cniCfgMap != nil {
-		annotations[nodeCniConfigAnnotation] = rutil.AnnotationHash(cniCfgMap.Data)
+		annotations[nodeCniConfigAnnotation] = rmeta.AnnotationHash(cniCfgMap.Data)
 	}
 
 	// Include annotation for prometheus scraping configuration.
@@ -622,7 +622,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   rutil.TolerateAll,
+					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cr.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
@@ -831,7 +831,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 
 // nodeResources creates the node's resource requirements.
 func (c *nodeComponent) nodeResources() v1.ResourceRequirements {
-	return rutil.GetResourceRequirements(c.cr, operator.ComponentNameNode)
+	return rdata.GetResourceRequirements(c.cr, operator.ComponentNameNode)
 }
 
 // nodeVolumeMounts creates the node's volume mounts.
@@ -1231,7 +1231,7 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 }
 
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)

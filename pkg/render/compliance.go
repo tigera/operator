@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/component"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +30,9 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -63,16 +63,16 @@ func Compliance(
 	managerInternalTLSSecret *corev1.Secret,
 	installation *operatorv1.InstallationSpec,
 	complianceServerCertSecret *corev1.Secret,
-	esClusterConfig *ElasticsearchClusterConfig,
+	esClusterConfig *relasticsearch.ClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
-) (component.Component, error) {
+) (Component, error) {
 	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
-	complianceServerCertSecrets = append(complianceServerCertSecrets, rutil.CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
+	complianceServerCertSecrets = append(complianceServerCertSecrets, rdata.CopySecrets(ComplianceNamespace, complianceServerCertSecret)...)
 
 	return &complianceComponent{
 		esSecrets:                   esSecrets,
@@ -93,7 +93,7 @@ type complianceComponent struct {
 	esSecrets                   []*corev1.Secret
 	managerInternalTLSSecret    *corev1.Secret
 	installation                *operatorv1.InstallationSpec
-	esClusterConfig             *ElasticsearchClusterConfig
+	esClusterConfig             *relasticsearch.ClusterConfig
 	pullSecrets                 []*corev1.Secret
 	complianceServerCertSecrets []*corev1.Secret
 	openshift                   bool
@@ -145,14 +145,14 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *complianceComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *complianceComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := append(
 		[]client.Object{createNamespace(ComplianceNamespace, c.openshift)},
-		rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ComplianceNamespace, c.pullSecrets...)...)...,
+		rdata.SecretsToRuntimeObjects(rdata.CopySecrets(ComplianceNamespace, c.pullSecrets...)...)...,
 	)
 	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
@@ -189,17 +189,17 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	if c.managerInternalTLSSecret != nil {
-		complianceObjs = append(complianceObjs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
+		complianceObjs = append(complianceObjs, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
 	if c.dexCfg != nil {
-		complianceObjs = append(complianceObjs, rutil.SecretsToRuntimeObjects(c.dexCfg.RequiredSecrets(ComplianceNamespace)...)...)
+		complianceObjs = append(complianceObjs, rdata.SecretsToRuntimeObjects(c.dexCfg.RequiredSecrets(ComplianceNamespace)...)...)
 	}
 
 	var objsToDelete []client.Object
 	// Compliance server is only for Standalone or Management clusters
 	if c.managementClusterConnection == nil {
-		complianceObjs = append(complianceObjs, rutil.SecretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
+		complianceObjs = append(complianceObjs, rdata.SecretsToRuntimeObjects(c.complianceServerCertSecrets...)...)
 		complianceObjs = append(complianceObjs,
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
@@ -229,7 +229,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
-	complianceObjs = append(complianceObjs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
+	complianceObjs = append(complianceObjs, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(ComplianceNamespace, c.esSecrets...)...)...)
 
 	return complianceObjs, objsToDelete
 }
@@ -381,7 +381,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 	}
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
@@ -389,13 +389,13 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				"k8s-app": ComplianceControllerName,
 			},
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
-			Tolerations:        append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster),
+			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorate(corev1.Container{
+				relasticsearch.ContainerDecorate(corev1.Container{
 					Name:          ComplianceControllerName,
 					Image:         c.controllerImage,
 					Env:           envVars,
@@ -426,7 +426,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 }
 
 func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(ComplianceControllerName)
 	return psp
 }
@@ -511,14 +511,14 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					"k8s-app": "compliance-reporter",
 				},
 			},
-			Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+			Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 				ServiceAccountName: "tigera-compliance-reporter",
-				Tolerations:        append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster),
+				Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				NodeSelector:       c.installation.ControlPlaneNodeSelector,
-				ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+				ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 				Containers: []corev1.Container{
-					ElasticsearchContainerDecorateIndexCreator(
-						ElasticsearchContainerDecorate(corev1.Container{
+					relasticsearch.ContainerDecorateIndexCreator(
+						relasticsearch.ContainerDecorate(corev1.Container{
 							Name:          "reporter",
 							Image:         c.reporterImage,
 							Env:           envVars,
@@ -549,7 +549,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 }
 
 func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("compliance-reporter")
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
@@ -669,7 +669,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	if c.dexCfg != nil {
 		envVars = append(envVars, c.dexCfg.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
 			Namespace: ComplianceNamespace,
@@ -678,13 +678,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			},
 			Annotations: complianceAnnotations(c),
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-server",
-			Tolerations:        append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster),
+			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorate(corev1.Container{
+				relasticsearch.ContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
 					Image: c.serverImage,
 					Env:   envVars,
@@ -740,7 +740,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 }
 
 func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(ComplianceServerName)
 	return psp
 }
@@ -816,11 +816,11 @@ func (c *complianceComponent) complianceVolumes() []corev1.Volume {
 
 func complianceAnnotations(c *complianceComponent) map[string]string {
 	var annotations = map[string]string{
-		complianceServerTLSHashAnnotation: rutil.AnnotationHash(c.complianceServerCertSecrets[0].Data),
+		complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecrets[0].Data),
 	}
 
 	if c.managerInternalTLSSecret != nil {
-		annotations[ManagerInternalTLSHashAnnotation] = rutil.AnnotationHash(c.managerInternalTLSSecret.Data)
+		annotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.managerInternalTLSSecret.Data)
 	}
 
 	return annotations
@@ -896,7 +896,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 	}
 
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
@@ -904,14 +904,14 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				"k8s-app": ComplianceSnapshotterName,
 			},
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-snapshotter",
-			Tolerations:        append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster),
+			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorateIndexCreator(
-					ElasticsearchContainerDecorate(corev1.Container{
+				relasticsearch.ContainerDecorateIndexCreator(
+					relasticsearch.ContainerDecorate(corev1.Container{
 						Name:          ComplianceSnapshotterName,
 						Image:         c.snapshotterImage,
 						Env:           envVars,
@@ -943,7 +943,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 }
 
 func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName(ComplianceSnapshotterName)
 	return psp
 }
@@ -1040,7 +1040,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		},
 	}
 
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",
 			Namespace: ComplianceNamespace,
@@ -1048,14 +1048,14 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				"k8s-app": "compliance-benchmarker",
 			},
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
-			Tolerations:        rutil.TolerateAll,
-			ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+			Tolerations:        rmeta.TolerateAll,
+			ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorateIndexCreator(
-					ElasticsearchContainerDecorate(corev1.Container{
+				relasticsearch.ContainerDecorateIndexCreator(
+					relasticsearch.ContainerDecorate(corev1.Container{
 						Name:          "compliance-benchmarker",
 						Image:         c.benchmarkerImage,
 						Env:           envVars,
@@ -1108,7 +1108,7 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 }
 
 func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("compliance-benchmarker")
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{

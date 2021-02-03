@@ -15,15 +15,14 @@
 package render
 
 import (
-	rutil "github.com/tigera/operator/pkg/render/common"
-	"github.com/tigera/operator/pkg/render/component"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 )
 
-func Secrets(secrets []*corev1.Secret) component.Component {
+func Secrets(secrets []*corev1.Secret) Component {
 	return &secretsComponent{secrets: secrets}
 }
 
@@ -36,8 +35,8 @@ func (c *secretsComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *secretsComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeAny
+func (c *secretsComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
 }
 
 func (c *secretsComponent) Objects() ([]client.Object, []client.Object) {

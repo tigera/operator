@@ -18,9 +18,11 @@ import (
 	"fmt"
 	"strings"
 
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+
 	"github.com/tigera/operator/pkg/ptr"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +32,6 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/component"
 )
 
 const (
@@ -42,7 +43,7 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (component.Component, error) {
+func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 	return &amazonCloudIntegrationComponent{
 		amazonCloudIntegration: aci,
 		installation:           installation,
@@ -69,8 +70,8 @@ func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) e
 	return err
 }
 
-func (c *amazonCloudIntegrationComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *amazonCloudIntegrationComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 type AmazonCredential struct {
@@ -108,8 +109,8 @@ func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.O
 	objs := []client.Object{
 		createNamespace(AmazonCloudIntegrationNamespace, c.openshift),
 	}
-	secrets := rutil.CopySecrets(AmazonCloudIntegrationNamespace, c.pullSecrets...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(secrets...)...)
+	secrets := rdata.CopySecrets(AmazonCloudIntegrationNamespace, c.pullSecrets...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
@@ -224,7 +225,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	annotations := make(map[string]string)
-	annotations[credentialSecretHashAnnotation] = rutil.AnnotationHash(c.credentials)
+	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.credentials)
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -253,8 +254,8 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
-					Tolerations:        rutil.TolerateAll,
-					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        rmeta.TolerateAll,
+					ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
 					},

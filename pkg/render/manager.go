@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/component"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +32,9 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -79,7 +79,7 @@ func Manager(
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
-	esClusterConfig *ElasticsearchClusterConfig,
+	esClusterConfig *relasticsearch.ClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -89,26 +89,26 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
-) (component.Component, error) {
+) (Component, error) {
 	tlsSecrets := []*corev1.Secret{tlsKeyPair}
-	tlsSecrets = append(tlsSecrets, rutil.CopySecrets(ManagerNamespace, tlsKeyPair)...)
+	tlsSecrets = append(tlsSecrets, rdata.CopySecrets(ManagerNamespace, tlsKeyPair)...)
 	tlsAnnotations := make(map[string]string)
 
 	if dexCfg != nil {
 		tlsSecrets = append(tlsSecrets, dexCfg.RequiredSecrets(ManagerNamespace)...)
 		tlsAnnotations = dexCfg.RequiredAnnotations()
 	}
-	tlsAnnotations[tlsSecretHashAnnotation] = rutil.AnnotationHash(tlsKeyPair.Data)
-	tlsAnnotations[KibanaTLSHashAnnotation] = rutil.SecretsAnnotationHash(kibanaSecrets...)
+	tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
+	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(kibanaSecrets...)
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
 		// tunnelSecret contains the ca cert to generate guardian certificates
 		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
-		tlsSecrets = append(tlsSecrets, rutil.CopySecrets(ManagerNamespace, tunnelSecret)...)
-		tlsSecrets = append(tlsSecrets, rutil.CopySecrets(ManagerNamespace, internalTrafficSecret)...)
-		tlsAnnotations[voltronTunnelHashAnnotation] = rutil.AnnotationHash(tunnelSecret.Data)
-		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rutil.AnnotationHash(internalTrafficSecret.Data)
+		tlsSecrets = append(tlsSecrets, rdata.CopySecrets(ManagerNamespace, tunnelSecret)...)
+		tlsSecrets = append(tlsSecrets, rdata.CopySecrets(ManagerNamespace, internalTrafficSecret)...)
+		tlsAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelSecret.Data)
+		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
 		dexCfg:                     dexCfg,
@@ -132,7 +132,7 @@ type managerComponent struct {
 	esSecrets                  []*corev1.Secret
 	kibanaSecrets              []*corev1.Secret
 	complianceServerCertSecret *corev1.Secret
-	esClusterConfig            *ElasticsearchClusterConfig
+	esClusterConfig            *relasticsearch.ClusterConfig
 	tlsSecrets                 []*corev1.Secret
 	tlsAnnotations             map[string]string
 	pullSecrets                []*corev1.Secret
@@ -172,22 +172,22 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *managerComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeLinux
+func (c *managerComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
-	pullSecrets := rutil.CopySecrets(ManagerNamespace, c.pullSecrets...)
-	pullSecrets = append(pullSecrets, rutil.CopySecrets(common.TigeraPrometheusNamespace, c.pullSecrets...)...)
+	pullSecrets := rdata.CopySecrets(ManagerNamespace, c.pullSecrets...)
+	pullSecrets = append(pullSecrets, rdata.CopySecrets(common.TigeraPrometheusNamespace, c.pullSecrets...)...)
 
 	// TODO: move copying of imagePullSecrets for prometheus into a dedicated prometheus controller
 	// once one is introduced.
 	// note that the TigeraPrometheusNamespace is not created by the operator but rather a dependency
 	// (as is all prometheus resources).
-	objs = append(objs, rutil.SecretsToRuntimeObjects(pullSecrets...)...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(pullSecrets...)...)
 
 	objs = append(objs,
 		managerServiceAccount(),
@@ -206,9 +206,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// If we're not running openshift, we need to add pod security policies.
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
-	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(rdata.CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	objs = append(objs, c.managerDeployment())
 
 	return objs, nil
@@ -222,7 +222,7 @@ func (c *managerComponent) Ready() bool {
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	annotations := map[string]string{
-		complianceServerTLSHashAnnotation: rutil.AnnotationHash(c.complianceServerCertSecret.Data),
+		complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecret.Data),
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -234,7 +234,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[k] = v
 	}
 
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-manager",
 			Namespace: ManagerNamespace,
@@ -243,14 +243,14 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			},
 			Annotations: annotations,
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
-			ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
-				ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
+				relasticsearch.ContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
+				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				c.managerProxyContainer(),
 			},
 			Volumes: c.managerVolumes(),
@@ -430,7 +430,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 		Image:           c.managerImage,
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
-		SecurityContext: rutil.BaseSecurityContext(),
+		SecurityContext: rdata.BaseSecurityContext(),
 	}
 
 	return tm
@@ -474,7 +474,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
-		SecurityContext: rutil.BaseSecurityContext(),
+		SecurityContext: rdata.BaseSecurityContext(),
 	}
 }
 
@@ -519,7 +519,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Name:            "tigera-es-proxy",
 		Image:           c.esProxyImage,
 		LivenessProbe:   c.managerEsProxyProbe(),
-		SecurityContext: rutil.BaseSecurityContext(),
+		SecurityContext: rdata.BaseSecurityContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}
@@ -527,7 +527,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
 func (c *managerComponent) managerTolerations() []v1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster, rutil.TolerateCriticalAddonsOnly)
+	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly)
 }
 
 // managerService returns the service exposing the Tigera Secure web app.
@@ -710,7 +710,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := rutil.BasePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-manager")
 	return psp
 }

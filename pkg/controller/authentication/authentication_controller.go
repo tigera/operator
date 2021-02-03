@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -95,7 +97,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
 	}
 
-	for _, namespace := range []string{rutil.OperatorNamespace(), render.DexNamespace} {
+	for _, namespace := range []string{rmeta.OperatorNamespace(), render.DexNamespace} {
 		for _, secretName := range []string{
 			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
 		} {
@@ -206,7 +208,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
 	tlsSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rutil.OperatorNamespace()}, tlsSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
 			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.clusterDomain))
@@ -226,10 +228,10 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Set namespace for secrets so they can be used in the namespace of dex.
-	idpSecret = rutil.CopySecrets(render.DexNamespace, idpSecret)[0]
+	idpSecret = rdata.CopySecrets(render.DexNamespace, idpSecret)[0]
 
 	dexSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rutil.OperatorNamespace()}, dexSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
 			dexSecret = render.CreateDexClientSecret()
@@ -300,8 +302,8 @@ func getIdpSecret(ctx context.Context, client client.Client, authentication *opr
 	}
 
 	secret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rutil.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("missing secret %s/%s: %w", rutil.OperatorNamespace(), secretName, err)
+	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rmeta.OperatorNamespace()}, secret); err != nil {
+		return nil, fmt.Errorf("missing secret %s/%s: %w", rmeta.OperatorNamespace(), secretName, err)
 	}
 
 	if len(secret.Data[render.ClientIDSecretField]) == 0 {

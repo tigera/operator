@@ -15,8 +15,7 @@
 package render
 
 import (
-	rutil "github.com/tigera/operator/pkg/render/common"
-	"github.com/tigera/operator/pkg/render/component"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	v1 "k8s.io/api/core/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +32,7 @@ func setCriticalPod(t *v1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = PriorityClassName
 }
 
-func PriorityClassDefinitions() component.Component {
+func PriorityClassDefinitions() Component {
 	return &priorityClassComponent{}
 }
 
@@ -45,8 +44,8 @@ func (c *priorityClassComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *priorityClassComponent) SupportedOSType() rutil.OSType {
-	return rutil.OSTypeAny
+func (c *priorityClassComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
 }
 
 func (c *priorityClassComponent) Objects() ([]client.Object, []client.Object) {

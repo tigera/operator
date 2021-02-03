@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package elasticsearch
 
 import (
 	"fmt"
 	"strconv"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int, flowShards int) *ElasticsearchClusterConfig {
-	return &ElasticsearchClusterConfig{
+const (
+	ClusterConfigConfigMapName = "tigera-secure-elasticsearch"
+)
+
+func NewClusterConfig(clusterName string, replicas int, shards int, flowShards int) *ClusterConfig {
+	return &ClusterConfig{
 		clusterName: clusterName,
 		replicas:    replicas,
 		shards:      shards,
@@ -34,7 +38,7 @@ func NewElasticsearchClusterConfig(clusterName string, replicas int, shards int,
 	}
 }
 
-func NewElasticsearchClusterConfigFromConfigMap(configMap *corev1.ConfigMap) (*ElasticsearchClusterConfig, error) {
+func NewClusterConfigFromConfigMap(configMap *corev1.ConfigMap) (*ClusterConfig, error) {
 	var replicas, shards, flowShards int
 	var err error
 
@@ -66,41 +70,41 @@ func NewElasticsearchClusterConfigFromConfigMap(configMap *corev1.ConfigMap) (*E
 		}
 	}
 
-	return NewElasticsearchClusterConfig(configMap.Data["clusterName"], replicas, shards, flowShards), nil
+	return NewClusterConfig(configMap.Data["clusterName"], replicas, shards, flowShards), nil
 }
 
-type ElasticsearchClusterConfig struct {
+type ClusterConfig struct {
 	clusterName string
 	replicas    int
 	shards      int
 	flowShards  int
 }
 
-func (c ElasticsearchClusterConfig) ClusterName() string {
+func (c ClusterConfig) ClusterName() string {
 	return c.clusterName
 }
 
-func (c ElasticsearchClusterConfig) Replicas() int {
+func (c ClusterConfig) Replicas() int {
 	return c.replicas
 }
 
-func (c ElasticsearchClusterConfig) Shards() int {
+func (c ClusterConfig) Shards() int {
 	return c.shards
 }
 
-func (c ElasticsearchClusterConfig) FlowShards() int {
+func (c ClusterConfig) FlowShards() int {
 	return c.flowShards
 }
 
-func (c ElasticsearchClusterConfig) Annotation() string {
-	return rutil.AnnotationHash(c)
+func (c ClusterConfig) Annotation() string {
+	return rmeta.AnnotationHash(c)
 }
 
-func (c ElasticsearchClusterConfig) ConfigMap() *corev1.ConfigMap {
+func (c ClusterConfig) ConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchConfigMapName,
-			Namespace: rutil.OperatorNamespace(),
+			Name:      ClusterConfigConfigMapName,
+			Namespace: rmeta.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			"clusterName": c.clusterName,

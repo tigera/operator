@@ -23,9 +23,8 @@ import (
 
 	"github.com/tigera/operator/pkg/tls"
 
-	rutil "github.com/tigera/operator/pkg/render/common"
-
-	"github.com/tigera/operator/pkg/render/component"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	"github.com/openshift/library-go/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
@@ -51,7 +50,7 @@ var (
 
 // A Renderer is capable of generating components to be installed on the cluster.
 type Renderer interface {
-	Render() []component.Component
+	Render() []Component
 }
 
 type TyphaNodeTLS struct {
@@ -89,7 +88,7 @@ func Calico(
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      TyphaCAConfigMapName,
-					Namespace: rutil.OperatorNamespace(),
+					Namespace: rmeta.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					TyphaCABundleName: string(cr.CertificateManagement.CACert),
@@ -118,10 +117,10 @@ func Calico(
 			}
 		}
 		// Create copy to go into Calico Namespace
-		tss = append(tss, rutil.CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
+		tss = append(tss, rdata.CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
 	}
 	// Create copy to go into Calico Namespace
-	tcms = append(tcms, rutil.CopyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
+	tcms = append(tcms, rdata.CopyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
 	// If internal manager cert secret exists add it to the renderer.
 	if managerInternalTLSSecret != nil {
@@ -154,7 +153,7 @@ func Calico(
 
 func createTLS() (*TyphaNodeTLS, error) {
 	// Make CA
-	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rutil.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
+	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
 	if err != nil {
 		return nil, err
 	}
@@ -172,17 +171,18 @@ func createTLS() (*TyphaNodeTLS, error) {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaCAConfigMapName,
-			Namespace: rutil.OperatorNamespace(),
+			Namespace: rmeta.OperatorNamespace(),
 		},
 		Data: data,
 	}
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.NodeSecret, err = rutil.CreateOperatorTLSSecret(ca,
+	tntls.NodeSecret, err = rdata.CreateTLSSecret(ca,
 		NodeTLSSecretName,
+		rmeta.OperatorNamespace(),
 		TLSSecretKeyName,
 		TLSSecretCertName,
-		rutil.DefaultCertificateDuration,
+		rmeta.DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
 		FelixCommonName)
 	if err != nil {
@@ -192,11 +192,12 @@ func createTLS() (*TyphaNodeTLS, error) {
 	tntls.NodeSecret.Data[CommonName] = []byte(FelixCommonName)
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.TyphaSecret, err = rutil.CreateOperatorTLSSecret(ca,
+	tntls.TyphaSecret, err = rdata.CreateTLSSecret(ca,
 		TyphaTLSSecretName,
+		rmeta.OperatorNamespace(),
 		TLSSecretKeyName,
 		TLSSecretCertName,
-		rutil.DefaultCertificateDuration,
+		rmeta.DefaultCertificateDuration,
 		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
 		TyphaCommonName)
 	if err != nil {
@@ -231,8 +232,8 @@ type calicoRenderer struct {
 	esLicenseType               ElasticsearchLicenseType
 }
 
-func (r calicoRenderer) Render() []component.Component {
-	var components []component.Component
+func (r calicoRenderer) Render() []Component {
+	var components []Component
 	components = appendNotNil(components, PriorityClassDefinitions())
 	components = appendNotNil(components, Namespaces(r.installation, r.pullSecrets))
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
@@ -243,7 +244,7 @@ func (r calicoRenderer) Render() []component.Component {
 	return components
 }
 
-func appendNotNil(components []component.Component, c component.Component) []component.Component {
+func appendNotNil(components []Component, c Component) []Component {
 	if c != nil {
 		components = append(components, c)
 	}

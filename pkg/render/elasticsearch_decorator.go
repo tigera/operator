@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strconv"
 
+	rutil "github.com/tigera/operator/pkg/render/common"
+
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 )
@@ -37,15 +39,15 @@ type Annotatable interface {
 	GetAnnotations() map[string]string
 }
 
-func elasticCertDir(osType OSType) string {
-	if osType == OSTypeWindows {
+func elasticCertDir(osType rutil.OSType) string {
+	if osType == rutil.OSTypeWindows {
 		return ElasticsearchDefaultCertDirWindows
 	}
 	return ElasticsearchDefaultCertDir
 }
 
-func elasticCertPath(osType OSType) string {
-	if osType == OSTypeWindows {
+func elasticCertPath(osType rutil.OSType) string {
+	if osType == rutil.OSTypeWindows {
 		return ElasticsearchDefaultCertPathWindows
 	}
 	return ElasticsearchDefaultCertPath
@@ -57,13 +59,13 @@ func ElasticsearchDecorateAnnotations(obj Annotatable, config *ElasticsearchClus
 		annots = map[string]string{}
 	}
 	annots[elasticsearchConfigMapAnnotation] = config.Annotation()
-	annots[elasticsearchSecretsAnnotation] = secretsAnnotationHash(secrets...)
+	annots[elasticsearchSecretsAnnotation] = rutil.SecretsAnnotationHash(secrets...)
 	obj.SetAnnotations(annots)
 
 	return obj
 }
 
-func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType OSType) corev1.Container {
+func ElasticsearchContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType rutil.OSType) corev1.Container {
 	return ElasticsearchContainerDecorateVolumeMounts(ElasticsearchContainerDecorateENVVars(c, cluster, secret, clusterDomain, osType), osType)
 }
 
@@ -77,9 +79,9 @@ func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, sh
 	return c
 }
 
-func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, clusterDomain string, osType OSType) corev1.Container {
+func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, clusterDomain string, osType rutil.OSType) corev1.Container {
 	certPath := elasticCertPath(osType)
-	esScheme, esHost, esPort, _ := ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, clusterDomain))
+	esScheme, esHost, esPort, _ := rutil.ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, clusterDomain))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},
@@ -89,15 +91,15 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSe
 		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
 		{
 			Name:      "ELASTIC_USER",
-			ValueFrom: envVarSourceFromSecret(esUserSecretName, "username", false),
+			ValueFrom: rutil.EnvVarSourceFromSecret(esUserSecretName, "username", false),
 		},
 		{
 			Name:      "ELASTIC_USERNAME", // some pods require this name instead of ELASTIC_USER
-			ValueFrom: envVarSourceFromSecret(esUserSecretName, "username", false),
+			ValueFrom: rutil.EnvVarSourceFromSecret(esUserSecretName, "username", false),
 		},
 		{
 			Name:      "ELASTIC_PASSWORD",
-			ValueFrom: envVarSourceFromSecret(esUserSecretName, "password", false),
+			ValueFrom: rutil.EnvVarSourceFromSecret(esUserSecretName, "password", false),
 		},
 		{Name: "ELASTIC_CA", Value: certPath},
 		{Name: "ES_CA_CERT", Value: certPath},
@@ -108,13 +110,13 @@ func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSe
 	return c
 }
 
-func ElasticsearchContainerDecorateVolumeMounts(c corev1.Container, osType OSType) corev1.Container {
+func ElasticsearchContainerDecorateVolumeMounts(c corev1.Container, osType rutil.OSType) corev1.Container {
 	c.VolumeMounts = append(c.VolumeMounts, ElasticsearchDefaultVolumeMount(osType))
 
 	return c
 }
 
-func ElasticsearchDefaultVolumeMount(osType OSType) corev1.VolumeMount {
+func ElasticsearchDefaultVolumeMount(osType rutil.OSType) corev1.VolumeMount {
 	certPath := elasticCertDir(osType)
 	return corev1.VolumeMount{
 		Name:      "elastic-ca-cert-volume",

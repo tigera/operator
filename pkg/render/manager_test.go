@@ -17,6 +17,9 @@ package render_test
 import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	rutil "github.com/tigera/operator/pkg/render/common"
+	"github.com/tigera/operator/pkg/render/dex"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -68,11 +71,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		deployment := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtestutil.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
@@ -110,16 +113,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
-		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
+		Expect(rtestutil.GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		d := rtestutil.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
 
-		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtestutil.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"authorization.k8s.io"},
@@ -186,7 +189,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		resources := renderObjects(true, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
-		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		d := rtestutil.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
@@ -222,12 +225,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		By("configuring the manager deployment")
-		deployment := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtestutil.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		manager := deployment.Spec.Template.Spec.Containers[0]
 		Expect(manager.Name).To(Equal("tigera-manager"))
 		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
@@ -274,7 +277,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 
-		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtestutil.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"authorization.k8s.io"},
@@ -343,15 +346,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
 		component, err := render.Manager(nil, nil, nil,
-			CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
+			CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace()),
 			&render.ElasticsearchClusterConfig{},
-			CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+			CreateCertSecret(render.ManagerTLSSecretName, rutil.OperatorNamespace()),
 			nil, false,
 			i,
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
-		return GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		return rtestutil.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 	}
 
 	It("should apply controlPlaneNodeSelectors", func() {
@@ -371,12 +374,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		deployment := renderManager(&operator.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
-		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster, tolerateCriticalAddonsOnly))
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster, rutil.TolerateCriticalAddonsOnly))
 	})
 })
 
 func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tlsSecret *corev1.Secret) []client.Object {
-	var dexCfg render.DexKeyValidatorConfig
+	var dexCfg dex.KeyValidatorConfig
 	if oidc {
 		var authentication *operator.Authentication
 		authentication = &operator.Authentication{
@@ -384,7 +387,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		dexCfg = dex.NewKeyValidatorConfig(authentication, dex.CreateTLSSecret("cn"), dns.DefaultClusterDomain)
 	}
 
 	var tunnelSecret *corev1.Secret
@@ -397,9 +400,9 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
+		CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace()),
 		esConfigMap,
-		CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+		CreateCertSecret(render.ManagerTLSSecretName, rutil.OperatorNamespace()),
 		nil,
 		false,
 		&operator.InstallationSpec{},

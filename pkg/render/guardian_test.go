@@ -20,6 +20,9 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
+	"github.com/tigera/operator/pkg/render/component"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,7 +31,7 @@ import (
 )
 
 var _ = Describe("Rendering tests", func() {
-	var g render.Component
+	var g component.Component
 	var resources []client.Object
 
 	var renderGuardian = func(i operator.InstallationSpec) {
@@ -37,7 +40,7 @@ var _ = Describe("Rendering tests", func() {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.GuardianSecretName,
-				Namespace: render.OperatorNamespace(),
+				Namespace: rutil.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"cert": []byte("foo"),
@@ -50,7 +53,7 @@ var _ = Describe("Rendering tests", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pull-secret",
-					Namespace: render.OperatorNamespace(),
+					Namespace: rutil.OperatorNamespace(),
 				},
 			}},
 			false,
@@ -89,10 +92,10 @@ var _ = Describe("Rendering tests", func() {
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		deployment := GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtestutil.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
 	})
 
@@ -105,7 +108,7 @@ var _ = Describe("Rendering tests", func() {
 		renderGuardian(operator.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
-		deployment := GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, tolerateCriticalAddonsOnly, tolerateMaster))
+		deployment := rtestutil.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rutil.TolerateCriticalAddonsOnly, rutil.TolerateMaster))
 	})
 })

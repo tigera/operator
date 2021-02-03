@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
 	"github.com/tigera/operator/test"
 )
 
@@ -636,7 +637,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ManagerInternalTLSSecretName,
-					Namespace: render.OperatorNamespace(),
+					Namespace: rutil.OperatorNamespace(),
 				},
 			}
 
@@ -656,8 +657,8 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Create a internal manager TLS secret with old DNS name.
-			oldSecret, err := render.CreateOperatorTLSSecret(nil,
-				render.ManagerInternalTLSSecretName, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
+			oldSecret, err := rutil.CreateOperatorTLSSecret(nil,
+				render.ManagerInternalTLSSecretName, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, rutil.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldSecret)).NotTo(HaveOccurred())

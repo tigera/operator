@@ -20,6 +20,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/common"
+	rtestutil "github.com/tigera/operator/pkg/render/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -29,7 +31,7 @@ var _ = Describe("compliance rendering tests", func() {
 	ns := "tigera-compliance"
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
-	complianceServerCertSecret := CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace())
+	complianceServerCertSecret := CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace())
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
@@ -87,15 +89,15 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			ExpectGlobalReportType(GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
-			ExpectGlobalReportType(GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
-			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
-			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			clusterRole := rtestutil.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
@@ -115,7 +117,7 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 			}))
 
-			d := GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			d := rtestutil.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 
 			expectedEnvs := []corev1.EnvVar{
@@ -186,15 +188,15 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			ExpectGlobalReportType(GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
-			ExpectGlobalReportType(GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
-			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
-			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			var dpComplianceServer = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			var dpComplianceServer = rtestutil.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
@@ -212,7 +214,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
 
-			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			clusterRole := rtestutil.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
@@ -294,15 +296,15 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtestutil.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			ExpectGlobalReportType(GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
-			ExpectGlobalReportType(GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
-			ExpectGlobalReportType(GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
-			ExpectGlobalReportType(GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
+			ExpectGlobalReportType(rtestutil.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			clusterRole := GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			clusterRole := rtestutil.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
@@ -323,11 +325,11 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(nil, nil, i, complianceServerCertSecret, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
-			server = GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			controller = GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			snapshotter = GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			reporter = GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
-			benchmarker = GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			server = rtestutil.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			controller = rtestutil.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			snapshotter = rtestutil.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			reporter = rtestutil.GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
+			benchmarker = rtestutil.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 			return
 		}
 		It("should apply controlPlaneTolerations", func() {
@@ -340,11 +342,11 @@ var _ = Describe("compliance rendering tests", func() {
 			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			})
-			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(tolerateAll))
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rutil.TolerateAll))
 		})
 
 		It("should apply controlPlaneNodeSelectors", func() {

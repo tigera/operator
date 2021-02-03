@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 func ConfigMaps(cms []*corev1.ConfigMap) Component {
@@ -34,8 +35,8 @@ func (c *configMapComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *configMapComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *configMapComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
 }
 
 func (c *configMapComponent) Objects() ([]client.Object, []client.Object) {

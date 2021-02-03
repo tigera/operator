@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	configv1 "github.com/openshift/api/config/v1"
 
@@ -137,13 +139,13 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for secrets in the operator namespace. We watch for all secrets, since we care
 	// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
 	// may have been provided by the user with arbitrary names.
-	err = utils.AddSecretsWatch(c, "", render.OperatorNamespace())
+	err = utils.AddSecretsWatch(c, "", rmeta.OperatorNamespace())
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	cm := render.BirdTemplatesConfigMapName
-	if err = utils.AddConfigMapWatch(c, cm, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
 
@@ -207,17 +209,17 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
 		}
 
-		if err = utils.AddSecretsWatch(c, render.ElasticsearchPublicCertSecret, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.ElasticsearchPublicCertSecret, render.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
-		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, render.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, render.OperatorNamespace(), err)
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), err)
 		}
 	}
 
@@ -787,14 +789,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 		elasticsearchSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, elasticsearchSecret)
+		err = r.client.Get(ctx, types.NamespacedName{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}, elasticsearchSecret)
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
 		kibanaSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaSecret)
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaSecret)
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
@@ -1160,7 +1162,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TyphaCAConfigMapName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	err := r.client.Get(context.Background(), cmNamespacedName, cm)
 	if err != nil {
@@ -1186,7 +1188,7 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if apierrors.IsNotFound(err) {

@@ -15,6 +15,7 @@
 package render
 
 import (
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -34,8 +35,8 @@ func (c *secretsComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *secretsComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *secretsComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
 }
 
 func (c *secretsComponent) Objects() ([]client.Object, []client.Object) {

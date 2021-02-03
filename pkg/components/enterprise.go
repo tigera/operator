@@ -103,12 +103,12 @@ var (
 	}
 
 	ComponentKibana = component{
-		Version: "v3.5.0",
+		Version: "tesla-v3.5.0",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "v3.5.0",
+		Version: "tesla-v3.5.0",
 		Image:   "tigera/cnx-manager",
 	}
 

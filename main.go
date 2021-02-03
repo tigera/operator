@@ -95,6 +95,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
 	if showVersion {
+		// If the following line is updated then it might be necessary to update the release-verify target in the Makefile
 		fmt.Println("Operator:", version.VERSION, "Calico:", components.CalicoRelease, "Enterprise:", components.EnterpriseRelease)
 		for _, x := range components.CalicoComponents {
 			ref, _ := components.GetReference(x, "", "", nil)

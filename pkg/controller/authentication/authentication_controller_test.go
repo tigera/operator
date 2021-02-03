@@ -74,7 +74,7 @@ var _ = Describe("authentication controller tests", func() {
 		idpSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.OIDCSecretName,
-				Namespace: render.OperatorNamespace(),
+				Namespace: rutil.OperatorNamespace(),
 			},
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data: map[string][]byte{

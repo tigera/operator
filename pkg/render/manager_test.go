@@ -17,6 +17,7 @@ package render_test
 import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	rutil "github.com/tigera/operator/pkg/render/util"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -343,9 +344,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
 		component, err := render.Manager(nil, nil, nil,
-			CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
+			CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace()),
 			&render.ElasticsearchClusterConfig{},
-			CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+			CreateCertSecret(render.ManagerTLSSecretName, rutil.OperatorNamespace()),
 			nil, false,
 			i,
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
@@ -371,7 +372,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		deployment := renderManager(&operator.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
-		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster, tolerateCriticalAddonsOnly))
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster, rutil.TolerateCriticalAddonsOnly))
 	})
 })
 
@@ -397,9 +398,9 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
+		CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace()),
 		esConfigMap,
-		CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+		CreateCertSecret(render.ManagerTLSSecretName, rutil.OperatorNamespace()),
 		nil,
 		false,
 		&operator.InstallationSpec{},

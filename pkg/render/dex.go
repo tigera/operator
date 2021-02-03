@@ -18,8 +18,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/component"
+
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	rutil "github.com/tigera/operator/pkg/render/util"
 	"gopkg.in/yaml.v2"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -46,7 +49,7 @@ func Dex(
 	openshift bool,
 	installation *oprv1.InstallationSpec,
 	dexConfig DexConfig,
-) Component {
+) component.Component {
 
 	return &dexComponent{
 		dexConfig:    dexConfig,
@@ -74,8 +77,8 @@ func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
 	return err
 }
 
-func (*dexComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (*dexComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeLinux
 }
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
@@ -87,9 +90,9 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 	}
-	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(OperatorNamespace())...)...)
-	objs = append(objs, secretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
-	objs = append(objs, copyImagePullSecrets(c.pullSecrets, DexNamespace)...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(c.dexConfig.RequiredSecrets(rutil.OperatorNamespace())...)...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(DexNamespace, c.pullSecrets...)...)...)
 	return objs, nil
 }
 
@@ -180,15 +183,15 @@ func (c *dexComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
-					Tolerations:        append(c.installation.ControlPlaneTolerations, tolerateMaster),
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        append(c.installation.ControlPlaneTolerations, rutil.TolerateMaster),
+					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,
 							Image:           c.image,
 							Env:             c.dexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
-							SecurityContext: securityContext(),
+							SecurityContext: rutil.SecurityContext(),
 
 							Command: []string{"/usr/local/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 

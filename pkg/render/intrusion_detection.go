@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/component"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +33,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	rutil "github.com/tigera/operator/pkg/render/util"
 )
 
 const (
@@ -53,7 +56,7 @@ func IntrusionDetection(
 	openshift bool,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
-) Component {
+) component.Component {
 	return &intrusionDetectionComponent{
 		lc:               lc,
 		esSecrets:        esSecrets,
@@ -102,15 +105,15 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error
 	return nil
 }
 
-func (c *intrusionDetectionComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *intrusionDetectionComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeLinux
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
-	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
-	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
-	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(IntrusionDetectionNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(rutil.CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
 	objs = append(objs, c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
@@ -145,9 +148,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Tolerations:      c.installation.ControlPlaneTolerations,
 			NodeSelector:     c.installation.ControlPlaneNodeSelector,
 			RestartPolicy:    v1.RestartPolicyOnFailure,
-			ImagePullSecrets: getImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets: rutil.GetImagePullSecretReferenceList(c.pullSecrets),
 			Containers: []v1.Container{
-				ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionJobUserSecret, c.clusterDomain, OSTypeLinux),
+				ElasticsearchContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(),
+					ElasticsearchIntrusionDetectionJobUserSecret, c.clusterDomain, rutil.OSTypeLinux),
 			},
 			Volumes: []corev1.Volume{{
 				Name: "kibana-ca-cert-volume",
@@ -182,7 +186,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	kScheme, kHost, kPort, _ := ParseEndpoint(fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain))
+	kScheme, kHost, kPort, _ := rutil.ParseEndpoint(fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain))
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",
@@ -208,11 +212,11 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 			},
 			{
 				Name:      "USER",
-				ValueFrom: envVarSourceFromSecret(secretName, "username", false),
+				ValueFrom: rutil.EnvVarSourceFromSecret(secretName, "username", false),
 			},
 			{
 				Name:      "PASSWORD",
-				ValueFrom: envVarSourceFromSecret(secretName, "password", false),
+				ValueFrom: rutil.EnvVarSourceFromSecret(secretName, "password", false),
 			},
 			{
 				Name:  "KB_CA_CERT",
@@ -404,7 +408,8 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 	}
 
 	container := ElasticsearchContainerDecorateIndexCreator(
-		ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain, OSTypeLinux),
+		ElasticsearchContainerDecorate(c.intrusionDetectionControllerContainer(), c.esClusterConfig.ClusterName(),
+			ElasticsearchIntrusionDetectionUserSecret, c.clusterDomain, rutil.OSTypeLinux),
 		c.esClusterConfig.Replicas(), c.esClusterConfig.Shards())
 
 	if c.esLicenseType == ElasticsearchLicenseTypeBasic {
@@ -751,7 +756,7 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []client.Object {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := rutil.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("intrusion-detection")
 
 	if c.syslogForwardingIsEnabled() {

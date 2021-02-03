@@ -20,6 +20,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -29,7 +30,7 @@ var _ = Describe("compliance rendering tests", func() {
 	ns := "tigera-compliance"
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
-	complianceServerCertSecret := CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace())
+	complianceServerCertSecret := CreateCertSecret(render.ComplianceServerCertSecret, rutil.OperatorNamespace())
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
@@ -340,11 +341,11 @@ var _ = Describe("compliance rendering tests", func() {
 			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			})
-			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster))
-			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(tolerateAll))
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, rutil.TolerateMaster))
+			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rutil.TolerateAll))
 		})
 
 		It("should apply controlPlaneNodeSelectors", func() {

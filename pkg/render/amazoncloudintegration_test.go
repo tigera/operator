@@ -25,6 +25,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rutil "github.com/tigera/operator/pkg/render/util"
 )
 
 const (
@@ -127,7 +128,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal(AwsCIName))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tolerateAll))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rutil.TolerateAll))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.ObjectMeta.Annotations).To(HaveKey("hash.operator.tigera.io/credential-secret"))

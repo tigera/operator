@@ -636,7 +636,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ManagerInternalTLSSecretName,
-					Namespace: render.OperatorNamespace(),
+					Namespace: rutil.OperatorNamespace(),
 				},
 			}
 

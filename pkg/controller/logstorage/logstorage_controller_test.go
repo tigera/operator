@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	rutil "github.com/tigera/operator/pkg/render/util"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -59,19 +61,19 @@ var (
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
 
 	esCertSecretKey        = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}
+	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: rutil.OperatorNamespace()}
 	esCertPubSecretKey     = client.ObjectKey{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertPubSecretOperKey = client.ObjectKey{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}
+	esCertPubSecretOperKey = client.ObjectKey{Name: render.ElasticsearchPublicCertSecret, Namespace: rutil.OperatorNamespace()}
 
 	kbCertSecretKey        = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
-	kbCertSecretOperKey    = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}
+	kbCertSecretOperKey    = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: rutil.OperatorNamespace()}
 	kbCertPubSecretKey     = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}
+	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: rutil.OperatorNamespace()}
 
 	esPublicCertObjMeta      = metav1.ObjectMeta{Name: render.ElasticsearchPublicCertSecret, Namespace: render.ElasticsearchNamespace}
 	kbPublicCertObjMeta      = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}
-	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: render.OperatorNamespace()}
+	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rutil.OperatorNamespace()}
+	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: rutil.OperatorNamespace()}
 	storageClassName         = "test-storage-class"
 
 	esDNSNames = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
@@ -698,7 +700,7 @@ var _ = Describe("LogStorage controller", func() {
 					esSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.TigeraElasticsearchCertSecret,
-							Namespace: render.OperatorNamespace(),
+							Namespace: rutil.OperatorNamespace(),
 						},
 					}
 					Expect(cli.Delete(ctx, esSecret)).NotTo(HaveOccurred())
@@ -706,7 +708,7 @@ var _ = Describe("LogStorage controller", func() {
 					kbSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.TigeraKibanaCertSecret,
-							Namespace: render.OperatorNamespace(),
+							Namespace: rutil.OperatorNamespace(),
 						},
 					}
 					Expect(cli.Delete(ctx, kbSecret)).NotTo(HaveOccurred())
@@ -1130,7 +1132,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		}, operatorv1.ProviderNone,
 		[]*corev1.Secret{
-			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: render.OperatorNamespace()}},
+			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rutil.OperatorNamespace()}},
 		},
 		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic,
 		&corev1.ConfigMap{
@@ -1200,7 +1202,7 @@ func createESSecrets() []client.Object {
 
 	esOperNsSecret := render.CopySecrets(render.ElasticsearchNamespace, esSecret)[0]
 
-	esPublicOperNsSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.OperatorNamespace(), esSecret.Data["tls.crt"], "tls.crt")
+	esPublicOperNsSecret := createPubSecret(render.ElasticsearchPublicCertSecret, rutil.OperatorNamespace(), esSecret.Data["tls.crt"], "tls.crt")
 	esPublicSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		esSecret,
@@ -1219,7 +1221,7 @@ func createKibanaSecrets() []client.Object {
 
 	kbOperNsSecret := render.CopySecrets(render.KibanaNamespace, kbSecret)[0]
 
-	kbPublicOperNsSecret := createPubSecret(render.KibanaPublicCertSecret, render.OperatorNamespace(), kbSecret.Data["tls.crt"], "tls.crt")
+	kbPublicOperNsSecret := createPubSecret(render.KibanaPublicCertSecret, rutil.OperatorNamespace(), kbSecret.Data["tls.crt"], "tls.crt")
 	kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		kbSecret,

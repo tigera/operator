@@ -73,7 +73,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 		Expect(cli.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.AmazonCloudIntegrationCredentialName,
-				Namespace: render.OperatorNamespace(),
+				Namespace: rutil.OperatorNamespace(),
 			},
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data: map[string][]byte{

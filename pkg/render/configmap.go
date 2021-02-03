@@ -15,13 +15,15 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/render/component"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
+	rutil "github.com/tigera/operator/pkg/render/util"
 )
 
-func ConfigMaps(cms []*corev1.ConfigMap) Component {
+func ConfigMaps(cms []*corev1.ConfigMap) component.Component {
 	return &configMapComponent{configMaps: cms}
 }
 
@@ -34,8 +36,8 @@ func (c *configMapComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *configMapComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *configMapComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeAny
 }
 
 func (c *configMapComponent) Objects() ([]client.Object, []client.Object) {

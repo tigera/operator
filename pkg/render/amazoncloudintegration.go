@@ -18,6 +18,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
+	rutil "github.com/tigera/operator/pkg/render/common"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -26,6 +30,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/component"
 )
 
 const (
@@ -37,7 +42,7 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
+func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (component.Component, error) {
 	return &amazonCloudIntegrationComponent{
 		amazonCloudIntegration: aci,
 		installation:           installation,
@@ -64,8 +69,8 @@ func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) e
 	return err
 }
 
-func (c *amazonCloudIntegrationComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *amazonCloudIntegrationComponent) SupportedOSType() rutil.OSType {
+	return rutil.OSTypeLinux
 }
 
 type AmazonCredential struct {
@@ -103,8 +108,8 @@ func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.O
 	objs := []client.Object{
 		createNamespace(AmazonCloudIntegrationNamespace, c.openshift),
 	}
-	secrets := copyImagePullSecrets(c.pullSecrets, AmazonCloudIntegrationNamespace)
-	objs = append(objs, secrets...)
+	secrets := rutil.CopySecrets(AmazonCloudIntegrationNamespace, c.pullSecrets...)
+	objs = append(objs, rutil.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
@@ -219,7 +224,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	annotations := make(map[string]string)
-	annotations[credentialSecretHashAnnotation] = AnnotationHash(c.credentials)
+	annotations[credentialSecretHashAnnotation] = rutil.AnnotationHash(c.credentials)
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -248,8 +253,8 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
-					Tolerations:        tolerateAll,
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        rutil.TolerateAll,
+					ImagePullSecrets:   rutil.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
 					},
@@ -301,8 +306,8 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             Bool(true),
-			AllowPrivilegeEscalation: Bool(false),
+			RunAsNonRoot:             ptr.BoolToPtr(true),
+			AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{

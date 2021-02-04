@@ -1,11 +1,11 @@
 components:
   typha:
-    version: v3.16.6
+    version: v3.16.7
   calico/node:
-    version: v3.16.6
+    version: v3.16.7
   calico/cni:
-    version: v3.16.6
+    version: v3.16.7
   calico/kube-controllers:
-    version: v3.16.6
+    version: v3.16.7
   flexvol:
-    version: v3.16.6
+    version: v3.16.7

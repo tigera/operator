@@ -372,8 +372,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
-	var oidcUserConfigMap *corev1.ConfigMap
-	var oidcUserSecret *corev1.Secret
 	applyTrial := false
 
 	if managementClusterConnection == nil {
@@ -429,15 +427,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			}
 		}
 
-		if oidcUserConfigMap, err = r.getOIDCUserConfigMap(ctx); err != nil {
-			r.status.SetDegraded("Failed to read oid user configmap", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if oidcUserSecret, err = r.oidcUsersEsSecret(ctx); err != nil {
-			r.status.SetDegraded("Failed to read oid user secret", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -512,8 +501,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		applyTrial,
 		dexCfg,
 		esLicenseType,
-		oidcUserConfigMap,
-		oidcUserSecret,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -551,6 +538,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger.Error(err, "failed to create or update Elasticsearch lifecycle policies")
 			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
 			return reconcile.Result{}, err
+		}
+
+		if esLicenseType == render.ElasticsearchLicenseTypeBasic {
+			if err = r.checkOIDCUsersEsResource(ctx); err != nil {
+				r.status.SetDegraded("Failed to get oidc user Secret and ConfigMap", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -720,38 +714,15 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 	return &svc, nil
 }
 
-func (r *ReconcileLogStorage) getOIDCUserConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, cm); err != nil {
-		if errors.IsNotFound(err) {
-			return &corev1.ConfigMap{
-				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCUsersConfigMapName,
-					Namespace: render.ElasticsearchNamespace,
-				},
-			}, nil
-		}
-		return nil, err
+func (r *ReconcileLogStorage) checkOIDCUsersEsResource(ctx context.Context) error {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, &corev1.ConfigMap{}); err != nil {
+		return err
 	}
-	return cm, nil
-}
 
-func (r *ReconcileLogStorage) oidcUsersEsSecret(ctx context.Context) (*corev1.Secret, error) {
-	secret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersEsSecreteName, Namespace: render.ElasticsearchNamespace}, secret); err != nil {
-		if errors.IsNotFound(err) {
-			return &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCUsersEsSecreteName,
-					Namespace: render.ElasticsearchNamespace,
-				},
-			}, nil
-		}
-		return nil, err
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersEsSecreteName, Namespace: render.ElasticsearchNamespace}, &corev1.Secret{}); err != nil {
+		return err
 	}
-	return secret, nil
+	return nil
 }
 
 func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

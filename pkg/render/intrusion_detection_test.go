@@ -20,6 +20,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,7 +30,7 @@ import (
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
-		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
+		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 		component := render.IntrusionDetection(
 			nil,
@@ -75,15 +77,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
 	})
 
 	It("should render all resources for a configuration that includes event forwarding turned on (Syslog)", func() {
-		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
+		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 		// Initialize a default LogCollector instance to use.
 		lc := &operatorv1.LogCollector{}
@@ -140,13 +142,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
 
-		dp := GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "", "v1", "Deployment").(*apps.Deployment)
+		dp := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "", "v1", "Deployment").(*apps.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -179,11 +181,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
 		)
 		resources, _ := component.Objects()
-		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
-		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
 		Expect(idc.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
@@ -198,10 +200,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
 		resources, _ := component.Objects()
-		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
-		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		Expect(job.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package authentication_test
+package authentication
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -121,7 +120,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -168,7 +167,12 @@ var _ = Describe("authentication controller tests", func() {
 
 		It("should use builtin images", func() {
 
-			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+			r := ReconcileAuthentication{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -198,7 +202,12 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+			r := ReconcileAuthentication{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -255,7 +264,7 @@ var _ = Describe("authentication controller tests", func() {
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := authentication.NewReconciler(cli, scheme, operatorv1.ProviderNone, mockStatus, "")
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())
@@ -265,7 +274,7 @@ var _ = Describe("authentication controller tests", func() {
 
 		if nameAttrEmpty {
 			err = cli.Get(ctx, client.ObjectKey{Name: auth.GetName()}, auth)
-			Expect(auth.Spec.LDAP.UserSearch.NameAttribute).To(Equal(authentication.DefaultNameAttribute))
+			Expect(auth.Spec.LDAP.UserSearch.NameAttribute).To(Equal(defaultNameAttribute))
 		}
 	},
 		Entry("Proper configuration",
@@ -330,5 +339,25 @@ var _ = Describe("authentication controller tests", func() {
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
 			[]byte(validDN), []byte(validPW), []byte(validCA),
 			true),
+	)
+	var (
+		iss  = "https://issuer.com"
+		ocp  = &operatorv1.AuthenticationOpenshift{IssuerURL: iss}
+		ldap = &operatorv1.AuthenticationLDAP{UserSearch: &operatorv1.UserSearch{BaseDN: validDN}}
+		oidc = &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}
+	)
+	DescribeTable("should validate the authentication spec", func(auth *operatorv1.Authentication, expectPass bool) {
+		if expectPass {
+			Expect(validateAuthentication(auth)).NotTo(HaveOccurred())
+		} else {
+			Expect(validateAuthentication(auth)).To(HaveOccurred())
+		}
+	},
+		Entry("Expect single Openshift config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{Openshift: ocp}}, true),
+		Entry("Expect single LDAP config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{LDAP: ldap}}, true),
+		Entry("Expect single OIDC config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, true),
+		Entry("Expect 0 configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{}}, false),
+		Entry("Expect two configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap}}, false),
+		Entry("Expect three configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap, Openshift: ocp}}, false),
 	)
 })

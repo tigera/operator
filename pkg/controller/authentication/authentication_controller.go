@@ -44,12 +44,12 @@ import (
 var log = logf.Log.WithName("controller_authentication")
 
 const (
-	ControllerName = "authentication-controller"
+	controllerName = "authentication-controller"
 
 	// Common name to add to the Dex TLS secret.
 	dexCN = "tigera-dex.tigera-dex.svc.%s"
 
-	DefaultNameAttribute string = "uid"
+	defaultNameAttribute string = "uid"
 )
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -77,23 +77,23 @@ func newReconciler(mgr manager.Manager, provider oprv1.Provider, clusterDomain s
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r *ReconcileAuthentication) error {
-	c, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("failed to create %s: %w", ControllerName, err)
+		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &oprv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
+		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch installation resource: %w", ControllerName, err)
+		return fmt.Errorf("%s failed to watch installation resource: %w", controllerName, err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &oprv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("%s failed to watch resource: %w", ControllerName, err)
+		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
 
 	for _, namespace := range []string{render.OperatorNamespace(), render.DexNamespace} {
@@ -101,13 +101,13 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", ControllerName, secretName, namespace, err)
+				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", controllerName, secretName, namespace, err)
 			}
 		}
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch ImageSet: %w", ControllerName, err)
+		return fmt.Errorf("%s failed to watch ImageSet: %w", controllerName, err)
 	}
 
 	return nil
@@ -131,7 +131,7 @@ type ReconcileAuthentication struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling ", "controller", ControllerName)
+	reqLogger.Info("Reconciling ", "controller", controllerName)
 
 	// Fetch the Authentication spec. If present, we deploy dex in the cluster.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
@@ -342,16 +342,17 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 	ldap := authentication.Spec.LDAP
 	if ldap != nil {
 		if ldap.UserSearch.NameAttribute == "" {
-			ldap.UserSearch.NameAttribute = DefaultNameAttribute
+			ldap.UserSearch.NameAttribute = defaultNameAttribute
 		}
 	}
 }
 
 // validateAuthentication makes sure that the authentication spec is ready for use.
 func validateAuthentication(authentication *oprv1.Authentication) error {
-	oidc := authentication.Spec.OIDC != nil
+	// We support using only one connector at once.
+	oidc := authentication.Spec.OIDC
 	ldp := authentication.Spec.LDAP
-	numConnectors := render.BoolToInt(oidc) + render.BoolToInt(authentication.Spec.Openshift != nil) + render.BoolToInt(ldp != nil)
+	numConnectors := render.CountTrues(oidc != nil, ldp != nil, authentication.Spec.Openshift != nil)
 	if numConnectors == 0 {
 		return fmt.Errorf("no identity provider connector was specified, please add a connector to the Authentication spec")
 	} else if numConnectors > 1 {
@@ -359,7 +360,7 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 	}
 
 	// If the user has specified the deprecated and the new prefix field, but with different values, we cannot proceed.
-	if oidc {
+	if oidc != nil {
 		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix != "" && authentication.Spec.OIDC.UsernamePrefix != authentication.Spec.UsernamePrefix {
 			return fmt.Errorf("you set username prefix twice, but with different values, please remove Authentication.Spec.OIDC.UsernamePrefix")
 		}

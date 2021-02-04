@@ -73,8 +73,12 @@ spec:
                             and a GroupAttribute match, a user belongs to the group.
                           properties:
                             groupAttribute:
+                              description: The attribute of a group that links it
+                                to a user.
                               type: string
                             userAttribute:
+                              description: The attribute of a user that links it to
+                                a group.
                               type: string
                           required:
                           - groupAttribute

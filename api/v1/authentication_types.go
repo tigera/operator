@@ -138,12 +138,12 @@ type UserSearch struct {
 
 	// Optional filter to apply when searching the directory. For example "(objectClass=person)"
 	// +optional
-	Filter string `json:"filter"`
+	Filter string `json:"filter,omitempty"`
 
 	// A mapping of the attribute that is used as the username. This attribute can be used to apply RBAC to a user.
 	// Default: uid
 	// +optional
-	NameAttribute string `json:"nameAttribute"`
+	NameAttribute string `json:"nameAttribute,omitempty"`
 }
 
 // Group search configuration to find the groups that a user is in.
@@ -155,7 +155,7 @@ type GroupSearch struct {
 	// Optional filter to apply when searching the directory.
 	// For example "(objectClass=posixGroup)"
 	// +optional
-	Filter string `json:"filter"`
+	Filter string `json:"filter,omitempty"`
 
 	// The attribute of the group that represents its name. This attribute can be used to apply RBAC to a user group.
 	// +required
@@ -170,7 +170,12 @@ type GroupSearch struct {
 
 // UserMatch when the value of a UserAttribute and a GroupAttribute match, a user belongs to the group.
 type UserMatch struct {
-	UserAttribute  string `json:"userAttribute"`
+	// The attribute of a user that links it to a group.
+	// +required
+	UserAttribute string `json:"userAttribute"`
+
+	// The attribute of a group that links it to a user.
+	// +required
 	GroupAttribute string `json:"groupAttribute"`
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package test
 
 import (
 	"encoding/json"
 	"fmt"
 
-	. "github.com/onsi/gomega"
-
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+
+	. "github.com/onsi/gomega"
+
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
+
+func ExpectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
+	for _, c := range podSpec.Containers {
+		ExpectWithOffset(1, c.Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: host},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: port},
+		), fmt.Sprintf("Container %s did not have KUBERENETES_SERVICE_... env vars", c.Name))
+	}
+	for _, c := range podSpec.InitContainers {
+		ExpectWithOffset(1, c.Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: host},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: port},
+		), fmt.Sprintf("Init container %s did not have KUBERENETES_SERVICE_... env vars", c.Name))
+	}
+}
 
 func ExpectResource(resource runtime.Object, name, ns, group, version, kind string) {
 	gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
@@ -108,30 +124,3 @@ func CreateCertSecret(name, namespace string) *corev1.Secret {
 		},
 	}
 }
-
-var (
-	tolerateMaster = corev1.Toleration{
-		Key:    "node-role.kubernetes.io/master",
-		Effect: corev1.TaintEffectNoSchedule,
-	}
-
-	tolerateCriticalAddonsOnly = corev1.Toleration{
-		Key:      "CriticalAddonsOnly",
-		Operator: v1.TolerationOpExists,
-	}
-
-	tolerateAll = []corev1.Toleration{
-		{
-			Key:      "CriticalAddonsOnly",
-			Operator: corev1.TolerationOpExists,
-		},
-		{
-			Effect:   corev1.TaintEffectNoSchedule,
-			Operator: corev1.TolerationOpExists,
-		},
-		{
-			Effect:   corev1.TaintEffectNoExecute,
-			Operator: corev1.TolerationOpExists,
-		},
-	}
-)

@@ -119,7 +119,7 @@ var _ = Describe("compliance rendering tests", func() {
 			envs := d.Spec.Template.Spec.Containers[0].Env
 
 			expectedEnvs := []corev1.EnvVar{
-				{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"},
+				{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
 				{Name: "ELASTIC_PORT", Value: "9200"},
 			}
 			for _, expected := range expectedEnvs {

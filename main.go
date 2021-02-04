@@ -79,7 +79,7 @@ func main() {
 	// kubeconfig but should use the in-cluster service account
 	var urlOnlyKubeconfig string
 	var showVersion bool
-	var dumpImages string
+	var printImages string
 	var sgSetup bool
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
@@ -88,8 +88,8 @@ func main() {
 		"Path to a kubeconfig, but only for the apiserver url.")
 	flag.BoolVar(&showVersion, "version", false,
 		"Show version information")
-	flag.StringVar(&dumpImages, "dump-images", "",
-		"Dump the default images the operator could deploy. Possible values: list")
+	flag.StringVar(&printImages, "print-images", "",
+		"Print the default images the operator could deploy and exit. Possible values: list")
 	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
 	opts := zap.Options{}
@@ -105,8 +105,8 @@ func main() {
 		fmt.Println("Enterprise:", components.EnterpriseRelease)
 		os.Exit(0)
 	}
-	if dumpImages != "" {
-		if strings.ToLower(dumpImages) == "list" {
+	if printImages != "" {
+		if strings.ToLower(printImages) == "list" {
 			for _, x := range components.CalicoComponents {
 				ref, _ := components.GetReference(x, "", "", nil)
 				fmt.Println(ref)
@@ -117,7 +117,7 @@ func main() {
 			}
 			os.Exit(0)
 		}
-		fmt.Println("Invalid option for --dump-images flag", dumpImages)
+		fmt.Println("Invalid option for --print-images flag", printImages)
 		os.Exit(1)
 	}
 

@@ -35,6 +35,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,6 +55,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
+	defaultEckOperatorMemorySetting    = "512Mi"
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
 )
 
@@ -232,6 +234,10 @@ func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStora
 
 	fillDefaults(instance)
 
+	if err := validateLogStorageSpec(&instance.Spec); err != nil {
+		return nil, err
+	}
+
 	return instance, nil
 }
 
@@ -273,6 +279,71 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Nodes == nil {
 		opr.Spec.Nodes = &operatorv1.Nodes{Count: 1}
 	}
+
+	if opr.Spec.ComponentResources == nil {
+		limits := corev1.ResourceList{}
+		requests := corev1.ResourceList{}
+		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		opr.Spec.ComponentResources = []operatorv1.ComponentResource{
+			{
+				ComponentName: operatorv1.ComponentNameECKOperator,
+				ResourceRequirements: &corev1.ResourceRequirements{
+					Limits:   limits,
+					Requests: requests,
+				},
+			},
+		}
+	}
+}
+
+func validateLogStorageSpec(spec *operatorv1.LogStorageSpec) error {
+	if spec.Retention == nil {
+		return fmt.Errorf("LogStorage Spec missing Retention %+v", spec)
+	}
+
+	if spec.Retention.Flows == nil {
+		return fmt.Errorf("LogStorage Spec missing Retention Flows %+v", spec)
+	}
+
+	if spec.Retention.AuditReports == nil {
+		return fmt.Errorf("LogStorage Spec missing Retention AuditReports %+v", spec)
+	}
+
+	if spec.Retention.Snapshots == nil {
+		return fmt.Errorf("LogStorage Spec missing Retention Snapshots %+v", spec)
+	}
+
+	if spec.Retention.ComplianceReports == nil {
+		return fmt.Errorf("LogStorage Spec missing Retention ComplianceReports %+v", spec)
+	}
+
+	if spec.Indices == nil {
+		return fmt.Errorf("LogStorage Spec missing Indices %+v", spec)
+	}
+
+	if spec.Indices.Replicas == nil {
+		return fmt.Errorf("LogStorage Spec Indices missing Replicas %+v", spec)
+	}
+
+	if spec.StorageClassName == "" {
+		return fmt.Errorf("LogStorage Spec missing StorageClassName %+v", spec)
+	}
+
+	if spec.Nodes == nil {
+		return fmt.Errorf("LogStorage Spec missing Nodes %+v", spec)
+	}
+
+	if spec.ComponentResources == nil {
+		return fmt.Errorf("LogStorage Spec missing ComponentResources %+v", spec)
+	}
+
+	// Currently the only supported Component is ECKOperator.
+	if spec.ComponentResources[0].ComponentName != operatorv1.ComponentNameECKOperator || len(spec.ComponentResources) > 1 {
+		return fmt.Errorf("LogStorage Spec ComponentResources contains entry other than ECKOperator %+v", spec.ComponentResources)
+	}
+
+	return nil
 }
 
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read

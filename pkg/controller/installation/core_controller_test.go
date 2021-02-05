@@ -671,4 +671,35 @@ var _ = Describe("Testing core-controller installation", func() {
 			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
 		})
 	})
+	Context("Installation Component Resources validation", func() {
+		installation := &operator.Installation{Spec: operator.InstallationSpec{
+			ComponentResources: []operator.ComponentResource{},
+		}}
+
+		It("should return nil when there are no Component Resources to validate.", func() {
+			Expect(validateComponentResources(installation)).To(BeNil())
+		})
+
+		It("should return nil when only valid ComponentNames are present.", func() {
+			installation.Spec.ComponentResources = append(installation.Spec.ComponentResources, []operator.ComponentResource{
+				{
+					ComponentName: operator.ComponentNameTypha,
+				},
+				{
+					ComponentName: operator.ComponentNameKubeControllers,
+				},
+				{
+					ComponentName: operator.ComponentNameNode,
+				},
+			}...)
+			Expect(validateComponentResources(installation)).To(BeNil())
+		})
+
+		It("should return an error when an invalid ComponentName is present", func() {
+			installation.Spec.ComponentResources = append(installation.Spec.ComponentResources, operator.ComponentResource{
+				ComponentName: operator.ComponentNameECKOperator,
+			})
+			Expect(validateComponentResources(installation)).ToNot(BeNil())
+		})
+	})
 })

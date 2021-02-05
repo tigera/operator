@@ -351,7 +351,11 @@ func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadm
 		}
 	}
 
-	return fillDefaults(i)
+	if err := fillDefaults(i); err != nil {
+		return err
+	}
+
+	return validateComponentResources(i)
 }
 
 // fillDefaults populates the default values onto an Installation object.
@@ -554,6 +558,26 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 	if instance.Spec.NodeUpdateStrategy.Type == "" {
 		instance.Spec.NodeUpdateStrategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
+	}
+
+	return nil
+}
+
+func validateComponentResources(installation *operator.Installation) error {
+	if len(installation.Spec.ComponentResources) == 0 {
+		return nil
+	}
+
+	validComponentNames := map[operator.ComponentName]struct{}{
+		operator.ComponentNameKubeControllers: {},
+		operator.ComponentNameNode:            {},
+		operator.ComponentNameTypha:           {},
+	}
+
+	for _, resource := range installation.Spec.ComponentResources {
+		if _, ok := validComponentNames[resource.ComponentName]; !ok {
+			return fmt.Errorf("installation spec componentResources contains an invalid componentName %+v", resource)
+		}
 	}
 
 	return nil

@@ -1030,6 +1030,14 @@ func (es elasticsearchComponent) esCuratorServiceAccount() *corev1.ServiceAccoun
 
 func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	gracePeriod := int64(10)
+	memoryLimit := resource.Quantity{}
+	memoryRequest := resource.Quantity{}
+	for _, c := range es.logStorage.Spec.ComponentResources {
+		if c.ComponentName == operatorv1.ComponentNameECKOperator {
+			memoryLimit = c.ResourceRequirements.Limits[corev1.ResourceMemory]
+			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
+		}
+	}
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1098,11 +1106,11 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("1"),
-								"memory": resource.MustParse("512Mi"),
+								"memory": memoryLimit,
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),
-								"memory": resource.MustParse("512Mi"),
+								"memory": memoryRequest,
 							},
 						},
 					}},

@@ -349,10 +349,20 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 
 // validateAuthentication makes sure that the authentication spec is ready for use.
 func validateAuthentication(authentication *oprv1.Authentication) error {
-	// We support using only one connector at once.
 	oidc := authentication.Spec.OIDC
 	ldp := authentication.Spec.LDAP
-	numConnectors := render.CountTrues(oidc != nil, ldp != nil, authentication.Spec.Openshift != nil)
+	// We support using only one connector at once.
+	var numConnectors int8 = 0
+	if oidc != nil {
+		numConnectors++
+	}
+	if ldp != nil {
+		numConnectors++
+	}
+	if authentication.Spec.Openshift != nil {
+		numConnectors++
+	}
+
 	if numConnectors == 0 {
 		return fmt.Errorf("no identity provider connector was specified, please add a connector to the Authentication spec")
 	} else if numConnectors > 1 {

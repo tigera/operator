@@ -266,4 +266,60 @@ var _ = Describe("dex config tests", func() {
 			ocpSecret,
 		),
 	)
+
+	DescribeTable("Test DexRPConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
+		dexConfig := render.NewDexRelyingPartyConfig(auth, tlsSecret, dexSecret, dns.DefaultClusterDomain)
+
+		Expect(dexConfig.TokenURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"))
+		Expect(dexConfig.UserInfoURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"))
+		Expect(dexConfig.JWKSURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"))
+		Expect(dexConfig.ClientSecret()).To(Equal(dexSecret.Data["clientSecret"]))
+		Expect(dexConfig.UsernameClaim()).To(Equal("email"))
+		Expect(dexConfig.GroupsClaim()).To(Equal("groups"))
+
+		annotations := dexConfig.RequiredAnnotations()
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+
+		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
+			Name: render.DexTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: render.DexTLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls-dex.crt"},
+					},
+				},
+			}}))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret, dexSecret))
+	},
+		Entry("Compare actual and expected OIDC config", oidc),
+		Entry("Compare actual and expected LDAP config", ldap),
+		Entry("Compare actual and expected Openshift config", ocp),
+	)
+
+	DescribeTable("Test DexKVConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
+		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, dns.DefaultClusterDomain)
+
+		annotations := dexConfig.RequiredAnnotations()
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+
+		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
+			Name: render.DexTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: render.DexTLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls-dex.crt"},
+					},
+				},
+			}}))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret))
+	},
+		Entry("Compare actual and expected OIDC config", oidc),
+		Entry("Compare actual and expected LDAP config", ldap),
+		Entry("Compare actual and expected Openshift config", ocp),
+	)
 })

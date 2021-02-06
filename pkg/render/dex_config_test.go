@@ -18,6 +18,7 @@ import (
 	"reflect"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -112,4 +113,213 @@ var _ = Describe("dex config tests", func() {
 			Expect(reflect.DeepEqual(hashes1, hashes3)).To(BeFalse())
 		})
 	})
+
+	var (
+		domain      = "https://example.com"
+		iss         = "https://issuer.com"
+		defaultMode = int32(420)
+		validDN     = "dc=example,dc=com"
+		validFilter = "(objectClass=posixGroup)"
+		attribute   = "uid"
+		oidc        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}}}
+		ocp         = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, Openshift: &operatorv1.AuthenticationOpenshift{IssuerURL: iss}}}
+		ldap        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, LDAP: &operatorv1.AuthenticationLDAP{Host: iss, UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}, GroupSearch: &operatorv1.GroupSearch{NameAttribute: attribute, Filter: validFilter, BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}}}}
+		ldapSecret  = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LDAPSecretName, Namespace: render.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			Data: map[string][]byte{"bindDN": []byte(validDN), "bindPW": []byte("my-secret"), "rootCA": []byte("ca")}}
+		ocpSecret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OpenshiftSecretName, Namespace: render.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			Data: map[string][]byte{"clientID": []byte(validDN), "clientSecret": []byte("my-secret"), "rootCA": []byte("ca")}}
+	)
+
+	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
+		dexConfig := render.NewDexConfig(auth, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
+		Expect(reflect.DeepEqual(dexConfig.Connector(), expectedConnector)).To(BeTrue())
+		annotations := dexConfig.RequiredAnnotations()
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-config"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-idp-secret"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+
+		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(expectedVolumes))
+		Expect(dexConfig.RequiredEnv("")).To(ConsistOf(expectedEnv))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret, dexSecret, secret))
+
+	},
+		Entry("Compare actual and expected OIDC config",
+			oidc, map[string]interface{}{
+				"id":   "oidc",
+				"type": "oidc",
+				"name": "oidc",
+				"config": map[string]interface{}{
+					"issuer":                    iss,
+					"clientID":                  "$CLIENT_ID",
+					"clientSecret":              "$CLIENT_SECRET",
+					"redirectURI":               "https://example.com/dex/callback",
+					"scopes":                    []string{"openid", "email", "profile"},
+					"userNameKey":               "email",
+					"userIDKey":                 "email",
+					"insecureSkipEmailVerified": false,
+				},
+			}, []corev1.Volume{
+				{
+					Name: "config",
+					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+				},
+				{
+					Name:         "tls",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: render.DexTLSSecretName}},
+				},
+				{
+					Name:         "secrets",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: idpSecret.Name, Items: []corev1.KeyToPath{{Key: "serviceAccountSecret", Path: "google-groups.json"}}}},
+				},
+			}, []corev1.EnvVar{
+				{Name: "DEX_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: dexSecret.Name}}}},
+				{Name: "CLIENT_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: idpSecret.Name}}}},
+				{Name: "CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: idpSecret.Name}}}},
+				{Name: "ADMIN_EMAIL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: "adminEmail", LocalObjectReference: corev1.LocalObjectReference{Name: idpSecret.Name}}}},
+			},
+			idpSecret,
+		),
+		Entry("Compare actual and expected LDAP config",
+			ldap, map[string]interface{}{
+				"id":   "ldap",
+				"type": "ldap",
+				"name": "ldap",
+				"config": map[string]interface{}{
+					"bindDN":                 "$BIND_DN",
+					"bindPW":                 "$BIND_PW",
+					"host":                   iss,
+					render.RootCASecretField: "/etc/ssl/certs/idp.pem",
+					"startTLS":               false,
+					"userSearch": map[string]string{
+						"baseDN":    validDN,
+						"filter":    validFilter,
+						"emailAttr": attribute,
+						"idAttr":    attribute,
+						"username":  attribute,
+						"nameAttr":  attribute,
+					},
+					"groupSearch": map[string]interface{}{
+						"baseDN":   validDN,
+						"filter":   validFilter,
+						"nameAttr": attribute,
+						"userMatchers": []map[string]string{{
+							"userAttr":  attribute,
+							"groupAttr": attribute,
+						}},
+					},
+				},
+			}, []corev1.Volume{
+				{
+					Name: "config",
+					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+				},
+				{
+					Name:         "tls",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: render.DexTLSSecretName}},
+				},
+				{
+					Name:         "secrets",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: ldapSecret.Name, Items: []corev1.KeyToPath{{Key: render.RootCASecretField, Path: "idp.pem"}}}},
+				},
+			}, []corev1.EnvVar{
+				{Name: "DEX_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: dexSecret.Name}}}},
+				{Name: "BIND_DN", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.BindDNSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ldapSecret.Name}}}},
+				{Name: "BIND_PW", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.BindPWSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ldapSecret.Name}}}},
+			},
+			ldapSecret,
+		),
+		Entry("Compare actual and expected Openshift config",
+			ocp, map[string]interface{}{
+				"id":   "openshift",
+				"type": "openshift",
+				"name": "openshift",
+				"config": map[string]interface{}{
+					"issuer":                 iss,
+					"clientID":               "$CLIENT_ID",
+					"clientSecret":           "$CLIENT_SECRET",
+					"redirectURI":            "https://example.com/dex/callback",
+					render.RootCASecretField: "/etc/ssl/certs/idp.pem",
+				},
+			}, []corev1.Volume{
+				{
+					Name: "config",
+					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+				},
+				{
+					Name:         "tls",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: render.DexTLSSecretName}},
+				},
+				{
+					Name:         "secrets",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: ocpSecret.Name, Items: []corev1.KeyToPath{{Key: render.RootCASecretField, Path: "idp.pem"}}}},
+				},
+			}, []corev1.EnvVar{
+				{Name: "DEX_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: dexSecret.Name}}}},
+				{Name: "CLIENT_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ocpSecret.Name}}}},
+				{Name: "CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ocpSecret.Name}}}},
+			},
+			ocpSecret,
+		),
+	)
+
+	DescribeTable("Test DexRPConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
+		dexConfig := render.NewDexRelyingPartyConfig(auth, tlsSecret, dexSecret, dns.DefaultClusterDomain)
+
+		Expect(dexConfig.TokenURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token"))
+		Expect(dexConfig.UserInfoURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo"))
+		Expect(dexConfig.JWKSURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"))
+		Expect(dexConfig.ClientSecret()).To(Equal(dexSecret.Data["clientSecret"]))
+		Expect(dexConfig.UsernameClaim()).To(Equal("email"))
+		Expect(dexConfig.GroupsClaim()).To(Equal("groups"))
+
+		annotations := dexConfig.RequiredAnnotations()
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+
+		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
+			Name: render.DexTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: render.DexTLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls-dex.crt"},
+					},
+				},
+			}}))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret, dexSecret))
+	},
+		Entry("Compare actual and expected OIDC config", oidc),
+		Entry("Compare actual and expected LDAP config", ldap),
+		Entry("Compare actual and expected Openshift config", ocp),
+	)
+
+	DescribeTable("Test DexKVConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
+		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, dns.DefaultClusterDomain)
+
+		annotations := dexConfig.RequiredAnnotations()
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+
+		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
+			Name: render.DexTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: render.DexTLSSecretName,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "tls-dex.crt"},
+					},
+				},
+			}}))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret))
+	},
+		Entry("Compare actual and expected OIDC config", oidc),
+		Entry("Compare actual and expected LDAP config", ldap),
+		Entry("Compare actual and expected Openshift config", ocp),
+	)
 })

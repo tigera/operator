@@ -18,6 +18,12 @@ import (
 	"fmt"
 	"strings"
 
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+
+	"github.com/tigera/operator/pkg/ptr"
+
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -64,8 +70,8 @@ func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) e
 	return err
 }
 
-func (c *amazonCloudIntegrationComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *amazonCloudIntegrationComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 type AmazonCredential struct {
@@ -103,8 +109,8 @@ func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.O
 	objs := []client.Object{
 		createNamespace(AmazonCloudIntegrationNamespace, c.openshift),
 	}
-	secrets := copyImagePullSecrets(c.pullSecrets, AmazonCloudIntegrationNamespace)
-	objs = append(objs, secrets...)
+	secrets := rdata.CopySecrets(AmazonCloudIntegrationNamespace, c.pullSecrets...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
@@ -219,7 +225,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	annotations := make(map[string]string)
-	annotations[credentialSecretHashAnnotation] = AnnotationHash(c.credentials)
+	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.credentials)
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -248,8 +254,8 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
-					Tolerations:        tolerateAll,
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					Tolerations:        rmeta.TolerateAll,
+					ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
 					},
@@ -301,8 +307,8 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             Bool(true),
-			AllowPrivilegeEscalation: Bool(false),
+			RunAsNonRoot:             ptr.BoolToPtr(true),
+			AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{

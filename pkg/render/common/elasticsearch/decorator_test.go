@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package elasticsearch
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	. "github.com/onsi/gomega"
 
@@ -41,9 +42,9 @@ var _ = Describe("Elasticsearch decorator tests", func() {
 			}},
 		}
 	})
-	Context("ElasticsearchContainerDecorate", func() {
+	Context("relasticsearch.ContainerDecorate", func() {
 		DescribeTable("should decorate a container with the given cluster DNS used for the ES host name", func(clusterDNS, expectedESHost string) {
-			c := ElasticsearchContainerDecorate(container, "test-cluster", "secret", clusterDNS, OSTypeLinux)
+			c := ContainerDecorate(container, "test-cluster", "secret", clusterDNS, rmeta.OSTypeLinux)
 
 			expectedEnvs := []corev1.EnvVar{
 				{Name: "ELASTIC_HOST", Value: expectedESHost},

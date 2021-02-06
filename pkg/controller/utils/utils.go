@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -186,7 +187,7 @@ func CheckLicenseKey(ctx context.Context, cli client.Client) error {
 
 // ValidateCertPair validates the cert pair secret in the tigera-operator namespace.
 func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
-	return ValidateCertPairInNamespace(client, render.OperatorNamespace(), certPairSecretName, keyName, certName)
+	return ValidateCertPairInNamespace(client, rmeta.OperatorNamespace(), certPairSecretName, keyName, certName)
 }
 
 // ValidateCertPairInNamespace checks if the given secret exists in the given
@@ -227,7 +228,7 @@ func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) (
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.ImagePullSecrets {
 		s := &corev1.Secret{}
-		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: render.OperatorNamespace()}, s)
+		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: rmeta.OperatorNamespace()}, s)
 		if err != nil {
 			return nil, err
 		}

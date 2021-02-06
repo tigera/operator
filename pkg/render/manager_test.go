@@ -17,6 +17,9 @@ package render_test
 import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -68,11 +71,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		deployment := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
@@ -102,7 +105,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
+		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
@@ -110,16 +113,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
-		Expect(GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "tigera-manager", "tigera-manager", "", "v1", "Deployment")).ToNot(BeNil())
 
-		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
 
-		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"authorization.k8s.io"},
@@ -186,7 +189,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resource based on test case.
 		resources := renderObjects(true, nil, nil)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
-		d := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
@@ -222,20 +225,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
 		By("configuring the manager deployment")
-		deployment := GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		manager := deployment.Spec.Template.Spec.Containers[0]
 		Expect(manager.Name).To(Equal("tigera-manager"))
-		ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
+		rtest.ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
 		voltron := deployment.Spec.Template.Spec.Containers[2]
 		esProxy := deployment.Spec.Template.Spec.Containers[1]
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
-		ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
+		rtest.ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
 		// Expect 2 volume mounts for es proxy
 		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
@@ -272,9 +275,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[5].Name).To(Equal(render.VoltronTunnelSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(render.ElasticsearchPublicCertSecret))
+		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
-		clusterRole := GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"authorization.k8s.io"},
@@ -343,15 +346,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operator.InstallationSpec) *v1.Deployment {
 		component, err := render.Manager(nil, nil, nil,
-			CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
-			&render.ElasticsearchClusterConfig{},
-			CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+			rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
+			&relasticsearch.ClusterConfig{},
+			rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
 			nil, false,
 			i,
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
-		return GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
+		return rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 	}
 
 	It("should apply controlPlaneNodeSelectors", func() {
@@ -371,7 +374,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		deployment := renderManager(&operator.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
-		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, tolerateMaster, tolerateCriticalAddonsOnly))
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly))
 	})
 })
 
@@ -393,13 +396,13 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 		tunnelSecret = &voltronTunnelSecret
 		internalTraffic = &internalManagerTLSSecret
 	}
-	esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
+	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		CreateCertSecret(render.ComplianceServerCertSecret, render.OperatorNamespace()),
+		rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
 		esConfigMap,
-		CreateCertSecret(render.ManagerTLSSecretName, render.OperatorNamespace()),
+		rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
 		nil,
 		false,
 		&operator.InstallationSpec{},

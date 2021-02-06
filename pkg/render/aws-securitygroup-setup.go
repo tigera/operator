@@ -23,6 +23,8 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.InstallationSpec) (Component, error) {
@@ -35,8 +37,8 @@ type awsSGSetupComponent struct {
 	image       string
 }
 
-func (c *awsSGSetupComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *awsSGSetupComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *awsSGSetupComponent) ResolveImages(is *operator.ImageSet) error {
@@ -65,7 +67,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "aws-security-group-setup-1",
-			Namespace: OperatorNamespace(),
+			Namespace: rmeta.OperatorNamespace(),
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
@@ -82,7 +84,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					ImagePullSecrets:   c.pullSecrets,
 					ServiceAccountName: TigeraAWSSGSetupName,
 					HostNetwork:        true,
-					Tolerations:        tolerateAll,
+					Tolerations:        rmeta.TolerateAll,
 					Containers: []corev1.Container{{
 						Name:  "aws-security-group-setup",
 						Image: c.image,
@@ -101,7 +103,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 								Value: "/etc/kubernetes/kubeconfig",
 							},
 						},
-						SecurityContext: securityContext(),
+						SecurityContext: rdata.BaseSecurityContext(),
 					}},
 				},
 			},
@@ -116,7 +118,7 @@ func (c *awsSGSetupComponent) serviceAccount() *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TigeraAWSSGSetupName,
-			Namespace: OperatorNamespace(),
+			Namespace: rmeta.OperatorNamespace(),
 		},
 	}
 }
@@ -139,7 +141,7 @@ func (c *awsSGSetupComponent) roleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      TigeraAWSSGSetupName,
-				Namespace: OperatorNamespace(),
+				Namespace: rmeta.OperatorNamespace(),
 			},
 		},
 	}

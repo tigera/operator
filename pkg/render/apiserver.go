@@ -31,6 +31,10 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
+	rdata "github.com/tigera/operator/pkg/render/common/data"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls"
 )
 
 const (
@@ -43,19 +47,30 @@ const (
 	APIServiceName          = "tigera-api"
 )
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
+	installation *operator.InstallationSpec,
+	managementCluster *operator.ManagementCluster,
+	managementClusterConnection *operator.ManagementClusterConnection,
+	aci *operator.AmazonCloudIntegration,
+	tlsKeyPair *corev1.Secret,
+	pullSecrets []*corev1.Secret,
+	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, clusterDomain)
 
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
-			var err error
-			tlsKeyPair, err = CreateOperatorTLSSecret(nil,
+			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			if err != nil {
+				return nil, err
+			}
+			tlsKeyPair, err = rdata.CreateTLSSecret(ca,
 				APIServerTLSSecretName,
+				rmeta.OperatorNamespace(),
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
-				DefaultCertificateDuration,
+				rmeta.DefaultCertificateDuration,
 				nil,
 				svcDNSNames...,
 			)
@@ -65,7 +80,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 			// We only need to add the tlsKeyPair if we created it, otherwise
 			// it already exists.
 			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+			tlsHashAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
 		}
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
@@ -80,8 +95,8 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, CopySecrets(APIServerNamespace, tunnelCASecret)...)
-		tlsHashAnnotations[voltronTunnelHashAnnotation] = AnnotationHash(tunnelCASecret.Data)
+		tlsSecrets = append(tlsSecrets, rdata.CopySecrets(APIServerNamespace, tunnelCASecret)...)
+		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelCASecret.Data)
 	}
 
 	return &apiServerComponent{
@@ -144,16 +159,16 @@ func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *apiServerComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(APIServerNamespace, c.openshift),
 	}
-	secrets := copyImagePullSecrets(c.pullSecrets, APIServerNamespace)
-	objs = append(objs, secrets...)
+	secrets := rdata.CopySecrets(APIServerNamespace, c.pullSecrets...)
+	objs = append(objs, rdata.SecretsToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.auditPolicyConfigMap(),
 		c.apiServerServiceAccount(),
@@ -667,7 +682,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					ImagePullSecrets:   rdata.GetImagePullSecretReferenceList(c.pullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
@@ -724,7 +739,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &isPrivileged,
-			RunAsUser:  Int64(0),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
@@ -801,7 +816,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext: securityContext(),
+		SecurityContext: rdata.BaseSecurityContext(),
 	}
 	return container
 }
@@ -855,7 +870,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, tolerateMaster)
+	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster)
 }
 
 func (c *apiServerComponent) getTLSObjects() []client.Object {
@@ -1150,10 +1165,10 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 }
 
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := rdata.BasePodSecurityPolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
 	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = Bool(false)
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp

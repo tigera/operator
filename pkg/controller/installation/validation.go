@@ -288,6 +288,18 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	validComponentNames := map[operatorv1.ComponentName]struct{}{
+		operatorv1.ComponentNameKubeControllers: {},
+		operatorv1.ComponentNameNode:            {},
+		operatorv1.ComponentNameTypha:           {},
+	}
+
+	for _, resource := range instance.Spec.ComponentResources {
+		if _, ok := validComponentNames[resource.ComponentName]; !ok {
+			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
+		}
+	}
+
 	return nil
 }
 

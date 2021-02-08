@@ -107,6 +107,7 @@ type InstallationSpec struct {
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
 	// ComponentResources can be used to customize the resource requirements for each component.
+	// Node, Typha, and KubeControllers are supported for installations.
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 
@@ -141,12 +142,13 @@ const (
 	ComponentNameNode            ComponentName = "Node"
 	ComponentNameTypha           ComponentName = "Typha"
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
+	ComponentNameECKOperator     ComponentName = "ECKOperator"
 )
 
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
-	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
+	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers;ECKOperator
 	ComponentName ComponentName `json:"componentName"`
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`

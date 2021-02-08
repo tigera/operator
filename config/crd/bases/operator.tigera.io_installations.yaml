@@ -281,7 +281,8 @@ spec:
                 type: object
               componentResources:
                 description: ComponentResources can be used to customize the resource
-                  requirements for each component.
+                  requirements for each component. Node, Typha, and KubeControllers
+                  are supported for installations.
                 items:
                   description: The ComponentResource struct associates a ResourceRequirements
                     with a component by name
@@ -292,6 +293,7 @@ spec:
                       - Node
                       - Typha
                       - KubeControllers
+                      - ECKOperator
                       type: string
                     resourceRequirements:
                       description: ResourceRequirements allows customization of limits
@@ -841,7 +843,8 @@ spec:
                     type: object
                   componentResources:
                     description: ComponentResources can be used to customize the resource
-                      requirements for each component.
+                      requirements for each component. Node, Typha, and KubeControllers
+                      are supported for installations.
                     items:
                       description: The ComponentResource struct associates a ResourceRequirements
                         with a component by name
@@ -853,6 +856,7 @@ spec:
                           - Node
                           - Typha
                           - KubeControllers
+                          - ECKOperator
                           type: string
                         resourceRequirements:
                           description: ResourceRequirements allows customization of

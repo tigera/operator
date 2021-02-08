@@ -35,6 +35,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,6 +55,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	tigeraElasticsearchUserSecretLabel = "tigera-elasticsearch-user"
 	defaultElasticsearchShards         = 1
+	defaultEckOperatorMemorySetting    = "512Mi"
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
 )
 
@@ -232,6 +234,10 @@ func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStora
 
 	fillDefaults(instance)
 
+	if err := validateComponentResources(&instance.Spec); err != nil {
+		return nil, err
+	}
+
 	return instance, nil
 }
 
@@ -273,6 +279,38 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Nodes == nil {
 		opr.Spec.Nodes = &operatorv1.Nodes{Count: 1}
 	}
+
+	if opr.Spec.ComponentResources == nil {
+		limits := corev1.ResourceList{}
+		requests := corev1.ResourceList{}
+		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		opr.Spec.ComponentResources = []operatorv1.ComponentResource{
+			{
+				ComponentName: operatorv1.ComponentNameECKOperator,
+				ResourceRequirements: &corev1.ResourceRequirements{
+					Limits:   limits,
+					Requests: requests,
+				},
+			},
+		}
+	}
+}
+
+func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
+	if spec.ComponentResources == nil {
+		return fmt.Errorf("LogStorage spec.ComponentResources is nil %+v", spec)
+	}
+	// Currently the only supported component is ECKOperator.
+	if len(spec.ComponentResources) > 1 {
+		return fmt.Errorf("LogStorage spec.ComponentResources contains unsupported components %+v", spec.ComponentResources)
+	}
+
+	if spec.ComponentResources[0].ComponentName != operatorv1.ComponentNameECKOperator {
+		return fmt.Errorf("LogStorage spec.ComponentResources.ComponentName %s is not supported", spec.ComponentResources[0].ComponentName)
+	}
+
+	return nil
 }
 
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read

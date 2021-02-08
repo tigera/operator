@@ -184,7 +184,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(len(initContainers)).To(Equal(1))
 				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
 
-				// Verify that the default container limist/requests are set.
+				// Verify that the default container limits/requests are set.
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 				limits := esContainer.Resources.Limits
 				resources := esContainer.Resources.Requests
@@ -580,6 +580,62 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
 			Expect(len(initContainers)).To(Equal(1))
 			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+		})
+
+		Context("ECKOperator memory requests/limits", func() {
+			When("LogStorage Spec contains an entry for ECKOperator in ComponentResources", func() {
+				It("should set matching memory requests/limits in the elastic-operator StatefulSet.Spec, manager container", func() {
+					limits := corev1.ResourceList{}
+					requests := corev1.ResourceList{}
+					limits[corev1.ResourceMemory] = resource.MustParse("512Mi")
+					requests[corev1.ResourceMemory] = resource.MustParse("512Mi")
+					logStorage.Spec.ComponentResources = []operatorv1.ComponentResource{
+						{
+							ComponentName: operatorv1.ComponentNameECKOperator,
+							ResourceRequirements: &corev1.ResourceRequirements{
+								Limits:   limits,
+								Requests: requests,
+							},
+						},
+					}
+
+					limits[corev1.ResourceCPU] = resource.MustParse("1")
+					requests[corev1.ResourceCPU] = resource.MustParse("100m")
+					expectedResourcesRequirements := corev1.ResourceRequirements{
+						Limits:   limits,
+						Requests: requests,
+					}
+
+					component := render.LogStorage(
+						logStorage,
+						installation, nil, nil, nil, nil,
+						esConfig,
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.OperatorNamespace()}},
+							{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						},
+						[]*corev1.Secret{
+							{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+						}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial, nil, nil)
+
+					createResources, _ := component.Objects()
+
+					statefulSet := GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace, "apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
+					Expect(statefulSet).Should(Not(BeNil()))
+					Expect(statefulSet.Spec.Template.Spec.Containers).ToNot(BeEmpty())
+					for _, container := range statefulSet.Spec.Template.Spec.Containers {
+						if container.Name == "manager" {
+							Expect(container).NotTo(BeNil())
+							Expect(container.Resources).To(Equal(expectedResourcesRequirements))
+							break
+						}
+					}
+				})
+			})
 		})
 	})
 

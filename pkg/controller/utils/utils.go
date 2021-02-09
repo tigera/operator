@@ -179,9 +179,20 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 // CheckLicenseKey checks if a license has been installed. It's useful
 // to prevent rollout of TSEE components that might require it.
 // It will return an error if the license is not installed, and nil otherwise.
-func CheckLicenseKey(ctx context.Context, cli client.Client) error {
+func CheckLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}
-	return cli.Get(ctx, DefaultInstanceKey, instance)
+	err := cli.Get(ctx, DefaultInstanceKey, instance)
+	return *instance, err
+}
+
+func IsComplianceFeatureActive(license v3.LicenseKey) bool {
+	for _, v := range license.Status.Features {
+		if v == "ComplianceReports" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ValidateCertPair validates the cert pair secret in the tigera-operator namespace.

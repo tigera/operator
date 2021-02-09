@@ -184,8 +184,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
+	license, err := utils.CheckLicenseKey(ctx, r.client)
+	if err != nil {
 		r.status.SetDegraded("License not found", err.Error())
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if !utils.IsComplianceFeatureActive(license) {
+		log.Info("Compliance is not activated as part of this license")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

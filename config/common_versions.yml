@@ -1,0 +1,5 @@
+title: unused
+components:
+  key-cert-provisioner:
+    image: tigera/key-cert-provisioner
+    version: release-v1.0

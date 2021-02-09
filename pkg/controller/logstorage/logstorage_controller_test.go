@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -47,6 +48,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -141,6 +143,24 @@ var _ = Describe("LogStorage controller", func() {
 			It("should default the spec.nodes structure", func() {
 				Expect(ls.Spec.Nodes).NotTo(BeNil())
 				Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
+			})
+
+			It("should set spec.componentResources to the default settings", func() {
+				limits := corev1.ResourceList{}
+				requests := corev1.ResourceList{}
+				limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+				requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+				expectedComponentResources := []operatorv1.ComponentResource{
+					{
+						ComponentName: operatorv1.ComponentNameECKOperator,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Limits:   limits,
+							Requests: requests,
+						},
+					},
+				}
+				Expect(ls.Spec.ComponentResources).NotTo(BeNil())
+				Expect(reflect.DeepEqual(expectedComponentResources, ls.Spec.ComponentResources)).To(BeTrue())
 			})
 		})
 
@@ -1085,6 +1105,78 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 			})
+		})
+	})
+	Context("LogStorageSpec, validateComponentResources", func() {
+		ls := operatorv1.LogStorage{Spec: operatorv1.LogStorageSpec{}}
+
+		It("should return an error when spec.ComponentResources is nil", func() {
+			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when spec.ComponentResources.ComponentName is not ECKOperator", func() {
+			ls.Spec.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName: "Typha",
+				},
+			}
+			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when spec.ComponentResources has more than one entry", func() {
+			ls.Spec.ComponentResources = append(ls.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName: "KubeControllers",
+			})
+			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return nil when spec.ComponentResources has 1 entry for ECKOperator", func() {
+			ls.Spec.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameECKOperator,
+				},
+			}
+			Expect(validateComponentResources(&ls.Spec)).To(BeNil())
+		})
+	})
+	Context("LogStorageSpec, fillDefaults", func() {
+		ls := operatorv1.LogStorage{Spec: operatorv1.LogStorageSpec{}}
+		fillDefaults(&ls)
+
+		var fr int32 = 8
+		var arr int32 = 91
+		var sr int32 = 91
+		var crr int32 = 91
+		var replicas int32 = render.DefaultElasticsearchReplicas
+		limits := corev1.ResourceList{}
+		requests := corev1.ResourceList{}
+		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+		requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+
+		expectedSpec := operatorv1.LogStorageSpec{
+			Nodes: &operatorv1.Nodes{Count: 1},
+			Retention: &operatorv1.Retention{
+				Flows:             &fr,
+				AuditReports:      &arr,
+				Snapshots:         &sr,
+				ComplianceReports: &crr,
+			},
+			Indices: &operatorv1.Indices{
+				Replicas: &replicas,
+			},
+			StorageClassName: DefaultElasticsearchStorageClass,
+			ComponentResources: []operatorv1.ComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameECKOperator,
+					ResourceRequirements: &corev1.ResourceRequirements{
+						Limits:   limits,
+						Requests: requests,
+					},
+				},
+			},
+		}
+		It("should have initialized all LogStorageSpec fields with default values", func() {
+			Expect(ls.Spec).To(Equal(expectedSpec))
 		})
 	})
 })

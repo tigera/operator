@@ -39,6 +39,7 @@ var _ = Describe("Installation validation tests", func() {
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
+				ComponentResources: []operator.ComponentResource{},
 			},
 		}
 	})
@@ -342,5 +343,32 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC, true),
 			Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, operator.IPAMPluginAzureVNET, false),
 		)
+	})
+	Describe("validate ComponentResources", func() {
+		It("should return nil when there are no ComponentResources to validate.", func() {
+			Expect(validateCustomResource(instance)).To(BeNil())
+		})
+
+		It("should return nil when only supported ComponentNames are present.", func() {
+			instance.Spec.ComponentResources = append(instance.Spec.ComponentResources, []operator.ComponentResource{
+				{
+					ComponentName: operator.ComponentNameTypha,
+				},
+				{
+					ComponentName: operator.ComponentNameKubeControllers,
+				},
+				{
+					ComponentName: operator.ComponentNameNode,
+				},
+			}...)
+			Expect(validateCustomResource(instance)).To(BeNil())
+		})
+
+		It("should return an error when an invalid ComponentName is present", func() {
+			instance.Spec.ComponentResources = append(instance.Spec.ComponentResources, operator.ComponentResource{
+				ComponentName: operator.ComponentNameECKOperator,
+			})
+			Expect(validateCustomResource(instance)).ToNot(BeNil())
+		})
 	})
 })

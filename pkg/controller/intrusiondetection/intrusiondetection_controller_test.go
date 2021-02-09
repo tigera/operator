@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/test"
 
@@ -107,7 +108,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
-			ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 

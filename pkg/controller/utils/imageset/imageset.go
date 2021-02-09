@@ -112,6 +112,16 @@ func ValidateImageSet(is *operator.ImageSet) error {
 		if !valid {
 			unknownImages = append(unknownImages, img.Image)
 		}
+
+		for _, x := range components.CommonComponents {
+			if img.Image == x.Image {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			unknownImages = append(unknownImages, img.Image)
+		}
 	}
 
 	invalidDigests := []string{}

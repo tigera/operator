@@ -207,8 +207,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
-		r.status.SetDegraded("License not found", err.Error())
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("License not found", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -273,19 +278,39 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// Check that compliance is running.
-	compliance, err := compliance.GetCompliance(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded("Compliance not found", err.Error())
+	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
+	var complianceServerCertSecret *corev1.Secret
+
+	if installCompliance {
+		// Check that compliance is running.
+		compliance, err := compliance.GetCompliance(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded("Compliance not found", err.Error())
+				return reconcile.Result{}, err
+			}
+			r.status.SetDegraded("Error querying compliance", err.Error())
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded("Error querying compliance", err.Error())
-		return reconcile.Result{}, err
-	}
-	if compliance.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
-		return reconcile.Result{}, nil
+		if compliance.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
+			return reconcile.Result{}, nil
+		}
+
+		complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
+			render.ComplianceServerCertSecret,
+			render.ComplianceServerCertName,
+			render.ComplianceServerKeyName,
+		)
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		} else if complianceServerCertSecret == nil {
+			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret), "")
+			return reconcile.Result{}, nil
+		}
 	}
 
 	// check that prometheus is running
@@ -334,21 +359,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
-	}
-
-	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
-		render.ComplianceServerCertSecret,
-		render.ComplianceServerCertName,
-		render.ComplianceServerKeyName,
-	)
-	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
-		return reconcile.Result{}, err
-	} else if complianceServerCertSecret == nil {
-		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret), "")
-		return reconcile.Result{}, nil
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)

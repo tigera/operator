@@ -181,8 +181,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
-		r.status.SetDegraded("License not found", err.Error())
+	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("License not found", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

@@ -18,33 +18,12 @@ import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/controller/status"
-
 	"github.com/onsi/ginkgo/reporters"
-	oprv1 "github.com/tigera/operator/api/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	. "github.com/onsi/gomega"
 )
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../../../report/authentication_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/authentication Suite", []Reporter{junitReporter})
-}
-
-// Expose the construction of the reconciler through this test file.
-func NewReconciler(
-	client client.Client,
-	scheme *runtime.Scheme,
-	provider oprv1.Provider,
-	status status.StatusManager,
-	clusterDomain string) *ReconcileAuthentication {
-	return &ReconcileAuthentication{
-		client:        client,
-		scheme:        scheme,
-		provider:      provider,
-		status:        status,
-		clusterDomain: clusterDomain,
-	}
 }

@@ -7,19 +7,18 @@ require (
 	github.com/containernetworking/cni v0.8.0
 	github.com/elastic/cloud-on-k8s v0.0.0-20200811130517-b53162318c20
 	github.com/go-logr/logr v0.3.0
-	github.com/go-openapi/spec v0.19.4 // indirect
 	github.com/hashicorp/go-version v1.2.1
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.1
-	github.com/tigera/api v0.0.0-20200313151414-d7e747e812b2
+	github.com/tigera/api v0.0.0-20210203004629-7f0f4f05e540
 	gopkg.in/inf.v0 v0.9.1
-	k8s.io/api v0.19.2
+	k8s.io/api v0.19.6
 	k8s.io/apiextensions-apiserver v0.19.2
-	k8s.io/apimachinery v0.19.2
-	k8s.io/client-go v0.19.2
+	k8s.io/apimachinery v0.19.6
+	k8s.io/client-go v0.19.6
 	k8s.io/kube-aggregator v0.19.2
 	sigs.k8s.io/controller-runtime v0.7.0
 )

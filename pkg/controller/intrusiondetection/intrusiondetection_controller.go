@@ -178,7 +178,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
+	if _, err := utils.CheckLicenseKey(ctx, r.client); err != nil {
 		r.status.SetDegraded("License not found", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}

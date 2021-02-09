@@ -440,9 +440,11 @@ gen-files: manifests generate
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
+COMMON_VERSIONS?=config/common_versions.yml
 gen-versions: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
+	$(BINDIR)/gen-versions -common-versions=$(COMMON_VERSIONS) > pkg/components/common.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)

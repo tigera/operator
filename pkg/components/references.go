@@ -41,7 +41,8 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 			registry = CalicoRegistry
 		case ComponentElasticsearchOperator:
 			registry = ECKRegistry
-		case ComponentOperatorInit:
+		case ComponentOperatorInit,
+			ComponentCSRInitContainer:
 			registry = InitRegistry
 		default:
 			registry = TigeraRegistry

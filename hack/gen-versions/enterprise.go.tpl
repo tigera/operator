@@ -178,12 +178,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "key-cert-provisioner" }}
-	ComponentCSRInitContainer = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
@@ -213,6 +207,5 @@ var (
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
-		ComponentCSRInitContainer,
 	}
 )

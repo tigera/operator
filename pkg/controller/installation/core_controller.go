@@ -1097,8 +1097,9 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, 
 		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
 	}
 
-	node, err := utils.ValidateCertPair(
+	node, err := utils.ValidateCertPairInNamespace(
 		r.client,
+		render.OperatorNamespace(),
 		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1116,8 +1117,9 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, 
 		}
 	}
 
-	typha, err := utils.ValidateCertPair(
+	typha, err := utils.ValidateCertPairInNamespace(
 		r.client,
+		render.OperatorNamespace(),
 		render.TyphaTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,

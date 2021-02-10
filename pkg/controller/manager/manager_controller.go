@@ -226,7 +226,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
-	tlsSecret, err := utils.ValidateCertPairInNamespace(r.client,
+	tlsSecret, err := utils.ValidateCertPair(r.client,
 		render.OperatorNamespace(),
 		render.ManagerTLSSecretName,
 		render.ManagerSecretKeyName,
@@ -335,7 +335,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	complianceServerCertSecret, err := utils.ValidateCertPairInNamespace(r.client,
+	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
 		render.OperatorNamespace(),
 		render.ComplianceServerCertSecret,
 		render.ComplianceServerCertName,

@@ -107,11 +107,11 @@ func main() {
 	}
 	if printImages != "" {
 		if strings.ToLower(printImages) == "list" {
-			for _, x := range components.CalicoComponents {
-				ref, _ := components.GetReference(x, "", "", nil)
-				fmt.Println(ref)
-			}
-			for _, x := range components.EnterpriseComponents {
+			cmpnts := components.CalicoComponents
+			cmpnts = append(cmpnts, components.EnterpriseComponents...)
+			cmpnts = append(cmpnts, components.CommonComponents...)
+
+			for _, x := range cmpnts {
 				ref, _ := components.GetReference(x, "", "", nil)
 				fmt.Println(ref)
 			}

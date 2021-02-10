@@ -5,8 +5,8 @@
 Checkout the branch from which you want to release. For a major or minor release,
 you will need to create a new `release-vX.Y` branch based on the target minor version.
 
-Make sure the appropriate versions have been updated in `config/calico_versions.yaml`
-or `config/enterprise_versions.yaml`, make sure both the images have been updated and
+Make sure the appropriate versions have been updated in `config/calico_versions.yaml`, `config/enterprise_versions.yaml`
+or / and config/common_versions.yaml, make sure both the images have been updated and
 the title field has been updated with the release (the format should be `v<Major>.<Minor>.<Patch>`).
 Then ensure `make gen-versions` has been ran and the resulting updates have been committed. When updating versions
 for enterprise, if necessary also update the `TigeraRegistry` field in `pkg/components/images.go`.

@@ -1588,8 +1588,6 @@ func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrid
 }
 
 func ElasticsearchHTTPSEndpoint(osType OSType, clusterDomain string) string {
-	// If this is for Windows, use the clusterDomain to get the FQDN version of
-	// the ES https endpoint.
 	esEndpoint := elasticsearchHTTPSEndpoint
 	if osType == OSTypeWindows {
 		esEndpoint = fmt.Sprintf(elasticsearchHTTPSFQDNEndpoint, clusterDomain)
@@ -1598,9 +1596,7 @@ func ElasticsearchHTTPSEndpoint(osType OSType, clusterDomain string) string {
 }
 
 func KibanaHTTPSEndpoint(osType OSType, clusterDomain string) string {
-	// If this is for Windows, use the clusterDomain to get the FQDN version of
 	kbEndpoint := kibanaHTTPSEndpoint
-	// the Kibana https endpoint.
 	if osType == OSTypeWindows {
 		kbEndpoint = fmt.Sprintf(kibanaHTTPSFQDNEndpoint, clusterDomain)
 	}

@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	goruntime "runtime"
+	"strings"
 
 	"github.com/cloudflare/cfssl/log"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -78,6 +79,7 @@ func main() {
 	// kubeconfig but should use the in-cluster service account
 	var urlOnlyKubeconfig string
 	var showVersion bool
+	var printImages string
 	var sgSetup bool
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
@@ -86,6 +88,8 @@ func main() {
 		"Path to a kubeconfig, but only for the apiserver url.")
 	flag.BoolVar(&showVersion, "version", false,
 		"Show version information")
+	flag.StringVar(&printImages, "print-images", "",
+		"Print the default images the operator could deploy and exit. Possible values: list")
 	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
 	opts := zap.Options{}
@@ -95,16 +99,26 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
 	if showVersion {
-		fmt.Println("Operator:", version.VERSION, "Calico:", components.CalicoRelease, "Enterprise:", components.EnterpriseRelease)
-		for _, x := range components.CalicoComponents {
-			ref, _ := components.GetReference(x, "", "", nil)
-			fmt.Println(ref)
-		}
-		for _, x := range components.EnterpriseComponents {
-			ref, _ := components.GetReference(x, "", "", nil)
-			fmt.Println(ref)
-		}
+		// If the following line is updated then it might be necessary to update the release-verify target in the Makefile
+		fmt.Println("Operator:", version.VERSION)
+		fmt.Println("Calico:", components.CalicoRelease)
+		fmt.Println("Enterprise:", components.EnterpriseRelease)
 		os.Exit(0)
+	}
+	if printImages != "" {
+		if strings.ToLower(printImages) == "list" {
+			for _, x := range components.CalicoComponents {
+				ref, _ := components.GetReference(x, "", "", nil)
+				fmt.Println(ref)
+			}
+			for _, x := range components.EnterpriseComponents {
+				ref, _ := components.GetReference(x, "", "", nil)
+				fmt.Println(ref)
+			}
+			os.Exit(0)
+		}
+		fmt.Println("Invalid option for --print-images flag", printImages)
+		os.Exit(1)
 	}
 
 	if urlOnlyKubeconfig != "" {

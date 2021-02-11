@@ -149,7 +149,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			{
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
-				Verbs:     []string{"get", "list", "create", "update", "delete"},
+				Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 			},
 			{
 				// Needs access to update clusterinformations.

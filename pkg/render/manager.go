@@ -32,6 +32,11 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -76,7 +81,7 @@ func Manager(
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
-	esClusterConfig *ElasticsearchClusterConfig,
+	esClusterConfig *relasticsearch.ClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -88,24 +93,24 @@ func Manager(
 	esLicenseType ElasticsearchLicenseType,
 ) (Component, error) {
 	tlsSecrets := []*corev1.Secret{tlsKeyPair}
-	tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tlsKeyPair)...)
+	tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
 	tlsAnnotations := make(map[string]string)
 
 	if dexCfg != nil {
 		tlsSecrets = append(tlsSecrets, dexCfg.RequiredSecrets(ManagerNamespace)...)
 		tlsAnnotations = dexCfg.RequiredAnnotations()
 	}
-	tlsAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
-	tlsAnnotations[KibanaTLSHashAnnotation] = secretsAnnotationHash(kibanaSecrets...)
+	tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
+	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(kibanaSecrets...)
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
 		// tunnelSecret contains the ca cert to generate guardian certificates
 		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
-		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, tunnelSecret)...)
-		tlsSecrets = append(tlsSecrets, CopySecrets(ManagerNamespace, internalTrafficSecret)...)
-		tlsAnnotations[voltronTunnelHashAnnotation] = AnnotationHash(tunnelSecret.Data)
-		tlsAnnotations[ManagerInternalTLSHashAnnotation] = AnnotationHash(internalTrafficSecret.Data)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tunnelSecret)...)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, internalTrafficSecret)...)
+		tlsAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelSecret.Data)
+		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
 		dexCfg:                     dexCfg,
@@ -129,7 +134,7 @@ type managerComponent struct {
 	esSecrets                  []*corev1.Secret
 	kibanaSecrets              []*corev1.Secret
 	complianceServerCertSecret *corev1.Secret
-	esClusterConfig            *ElasticsearchClusterConfig
+	esClusterConfig            *relasticsearch.ClusterConfig
 	tlsSecrets                 []*corev1.Secret
 	tlsAnnotations             map[string]string
 	pullSecrets                []*corev1.Secret
@@ -169,21 +174,22 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *managerComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *managerComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(ManagerNamespace, c.openshift),
 	}
-	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
+	pullSecrets := secret.CopyToNamespace(ManagerNamespace, c.pullSecrets...)
+	pullSecrets = append(pullSecrets, secret.CopyToNamespace(common.TigeraPrometheusNamespace, c.pullSecrets...)...)
 
 	// TODO: move copying of imagePullSecrets for prometheus into a dedicated prometheus controller
 	// once one is introduced.
 	// note that the TigeraPrometheusNamespace is not created by the operator but rather a dependency
 	// (as is all prometheus resources).
-	objs = append(objs, copyImagePullSecrets(c.pullSecrets, common.TigeraPrometheusNamespace)...)
+	objs = append(objs, secret.ToRuntimeObjects(pullSecrets...)...)
 
 	objs = append(objs,
 		managerServiceAccount(),
@@ -202,9 +208,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// If we're not running openshift, we need to add pod security policies.
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
-	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.esSecrets...)...)...)
-	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.kibanaSecrets...)...)...)
-	objs = append(objs, secretsToRuntimeObjects(CopySecrets(ManagerNamespace, c.complianceServerCertSecret)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.esSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.kibanaSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	objs = append(objs, c.managerDeployment())
 
 	return objs, nil
@@ -218,7 +224,7 @@ func (c *managerComponent) Ready() bool {
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	annotations := map[string]string{
-		complianceServerTLSHashAnnotation: AnnotationHash(c.complianceServerCertSecret.Data),
+		complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecret.Data),
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -230,7 +236,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[k] = v
 	}
 
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-manager",
 			Namespace: ManagerNamespace,
@@ -239,14 +245,14 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			},
 			Annotations: annotations,
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
-			ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
 			Containers: []corev1.Container{
-				ElasticsearchContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
-				ElasticsearchContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
+				relasticsearch.ContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
+				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				c.managerProxyContainer(),
 			},
 			Volumes: c.managerVolumes(),
@@ -426,7 +432,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 		Image:           c.managerImage,
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
-		SecurityContext: securityContext(),
+		SecurityContext: podsecuritycontext.NewBaseContext(),
 	}
 
 	return tm
@@ -470,7 +476,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
-		SecurityContext: securityContext(),
+		SecurityContext: podsecuritycontext.NewBaseContext(),
 	}
 }
 
@@ -515,7 +521,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Name:            "tigera-es-proxy",
 		Image:           c.esProxyImage,
 		LivenessProbe:   c.managerEsProxyProbe(),
-		SecurityContext: securityContext(),
+		SecurityContext: podsecuritycontext.NewBaseContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}
@@ -523,7 +529,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
 func (c *managerComponent) managerTolerations() []v1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly)
+	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly)
 }
 
 // managerService returns the service exposing the Tigera Secure web app.
@@ -706,7 +712,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-manager")
 	return psp
 }

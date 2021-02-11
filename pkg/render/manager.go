@@ -210,7 +210,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.kibanaSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.complianceServerCertSecret)...)...)
+	if c.complianceServerCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.complianceServerCertSecret)...)...)
+	}
 	objs = append(objs, c.managerDeployment())
 
 	return objs, nil
@@ -223,8 +225,12 @@ func (c *managerComponent) Ready() bool {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-	annotations := map[string]string{
-		complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecret.Data),
+	var annotations map[string]string = make(map[string]string)
+
+	if c.complianceServerCertSecret != nil {
+		annotations = map[string]string{
+			complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecret.Data),
+		}
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -303,7 +309,10 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 				},
 			},
 		},
-		{
+	}
+
+	if c.complianceServerCertSecret != nil {
+		v = append(v, v1.Volume{
 			Name: ComplianceServerCertSecret,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
@@ -314,7 +323,7 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 					SecretName: ComplianceServerCertSecret,
 				},
 			},
-		},
+		})
 	}
 
 	if c.managementCluster != nil {
@@ -470,6 +479,10 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		env = append(env, c.dexCfg.RequiredEnv("VOLTRON_")...)
 	}
 
+	if c.complianceServerCertSecret == nil {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
+	}
+
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.proxyImage,
@@ -484,7 +497,10 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
-		{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true},
+	}
+
+	if c.complianceServerCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true})
 	}
 
 	if c.managementCluster != nil {

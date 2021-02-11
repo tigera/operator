@@ -18,13 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
-
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -88,7 +88,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to the secrets associated with the ManagementClusterConnection.
-	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
@@ -164,7 +164,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
 	tunnelSecret := &corev1.Secret{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: rmeta.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
 		r.status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
 		if !k8serrors.IsNotFound(err) {

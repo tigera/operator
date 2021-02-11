@@ -17,10 +17,12 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/test"
 
@@ -107,7 +109,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
-			ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
@@ -226,6 +229,28 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentElasticTseeInstaller.Image,
 					"sha256:intrusiondetectionjobinstallerhash")))
+		})
+	})
+
+	Context("Feature intrusion detection not active", func() {
+		BeforeEach(func() {
+			By("Deleting the previous license")
+			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
+			By("Creating a new license that does not contain intrusion detection as a feature")
+			Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
+		})
+
+		It("should not create resources", func() {
+			mockStatus.On("SetDegraded", "Feature is not active", "License does not support this feature").Return()
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(10 * time.Second))
+		})
+
+		AfterEach(func() {
+			By("Deleting the previous license")
+			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
 		})
 	})
 })

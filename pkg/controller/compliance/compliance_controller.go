@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -184,8 +185,15 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
 		r.status.SetDegraded("License not found", err.Error())
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if !utils.IsFeatureActive(license, common.ComplianceFeature) {
+		log.Info("Compliance is not activated as part of this license")
+		r.status.SetDegraded("Feature is not active", "License does not support this feature")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

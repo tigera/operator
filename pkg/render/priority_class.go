@@ -15,6 +15,8 @@
 package render
 
 import (
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	v1 "k8s.io/api/core/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,6 +27,10 @@ import (
 const (
 	PriorityClassName = "calico-priority"
 )
+
+func setCriticalPod(t *v1.PodTemplateSpec) {
+	t.Spec.PriorityClassName = PriorityClassName
+}
 
 func PriorityClassDefinitions() Component {
 	return &priorityClassComponent{}
@@ -38,8 +44,8 @@ func (c *priorityClassComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *priorityClassComponent) SupportedOSType() OSType {
-	return OSTypeAny
+func (c *priorityClassComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
 }
 
 func (c *priorityClassComponent) Objects() ([]client.Object, []client.Object) {

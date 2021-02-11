@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -27,7 +28,7 @@ var internalManagerTLSSecret = v1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.ManagerInternalTLSSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"cert": []byte("cert"),
@@ -42,7 +43,7 @@ var elasticsearchSecret = v1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.TigeraElasticsearchCertSecret,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"cert": []byte("cert"),
@@ -57,7 +58,7 @@ var kibanaSecret = v1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.TigeraKibanaCertSecret,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"cert": []byte("cert"),
@@ -71,7 +72,7 @@ var voltronTunnelSecret = v1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.VoltronTunnelSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		render.VoltronTunnelSecretCertName: []byte("cert"),

@@ -427,7 +427,7 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 	return ErrIncompatibleCluster{
 		err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", *method),
 		component: ComponentCalicoNode,
-		fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found=*', 'can-reach=*', 'interface=*', or 'skip-interface=*'",
+		fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', or 'skip-interface=*'",
 	}
 }
 

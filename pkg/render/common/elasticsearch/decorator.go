@@ -15,7 +15,6 @@
 package elasticsearch
 
 import (
-	"fmt"
 	"strconv"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -86,7 +85,7 @@ func ContainerDecorateENVVars(
 	cluster, esUserSecretName, clusterDomain string,
 	osType rmeta.OSType) corev1.Container {
 	certPath := elasticCertPath(osType)
-	esScheme, esHost, esPort, _ := url.ParseEndpoint(fmt.Sprintf(HTTPSEndpoint, clusterDomain))
+	esScheme, esHost, esPort, _ := url.ParseEndpoint(HTTPSEndpoint(osType, clusterDomain))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},

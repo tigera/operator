@@ -20,4 +20,9 @@ const (
 	NodeDaemonSetName   = "calico-node"
 
 	TigeraPrometheusNamespace = "tigera-prometheus"
+
+	// Compliance feature name
+	ComplianceFeature = "compliance-reports"
+	// Threat defene feature name
+	ThreatDefenseFeature = "threat-defense"
 )

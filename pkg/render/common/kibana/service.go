@@ -1,4 +1,4 @@
-package elasticsearch
+package kibana
 
 import (
 	"fmt"
@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	httpsFQDNEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
-	httpsEndpoint     = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	httpsEndpoint     = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	httpsFQDNEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
 )
 
 func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
 	// If this is for Windows, use the clusterDomain to get the FQDN version of
-	// the ES https endpoint.
+	// the Kibana https endpoint.
 	if osType == rmeta.OSTypeWindows {
 		return fmt.Sprintf(httpsFQDNEndpoint, clusterDomain)
 	}

@@ -1,4 +1,4 @@
-package elasticsearch
+package kibana
 
 import (
 	"fmt"
@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	httpsEndpoint     = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
-	httpsFQDNEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
+	httpsEndpoint     = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	httpsFQDNEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
 )
 
-// HTTPSEndpoint returns the endpoint for the Elasticsearch service. For
+// HTTPSEndpoint returns the full endpoint for the Kibana service. For
 // Windows, the FQDN endpoint is returned.
 func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
 	if osType == rmeta.OSTypeWindows {

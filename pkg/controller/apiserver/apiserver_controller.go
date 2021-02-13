@@ -186,6 +186,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
 			render.APIServerTLSSecretName,
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
@@ -227,6 +228,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var tunnelCASecret *v1.Secret
 	if managementCluster != nil {
 		tunnelCASecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
 			render.VoltronTunnelSecretName,
 			render.VoltronTunnelSecretKeyName,
 			render.VoltronTunnelSecretCertName,

@@ -197,18 +197,12 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 	return false
 }
 
-// ValidateCertPair validates the cert pair secret in the tigera-operator namespace.
-func ValidateCertPair(client client.Client, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
-	return ValidateCertPairInNamespace(client, rmeta.OperatorNamespace(), certPairSecretName, keyName, certName)
-}
-
-// ValidateCertPairInNamespace checks if the given secret exists in the given
+// ValidateCertPair checks if the given secret exists in the given
 // namespace and if so that it contains key and cert fields. If a secret exists then it is returned.
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
 // If no secret exists then nil, nil is returned to represent that no cert is valid.
-// TODO: Replace this with version of ValidateCertPair taking in a ns.
-func ValidateCertPairInNamespace(client client.Client, namespace, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
+func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      certPairSecretName,

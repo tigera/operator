@@ -805,7 +805,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
-	managerInternalTLSSecret, err = utils.ValidateCertPairInNamespace(r.client,
+	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		common.CalicoNamespace,
 		render.ManagerInternalTLSSecretName,
 		render.ManagerInternalSecretCertName,
@@ -1101,6 +1101,7 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, 
 
 	node, err := utils.ValidateCertPair(
 		r.client,
+		rmeta.OperatorNamespace(),
 		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1120,6 +1121,7 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, 
 
 	typha, err := utils.ValidateCertPair(
 		r.client,
+		rmeta.OperatorNamespace(),
 		render.TyphaTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,

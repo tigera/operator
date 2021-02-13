@@ -234,6 +234,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
 	tlsSecret, err := utils.ValidateCertPair(r.client,
+		rmeta.OperatorNamespace(),
 		render.ManagerTLSSecretName,
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
@@ -298,6 +299,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
 			render.ComplianceServerCertName,
 			render.ComplianceServerKeyName,

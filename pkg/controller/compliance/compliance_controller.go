@@ -278,6 +278,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var managerInternalTLSSecret *corev1.Secret
 	if managementCluster != nil {
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
 			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
@@ -290,6 +291,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
+		rmeta.OperatorNamespace(),
 		render.ComplianceServerCertSecret,
 		render.ComplianceServerCertName,
 		render.ComplianceServerKeyName,

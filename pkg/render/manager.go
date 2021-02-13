@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -468,7 +469,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.clusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "info"},
-		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain)},
+		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
@@ -525,7 +526,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	env := []v1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)},
 		{Name: "ELASTIC_VERSION", Value: components.ComponentEckElasticsearch.Version},
-		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain)},
+		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
 	}
 
 	if c.dexCfg != nil {

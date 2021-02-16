@@ -52,23 +52,24 @@ const (
 	ECKLicenseConfigMapName = "elastic-licensing"
 
 	ElasticsearchNamespace                = "tigera-elasticsearch"
-	ElasticsearchHTTPURL                  = "tigera-secure-es-http.tigera-elasticsearch.svc.%s"
-	ElasticsearchHTTPSEndpoint            = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
+	elasticsearchHTTPSEndpoint            = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	elasticsearchHTTPSFQDNEndpoint        = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
 	ElasticsearchName                     = "tigera-secure"
 	ElasticsearchConfigMapName            = "tigera-secure-elasticsearch"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 
-	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc.%s"
-	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName             = "tigera-secure"
-	KibanaNamespace        = "tigera-kibana"
-	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
-	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
-	KibanaBasePath         = "tigera-kibana"
-	KibanaServiceName      = "tigera-secure-kb-http"
+	KibanaHTTPURL           = "tigera-secure-kb-http.tigera-kibana.svc.%s"
+	kibanaHTTPSEndpoint     = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	kibanaHTTPSFQDNEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
+	KibanaName              = "tigera-secure"
+	KibanaNamespace         = "tigera-kibana"
+	KibanaPublicCertSecret  = "tigera-secure-kb-http-certs-public"
+	TigeraKibanaCertSecret  = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath   = "/etc/ssl/kibana/ca.pem"
+	KibanaBasePath          = "tigera-kibana"
+	KibanaServiceName       = "tigera-secure-kb-http"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -1592,4 +1593,22 @@ func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrid
 		updatedReq.Requests["storage"] = userOverrides.Requests["storage"]
 	}
 	return updatedReq
+}
+
+func ElasticsearchHTTPSEndpoint(osType OSType, clusterDomain string) string {
+	// If this is for Windows, use the clusterDomain to get the FQDN version of
+	// the ES https endpoint.
+	if osType == OSTypeWindows {
+		return fmt.Sprintf(elasticsearchHTTPSFQDNEndpoint, clusterDomain)
+	}
+	return elasticsearchHTTPSEndpoint
+}
+
+func KibanaHTTPSEndpoint(osType OSType, clusterDomain string) string {
+	// If this is for Windows, use the clusterDomain to get the FQDN version of
+	// the Kibana https endpoint.
+	if osType == OSTypeWindows {
+		return fmt.Sprintf(kibanaHTTPSFQDNEndpoint, clusterDomain)
+	}
+	return kibanaHTTPSEndpoint
 }

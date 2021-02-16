@@ -16,7 +16,6 @@ package render_test
 
 import (
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -50,7 +49,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		esConfigMap = render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
 	})
 
-	DescribeTable("should render with a default configuration", func(clusterDomain, expectedElasticHost string) {
+	It("should render with a default configuration", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -67,7 +66,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, clusterDomain, render.OSTypeLinux)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, render.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -86,7 +85,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: expectedElasticHost},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -98,10 +97,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))
 		}
-	},
-		Entry("default cluster DNS", dns.DefaultClusterDomain, "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"),
-		Entry("custom cluster DNS", "acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal"),
-	)
+	})
 
 	It("should render for Windows nodes", func() {
 		expectedResources := []struct {
@@ -585,7 +581,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"}))
 
 		fetchIntervalVal := "900"
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fetchIntervalVal}))

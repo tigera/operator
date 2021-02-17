@@ -135,7 +135,9 @@ type PreferredNodeAffinity struct {
 	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
-// ComponentName CRD enum
+// ComponentName represents a single component.
+//
+// One of: Node, Typha, KubeControllers
 type ComponentName string
 
 const (
@@ -166,7 +168,9 @@ var (
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )
 
-// ProductVariant represents the variant of the product. Valid options are: Calico, TigeraSecureEnterprise.
+// ProductVariant represents the variant of the product.
+//
+// One of: Calico, TigeraSecureEnterprise
 type ProductVariant string
 
 var (
@@ -182,7 +186,9 @@ const (
 	ContainerIPForwardingDisabled ContainerIPForwardingType = "Disabled"
 )
 
-// HostPortsType specifies if the HostPorts plugin enabled status.
+// HostPortsType specifies host port support.
+//
+// One of: Enabled, Disabled
 type HostPortsType string
 
 const (
@@ -199,6 +205,9 @@ var HostPortsTypesString []string = []string{
 	HostPortsDisabled.String(),
 }
 
+// MultiInterfaceMode describes the method of providing multiple pod interfaces.
+//
+// One of: None, Multus
 type MultiInterfaceMode string
 
 func (m MultiInterfaceMode) Value() string {
@@ -218,6 +227,9 @@ func (nt HostPortsType) String() string {
 	return string(nt)
 }
 
+// BGPOption describes the mode of BGP to use.
+//
+// One of: Enabled, Disabled
 type BGPOption string
 
 func BGPOptionPtr(b BGPOption) *BGPOption {
@@ -304,8 +316,9 @@ type NodeAddressAutodetection struct {
 	CIDRS []string `json:"cidrs,omitempty"`
 }
 
-// EncapsulationType is the type of encapsulation to use on an IP pool. Valid
-// options are: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None.
+// EncapsulationType is the type of encapsulation to use on an IP pool.
+//
+// One of: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None
 type EncapsulationType string
 
 func (et EncapsulationType) String() string {
@@ -336,6 +349,8 @@ var EncapsulationTypesString []string = []string{
 }
 
 // NATOutgoingType describe the type of outgoing NAT to use.
+//
+// One of: Enabled, Disabled
 type NATOutgoingType string
 
 const (
@@ -387,7 +402,9 @@ type IPPool struct {
 	BlockSize *int32 `json:"blockSize,omitempty"`
 }
 
-// CNIPluginType describe the type of CNI plugin used.
+// CNIPluginType describes the type of CNI plugin used.
+//
+// One of: Calico, GKE, AmazonVPC, AzureVNET
 type CNIPluginType string
 
 const (

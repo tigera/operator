@@ -236,7 +236,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs,
 		createNamespace(
 			LogCollectorNamespace,
-			c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
+			c.installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.pullSecrets...)...)...)
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())

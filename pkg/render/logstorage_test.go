@@ -595,7 +595,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					requests := corev1.ResourceList{}
 					limits[corev1.ResourceMemory] = resource.MustParse("512Mi")
 					requests[corev1.ResourceMemory] = resource.MustParse("512Mi")
-					logStorage.Spec.ComponentResources = []operatorv1.ComponentResource{
+					logStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
 						{
 							ComponentName: operatorv1.ComponentNameECKOperator,
 							ResourceRequirements: &corev1.ResourceRequirements{

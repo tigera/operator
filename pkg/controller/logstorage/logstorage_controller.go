@@ -288,7 +288,7 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		requests := corev1.ResourceList{}
 		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
 		requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
-		opr.Spec.ComponentResources = []operatorv1.ComponentResource{
+		opr.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
 			{
 				ComponentName: operatorv1.ComponentNameECKOperator,
 				ResourceRequirements: &corev1.ResourceRequirements{

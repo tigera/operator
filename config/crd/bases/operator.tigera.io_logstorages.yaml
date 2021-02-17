@@ -50,9 +50,6 @@ spec:
                     componentName:
                       description: ComponentName is an enum which identifies the component
                       enum:
-                      - Node
-                      - Typha
-                      - KubeControllers
                       - ECKOperator
                       type: string
                     resourceRequirements:

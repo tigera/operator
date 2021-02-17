@@ -164,7 +164,7 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(APIServerNamespace, c.openshift),
+		createNamespace(APIServerNamespace, c.installation.KubernetesProvider),
 	}
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.pullSecrets...)
 	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)

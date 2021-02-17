@@ -46,11 +46,11 @@ func (c *namespaceComponent) SupportedOSType() OSType {
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
-		createNamespace(common.CalicoNamespace, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift),
+		createNamespace(common.CalicoNamespace, c.installation.KubernetesProvider),
 	}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
-		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
+		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider))
 	}
 	if len(c.pullSecrets) > 0 {
 		ns = append(ns, copyImagePullSecrets(c.pullSecrets, common.CalicoNamespace)...)
@@ -63,7 +63,7 @@ func (c *namespaceComponent) Ready() bool {
 	return true
 }
 
-func createNamespace(name string, openshift bool) *corev1.Namespace {
+func createNamespace(name string, provider operatorv1.Provider) *corev1.Namespace {
 	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -73,10 +73,12 @@ func createNamespace(name string, openshift bool) *corev1.Namespace {
 		},
 	}
 
-	// OpenShift requires special labels and annotations.
-	if openshift {
+	switch provider {
+	case operatorv1.ProviderOpenShift:
 		ns.Labels["openshift.io/run-level"] = "0"
 		ns.Annotations["openshift.io/node-selector"] = ""
+	case operatorv1.ProviderAKS:
+		ns.Labels["control-plane"] = "true"
 	}
 	return ns
 }

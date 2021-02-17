@@ -142,13 +142,12 @@ const (
 	ComponentNameNode            ComponentName = "Node"
 	ComponentNameTypha           ComponentName = "Typha"
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
-	ComponentNameECKOperator     ComponentName = "ECKOperator"
 )
 
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
-	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers;ECKOperator
+	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
 	ComponentName ComponentName `json:"componentName"`
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`

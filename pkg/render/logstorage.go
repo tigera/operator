@@ -1024,7 +1024,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	memoryLimit := resource.Quantity{}
 	memoryRequest := resource.Quantity{}
 	for _, c := range es.logStorage.Spec.ComponentResources {
-		if c.ComponentName == operatorv1.ComponentNameECKOperator {
+		if c.LogStorageComponentName == operatorv1.ComponentNameECKOperator {
 			memoryLimit = c.ResourceRequirements.Limits[corev1.ResourceMemory]
 			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
 		}

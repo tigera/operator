@@ -103,6 +103,32 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 		verifyTyphaReplicas(c, 2)
 	})
+
+	It("should ignore aks virtual nodes in its count", func() {
+		typhaMeta := metav1.ObjectMeta{
+			Name:      "calico-typha",
+			Namespace: "calico-system",
+		}
+		// Create a typha deployment
+		typha := &appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: typhaMeta,
+		}
+		err := c.Create(ctx, typha)
+		Expect(err).To(BeNil())
+
+		// Create a few nodes
+		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
+		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
+		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"})
+
+		// Create the autoscaler and run it
+		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta.start()
+
+		verifyTyphaReplicas(c, 2)
+	})
+
 	It("should be degraded if there's not enough linux nodes", func() {
 		typhaMeta := metav1.ObjectMeta{
 			Name:      "calico-typha",

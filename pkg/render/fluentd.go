@@ -129,7 +129,7 @@ func (c *fluentdComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs = append(objs,
 		createNamespace(
 			LogCollectorNamespace,
-			c.installation.KubernetesProvider == operatorv1.ProviderOpenShift))
+			c.installation.KubernetesProvider))
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, LogCollectorNamespace)...)
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())

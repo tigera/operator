@@ -293,7 +293,6 @@ spec:
                       - Node
                       - Typha
                       - KubeControllers
-                      - ECKOperator
                       type: string
                     resourceRequirements:
                       description: ResourceRequirements allows customization of limits
@@ -856,7 +855,6 @@ spec:
                           - Node
                           - Typha
                           - KubeControllers
-                          - ECKOperator
                           type: string
                         resourceRequirements:
                           description: ResourceRequirements allows customization of

@@ -366,7 +366,7 @@ var _ = Describe("Installation validation tests", func() {
 
 		It("should return an error when an invalid ComponentName is present", func() {
 			instance.Spec.ComponentResources = append(instance.Spec.ComponentResources, operator.ComponentResource{
-				ComponentName: operator.ComponentNameECKOperator,
+				ComponentName: "invalid-componentName",
 			})
 			Expect(validateCustomResource(instance)).ToNot(BeNil())
 		})

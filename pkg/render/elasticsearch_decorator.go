@@ -15,7 +15,6 @@
 package render
 
 import (
-	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -79,7 +78,11 @@ func ElasticsearchContainerDecorateIndexCreator(c corev1.Container, replicas, sh
 
 func ElasticsearchContainerDecorateENVVars(c corev1.Container, cluster, esUserSecretName, clusterDomain string, osType OSType) corev1.Container {
 	certPath := elasticCertPath(osType)
-	esScheme, esHost, esPort, _ := ParseEndpoint(fmt.Sprintf(ElasticsearchHTTPSEndpoint, clusterDomain))
+
+	// If this is for Windows, use the clusterDomain to get the FQDN version of
+	// the ES https endpoint.
+	esEndpoint := ElasticsearchHTTPSEndpoint(osType, clusterDomain)
+	esScheme, esHost, esPort, _ := ParseEndpoint(esEndpoint)
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},

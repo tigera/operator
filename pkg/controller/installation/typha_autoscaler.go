@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -58,6 +59,7 @@ type typhaAutoscaler struct {
 	statusManager  status.StatusManager
 	triggerRunChan chan chan error
 	isDegradedChan chan chan bool
+	provider       operatorv1.Provider
 }
 
 type typhaAutoscalerOption func(*typhaAutoscaler)
@@ -71,13 +73,14 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 2 minutes.
-func newTyphaAutoscaler(client client.Client, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(client client.Client, statusManager status.StatusManager, provider operatorv1.Provider, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
 		client:         client,
 		statusManager:  statusManager,
 		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
 		triggerRunChan: make(chan chan error),
 		isDegradedChan: make(chan chan bool),
+		provider:       provider,
 	}
 
 	for _, option := range options {
@@ -210,28 +213,25 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	linuxNodes := 0
 	schedulable := 0
 	for _, n := range nodes.Items {
-		if !n.Spec.Unschedulable {
-			schedulable++
-			if n.Labels["kubernetes.io/os"] == "linux" {
-				linuxNodes++
-			}
+		if n.Spec.Unschedulable {
+			continue
 		}
+
+		if t.provider == operatorv1.ProviderAKS && n.Labels["type"] == "virtual-kubelet" {
+			// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
+			// virtual-nodes have many limitations, and are tainted to prevent pods from running on them.
+			// calico-node isn't run there as they don't support hostNetwork or host volume mounts.
+			// as such, we shouldn't consider virtual-nodes in the count towards how many typha pods should be run.
+			// furthermore, typha can't run on virtual-nodes as it is hostnetworked, so we don't want it's desired
+			// replica count to include it.
+			continue
+		}
+
+		schedulable++
+		if n.Labels["kubernetes.io/os"] == "linux" {
+			linuxNodes++
+		}
+
 	}
 	return schedulable, linuxNodes, nil
-}
-
-func (t *typhaAutoscaler) getSchedulableNodeCount(listOptions ...client.ListOption) (int, error) {
-	nodes := corev1.NodeList{}
-	err := t.client.List(context.Background(), &nodes, listOptions...)
-	if err != nil {
-		return 0, err
-	}
-
-	schedulable := 0
-	for _, n := range nodes.Items {
-		if !n.Spec.Unschedulable {
-			schedulable++
-		}
-	}
-	return schedulable, nil
 }

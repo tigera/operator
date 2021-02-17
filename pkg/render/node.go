@@ -679,6 +679,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+		{Name: "sysfs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 		{
 			Name: "typha-ca",
 			VolumeSource: v1.VolumeSource{
@@ -842,6 +843,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/var/run/calico", Name: "var-run-calico"},
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
+		{MountPath: "/sys/fs", Name: "sysfs"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}

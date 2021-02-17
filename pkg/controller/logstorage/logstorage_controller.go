@@ -288,9 +288,9 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		requests := corev1.ResourceList{}
 		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
 		requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
-		opr.Spec.ComponentResources = []operatorv1.ComponentResource{
+		opr.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
 			{
-				ComponentName: operatorv1.ComponentNameECKOperator,
+				LogStorageComponentName: operatorv1.ComponentNameECKOperator,
 				ResourceRequirements: &corev1.ResourceRequirements{
 					Limits:   limits,
 					Requests: requests,
@@ -309,8 +309,8 @@ func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 		return fmt.Errorf("LogStorage spec.ComponentResources contains unsupported components %+v", spec.ComponentResources)
 	}
 
-	if spec.ComponentResources[0].ComponentName != operatorv1.ComponentNameECKOperator {
-		return fmt.Errorf("LogStorage spec.ComponentResources.ComponentName %s is not supported", spec.ComponentResources[0].ComponentName)
+	if spec.ComponentResources[0].LogStorageComponentName != operatorv1.ComponentNameECKOperator {
+		return fmt.Errorf("LogStorage spec.ComponentResources.ComponentName %s is not supported", spec.ComponentResources[0].LogStorageComponentName)
 	}
 
 	return nil

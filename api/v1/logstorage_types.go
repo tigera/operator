@@ -51,7 +51,7 @@ type LogStorageSpec struct {
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// Only ECKOperator is supported for this spec.
 	// +optional
-	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
+	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.
@@ -140,6 +140,22 @@ type Retention struct {
 	// Default: 91
 	// +optional
 	ComplianceReports *int32 `json:"complianceReports"`
+}
+
+// LogStorageComponentName CRD enum
+type LogStorageComponentName string
+
+const (
+	ComponentNameECKOperator LogStorageComponentName = "ECKOperator"
+)
+
+// The ComponentResource struct associates a ResourceRequirements with a component by name
+type LogStorageComponentResource struct {
+	// ComponentName is an enum which identifies the component
+	// +kubebuilder:validation:Enum=ECKOperator
+	ComponentName LogStorageComponentName `json:"componentName"`
+	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
+	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements"`
 }
 
 // +kubebuilder:object:root=true

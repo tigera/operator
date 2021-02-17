@@ -154,7 +154,7 @@ var _ = Describe("LogStorage controller", func() {
 				requests := corev1.ResourceList{}
 				limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
 				requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
-				expectedComponentResources := []operatorv1.ComponentResource{
+				expectedComponentResources := []operatorv1.LogStorageComponentResource{
 					{
 						ComponentName: operatorv1.ComponentNameECKOperator,
 						ResourceRequirements: &corev1.ResourceRequirements{
@@ -1124,7 +1124,7 @@ var _ = Describe("LogStorage controller", func() {
 		})
 
 		It("should return an error when spec.ComponentResources.ComponentName is not ECKOperator", func() {
-			ls.Spec.ComponentResources = []operatorv1.ComponentResource{
+			ls.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
 				{
 					ComponentName: "Typha",
 				},
@@ -1133,14 +1133,14 @@ var _ = Describe("LogStorage controller", func() {
 		})
 
 		It("should return an error when spec.ComponentResources has more than one entry", func() {
-			ls.Spec.ComponentResources = append(ls.Spec.ComponentResources, operatorv1.ComponentResource{
+			ls.Spec.ComponentResources = append(ls.Spec.ComponentResources, operatorv1.LogStorageComponentResource{
 				ComponentName: "KubeControllers",
 			})
 			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
 		})
 
 		It("should return nil when spec.ComponentResources has 1 entry for ECKOperator", func() {
-			ls.Spec.ComponentResources = []operatorv1.ComponentResource{
+			ls.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
 				{
 					ComponentName: operatorv1.ComponentNameECKOperator,
 				},
@@ -1174,7 +1174,7 @@ var _ = Describe("LogStorage controller", func() {
 				Replicas: &replicas,
 			},
 			StorageClassName: DefaultElasticsearchStorageClass,
-			ComponentResources: []operatorv1.ComponentResource{
+			ComponentResources: []operatorv1.LogStorageComponentResource{
 				{
 					ComponentName: operatorv1.ComponentNameECKOperator,
 					ResourceRequirements: &corev1.ResourceRequirements{

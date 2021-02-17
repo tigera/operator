@@ -98,7 +98,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
-		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient(), statusManager),
+		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient(), statusManager, opts.DetectedProvider),
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
@@ -684,6 +684,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
+
+	// update autoscaler with kubernetesProvider in case it's changed
+	r.typhaAutoscaler.provider = instance.Spec.KubernetesProvider
 
 	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 	// the run the reset the degraded status and requeue the request.

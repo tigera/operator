@@ -18,6 +18,7 @@ import (
 	"context"
 	"time"
 
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 
 	. "github.com/onsi/ginkgo"
@@ -55,7 +56,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		n1 := createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
-		ta := newTyphaAutoscaler(c, statusManager)
+		ta := newTyphaAutoscaler(c, statusManager, operator.ProviderNone)
 		schedulableNodes, linuxNodes, err := ta.getNodeCounts()
 		Expect(err).To(BeNil())
 		Expect(schedulableNodes).To(Equal(2))
@@ -89,7 +90,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, statusManager, operator.ProviderNone, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		verifyTyphaReplicas(c, 2)
@@ -125,7 +126,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "window"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, statusManager, operator.ProviderNone, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		// This blocks until the first run is done.

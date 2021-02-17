@@ -398,7 +398,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					Tolerations:                   rmeta.TolerateAll,
-					Affinity:                      toAffinity(c.installation.TyphaAffinity),
+					Affinity:                      c.affinity(),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -607,17 +607,37 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 	return psp
 }
 
-// toAffinity converts a typha affinity to a k8s affinity.
-func toAffinity(t *operator.TyphaAffinity) *v1.Affinity {
-	if t == nil {
-		return nil
+// affinity sets the affinity on typha, accounting for the kubernetes-provider and user-specified values.
+func (c *typhaComponent) affinity() (aff *v1.Affinity) {
+	// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
+	// virtual-nodes have many limitations, namely it's unable to run hostNetworked pods. virtual-kubelets are tainted to prevent pods from running on them,
+	// but typha tolerates all taints and will run there.
+	// as such, we add an anti-affinity for virtual-nodes if running on azure
+	if c.installation.KubernetesProvider == operator.ProviderAKS {
+		aff = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: corev1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-node"},
+						}},
+					}},
+				},
+			},
+		}
 	}
-	if t.NodeAffinity == nil {
-		return nil
+
+	// add the user-specified typha preferred affinity if specified.
+	if c.installation.TyphaAffinity != nil && c.installation.TyphaAffinity.NodeAffinity != nil {
+		// check if above code initialized affintiy or not.
+		// this ensures we still return nil if neither condition is hit.
+		if aff == nil {
+			aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{}}
+		}
+		aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
 	}
-	return &v1.Affinity{
-		NodeAffinity: &v1.NodeAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: t.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-		},
-	}
+
+	return aff
 }

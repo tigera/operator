@@ -210,28 +210,25 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	linuxNodes := 0
 	schedulable := 0
 	for _, n := range nodes.Items {
-		if !n.Spec.Unschedulable {
-			schedulable++
-			if n.Labels["kubernetes.io/os"] == "linux" {
-				linuxNodes++
-			}
+		if n.Spec.Unschedulable {
+			continue
 		}
+
+		if _, ok := n.Labels["kubernetes.azure.com/cluster"]; ok && n.Labels["type"] == "virtual-kubelet" {
+			// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
+			// virtual-nodes have many limitations, and are tainted to prevent pods from running on them.
+			// calico-node isn't run there as they don't support hostNetwork or host volume mounts.
+			// as such, we shouldn't consider virtual-nodes in the count towards how many typha pods should be run.
+			// furthermore, typha can't run on virtual-nodes as it is hostnetworked, so we don't want it's desired
+			// replica count to include it.
+			continue
+		}
+
+		schedulable++
+		if n.Labels["kubernetes.io/os"] == "linux" {
+			linuxNodes++
+		}
+
 	}
 	return schedulable, linuxNodes, nil
-}
-
-func (t *typhaAutoscaler) getSchedulableNodeCount(listOptions ...client.ListOption) (int, error) {
-	nodes := corev1.NodeList{}
-	err := t.client.List(context.Background(), &nodes, listOptions...)
-	if err != nil {
-		return 0, err
-	}
-
-	schedulable := 0
-	for _, n := range nodes.Items {
-		if !n.Spec.Unschedulable {
-			schedulable++
-		}
-	}
-	return schedulable, nil
 }

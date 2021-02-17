@@ -540,7 +540,7 @@ type CertificateManagement struct {
 
 	// When a CSR is issued to the certificates.k8s.io API, the signerName is added to the request in order to accommodate for clusters
 	// with multiple signers.
-	// Must be formatted as: "<my-domain>/<my-signername>".
+	// Must be formatted as: `<my-domain>/<my-signername>`.
 	SignerName string `json:"signerName"`
 
 	// Specify the algorithm used by pods to generate a key pair that is associated with the X.509 certificate request.

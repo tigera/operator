@@ -38,6 +38,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("calico-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
+		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 	})
 
@@ -49,7 +50,19 @@ var _ = Describe("Namespace rendering tests", func() {
 		rtest.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["openshift.io/run-level"]).To(Equal("0"))
+		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
 		Expect(meta.GetAnnotations()["openshift.io/node-selector"]).To(Equal(""))
+	})
+
+	It("should render a namespace for aks", func() {
+		installation.KubernetesProvider = v1.ProviderAKS
+		component := render.Namespaces(installation, nil)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(1))
+		rtest.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
+		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
+		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
 	})
 
 	It("should render a namespace for tigera-dex on EE", func() {

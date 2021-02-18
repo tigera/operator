@@ -112,7 +112,7 @@ func (c *apiServerComponent) SupportedOSType() OSType {
 
 func (c *apiServerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
-		createNamespace(APIServerNamespace, c.openshift),
+		createNamespace(APIServerNamespace, c.installation.KubernetesProvider),
 	}
 	secrets := copyImagePullSecrets(c.pullSecrets, APIServerNamespace)
 	objs = append(objs, secrets...)

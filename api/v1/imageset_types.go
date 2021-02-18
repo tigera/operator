@@ -35,8 +35,7 @@ type Image struct {
 	Image string `json:"image"`
 
 	// Digest is the image identifier that will be used for the Image.
-	// The field should not include a leading `@` and must be prefixed with `sha256:`, if other
-	// digest prefixes are needed please submit a feature request.
+	// The field should not include a leading `@` and must be prefixed with `sha256:`.
 	Digest string `json:"digest"`
 }
 

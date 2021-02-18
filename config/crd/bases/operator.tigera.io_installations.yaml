@@ -223,7 +223,7 @@ spec:
                   signerName:
                     description: 'When a CSR is issued to the certificates.k8s.io
                       API, the signerName is added to the request in order to accommodate
-                      for clusters with multiple signers. Must be formatted as: "<my-domain>/<my-signername>".'
+                      for clusters with multiple signers. Must be formatted as: `<my-domain>/<my-signername>`.'
                     type: string
                 required:
                 - caCert
@@ -784,7 +784,7 @@ spec:
                         description: 'When a CSR is issued to the certificates.k8s.io
                           API, the signerName is added to the request in order to
                           accommodate for clusters with multiple signers. Must be
-                          formatted as: "<my-domain>/<my-signername>".'
+                          formatted as: `<my-domain>/<my-signername>`.'
                         type: string
                     required:
                     - caCert

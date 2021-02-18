@@ -152,7 +152,7 @@ func (c *managerComponent) SupportedOSType() OSType {
 
 func (c *managerComponent) Objects() ([]runtime.Object, []runtime.Object) {
 	objs := []runtime.Object{
-		createNamespace(ManagerNamespace, c.openshift),
+		createNamespace(ManagerNamespace, c.installation.KubernetesProvider),
 	}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, ManagerNamespace)...)
 

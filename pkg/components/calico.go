@@ -54,7 +54,6 @@ var (
 		ComponentCalicoNode,
 		ComponentCalicoTypha,
 		ComponentFlexVolume,
-		ComponentCSRInitContainer,
 		ComponentOperatorInit,
 	}
 )

@@ -23,6 +23,8 @@ const (
 
 	// Compliance feature name
 	ComplianceFeature = "compliance-reports"
-	// Threat defene feature name
+	// Threat defence feature name
 	ThreatDefenseFeature = "threat-defense"
+	// Export logs to 3rd party systems feature name
+	ExportLogs = "export-logs"
 )

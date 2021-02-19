@@ -34,6 +34,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -184,7 +185,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
@@ -236,8 +238,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	var exportLogs = utils.IsFeatureActive(license, common.ExportLogs)
 	var s3Credential *render.S3Credential
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.S3 != nil {
 			s3Credential, err = getS3Credential(r.client)
 			if err != nil {
@@ -254,7 +257,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var splunkCredential *render.SplunkCredential
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Splunk != nil {
 			splunkCredential, err = getSplunkCredential(r.client)
 			if err != nil {
@@ -270,7 +273,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 

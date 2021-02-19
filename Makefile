@@ -497,19 +497,6 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 	$(MAKEFILE_LIST)
 #####################################
 #####################################
-# Current Operator version
-VERSION ?= 0.0.1
-# Default bundle image tag
-BUNDLE_IMG ?= operator-bundle:$(VERSION)
-# Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
-ifneq ($(origin DEFAULT_CHANNEL), undefined)
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
-
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -586,9 +573,25 @@ $(BINDIR)/kustomize:
 		go mod init tmp ;\
 		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
 
+
+# Options for 'bundle-build'
+ifneq ($(origin CHANNELS), undefined)
+BUNDLE_CHANNELS := --channels=$(CHANNELS)
+endif
+ifneq ($(origin DEFAULT_CHANNEL), undefined)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+endif
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
 ## Generate bundle manifests and metadata, then validate generated files.
 .PHONY: bundle
 bundle: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE)
+ifndef VERSION
+	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
+endif
+ifndef PREV_VERSION
+	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
+endif
 	$(KUSTOMIZE) build config/manifests \
 	| $(OPERATOR_SDK_BARE) generate bundle \
 		--channels=stable \
@@ -611,4 +614,7 @@ update-bundle: $(OPERATOR_SDK_BARE) get-digest
 # Build the bundle image.
 .PHONY: bundle-build
 bundle-build:
-	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t $(BUNDLE_IMG) bundle/
+ifndef VERSION
+	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z)
+endif
+	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t operator-bundle-$(VERSION) bundle/

@@ -159,7 +159,9 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticsearchLicenseType) Component {
+	elasticLicenseType ElasticsearchLicenseType,
+	oidcUserConfigMap *corev1.ConfigMap,
+	oidcUserSecret *corev1.Secret) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -180,6 +182,8 @@ func LogStorage(
 		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
 		elasticLicenseType:          elasticLicenseType,
+		oidcUserConfigMap:           oidcUserConfigMap,
+		oidcUserSecret:              oidcUserSecret,
 	}
 }
 
@@ -202,6 +206,8 @@ type elasticsearchComponent struct {
 	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
 	elasticLicenseType          ElasticsearchLicenseType
+	oidcUserConfigMap           *corev1.ConfigMap
+	oidcUserSecret              *corev1.Secret
 	esImage                     string
 	esOperatorImage             string
 	kibanaImage                 string
@@ -372,6 +378,17 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.oidcUserRole()...)
 		toCreate = append(toCreate, es.oidcUserRoleBinding()...)
+
+		// OIDCUsersConfigMapName and OIDCUsersEsSecreteName should be created only once
+		// when the external IdP is set and Elasticsearch uses basic license.
+		// If external IdP is not configured or if Elasticsearch is not using Basic license, delete these objects if available.
+		if es.elasticLicenseType == ElasticsearchLicenseTypeBasic && es.dexCfg != nil {
+			toCreate = append(toCreate, es.oidcUserConfigMap)
+			toCreate = append(toCreate, es.oidcUserSecret)
+		} else {
+			toDelete = append(toDelete, es.oidcUserConfigMap)
+			toDelete = append(toDelete, es.oidcUserSecret)
+		}
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
 		// service as it differs between these cluster types
@@ -1463,13 +1480,13 @@ func (es elasticsearchComponent) oidcUserRole() []client.Object {
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
 					ResourceNames: []string{OIDCUsersConfigMapName},
-					Verbs:         []string{"get", "list", "watch", "create", "delete"},
+					Verbs:         []string{"get", "list", "watch"},
 				},
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
 					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"get", "list", "watch", "create", "update", "delete"},
+					Verbs:         []string{"update", "get"},
 				},
 			},
 		},

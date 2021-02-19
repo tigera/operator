@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/initializecrs"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -147,6 +148,28 @@ func main() {
 		}
 
 		err = awssgsetup.SetupAWSSecurityGroups(ctx, client)
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if initializeCRs {
+		log.Info("Initialize CRs")
+		cfg, err := config.GetConfig()
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+
+		client, err := client.New(cfg, client.Options{})
+		if err != nil {
+			log.Error(err, "")
+			os.Exit(1)
+		}
+
+		err = initializecrs.InitializeCRs(ctx, client)
 		if err != nil {
 			log.Error(err, "")
 			os.Exit(1)

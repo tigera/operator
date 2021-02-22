@@ -293,6 +293,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.provider == operatorv1.ProviderOpenShift,
 		r.clusterDomain,
 		esLicenseType,
+		managementClusterConnection != nil,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

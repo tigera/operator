@@ -176,12 +176,24 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	return true, nil
 }
 
-// CheckLicenseKey checks if a license has been installed. It's useful
+// FetchLicenseKey returns the license if it has been installed. It's useful
 // to prevent rollout of TSEE components that might require it.
-// It will return an error if the license is not installed, and nil otherwise.
-func CheckLicenseKey(ctx context.Context, cli client.Client) error {
+// It will return an error if the license is not installed/cannot be read
+func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}
-	return cli.Get(ctx, DefaultInstanceKey, instance)
+	err := cli.Get(ctx, DefaultInstanceKey, instance)
+	return *instance, err
+}
+
+// IsFeatureActive return true if the feature is listed in LicenseStatusKey
+func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
+	for _, v := range license.Status.Features {
+		if v == featureName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ValidateCertPairInNamespace checks if the given secret exists in the given

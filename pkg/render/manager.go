@@ -63,7 +63,8 @@ const (
 	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
 	ManagerInternalTLSHashAnnotation = "hash.operator.tigera.io/internal-tls-secret"
 
-	KibanaTLSHashAnnotation = "hash.operator.tigera.io/kibana-secrets"
+	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
+	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
 )
 
 // ManagementClusterConnection configuration constants

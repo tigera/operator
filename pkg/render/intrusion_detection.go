@@ -59,6 +59,7 @@ func IntrusionDetection(
 	openshift bool,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	managedCluster bool,
 ) Component {
 	return &intrusionDetectionComponent{
 		lc:               lc,
@@ -70,6 +71,7 @@ func IntrusionDetection(
 		openshift:        openshift,
 		clusterDomain:    clusterDomain,
 		esLicenseType:    esLicenseType,
+		managedCluster:   managedCluster,
 	}
 }
 
@@ -85,13 +87,16 @@ type intrusionDetectionComponent struct {
 	esLicenseType     ElasticsearchLicenseType
 	jobInstallerImage string
 	controllerImage   string
+	managedCluster    bool
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	var err error
-	c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, is)
+	if !c.managedCluster {
+		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, is)
+	}
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -123,8 +128,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
 		c.intrusionDetectionRoleBinding(),
-		c.intrusionDetectionDeployment(),
-		c.intrusionDetectionElasticsearchJob())
+		c.intrusionDetectionDeployment())
+
+	if !c.managedCluster {
+		objs = append(objs, c.intrusionDetectionElasticsearchJob())
+	}
 
 	objs = append(objs, c.globalAlertTemplates()...)
 

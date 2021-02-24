@@ -149,6 +149,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 	}
+
+	if err = utils.AddLicenseWatch(c); err != nil {
+		return fmt.Errorf("manager-controller failed to watch LicenseKey resource: %v", err)
+	}
 	return nil
 }
 
@@ -211,10 +215,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.

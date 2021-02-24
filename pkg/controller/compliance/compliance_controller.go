@@ -130,6 +130,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
 	}
 
+	if err = utils.AddLicenseWatch(c); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch LicenseKey resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -194,12 +198,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !utils.IsFeatureActive(license, common.ComplianceFeature) {
-		log.V(4).Info("Compliance is not activated as part of this license")
-		r.status.SetDegraded("Feature is not active", "License does not support this feature")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -354,6 +352,17 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	if !utils.IsFeatureActive(license, common.ComplianceFeature) {
+		log.V(4).Info("Compliance is not activated as part of this license")
+		if err := handler.Delete(context.Background(), component, r.status); err != nil {
+			r.status.SetDegraded("Error deleting resource", err.Error())
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		r.status.SetDegraded("Feature is not active", "License does not support this feature")
+		return reconcile.Result{}, nil
 	}
 
 	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {

@@ -34,6 +34,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	apiv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -112,6 +113,13 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
+}
+
+func AddLicenseWatch(c controller.Controller) error {
+	lic := &apiv1.LicenseKey{
+		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
+	}
+	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
 }
 
 // addWatch creates a watch on the given object. If a name and namespace are provided, then it will

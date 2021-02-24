@@ -4,6 +4,18 @@
 # ClusterServiceVersions.
 set -ex
 
+if [[ -z "${BUNDLE_CRD_DIR}" ]]; then
+    echo "BUNDLE_CRD_DIR is not set"
+    exit 1
+fi
+if [[ -z "${BUNDLE_DEPLOY_DIR}" ]]; then
+    echo "BUNDLE_DEPLOY_DIR is not set"
+    exit 1
+fi
+
+mkdir -p ${BUNDLE_CRD_DIR} || true
+mkdir -p ${BUNDLE_DEPLOY_DIR} || true
+
 # Get the base path for the Calico docs site. This will be used to download manifests.
 CALICO_BASE_URL=https://docs.projectcalico.org
 
@@ -27,17 +39,22 @@ fi
 # operator deployment manifest that doesn't include an init container and
 # volumes for creating install-time resources.
 function downloadOperatorManifests() {
-    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator-no-resource-loading.yaml --output ${DEPLOY_DIR}/operator.yaml
-    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-role-tigera-operator.yaml --output ${DEPLOY_DIR}/role.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator-no-resource-loading.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-role-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/role.yaml
+    # The binding is required unlike in earlier bundle generation. The
+    # 'operator-sdk generate bundle' command combines clusterroles bound to service
+    # accounts. The resulting permissions is set to the CSV's
+    # spec.install.clusterPermissions field.
+    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-rolebinding-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/rolebinding-tigera-operator.yaml
 
     # Download the installation CR so that the alm-examples annotation is generated.
-    curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${DEPLOY_DIR}/01-cr-installation.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml
 }
 
 # Download the installation and tigerastatus CRDs.
 function downloadOperatorCRDs() {
-    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-installation.yaml --output ${CSV_DIR}/operator.tigera.io_installations_crd.yaml
-    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-tigerastatus.yaml --output ${CSV_DIR}/operator.tigera.io_tigerastatuses_crd.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-installation.yaml --output ${BUNDLE_CRD_DIR}/operator.tigera.io_installations_crd.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-tigerastatus.yaml --output ${BUNDLE_CRD_DIR}/operator.tigera.io_tigerastatuses_crd.yaml
 }
 
 function downloadCalicoCRDs() {
@@ -59,9 +76,9 @@ networkpolicies
 networksets
 "
 
-    # Download the Calico CRDs into CSV dir.
+    # Download the Calico CRDs into CRD dir.
     for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${CSV_DIR}/crd.projectcalico.org_${resource}.yaml
+        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
     done
 }
 

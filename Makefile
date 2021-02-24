@@ -583,27 +583,40 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
-## Generate bundle manifests and metadata, then validate generated files.
+BUNDLE_CRD_DIR ?= build/_output/bundle/$(VERSION)/crds
+BUNDLE_DEPLOY_DIR ?= build/_output/bundle/$(VERSION)/deploy
+
+## Create an operator bundle.
 .PHONY: bundle
-bundle: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE)
+bundle: bundle-generate update-bundle bundle-validate bundle-image
+
+.PHONY: bundle-validate
+bundle-validate:
+	#$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
+
+.PHONY: bundle-manifests
+bundle-manifests:
 ifndef VERSION
 	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
 endif
 ifndef PREV_VERSION
 	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
 endif
+	$(eval EXTRA_DOCKER_ARGS += -e BUNDLE_CRD_DIR=$(BUNDLE_CRD_DIR) -e BUNDLE_DEPLOY_DIR=$(BUNDLE_DEPLOY_DIR))
+	$(CONTAINERIZED) "hack/gen-csv/get-manifests.sh"
+
+.PHONY: bundle-generate
+bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
 	$(KUSTOMIZE) build config/manifests \
 	| $(OPERATOR_SDK_BARE) generate bundle \
 		--channels=stable \
 		--default-channel=stable \
-		--crds-dir build/_output/bundle/olm-catalog/tigera-operator/$(VERSION)/ \
-		--deploy-dir build/_output/bundle/deploy/ \
+		--crds-dir $(BUNDLE_CRD_DIR) \
+		--deploy-dir $(BUNDLE_DEPLOY_DIR) \
 		--version $(VERSION) \
 		--verbose \
 		--manifests \
 		--metadata $(BUNDLE_METADATA_OPTS)
-	$(MAKE) update-bundle VERSION=$(VERSION) PREV_VERSION=$(PREV_VERSION)
-	#$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
 
 # Update a generated bundle so that it can be certified. 
 .PHONY: update-bundle
@@ -613,8 +626,8 @@ update-bundle: $(OPERATOR_SDK_BARE) get-digest
 
 # Build the bundle image.
 .PHONY: bundle-build
-bundle-build:
+bundle-image:
 ifndef VERSION
 	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z)
 endif
-	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t operator-bundle-$(VERSION) bundle/
+	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t tigera-operator-bundle:$(VERSION) bundle/

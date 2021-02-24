@@ -8,7 +8,7 @@ metadata:
     description: An operator which manages the lifecycle of a Calico or Calico Enterprise installation on Kubernetes or OpenShift.
     marketplace.openshift.io/action-text: Install-time Instructions
     marketplace.openshift.io/remote-workflow: https://docs.projectcalico.org/getting-started/openshift/installation
-    operators.operatorframework.io/builder: operator-sdk-v1.0.1
+    operators.operatorframework.io/builder: operator-sdk-v1.1.0
     operators.operatorframework.io/internal-objects: '["blockaffinities.crd.projectcalico.org","clusterinformations.crd.projectcalico.org","ipamblocks.crd.projectcalico.org","ipamconfigs.crd.projectcalico.org","ipamhandles.crd.projectcalico.org"]'
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
     repository: https://github.com/tigera/operator
@@ -112,6 +112,7 @@ spec:
     mediatype: image/svg+xml
   install:
     spec:
+      clusterPermissions: null
       deployments: null
     strategy: ""
   installModes:

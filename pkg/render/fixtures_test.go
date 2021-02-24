@@ -51,6 +51,20 @@ var elasticsearchSecret = v1.Secret{
 	},
 }
 
+var elasticsearchAdminUserSecret = v1.Secret{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "Secret",
+		APIVersion: "v1",
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      render.ElasticsearchAdminUserSecret,
+		Namespace: rmeta.OperatorNamespace(),
+	},
+	Data: map[string][]byte{
+		"elastic": []byte("password"),
+	},
+}
+
 var kibanaSecret = v1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",

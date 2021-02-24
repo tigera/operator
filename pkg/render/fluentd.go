@@ -105,19 +105,21 @@ func Fluentd(
 	installation *operatorv1.InstallationSpec,
 	clusterDomain string,
 	osType rmeta.OSType,
+	exportLogsToAdditionalStorages bool,
 ) Component {
 	return &fluentdComponent{
-		lc:              lc,
-		esSecrets:       esSecrets,
-		esClusterConfig: esClusterConfig,
-		s3Credential:    s3C,
-		splkCredential:  spC,
-		filters:         f,
-		eksConfig:       eksConfig,
-		pullSecrets:     pullSecrets,
-		installation:    installation,
-		clusterDomain:   clusterDomain,
-		osType:          osType,
+		lc:                             lc,
+		esSecrets:                      esSecrets,
+		esClusterConfig:                esClusterConfig,
+		s3Credential:                   s3C,
+		splkCredential:                 spC,
+		filters:                        f,
+		eksConfig:                      eksConfig,
+		pullSecrets:                    pullSecrets,
+		installation:                   installation,
+		clusterDomain:                  clusterDomain,
+		osType:                         osType,
+		exportLogsToAdditionalStorages: exportLogsToAdditionalStorages,
 	}
 }
 
@@ -131,18 +133,19 @@ type EksCloudwatchLogConfig struct {
 }
 
 type fluentdComponent struct {
-	lc              *operatorv1.LogCollector
-	esSecrets       []*corev1.Secret
-	esClusterConfig *relasticsearch.ClusterConfig
-	s3Credential    *S3Credential
-	splkCredential  *SplunkCredential
-	filters         *FluentdFilters
-	eksConfig       *EksCloudwatchLogConfig
-	pullSecrets     []*corev1.Secret
-	installation    *operatorv1.InstallationSpec
-	clusterDomain   string
-	osType          rmeta.OSType
-	image           string
+	lc                             *operatorv1.LogCollector
+	esSecrets                      []*corev1.Secret
+	esClusterConfig                *relasticsearch.ClusterConfig
+	s3Credential                   *S3Credential
+	splkCredential                 *SplunkCredential
+	filters                        *FluentdFilters
+	eksConfig                      *EksCloudwatchLogConfig
+	pullSecrets                    []*corev1.Secret
+	installation                   *operatorv1.InstallationSpec
+	clusterDomain                  string
+	osType                         rmeta.OSType
+	image                          string
+	exportLogsToAdditionalStorages bool
 }
 
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -483,7 +486,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 	}
 
-	if c.lc.Spec.AdditionalStores != nil {
+	if c.exportLogsToAdditionalStorages && c.lc.Spec.AdditionalStores != nil {
 		s3 := c.lc.Spec.AdditionalStores.S3
 		if s3 != nil {
 			envs = append(envs,
@@ -513,7 +516,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			)
 		}
 		syslog := c.lc.Spec.AdditionalStores.Syslog
-		if syslog != nil {
+		if c.exportLogsToAdditionalStorages && syslog != nil {
 			proto, host, port, _ := url.ParseEndpoint(syslog.Endpoint)
 			envs = append(envs,
 				corev1.EnvVar{Name: "SYSLOG_HOST", Value: host},
@@ -564,7 +567,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			}
 		}
 		splunk := c.lc.Spec.AdditionalStores.Splunk
-		if splunk != nil {
+		if c.exportLogsToAdditionalStorages && splunk != nil {
 			proto, host, port, _ := url.ParseEndpoint(splunk.Endpoint)
 			envs = append(envs,
 				corev1.EnvVar{Name: "SPLUNK_HEC_TOKEN",

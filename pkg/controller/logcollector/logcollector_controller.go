@@ -34,6 +34,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -112,6 +113,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)
 	}
+
+	if err = utils.AddLicenseWatch(c); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch LicenseKey resource: %v", err)
+	}
 	return nil
 }
 
@@ -184,13 +189,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -236,8 +242,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	var exportLogs = utils.IsFeatureActive(license, common.ExportLogs)
 	var s3Credential *render.S3Credential
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.S3 != nil {
 			s3Credential, err = getS3Credential(r.client)
 			if err != nil {
@@ -254,7 +261,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var splunkCredential *render.SplunkCredential
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Splunk != nil {
 			splunkCredential, err = getSplunkCredential(r.client)
 			if err != nil {
@@ -270,7 +277,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 
@@ -385,6 +392,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		installation,
 		r.clusterDomain,
 		rmeta.OSTypeLinux,
+		exportLogs,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -417,6 +425,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			installation,
 			r.clusterDomain,
 			rmeta.OSTypeWindows,
+			exportLogs,
 		)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

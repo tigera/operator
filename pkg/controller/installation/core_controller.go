@@ -209,6 +209,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
 		}
 
+		if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret %s: %w", render.ElasticsearchAdminUserSecret, err)
+		}
+
 		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
@@ -788,16 +792,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
 			return reconcile.Result{}, err
 		}
-		elasticsearchSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}, elasticsearchSecret)
-		if err != nil && !apierrors.IsNotFound(err) {
+
+		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		kibanaSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaSecret)
-		if err != nil && !apierrors.IsNotFound(err) {
+
+		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
 			return reconcile.Result{}, err
@@ -829,6 +833,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
+	// Elasticsearch.
+	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -911,6 +922,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile,
 		r.clusterDomain,
 		esLicenseType,
+		esAdminSecret,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

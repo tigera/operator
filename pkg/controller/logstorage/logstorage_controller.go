@@ -202,12 +202,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.OIDCUsersConfigMapName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.OIDCUsersEsSecreteName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	for _, name := range []string{render.OIDCUsersConfigMapName, render.OIDCUsersEsSecreteName,
+		render.ElasticsearchAdminUserSecret} {
+		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace); err != nil {
+			return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+		}
 	}
 
 	return nil
@@ -648,6 +647,16 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 	} else {
 		// If the cert was not deleted, copy the valid cert to operator namespace.
 		secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)...)
+	}
+
+	// Get the secret - might be nil
+	secret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
+	if err != nil {
+		return nil, err
+	}
+
+	if secret != nil {
+		secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), secret)...)
 	}
 
 	return secrets, nil

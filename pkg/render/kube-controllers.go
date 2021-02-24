@@ -17,6 +17,8 @@ package render
 import (
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -35,6 +37,10 @@ import (
 
 var replicas int32 = 1
 
+const (
+	ElasticsearchKubeControllersUserSecret = "tigera-ee-kube-controllers-elasticsearch-access"
+)
+
 func KubeControllers(
 	k8sServiceEp k8sapi.ServiceEndpoint,
 	cr *operator.InstallationSpec,
@@ -46,7 +52,23 @@ func KubeControllers(
 	kibanaSecret *v1.Secret,
 	authentication *operator.Authentication,
 	esLicenseType ElasticsearchLicenseType,
+	clusterDomain string,
+	esAdminSecret *v1.Secret,
 ) *kubeControllersComponent {
+	var elasticsearchUserSecret *v1.Secret
+	if esAdminSecret != nil {
+		elasticsearchUserSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ElasticsearchKubeControllersUserSecret,
+				Namespace: common.CalicoNamespace,
+			},
+			Data: map[string][]byte{
+				"username": []byte("elastic"),
+				"password": esAdminSecret.Data["elastic"],
+			},
+		}
+	}
+
 	return &kubeControllersComponent{
 		cr:                          cr,
 		managementCluster:           managementCluster,
@@ -58,6 +80,8 @@ func KubeControllers(
 		authentication:              authentication,
 		k8sServiceEp:                k8sServiceEp,
 		esLicenseType:               esLicenseType,
+		clusterDomain:               clusterDomain,
+		elasticsearchUserSecret:     elasticsearchUserSecret,
 	}
 }
 
@@ -73,6 +97,8 @@ type kubeControllersComponent struct {
 	k8sServiceEp                k8sapi.ServiceEndpoint
 	esLicenseType               ElasticsearchLicenseType
 	image                       string
+	clusterDomain               string
+	elasticsearchUserSecret     *v1.Secret
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
@@ -101,6 +127,15 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.managerInternalSecret != nil {
 		kubeControllerObjects = append(kubeControllerObjects, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.managerInternalSecret)...)...)
+	}
+
+	if c.elasticsearchSecret != nil {
+		kubeControllerObjects = append(kubeControllerObjects, secret.ToRuntimeObjects(
+			secret.CopyToNamespace(common.CalicoNamespace, c.elasticsearchSecret)...)...)
+	}
+
+	if c.managementCluster != nil && c.elasticsearchUserSecret != nil {
+		kubeControllerObjects = append(kubeControllerObjects, secret.ToRuntimeObjects(c.elasticsearchUserSecret)...)
 	}
 
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
@@ -315,6 +350,42 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	defaultMode := int32(420)
 
+	container := v1.Container{
+		Name:      "calico-kube-controllers",
+		Image:     c.image,
+		Env:       env,
+		Resources: c.kubeControllersResources(),
+		ReadinessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				Exec: &v1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-r",
+					},
+				},
+			},
+		},
+		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
+	}
+
+	if c.managementCluster != nil {
+		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
+			ElasticsearchKubeControllersUserSecret, c.clusterDomain, rmeta.OSTypeLinux)
+	}
+
+	podSpec := v1.PodSpec{
+		NodeSelector:       c.cr.ControlPlaneNodeSelector,
+		Tolerations:        append(c.cr.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+		ImagePullSecrets:   c.cr.ImagePullSecrets,
+		ServiceAccountName: "calico-kube-controllers",
+		Containers:         []v1.Container{container},
+		Volumes:            kubeControllersVolumes(defaultMode, c.managerInternalSecret),
+	}
+
+	if c.managementCluster != nil {
+		podSpec = relasticsearch.PodSpecDecorate(podSpec)
+	}
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -343,32 +414,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 					Annotations: c.annotations(),
 				},
-				Spec: v1.PodSpec{
-					NodeSelector:       c.cr.ControlPlaneNodeSelector,
-					Tolerations:        append(c.cr.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
-					ImagePullSecrets:   c.cr.ImagePullSecrets,
-					ServiceAccountName: "calico-kube-controllers",
-					Containers: []v1.Container{
-						{
-							Name:      "calico-kube-controllers",
-							Image:     c.image,
-							Env:       env,
-							Resources: c.kubeControllersResources(),
-							ReadinessProbe: &v1.Probe{
-								Handler: v1.Handler{
-									Exec: &v1.ExecAction{
-										Command: []string{
-											"/usr/bin/check-status",
-											"-r",
-										},
-									},
-								},
-							},
-							VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
-						},
-					},
-					Volumes: kubeControllersVolumes(defaultMode, c.managerInternalSecret),
-				},
+				Spec: podSpec,
 			},
 		},
 	}
@@ -389,6 +435,9 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	}
 	if c.elasticsearchSecret != nil {
 		am[tlsSecretHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchSecret.Data)
+	}
+	if c.elasticsearchUserSecret != nil {
+		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchUserSecret.Data)
 	}
 	if c.kibanaSecret != nil {
 		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.kibanaSecret.Data)

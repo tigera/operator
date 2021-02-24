@@ -209,6 +209,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
 		}
 
+		if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret %s: %w", render.ElasticsearchAdminUserSecret, err)
+		}
+
 		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
@@ -831,6 +835,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Get the secret - might be nil
+	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	var typhaNodeTLS *render.TyphaNodeTLS
 	if instance.Spec.CertificateManagement == nil {
 		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
@@ -911,6 +921,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile,
 		r.clusterDomain,
 		esLicenseType,
+		esAdminSecret,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

@@ -21,10 +21,10 @@ const (
 
 	TigeraPrometheusNamespace = "tigera-prometheus"
 
-	// Compliance feature name
+	// ComplianceFeature name
 	ComplianceFeature = "compliance-reports"
-	// Threat defence feature name
+	// ThreatDefenseFeature feature name
 	ThreatDefenseFeature = "threat-defense"
-	// Export logs to 3rd party systems feature name
-	ExportLogs = "export-logs"
+	// ExportLogsFeature to 3rd party systems feature name
+	ExportLogsFeature = "export-logs"
 )

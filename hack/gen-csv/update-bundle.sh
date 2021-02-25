@@ -78,6 +78,10 @@ COPY ${VERSION}/manifests /manifests/
 COPY ${VERSION}/metadata /metadata/
 EOF
 
+# Delete empty permissions (we only set clusterPermissions) otherwise the CSV
+# validation fails
+yq delete -i ${CSV} spec.install.spec.permissions
+
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle.Dockerfile
 

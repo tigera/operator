@@ -618,7 +618,7 @@ bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
 		--manifests \
 		--metadata $(BUNDLE_METADATA_OPTS)
 
-# Update a generated bundle so that it can be certified. 
+# Update a generated bundle so that it can be certified.
 .PHONY: update-bundle
 update-bundle: $(OPERATOR_SDK_BARE) get-digest
 	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))

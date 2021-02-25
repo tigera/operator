@@ -93,13 +93,13 @@ type intrusionDetectionComponent struct {
 func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	errMsgs := []string{}
 	var err error
 	if !c.managedCluster {
 		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, is)
-	}
-	errMsgs := []string{}
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, is)

@@ -326,6 +326,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 
 			env = append(env, v1.EnvVar{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)})
+			env = append(env, v1.EnvVar{Name: "ELASTIC_USERNAME", Value: string(c.elasticsearchUserSecret.Data["username"])})
+			env = append(env, v1.EnvVar{Name: "ELASTIC_PASSWORD", Value: string(c.elasticsearchUserSecret.Data["password"])})
+			env = append(env, v1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"})
+			env = append(env, v1.EnvVar{Name: "ELASTIC_CA", Value: "/elasticsearch-certs/tls.crt"})
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.
@@ -452,38 +456,55 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 }
 
 func kubeControllersVolumeMounts(managerSecret *v1.Secret) []v1.VolumeMount {
+	var volumeMounts []v1.VolumeMount
 	if managerSecret != nil {
-		return []v1.VolumeMount{{
-			Name:      ManagerInternalTLSSecretName,
-			MountPath: "/manager-tls",
-			ReadOnly:  true,
-		}}
+		volumeMounts = append(volumeMounts,
+			v1.VolumeMount{
+				Name:      ManagerInternalTLSSecretName,
+				MountPath: "/manager-tls",
+				ReadOnly:  true,
+			})
 	}
 
-	return []v1.VolumeMount{}
+	volumeMounts = append(volumeMounts, v1.VolumeMount{
+		Name:      relasticsearch.PublicCertSecret,
+		MountPath: "/elasticsearch-certs",
+		ReadOnly:  true,
+	})
+
+	return volumeMounts
 }
 
 func kubeControllersVolumes(defaultMode int32, managerSecret *v1.Secret) []v1.Volume {
+	var volumes []v1.Volume
 	if managerSecret != nil {
 
-		return []v1.Volume{
-			{
-				Name: ManagerInternalTLSSecretName,
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  ManagerInternalTLSSecretName,
-						Items: []v1.KeyToPath{
-							{
-								Key:  "cert",
-								Path: "cert",
-							},
+		volumes = append(volumes, v1.Volume{
+			Name: ManagerInternalTLSSecretName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					DefaultMode: &defaultMode,
+					SecretName:  ManagerInternalTLSSecretName,
+					Items: []v1.KeyToPath{
+						{
+							Key:  "cert",
+							Path: "cert",
 						},
 					},
 				},
 			},
-		}
+		})
 	}
 
-	return []v1.Volume{}
+	volumes = append(volumes, v1.Volume{
+		Name: relasticsearch.PublicCertSecret,
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				DefaultMode: &defaultMode,
+				SecretName:  relasticsearch.PublicCertSecret,
+			},
+		},
+	})
+
+	return volumes
 }

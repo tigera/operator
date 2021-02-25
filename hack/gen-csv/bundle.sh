@@ -79,9 +79,3 @@ channels:
 defaultChannel: stable
 packageName: tigera-operator
 EOF
-
-# Finally, zip up the bundle.
-cwd=$(pwd)
-pushd .
-cd ${BUNDLE_DIR} && zip -r ${cwd}/build/_output/bundle/bundle.zip .
-popd

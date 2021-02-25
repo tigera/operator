@@ -603,7 +603,7 @@ ifndef PREV_VERSION
 	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
 endif
 	$(eval EXTRA_DOCKER_ARGS += -e BUNDLE_CRD_DIR=$(BUNDLE_CRD_DIR) -e BUNDLE_DEPLOY_DIR=$(BUNDLE_DEPLOY_DIR))
-	$(CONTAINERIZED) "hack/gen-csv/get-manifests.sh"
+	$(CONTAINERIZED) "hack/gen-bundle/get-manifests.sh"
 
 .PHONY: bundle-generate
 bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
@@ -622,7 +622,7 @@ bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
 .PHONY: update-bundle
 update-bundle: $(OPERATOR_SDK_BARE) get-digest
 	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
-	$(CONTAINERIZED) hack/gen-csv/update-bundle.sh
+	$(CONTAINERIZED) hack/gen-bundle/update-bundle.sh
 
 # Build the bundle image.
 .PHONY: bundle-build

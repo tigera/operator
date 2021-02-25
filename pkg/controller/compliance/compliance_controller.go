@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -35,6 +36,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -54,11 +56,25 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	r := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+	// Create a new controller
+	c, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(r)})
+
+	if err != nil {
+		return err
+	}
+
+	r.C = c
+
+	if err := add(mgr, c); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) *ReconcileCompliance {
 	r := &ReconcileCompliance{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
@@ -71,12 +87,8 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDom
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource Compliance
 	err = c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
@@ -130,9 +142,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
 	}
 
-	if err = utils.AddLicenseWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch LicenseKey resource: %v", err)
-	}
+	// if err = utils.AddLicenseWatch(c); err != nil {
+	// 	return fmt.Errorf("compliance-controller failed to watch LicenseKey resource: %v", err)
+	// }
 
 	return nil
 }
@@ -149,6 +161,7 @@ type ReconcileCompliance struct {
 	provider      operatorv1.Provider
 	status        status.StatusManager
 	clusterDomain string
+	C             controller.Controller
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -190,6 +203,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
 	}
+
+	lic := &v3.LicenseKey{
+		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
+	}
+	r.C.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {

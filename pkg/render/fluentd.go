@@ -452,6 +452,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
+		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
 	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.clusterDomain, c.osType)
@@ -599,6 +600,25 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	)
 
 	return envs
+}
+
+// The startup probe uses the same action as the liveness probe, but with
+// a higher failure threshold and a larger timeout to account for slow networks.
+func (c *fluentdComponent) startup() *corev1.Probe {
+	// Default failure threshold for probes is 3. For the startup we should
+	// tolerate more failures.
+	var startupProbeFailureThreshold int32 = 10
+
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: c.livenessCmd(),
+			},
+		},
+		TimeoutSeconds:   ProbeTimeoutSeconds * 2,
+		PeriodSeconds:    ProbePeriodSeconds,
+		FailureThreshold: startupProbeFailureThreshold,
+	}
 }
 
 func (c *fluentdComponent) liveness() *corev1.Probe {

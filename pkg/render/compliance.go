@@ -148,7 +148,7 @@ func (c *complianceComponent) SupportedOSType() OSType {
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := append(
-		[]client.Object{createNamespace(ComplianceNamespace, c.openshift)},
+		[]client.Object{createNamespace(ComplianceNamespace, c.installation.KubernetesProvider)},
 		copyImagePullSecrets(c.pullSecrets, ComplianceNamespace)...,
 	)
 	complianceObjs = append(complianceObjs,

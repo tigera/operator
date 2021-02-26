@@ -134,7 +134,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(common.CalicoNamespace, c.elasticsearchSecret)...)...)
 	}
 
-	if c.managementCluster != nil && c.elasticsearchUserSecret != nil {
+	if !c.isManagedCluster() && c.elasticsearchUserSecret != nil {
 		kubeControllerObjects = append(kubeControllerObjects, secret.ToRuntimeObjects(c.elasticsearchUserSecret)...)
 	}
 
@@ -368,7 +368,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 	}
 
-	if c.managementCluster != nil {
+	if !c.isManagedCluster() && c.logStorageExists {
 		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.clusterDomain, rmeta.OSTypeLinux)
 	}
@@ -382,7 +382,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Volumes:            kubeControllersVolumes(defaultMode, c.managerInternalSecret),
 	}
 
-	if c.managementCluster != nil {
+	if !c.isManagedCluster() && c.logStorageExists {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 
@@ -421,6 +421,10 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	setCriticalPod(&(d.Spec.Template))
 
 	return &d
+}
+
+func (c *kubeControllersComponent) isManagedCluster() bool {
+	return c.managementClusterConnection != nil
 }
 
 // kubeControllerResources creates the kube-controller's resource requirements.

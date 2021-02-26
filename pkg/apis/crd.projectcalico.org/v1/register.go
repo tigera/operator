@@ -37,6 +37,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&IPPool{},
 		&IPPoolList{},
 		&FelixConfiguration{},
+		&KubeControllersConfiguration{},
+		&KubeControllersConfigurationList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

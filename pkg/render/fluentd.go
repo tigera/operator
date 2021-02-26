@@ -62,11 +62,8 @@ const (
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 
-	// fluentd startup is slower on Windows.
-	ProbeTimeoutSeconds        = 5
-	ProbeTimeoutSecondsWindows = 10
-	ProbePeriodSeconds         = 10
-	ProbePeriodSecondsWindows  = 20
+	ProbeTimeoutSeconds = 5
+	ProbePeriodSeconds  = 10
 
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
@@ -199,20 +196,6 @@ func (c *fluentdComponent) livenessCmd() []string {
 		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
 	}
 	return []string{"sh", "-c", "/bin/liveness.sh"}
-}
-
-func (c *fluentdComponent) probeTimeout() int32 {
-	if c.osType == rmeta.OSTypeWindows {
-		return ProbeTimeoutSecondsWindows
-	}
-	return ProbeTimeoutSeconds
-}
-
-func (c *fluentdComponent) probePeriod() int32 {
-	if c.osType == rmeta.OSTypeWindows {
-		return ProbePeriodSecondsWindows
-	}
-	return ProbePeriodSeconds
 }
 
 func (c *fluentdComponent) volumeHostPath() string {
@@ -625,8 +608,8 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds: c.probeTimeout(),
-		PeriodSeconds:  c.probePeriod(),
+		TimeoutSeconds: ProbeTimeoutSeconds,
+		PeriodSeconds:  ProbePeriodSeconds,
 	}
 }
 

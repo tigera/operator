@@ -81,6 +81,7 @@ func Calico(
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 	esAdminSecret *corev1.Secret,
+	kubeControllersMetricsPort int,
 ) (Renderer, error) {
 	var tcms []*corev1.ConfigMap
 	var tss []*corev1.Secret
@@ -152,6 +153,7 @@ func Calico(
 		esLicenseType:               esLicenseType,
 		clusterDomain:               clusterDomain,
 		esAdminSecret:               esAdminSecret,
+		kubeControllersMetricsPort:  kubeControllersMetricsPort,
 	}, nil
 }
 
@@ -235,6 +237,7 @@ type calicoRenderer struct {
 	clusterDomain               string
 	esLicenseType               ElasticsearchLicenseType
 	esAdminSecret               *corev1.Secret
+	kubeControllersMetricsPort  int
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -247,7 +250,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
 		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
-		r.esLicenseType, r.clusterDomain, r.esAdminSecret))
+		r.esLicenseType, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))
 	return components
 }
 

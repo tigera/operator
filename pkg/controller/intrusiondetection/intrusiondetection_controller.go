@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/logcollector"
@@ -130,6 +131,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
+	if err = utils.AddLicenseWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch LicenseKey resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -185,16 +190,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{}, err
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !utils.IsFeatureActive(license, common.ThreatDefenseFeature) {
-		log.V(4).Info("IntrusionDetection is not activated as part of this license")
-		r.status.SetDegraded("Feature is not active", "License does not support this feature")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, err
 	}
 
 	// Query for the installation object.
@@ -300,6 +299,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	if !utils.IsFeatureActive(license, common.ThreatDefenseFeature) {
+		log.V(4).Info("IntrusionDetection is not activated as part of this license")
+		if err := handler.Delete(context.Background(), component, r.status); err != nil {
+			r.status.SetDegraded("Error deleting resource", err.Error())
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		r.status.SetDegraded("Feature is not active", "License does not support this feature")
+		return reconcile.Result{}, nil
 	}
 
 	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {

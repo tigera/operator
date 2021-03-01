@@ -217,9 +217,15 @@ func (d *dexBaseCfg) ClientSecret() []byte {
 }
 
 func (d *dexBaseCfg) RequestedScopes() []string {
+
 	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
+
+	if d.connectorType == connectorTypeGoogle {
+		return []string{"openid", "email", "profile", "groups"}
+	}
+
 	return []string{"openid", "email", "profile"}
 }
 
@@ -453,7 +459,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 
 	// TODO Instead of having to check if this is an OIDC Spec we should have a dex configuration object specifically
 	// for OIDC.
-	if d.authentication.Spec.OIDC != nil && len(d.RequestedScopes()) > 0 {
+	if d.connectorType == connectorTypeOIDC && len(d.RequestedScopes()) > 0 {
 		config["scopes"] = d.RequestedScopes()
 	}
 

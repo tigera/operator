@@ -69,7 +69,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient(), opts.ClusterDomain)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain)
 	if err != nil {
 		return err
 	}
@@ -78,13 +78,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esClient utils.ElasticClient, clusterDomain string) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
 		client:        cli,
 		scheme:        schema,
 		status:        statusMgr,
 		provider:      provider,
-		esClient:      esClient,
+		esCliCreator:  esCliCreator,
 		clusterDomain: clusterDomain,
 	}
 
@@ -223,7 +223,7 @@ type ReconcileLogStorage struct {
 	scheme        *runtime.Scheme
 	status        status.StatusManager
 	provider      operatorv1.Provider
-	esClient      utils.ElasticClient
+	esCliCreator  utils.ElasticsearchClientCreator
 	clusterDomain string
 }
 
@@ -573,7 +573,14 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// ES should be in ready phase when execution reaches here, apply ILM polices
-		if err = r.esClient.SetILMPolicies(r.client, ctx, ls, relasticsearch.HTTPSEndpoint(component.SupportedOSType(), r.clusterDomain)); err != nil {
+		esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(component.SupportedOSType(), r.clusterDomain))
+		if err != nil {
+			reqLogger.Error(err, "failed to create the Elasticsearch client")
+			r.status.SetDegraded("Failed to connect to Elasticsearch", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err = esClient.SetILMPolicies(ctx, ls); err != nil {
 			reqLogger.Error(err, "failed to create or update Elasticsearch lifecycle policies")
 			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
 			return reconcile.Result{}, err

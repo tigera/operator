@@ -320,7 +320,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
-		if c.logStorageExists {
+		if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
 			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
 			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
@@ -368,7 +368,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 	}
 
-	if !c.isManagedCluster() && c.logStorageExists {
+	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
 		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.clusterDomain, rmeta.OSTypeLinux)
 	}
@@ -382,7 +382,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Volumes:            kubeControllersVolumes(defaultMode, c.managerInternalSecret),
 	}
 
-	if !c.isManagedCluster() && c.logStorageExists {
+	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 

@@ -434,7 +434,7 @@ func (c *kubeControllersComponent) prometheusService() *v1.Service {
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kube-controllers-metrics",
+			Name:      "calico-kube-controllers-metrics",
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-kube-controllers"},
 		},

@@ -17,6 +17,7 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -162,6 +163,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: render.TigeraElasticsearchCertSecret, ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: render.ElasticsearchKubeControllersUserSecret, ns: "calico-system", group: "", version: "", kind: ""},
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "calico-kube-controllers-metrics", ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
 		instance.Variant = operator.TigeraSecureEnterprise
@@ -221,6 +223,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: render.TigeraElasticsearchCertSecret, ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: render.ElasticsearchKubeControllersUserSecret, ns: "calico-system", group: "", version: "", kind: ""},
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "calico-kube-controllers-metrics", ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
 		instance.Variant = operator.TigeraSecureEnterprise
@@ -288,6 +291,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-kube-controllers", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "calico-kube-controllers-metrics", ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}

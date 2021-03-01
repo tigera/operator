@@ -105,7 +105,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1))
+		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -162,6 +162,7 @@ var _ = Describe("Rendering tests", func() {
 			{"calico-kube-controllers", common.CalicoNamespace, "apps", "v1", "Deployment"},
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{"calico-kube-controllers", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 		}
 
 		var resources []client.Object

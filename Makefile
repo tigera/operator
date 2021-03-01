@@ -260,7 +260,7 @@ run-uts:
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
-## Create a local kind dual stack cluster.
+## Create a local kind cluster.
 KUBECONFIG?=./kubeconfig.yaml
 cluster-create: kubectl
 	# First make sure any previous cluster is deleted

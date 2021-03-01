@@ -24,6 +24,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -140,6 +141,10 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
 		kubeControllerObjects = append(kubeControllerObjects, c.controllersPodSecurityPolicy())
+	}
+
+	if c.cr.Variant == operator.TigeraSecureEnterprise {
+		kubeControllerObjects = append(kubeControllerObjects, c.prometheusService())
 	}
 
 	return kubeControllerObjects, nil
@@ -421,6 +426,34 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	setCriticalPod(&(d.Spec.Template))
 
 	return &d
+}
+
+// prometheusService creates a Service which exposes and endpoint on kube-controllers for
+// reporting Prometheus metrics.
+func (c *kubeControllersComponent) prometheusService() *v1.Service {
+	return &v1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-kube-controllers-metrics",
+			Namespace: common.CalicoNamespace,
+			Labels:    map[string]string{"k8s-app": "calico-kube-controllers"},
+		},
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": "calico-kube-controllers"},
+			Type:     v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
+				// Expose on the default port - 9094.
+				// TODO: Users can change this value in KubeControllersConfiguration. We should
+				//       determine the port based on that config.
+				{
+					Name:       "metrics-port",
+					Port:       9094,
+					TargetPort: intstr.FromInt(int(9094)),
+					Protocol:   v1.ProtocolTCP,
+				},
+			},
+		},
+	}
 }
 
 func (c *kubeControllersComponent) isManagedCluster() bool {

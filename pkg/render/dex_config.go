@@ -229,6 +229,11 @@ func (d *dexBaseCfg) RequestedScopes() []string {
 	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
+
+	if d.connectorType == connectorTypeGoogle {
+		return []string{"openid", "email", "profile", "groups"}
+	}
+
 	return []string{"openid", "email", "profile"}
 }
 
@@ -485,7 +490,6 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"clientID":               fmt.Sprintf("$%s", clientIDEnv),
 			"clientSecret":           fmt.Sprintf("$%s", clientSecretEnv),
 			"redirectURI":            fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
-			"scopes":                 d.RequestedScopes(),
 			"serviceAccountFilePath": serviceAccountSecretLocation,
 			adminEmailSecretField:    fmt.Sprintf("$%s", googleAdminEmailEnv),
 		}

@@ -57,11 +57,8 @@ const (
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 
-	// fluentd startup is slower on Windows.
-	ProbeTimeoutSeconds        = 5
-	ProbeTimeoutSecondsWindows = 10
-	ProbePeriodSeconds         = 10
-	ProbePeriodSecondsWindows  = 20
+	ProbeTimeoutSeconds = 5
+	ProbePeriodSeconds  = 10
 
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
@@ -194,20 +191,6 @@ func (c *fluentdComponent) livenessCmd() []string {
 		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
 	}
 	return []string{"sh", "-c", "/bin/liveness.sh"}
-}
-
-func (c *fluentdComponent) probeTimeout() int32 {
-	if c.osType == OSTypeWindows {
-		return ProbeTimeoutSecondsWindows
-	}
-	return ProbeTimeoutSeconds
-}
-
-func (c *fluentdComponent) probePeriod() int32 {
-	if c.osType == OSTypeWindows {
-		return ProbePeriodSecondsWindows
-	}
-	return ProbePeriodSeconds
 }
 
 func (c *fluentdComponent) volumeHostPath() string {
@@ -464,6 +447,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
+		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
 	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.clusterDomain, c.osType)
@@ -613,6 +597,25 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	return envs
 }
 
+// The startup probe uses the same action as the liveness probe, but with
+// a higher failure threshold and a larger timeout to account for slow networks.
+func (c *fluentdComponent) startup() *corev1.Probe {
+	// Default failure threshold for probes is 3. For the startup we should
+	// tolerate more failures.
+	var startupProbeFailureThreshold int32 = 10
+
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: c.livenessCmd(),
+			},
+		},
+		TimeoutSeconds:   ProbeTimeoutSeconds * 2,
+		PeriodSeconds:    ProbePeriodSeconds,
+		FailureThreshold: startupProbeFailureThreshold,
+	}
+}
+
 func (c *fluentdComponent) liveness() *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
@@ -620,8 +623,8 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds: c.probeTimeout(),
-		PeriodSeconds:  c.probePeriod(),
+		TimeoutSeconds: ProbeTimeoutSeconds,
+		PeriodSeconds:  ProbePeriodSeconds,
 	}
 }
 

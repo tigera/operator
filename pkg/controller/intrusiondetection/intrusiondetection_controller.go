@@ -238,13 +238,25 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Failed to read ManagementClusterConnection")
+		r.status.SetDegraded("Failed to read ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	secrets := []string{
+		render.ElasticsearchIntrusionDetectionUserSecret,
+		render.ElasticsearchADJobUserSecret,
+	}
+
+	if managementClusterConnection == nil {
+		secrets = append(secrets, render.ElasticsearchIntrusionDetectionJobUserSecret)
+	}
+
 	esSecrets, err := utils.ElasticsearchSecrets(
 		context.Background(),
-		[]string{
-			render.ElasticsearchIntrusionDetectionUserSecret,
-			render.ElasticsearchIntrusionDetectionJobUserSecret,
-			render.ElasticsearchADJobUserSecret,
-		},
+		secrets,
 		r.client,
 	)
 	if err != nil {
@@ -265,12 +277,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Failed to read ManagementClusterConnection")
-		r.status.SetDegraded("Failed to read ManagementClusterConnection", err.Error())
-		return reconcile.Result{}, err
-	}
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())

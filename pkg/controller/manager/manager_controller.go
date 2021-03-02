@@ -298,7 +298,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, nil
 		}
 
-		complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
+		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
 			render.ComplianceServerCertName,

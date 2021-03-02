@@ -9,8 +9,10 @@
 # Set config variables needed for ${kubectl}.
 export KUBECONFIG=~/.kube/kind-config-kind
 
-echo "Download kind executable"
-curl -L https://github.com/kubernetes-sigs/kind/releases/download/v0.10.0/kind-linux-amd64 -o ${KIND}
+echo "Download kind executable with dual stack support"
+# We need to replace kind executable and node image
+# with official release once dual stack is fully supported by upstream.
+curl -L https://github.com/song-jiang/kind/releases/download/dualstack-1.17.0/kind -o ${KIND}
 chmod +x ${KIND}
 
 echo "Create kind cluster"

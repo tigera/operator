@@ -274,6 +274,34 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		})
 	})
 
+	Context("secret availability", func() {
+		It("should not wait on tigera-ee-installer-elasticsearch-access secret when cluster is managed", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+		})
+
+		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterSpec{
+					Address: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+		})
+	})
+
 	Context("Feature intrusion detection not active", func() {
 		BeforeEach(func() {
 			By("Deleting the previous license")

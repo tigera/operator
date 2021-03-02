@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -74,6 +75,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -271,6 +273,58 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &j)).To(BeNil())
+		})
+	})
+
+	Context("secret availability", func() {
+		It("should not wait on tigera-ee-installer-elasticsearch-access secret when cluster is managed", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			// Delete the secret to ensure that utils.ElasticSearch correctly looks for secrets relevant to managed
+			// clusters only and doesn't attempt to find the IDS job secret.
+			idsSecret := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+			}
+			err := c.Delete(ctx, idsSecret)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 0)).To(BeTrue())
+		})
+
+		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterSpec{
+					Address: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			// Delete the secret to force utils.ElasticSearch to return a NotFound error, which in turn degrades the status and exists the reconcile loop.
+			// This tells us that the secret was expected but not found, therefore we are correctly waiting on the secret in a management cluster.
+			idsSecret := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+			}
+			err := c.Delete(ctx, idsSecret)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
 		})
 	})
 

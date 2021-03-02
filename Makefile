@@ -452,17 +452,6 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
-## Generate a ClusterServiceVersion package.
-# E.g. make gen-csv VERSION=1.6.2 PREV_VERSION=0.0.0
-#
-# VERSION: the operator version to generate a CSV for.
-# PREV_VERSION: the operator version that this CSV will replace. If there is
-#               no previous version, use 0.0.0
-.PHONY: gen-csv
-gen-csv: $(OPERATOR_SDK_BARE) get-digest
-	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
-	$(CONTAINERIZED) hack/gen-csv/csv.sh
-
 .PHONY: prepull-image
 prepull-image:
 	@echo Pulling operator image...
@@ -490,12 +479,6 @@ get-digest: prepull-image
 	@echo Getting operator image digest...
 	$(eval OPERATOR_IMAGE_INSPECT=$(shell sh -c "docker image inspect quay.io/tigera/operator:v$(VERSION) | base64 -w 0"))
 
-## Generate a CSV bundle zip file containing all CSVs and a package manifest.
-# E.g. make gen-bundle
-.PHONY: gen-bundle
-gen-bundle:
-	$(CONTAINERIZED) hack/gen-csv/bundle.sh
-
 .PHONY: help
 ## Display this help text
 help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383502660
@@ -514,19 +497,6 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 	$(MAKEFILE_LIST)
 #####################################
 #####################################
-# Current Operator version
-VERSION ?= 0.0.1
-# Default bundle image tag
-BUNDLE_IMG ?= controller-bundle:$(VERSION)
-# Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
-ifneq ($(origin DEFAULT_CHANNEL), undefined)
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
-
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -603,15 +573,61 @@ $(BINDIR)/kustomize:
 		go mod init tmp ;\
 		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
 
-## Generate bundle manifests and metadata, then validate generated files.
-#.PHONY: bundle
-#bundle: manifests
-#	operator-sdk generate kustomize manifests -q
-#	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-#	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
-#	operator-sdk bundle validate ./bundle
-#
-## Build the bundle image.
-#.PHONY: bundle-build
-#bundle-build:
-#	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+
+# Options for 'bundle-build'
+ifneq ($(origin CHANNELS), undefined)
+BUNDLE_CHANNELS := --channels=$(CHANNELS)
+endif
+ifneq ($(origin DEFAULT_CHANNEL), undefined)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+endif
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
+BUNDLE_CRD_DIR ?= build/_output/bundle/$(VERSION)/crds
+BUNDLE_DEPLOY_DIR ?= build/_output/bundle/$(VERSION)/deploy
+
+## Create an operator bundle.
+.PHONY: bundle
+bundle: bundle-generate update-bundle bundle-validate bundle-image
+
+.PHONY: bundle-validate
+bundle-validate:
+	#$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
+
+.PHONY: bundle-manifests
+bundle-manifests:
+ifndef VERSION
+	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
+endif
+ifndef PREV_VERSION
+	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
+endif
+	$(eval EXTRA_DOCKER_ARGS += -e BUNDLE_CRD_DIR=$(BUNDLE_CRD_DIR) -e BUNDLE_DEPLOY_DIR=$(BUNDLE_DEPLOY_DIR))
+	$(CONTAINERIZED) "hack/gen-bundle/get-manifests.sh"
+
+.PHONY: bundle-generate
+bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
+	$(KUSTOMIZE) build config/manifests \
+	| $(OPERATOR_SDK_BARE) generate bundle \
+		--channels=stable \
+		--default-channel=stable \
+		--crds-dir $(BUNDLE_CRD_DIR) \
+		--deploy-dir $(BUNDLE_DEPLOY_DIR) \
+		--version $(VERSION) \
+		--verbose \
+		--manifests \
+		--metadata $(BUNDLE_METADATA_OPTS)
+
+# Update a generated bundle so that it can be certified.
+.PHONY: update-bundle
+update-bundle: $(OPERATOR_SDK_BARE) get-digest
+	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
+	$(CONTAINERIZED) hack/gen-bundle/update-bundle.sh
+
+# Build the bundle image.
+.PHONY: bundle-build
+bundle-image:
+ifndef VERSION
+	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z)
+endif
+	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t tigera-operator-bundle:$(VERSION) bundle/

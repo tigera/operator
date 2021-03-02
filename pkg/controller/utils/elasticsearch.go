@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -113,69 +112,55 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*rel
 	return relasticsearch.NewClusterConfigFromConfigMap(configMap)
 }
 
+type ElasticsearchClientCreator func(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error)
+
 type ElasticClient interface {
-	SetILMPolicies(client.Client, context.Context, *operatorv1.LogStorage, string) error
+	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
 }
 
 type esClient struct {
 	client *elastic.Client
-	lock   sync.Mutex
 }
 
-func NewElasticClient() ElasticClient {
-	return &esClient{}
+func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error) {
+	user, password, root, err := getClientCredentials(client, ctx)
+	if err != nil {
+		return nil, err
+	}
+	h := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
+	}
+
+	options := []elastic.ClientOptionFunc{
+		elastic.SetURL(elasticHTTPSEndpoint),
+		elastic.SetHttpClient(h),
+		elastic.SetErrorLog(logrWrappedESLogger{}),
+		elastic.SetSniff(false),
+		elastic.SetHealthcheck(false),
+		elastic.SetBasicAuth(user, password),
+	}
+	retryInterval, err := time.ParseDuration(ElasticConnRetryInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	var esCli *elastic.Client
+	for i := 0; i < ElasticConnRetries; i++ {
+		esCli, err = elastic.NewClient(options...)
+		if err == nil {
+			break
+		}
+		log.Error(err, "Elastic connect failed, retrying")
+		time.Sleep(retryInterval)
+	}
+
+	return &esClient{client: esCli}, err
 }
 
 // SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
-func (es *esClient) SetILMPolicies(client client.Client, ctx context.Context, ls *operatorv1.LogStorage, elasticHTTPSEndpoint string) error {
-	es.lock.Lock()
-	if err := es.createElasticClient(client, ctx, elasticHTTPSEndpoint); err != nil {
-		es.lock.Unlock()
-		return err
-	}
-	es.lock.Unlock()
+func (es *esClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
 	policyList := es.listILMPolicies(ls)
 	return es.createOrUpdatePolicies(ctx, policyList)
-}
-
-func (es *esClient) createElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) error {
-	if es.client == nil {
-		user, password, root, err := getClientCredentials(client, ctx)
-		if err != nil {
-			return err
-		}
-		h := &http.Client{
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
-		}
-
-		options := []elastic.ClientOptionFunc{
-			elastic.SetURL(elasticHTTPSEndpoint),
-			elastic.SetHttpClient(h),
-			elastic.SetErrorLog(logrWrappedESLogger{}),
-			elastic.SetSniff(false),
-			elastic.SetHealthcheck(false),
-			elastic.SetBasicAuth(user, password),
-		}
-		retryInterval, err := time.ParseDuration(ElasticConnRetryInterval)
-		if err != nil {
-			return err
-		}
-
-		var eserr error
-		var esClient *elastic.Client
-		for i := 0; i < ElasticConnRetries; i++ {
-
-			esClient, eserr = elastic.NewClient(options...)
-			if eserr == nil {
-				es.client = esClient
-				return nil
-			}
-			log.Error(eserr, "Elastic connect failed, retrying")
-			time.Sleep(retryInterval)
-		}
-		return eserr
-	}
-	return nil
 }
 
 // listILMPolicies generates ILM policies based on disk space and retention in LogStorage
@@ -215,12 +200,7 @@ func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[s
 
 		res, err := es.client.XPackIlmGetLifecycle().Policy(policyName).Do(ctx)
 		if err != nil {
-			if elastic.IsConnErr(err) {
-				// If connection error, reset elasticsearch client
-				es.lock.Lock()
-				es.client = nil
-				es.lock.Unlock()
-			} else if elastic.IsNotFound(err) {
+			if elastic.IsNotFound(err) {
 				// If policy doesn't exist, create one
 				return applyILMPolicy(ctx, es.client, indexName, pd.policy)
 			}

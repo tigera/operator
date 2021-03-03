@@ -80,6 +80,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		Expect(ds.Spec.Template.Labels["k8s-app"]).To(Equal("fluentd-node"))
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
@@ -127,10 +128,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		ds := rtest.GetResource(resources, "fluentd-node-windows", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
+		Expect(ds.Spec.Template.Labels["k8s-app"]).To(Equal("fluentd-node"))
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("c:/TigeraCalico"))
 
 		envs := ds.Spec.Template.Spec.Containers[0].Env
-
 		expectedEnvs := []corev1.EnvVar{
 			{Name: "FLUENT_UID", Value: "0"},
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
@@ -150,8 +151,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		ds = rtest.GetResource(resources, "fluentd-node-windows", "tigera-fluentd", "apps", "v1", "DaemonSet").(*apps.DaemonSet)
-		envs = ds.Spec.Template.Spec.Containers[0].Env
+		Expect(ds.Spec.Template.Labels["k8s-app"]).To(Equal("fluentd-node"))
 
+		envs = ds.Spec.Template.Spec.Containers[0].Env
 		expectedEnvs = []corev1.EnvVar{
 			{Name: "FLUENT_UID", Value: "0"},
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},

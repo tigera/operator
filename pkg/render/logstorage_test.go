@@ -516,7 +516,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				"cluster.max_shards_per_node": 10000,
 				"xpack.security.authc.realms.oidc.oidc1": map[string]interface{}{
 					"rp.client_id":                "tigera-manager",
-					"rp.requested_scopes":         []string{"scope"},
+					"rp.requested_scopes":         []string{"openid", "email", "profile", "groups", "offline_access"},
 					"op.jwkset_path":              "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys",
 					"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",
 					"claims.principal":            "email",

@@ -23,6 +23,7 @@ import (
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
+	"github.com/juju/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -232,14 +233,13 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 		return fmt.Errorf("failed deleting kube-system calico-kube-controllers: %s", err.Error())
 	}
 	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
-	if err := m.waitForOperatorTyphaDeploymentReady(ctx); err != nil {
-		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
-	}
-	log.V(1).Info("Operator Typha Deployment is ready")
 	if err := m.labelUnmigratedNodes(ctx); err != nil {
 		return fmt.Errorf("failed to label unmigrated nodes: %s", err.Error())
 	}
 	log.V(1).Info("All unmigrated nodes labeled")
+	if err := m.ensureKubeSysTyphaHasNodeSelector(ctx); err != nil {
+		return fmt.Errorf("the kube-system typha deployment is not ready with the updated nodeSelector: %s", err.Error())
+	}
 	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx); err != nil {
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
@@ -255,6 +255,10 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	if err := m.deleteKubeSystemTypha(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
+	if err := m.waitForOperatorTyphaDeploymentReady(ctx); err != nil {
+		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
+	}
+	log.V(1).Info("Operator Typha Deployment is ready")
 
 	return nil
 }
@@ -377,7 +381,6 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if err != nil {
 			return false, err
 		}
-
 		if ds.Spec.Template.Spec.NodeSelector == nil {
 			ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 		}
@@ -399,8 +402,47 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady || ds.Status.ObservedGeneration != ds.ObjectMeta.Generation {
 			return false, fmt.Errorf("not all pods are ready yet: %d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 		}
+		log.Info("All kube-system calico/node pods are now ready after nodeSelector update")
 
 		// Successful update
+		return true, nil
+	})
+}
+
+// ensureKubeSysTyphaHasNodeSelector adds the migration node selector to the kube-system Typha deployment and waits until
+// the deployment has updated. This node selector is used to perform a rolling update of typhas from one namespace to the other, since
+// a maximum of one typha can be run per-node independent of namespace.
+func (m *CoreNamespaceMigration) ensureKubeSysTyphaHasNodeSelector(ctx context.Context) error {
+	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
+		typha, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				return false, err
+			}
+		}
+		if typha != nil {
+			if typha.Spec.Template.Spec.NodeSelector == nil {
+				typha.Spec.Template.Spec.NodeSelector = make(map[string]string)
+			}
+			err = m.addNodeSelectorToDeployment(ctx, typha, kubeSystem, nodeSelectorKey, nodeSelectorValuePre)
+			if err != nil {
+				if apierrs.IsConflict(err) {
+					// Retry on update conflicts.
+					return false, nil
+				}
+				return false, err
+			}
+
+			typha, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+			if typha.Status.UpdatedReplicas != typha.Status.Replicas || typha.Status.ObservedGeneration != typha.ObjectMeta.Generation {
+				return false, fmt.Errorf("not all pods are ready yet: %d/%d", typha.Status.AvailableReplicas, typha.Status.Replicas)
+			}
+			log.Info("All kube-system calico/typha pods are now ready after nodeSelector update")
+
+		}
 		return true, nil
 	})
 }
@@ -408,7 +450,6 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context, ds *appsv1.DaemonSet, namespace, key, value string) error {
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
-
 		var patchBytes []byte
 		if len(ds.Spec.Template.Spec.NodeSelector) > 0 {
 			k := strings.Replace(key, "/", "~1", -1)
@@ -434,6 +475,41 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context,
 		log.Info("Patch NodeSelector with: ", string(patchBytes))
 
 		_, err := m.client.AppsV1().DaemonSets(kubeSystem).Patch(ctx, ds.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *CoreNamespaceMigration) addNodeSelectorToDeployment(ctx context.Context, d *appsv1.Deployment, namespace, key, value string) error {
+	// Check if nodeSelector is already set
+	if _, ok := d.Spec.Template.Spec.NodeSelector[key]; !ok {
+		var patchBytes []byte
+		if len(d.Spec.Template.Spec.NodeSelector) > 0 {
+			k := strings.Replace(key, "/", "~1", -1)
+
+			// This patch does not work when NodeSelectors don't already exist, only use it when some already exist.
+			p := []StringPatch{
+				{
+					Op:    "add",
+					Path:  fmt.Sprintf("/spec/template/spec/nodeSelector/%s", k),
+					Value: value,
+				},
+			}
+
+			var err error
+			patchBytes, err = json.Marshal(p)
+			if err != nil {
+				return err
+			}
+		} else {
+			// This patch will overwrite any existing NodeSelectors if any exist so only use it when there are none.
+			patchBytes = []byte(fmt.Sprintf(`[ { "op": "add", "path": "/spec/template/spec/nodeSelector", "value": { "%s": "%s" } }]`, key, value))
+		}
+		log.Info("Patch NodeSelector with: ", string(patchBytes))
+
+		_, err := m.client.AppsV1().Deployments(kubeSystem).Patch(ctx, d.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
 		if err != nil {
 			return err
 		}

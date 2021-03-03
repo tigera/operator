@@ -34,9 +34,12 @@ func checkTypha(c *components, _ *operatorv1.Installation) error {
 		return nil
 	}
 
-	return ErrIncompatibleCluster{
-		err: fmt.Sprintf("Not enough nodes available for typha deployment. Have %d nodes with %d typha replicas currently deployed and %d additional typhas are needed during migration",
-			nodeCount, curReplicas, utils.GetExpectedTyphaScale(nodeCount)),
-		component: ComponentTypha,
-	}
+	// CASEY: HACK: Allow Typha migration to continue even if we don't have enough nodes.
+	return nil
+
+	// return ErrIncompatibleCluster{
+	// 	err: fmt.Sprintf("Not enough nodes available for typha deployment. Have %d nodes with %d typha replicas currently deployed and %d additional typhas are needed during migration",
+	// 		nodeCount, curReplicas, utils.GetExpectedTyphaScale(nodeCount)),
+	// 	component: ComponentTypha,
+	// }
 }

@@ -60,24 +60,24 @@ func Typha(
 	clusterDomain string,
 ) Component {
 	return &typhaComponent{
-		k8sServiceEp:       k8sServiceEp,
-		installation:       installation,
-		typhaNodeTLS:       tnTLS,
-		amazonCloudInt:     aci,
-		namespaceMigration: migrationNeeded,
-		clusterDomain:      clusterDomain,
+		k8sServiceEp:    k8sServiceEp,
+		installation:    installation,
+		typhaNodeTLS:    tnTLS,
+		amazonCloudInt:  aci,
+		migrationNeeded: migrationNeeded,
+		clusterDomain:   clusterDomain,
 	}
 }
 
 type typhaComponent struct {
-	k8sServiceEp       k8sapi.ServiceEndpoint
-	installation       *operator.InstallationSpec
-	typhaNodeTLS       *TyphaNodeTLS
-	amazonCloudInt     *operator.AmazonCloudIntegration
-	namespaceMigration bool
-	clusterDomain      string
-	typhaImage         string
-	certSignReqImage   string
+	k8sServiceEp     k8sapi.ServiceEndpoint
+	installation     *operator.InstallationSpec
+	typhaNodeTLS     *TyphaNodeTLS
+	amazonCloudInt   *operator.AmazonCloudIntegration
+	migrationNeeded  bool
+	clusterDomain    string
+	typhaImage       string
+	certSignReqImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
@@ -411,8 +411,11 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
-	if c.namespaceMigration {
+	if c.migrationNeeded {
 		migration.SetTyphaAntiAffinity(&d)
+	}
+	if c.migrationNeeded {
+		migration.LimitDeploymentToMigratedNodes(&d)
 	}
 	return &d
 }

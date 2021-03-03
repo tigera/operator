@@ -30,6 +30,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -185,6 +186,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", t, err)
 		}
+	}
+
+	// Watch for changes to KubeControllersConfiguration.
+	err = c.Watch(&source.Kind{Type: &crdv1.KubeControllersConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
 	}
 
 	if r.enterpriseCRDsExist {
@@ -606,7 +613,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	status := instance.Status
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
-	// mark CR found so we can report converter problems via tigerastatus
+	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
 	if !r.migrationChecked {
@@ -892,6 +899,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.
+	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.SetDegraded("Unable to ready KubeControllersConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Determine the port to use for kube-controllers metrics.
+	kubeControllersMetricsPort := 0
+	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
+		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
+	}
+
 	nodeAppArmorProfile := ""
 	a := instance.GetObjectMeta().GetAnnotations()
 	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
@@ -923,6 +944,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.clusterDomain,
 		esLicenseType,
 		esAdminSecret,
+		kubeControllersMetricsPort,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

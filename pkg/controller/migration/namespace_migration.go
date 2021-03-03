@@ -162,6 +162,18 @@ func LimitDaemonSetToMigratedNodes(ds *appsv1.DaemonSet) {
 	}
 }
 
+// LimitDeploymentToMigratedNodes updates the deployment passed in with a
+// nodeSelector that will only allow pods to be schedueled on nodes with
+// the key:value projectcalico.org/operator-node-migration:migrated.
+func LimitDeploymentToMigratedNodes(d *appsv1.Deployment) {
+	if d.Spec.Template.Spec.NodeSelector == nil {
+		d.Spec.Template.Spec.NodeSelector = make(map[string]string)
+	}
+	for k, v := range migratedNodeLabel {
+		d.Spec.Template.Spec.NodeSelector[k] = v
+	}
+}
+
 // AddBindingForKubeSystemNode updates the ClusterRoleBinding passed in
 // to also bind the service account in the kube-system namespace to the
 // Role. Without this, when the new ClusterRoleBinding overwrites the

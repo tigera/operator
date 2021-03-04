@@ -99,7 +99,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
-		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient(), statusManager),
+		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetConfig(), mgr.GetClient(), statusManager),
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,

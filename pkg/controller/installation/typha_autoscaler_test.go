@@ -55,7 +55,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		n1 := createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
-		ta := newTyphaAutoscaler(c, statusManager)
+		ta := newTyphaAutoscaler(nil, c, statusManager)
 		schedulableNodes, linuxNodes, err := ta.getNodeCounts()
 		Expect(err).To(BeNil())
 		Expect(schedulableNodes).To(Equal(2))
@@ -89,7 +89,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(nil, c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		verifyTyphaReplicas(c, 2)
@@ -123,7 +123,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(nil, c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		// normally we'd expect to see three replicas for three nodes, but since one node is a virtual-kubelet,
@@ -153,7 +153,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "window"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(nil, c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		// This blocks until the first run is done.

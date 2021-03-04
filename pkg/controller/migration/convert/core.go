@@ -341,13 +341,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 				}
 			}
 		}
-
-		nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector)
-		if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; ok {
-			delete(nodeSel, "projectcalico.org/operator-node-migration")
-		}
-		if len(nodeSel) != 0 {
-			// raise error unless the only nodeSelector is the migration nodeSelector
+		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
 			return ErrIncompatibleCluster{
 				err:       fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel),
 				component: ComponentTypha,

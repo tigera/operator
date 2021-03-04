@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
 	"github.com/juju/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -225,15 +224,15 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 		return fmt.Errorf("failed to label unmigrated nodes: %s", err.Error())
 	}
 	log.V(1).Info("All unmigrated nodes labeled")
-	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx); err != nil {
+	if err := m.ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx, log); err != nil {
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
-	if err := m.ensureTyphaRoom(ctx); err != nil {
+	if err := m.ensureTyphaRoom(ctx, log); err != nil {
 		return fmt.Errorf("unable to ensure room for enough typhas: %s", err.Error())
 	}
 	log.V(1).Info("Ensured room for Typha deployments")
-	if err := m.waitForOperatorTyphaDeploymentReady(ctx); err != nil {
+	if err := m.waitForOperatorTyphaDeploymentReady(ctx, log); err != nil {
 		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
 	}
 	log.V(1).Info("New Typha is running in calico-system")
@@ -248,12 +247,12 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	if err := m.deleteKubeSystemTypha(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
-	log.V(1).Info("Operator Typha Deployment is ready")
+	log.Info("Namespace migration complete")
 
 	return nil
 }
 
-func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context) error {
+func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context, log logr.Logger) error {
 	// Get typha, if it exists.
 	typha, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
 	if err != nil {
@@ -298,7 +297,7 @@ func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context) error {
 		desiredReplicas = min(int32(maxAvailableNodes), curReplicas)
 	}
 	if desiredReplicas != curReplicas {
-		log.Infof("Scaling kube-system calico/typha to %d replicas to make room for migration", desiredReplicas)
+		log.Info(fmt.Sprintf("Scaling kube-system/calico-typha deployment to %d replicas to make room for migration", desiredReplicas))
 		typha.Spec.Replicas = &desiredReplicas
 		_, err = m.client.AppsV1().Deployments(kubeSystem).Update(ctx, typha, metav1.UpdateOptions{})
 		return err
@@ -371,7 +370,7 @@ func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode(ctx context.Context)
 // waitForOperatorTyphaDeploymentReady waits until the 'new' typha deployment in
 // the calico-system namespace is ready before continuing, it will wait up to
 // 1 minute before returning with an error.
-func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady(ctx context.Context) error {
+func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady(ctx context.Context, log logr.Logger) error {
 	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
 		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(ctx, common.TyphaDeploymentName, metav1.GetOptions{})
 		if err != nil {
@@ -382,9 +381,8 @@ func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady(ctx context
 			// Expected replicas active
 			return true, nil
 		}
-		return false,
-			fmt.Errorf("waiting for typha to have %d replicas, currently at %d",
-				d.Status.Replicas, d.Status.AvailableReplicas)
+		log.V(1).Info(fmt.Sprintf("waiting for typha to %d replicas, currently at %d", d.Status.Replicas, d.Status.AvailableReplicas))
+		return false, nil
 	})
 }
 
@@ -425,7 +423,7 @@ func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes(ctx context.C
 // ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady updates the calico-node DaemonSet in the
 // kube-system namespace with a node selector that will prevent it from being
 // deployed to nodes that have been migrated and waits for the daemonset to update.
-func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx context.Context) error {
+func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsReady(ctx context.Context, log logr.Logger) error {
 	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
 		ds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
 		if err != nil {
@@ -435,7 +433,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 			ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 		}
 
-		err = m.addNodeSelectorToDaemonSet(ctx, ds, kubeSystem, nodeSelectorKey, nodeSelectorValuePre)
+		err = m.addNodeSelectorToDaemonSet(ctx, ds, kubeSystem, nodeSelectorKey, nodeSelectorValuePre, log)
 		if err != nil {
 			if apierrs.IsConflict(err) {
 				// Retry on update conflicts.
@@ -449,8 +447,13 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if err != nil {
 			return false, err
 		}
-		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady || ds.Status.ObservedGeneration != ds.ObjectMeta.Generation {
-			return false, fmt.Errorf("not all pods are ready yet: %d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
+		if ds.Status.ObservedGeneration != ds.ObjectMeta.Generation {
+			log.Info(fmt.Sprintf("waiting for observed generation (%d) to match object generation (%d)", ds.Status.ObservedGeneration, ds.ObjectMeta.Generation))
+			return false, nil
+		}
+		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady {
+			log.Info(fmt.Sprintf("waiting for kube-system/calico-node to have %d replicas, currently at %d", ds.Status.DesiredNumberScheduled, ds.Status.NumberReady))
+			return false, nil
 		}
 		log.Info("All kube-system calico/node pods are now ready after nodeSelector update")
 
@@ -459,7 +462,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 	})
 }
 
-func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context, ds *appsv1.DaemonSet, namespace, key, value string) error {
+func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context, ds *appsv1.DaemonSet, namespace, key, value string, log logr.Logger) error {
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
 		var patchBytes []byte
@@ -484,7 +487,7 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context,
 			// This patch will overwrite any existing NodeSelectors if any exist so only use it when there are none.
 			patchBytes = []byte(fmt.Sprintf(`[ { "op": "add", "path": "/spec/template/spec/nodeSelector", "value": { "%s": "%s" } }]`, key, value))
 		}
-		log.Info("Patch NodeSelector with: ", string(patchBytes))
+		log.Info(fmt.Sprintf("Patch NodeSelector with: %s", string(patchBytes)))
 
 		_, err := m.client.AppsV1().DaemonSets(kubeSystem).Patch(ctx, ds.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
 		if err != nil {

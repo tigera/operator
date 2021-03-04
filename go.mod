@@ -26,16 +26,13 @@ require (
 require (
 	github.com/aws/aws-sdk-go v1.19.6
 	github.com/go-ldap/ldap v3.0.3+incompatible
-	github.com/juju/errors v0.0.0-20200330140219-3fe23663418f
 	github.com/olivere/elastic/v7 v7.0.6
-	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5 // indirect
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
-	github.com/operator-framework/operator-sdk v1.0.1 // indirect
 	github.com/r3labs/diff/v2 v2.8.0
-	github.com/robfig/cron v1.2.0 // indirect
 	go.uber.org/zap v1.15.0
+	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
-	sigs.k8s.io/kube-storage-version-migrator v0.0.3 // indirect
+	k8s.io/klog/v2 v2.3.0 // indirect
 )
 
 replace (

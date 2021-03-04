@@ -540,14 +540,16 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 
-				It("test that LogStorage is degraded if the user-supplied certs have invalid DNS names", func() {
-					// Create the certs with old DNS names upfront so we can
-					// verify that the controller sets the degraded bit.
-					// These certs are not operator-managed. The user must
-					// update these certs.
+				It("test that LogStorage reconciles if the user-supplied certs have any DNS names", func() {
+					// This test currently just validates that user-provided
+					// certs will reconcile and not return an error and won't be
+					// overwritten by the operator. This test
+					// will change once we add validation for user-provided
+					// certs.
+					esDNSNames := []string{"es.example.com", "192.168.10.10"}
 					testCA := test.MakeTestCA("logstorage-test")
 					esSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
+						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, esDNSNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -555,8 +557,9 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
+					kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 					kbSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, kbDNSNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
@@ -589,66 +592,15 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", "Failed to create elasticsearch secrets", "Expected cert \"tigera-secure-elasticsearch-cert\" to have DNS names: tigera-secure-es-http, tigera-secure-es-http.tigera-elasticsearch, tigera-secure-es-http.tigera-elasticsearch.svc, tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local").Return()
-					_, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).Should(HaveOccurred())
-				})
-
-				It("test that LogStorage reconciles if the user-supplied certs have the expected DNS names", func() {
-					// Create the certs with correct DNS names upfront so we can
-					// verify that the controller reconciles and loads the ES
-					// and KB cert secrets.
-
-					dnsNames := append(esDNSNames, "es.example.com", "192.168.10.10")
-					testCA := test.MakeTestCA("logstorage-test")
-					esSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraElasticsearchCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-
-					esPublicSecret := createPubSecret(render.ElasticsearchPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
-					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
-					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
-
-					dnsNames = append(kbDNSNames, "kb.example.com", "192.168.10.11")
-					kbSecret, err := render.CreateOperatorTLSSecret(testCA,
-						render.TigeraKibanaCertSecret, "tls.key", "tls.crt", render.DefaultCertificateDuration, nil, dnsNames...,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
-					Expect(cli.Create(ctx, kbSecret)).ShouldNot(HaveOccurred())
-					Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
-
-					Expect(cli.Create(ctx, &storagev1.StorageClass{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: storageClassName,
-						},
-					})).ShouldNot(HaveOccurred())
-
-					Expect(cli.Create(ctx, &operatorv1.LogStorage{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "tigera-secure",
-						},
-						Spec: operatorv1.LogStorageSpec{
-							Nodes: &operatorv1.Nodes{
-								Count: int64(1),
-							},
-							StorageClassName: storageClassName,
-						},
-					})).ShouldNot(HaveOccurred())
-
-					Expect(cli.Create(ctx, &corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
-						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
-					})).ShouldNot(HaveOccurred())
-
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, &mockESClient{}, dns.DefaultClusterDomain)
-					Expect(err).ShouldNot(HaveOccurred())
-
-					// Elasticsearch and kibana secrets are good.
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
 					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
+
+					Expect(cli.Get(ctx, esCertSecretOperKey, esSecret)).ShouldNot(HaveOccurred())
+					test.VerifyCert(esSecret, "tls.key", "tls.crt", esDNSNames...)
+
+					Expect(cli.Get(ctx, kbCertSecretOperKey, kbSecret)).ShouldNot(HaveOccurred())
+					test.VerifyCert(kbSecret, "tls.key", "tls.crt", kbDNSNames...)
 				})
 
 				It("test that LogStorage creates new certs if operator managed certs have invalid DNS names", func() {

@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +35,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	apiv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -115,11 +115,32 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
-func AddLicenseWatch(c controller.Controller) error {
-	lic := &apiv1.LicenseKey{
+func addLicenseWatch(c controller.Controller) error {
+	lic := &v3.LicenseKey{
 		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
 	}
 	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
+}
+
+// WaitToAddLicenseKeyWatch will check if the API server is available and if so, it will add a watch for LicenseKey
+// The completion of this operation will be signaled on a ready channel
+func WaitToAddLicenseKeyWatch(controller controller.Controller, client client.Client, log logr.Logger, ready chan bool) {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if IsAPIServerReady(client, log) {
+				err := addLicenseWatch(controller)
+				if err != nil {
+					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
+				} else {
+					ready <- true
+					return
+				}
+			}
+		}
+	}
 }
 
 // addWatch creates a watch on the given object. If a name and namespace are provided, then it will

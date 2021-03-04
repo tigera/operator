@@ -17,6 +17,7 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -56,29 +57,39 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+
+	// Create a new controller
+	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("Failed to create intrusiondetection-controller: %v", err)
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, reconciler.client, log, reconciler.ready)
+
+	return add(mgr, controller)
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+// newReconciler returns a new ReconcileIntrusionDetection
+func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string) *ReconcileIntrusionDetection {
 	r := &ReconcileIntrusionDetection{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		provider:      p,
 		status:        status.New(mgr.GetClient(), "intrusion-detection"),
 		clusterDomain: clusterDomain,
+		ready:         make(chan bool),
+		wg:            sync.WaitGroup{},
 	}
 	r.status.Run()
 	return r
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("Failed to create intrusiondetection-controller: %v", err)
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource IntrusionDetection
 	err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, &handler.EnqueueRequestForObject{})
@@ -131,10 +142,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddLicenseWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch LicenseKey resource: %v", err)
-	}
-
 	return nil
 }
 
@@ -145,11 +152,14 @@ var _ reconcile.Reconciler = &ReconcileIntrusionDetection{}
 type ReconcileIntrusionDetection struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	ready           chan bool
+	hasLicenseWatch bool
+	wg              sync.WaitGroup
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -184,6 +194,25 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
+	}
+
+	if !r.hasLicenseWatch {
+		r.wg.Add(1)
+
+		go func() {
+			defer close(r.ready)
+			for {
+				select {
+				case <-r.ready:
+					r.hasLicenseWatch = true
+					r.wg.Done()
+					return
+				default:
+					r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+				}
+			}
+		}()
+		r.wg.Wait()
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)

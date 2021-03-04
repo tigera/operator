@@ -17,6 +17,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -81,15 +82,19 @@ var _ = Describe("Compliance controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileCompliance{
-			client:        c,
-			scheme:        scheme,
-			provider:      operatorv1.ProviderNone,
-			status:        mockStatus,
-			clusterDomain: dns.DefaultClusterDomain,
+			client:          c,
+			scheme:          scheme,
+			provider:        operatorv1.ProviderNone,
+			status:          mockStatus,
+			clusterDomain:   dns.DefaultClusterDomain,
+			ready:           make(chan bool),
+			hasLicenseWatch: false,
+			wg:              sync.WaitGroup{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -134,6 +139,10 @@ var _ = Describe("Compliance controller tests", func() {
 		// Apply the compliance CR to the fake cluster.
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 		Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+		go func(r *ReconcileCompliance) {
+			r.ready <- true
+		}(&r)
 	})
 
 	It("should create resources for standalone clusters", func() {

@@ -28,7 +28,6 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 var typhaLog = logf.Log.WithName("typha_autoscaler")
@@ -157,7 +156,7 @@ func (t *typhaAutoscaler) autoscaleReplicas() error {
 	if err != nil {
 		return fmt.Errorf("could not get number of nodes: %w", err)
 	}
-	expectedReplicas := utils.GetExpectedTyphaScale(allSchedulableNodes)
+	expectedReplicas := common.GetExpectedTyphaScale(allSchedulableNodes)
 	if linuxNodes < expectedReplicas {
 		return fmt.Errorf("not enough linux nodes to schedule typha pods on, require %d and have %d", expectedReplicas, linuxNodes)
 	}
@@ -211,6 +210,10 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	schedulable := 0
 	for _, n := range nodes.Items {
 		if n.Spec.Unschedulable {
+			continue
+		}
+		if n.GetObjectMeta().GetAnnotations()["projectcalico.org/operator-node-migration"] == "pre-operator" {
+			// This node hasn't been migrated to the operator yet. Don't include it in the number of desired Typhas.
 			continue
 		}
 

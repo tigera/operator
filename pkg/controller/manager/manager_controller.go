@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -54,30 +55,39 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+
+	// Create a new controller
+	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("failed to create manager-controller: %w", err)
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, reconciler.client, log, reconciler.ready)
+
+	return add(mgr, controller)
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+// newReconciler returns a new *ReconcileManager
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) *ReconcileManager {
 	c := &ReconcileManager{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		provider:      provider,
 		status:        status.New(mgr.GetClient(), "manager"),
 		clusterDomain: clusterDomain,
+		ready:         make(chan bool),
+		wg:            sync.WaitGroup{},
 	}
 	c.status.Run()
 	return c
 
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("failed to create manager-controller: %w", err)
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource Manager
 	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
@@ -150,9 +160,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddLicenseWatch(c); err != nil {
-		return fmt.Errorf("manager-controller failed to watch LicenseKey resource: %v", err)
-	}
 	return nil
 }
 
@@ -162,11 +169,14 @@ var _ reconcile.Reconciler = &ReconcileManager{}
 type ReconcileManager struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	ready           chan bool
+	hasLicenseWatch bool
+	wg              sync.WaitGroup
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -211,6 +221,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	if !r.hasLicenseWatch {
+		r.wg.Add(1)
+
+		go func() {
+			defer close(r.ready)
+			for {
+				select {
+				case <-r.ready:
+					r.hasLicenseWatch = true
+					r.wg.Done()
+					return
+				default:
+					r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+				}
+			}
+		}()
+		r.wg.Wait()
+	}
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

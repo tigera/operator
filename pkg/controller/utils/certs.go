@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -74,28 +73,30 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		)
 	}
 
-	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
-	if err == ErrInvalidCertDNSNames {
-		// If the cert's DNS names are invalid and the cert secret is managed
-		// by the operator, then create a new secret to replace the invalid one.
-		operatorManaged, err := IsOperatorManaged(secret, certName)
-		if err != nil {
-			return nil, err
-		}
-		if operatorManaged {
-			certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
-
-			return rsecret.CreateTLSSecret(nil,
-				secretName, rmeta.OperatorNamespace(), keyName, certName,
-				rmeta.DefaultCertificateDuration, nil, svcDNSNames...,
-			)
-		}
-		// Otherwise, the secret was supplied so return an error.
-		return nil, fmt.Errorf("Expected cert %q to have DNS names: %v", secretName, strings.Join(svcDNSNames, ", "))
+	operatorManaged, err := IsOperatorManaged(secret, certName)
+	if err != nil {
+		return nil, err
 	}
 
-	// Return the original secret.
-	return secret, nil
+	// For user provided certs, skip checking whether they have the right DNS
+	// names.
+	if !operatorManaged {
+		return secret, err
+	}
+
+	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
+	if err == ErrInvalidCertDNSNames {
+		// If the cert's DNS names are invalid, then create a new secret to
+		// replace the invalid one since it's managed by the operator.
+		certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
+
+		return rsecret.CreateTLSSecret(nil,
+			secretName, rmeta.OperatorNamespace(), keyName, certName,
+			rmeta.DefaultCertificateDuration, nil, svcDNSNames...,
+		)
+	}
+
+	return secret, err
 }
 
 // Check if the cert secret is created and managed by the operator.

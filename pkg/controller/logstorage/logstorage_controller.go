@@ -646,15 +646,22 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 		return secrets, nil
 	}
 
-	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
-	if err == utils.ErrInvalidCertDNSNames {
-		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
-			return nil, err
-		}
-	} else {
-		// If the cert was not deleted, copy the valid cert to operator namespace.
-		secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)...)
+	operatorManaged, err := utils.IsOperatorManaged(secret, "tls.crt")
+	if err != nil {
+		return nil, err
 	}
+
+	if operatorManaged {
+		err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err == utils.ErrInvalidCertDNSNames {
+			if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// If the cert was not deleted, copy the valid cert to operator namespace.
+	secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)...)
 
 	// Get the secret - might be nil
 	secret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
@@ -712,15 +719,21 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		return secrets, nil
 	}
 
-	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
-	if err == utils.ErrInvalidCertDNSNames {
-		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
-			return nil, err
-		}
-	} else {
-		// If the cert was not deleted, copy the valid cert to operator namespace.
-		secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)...)
+	operatorManaged, err := utils.IsOperatorManaged(secret, "tls.crt")
+	if err != nil {
+		return nil, err
 	}
+
+	if operatorManaged {
+		err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err == utils.ErrInvalidCertDNSNames {
+			if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// If the cert was not deleted, copy the valid cert to operator namespace.
+	secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)...)
 
 	return secrets, nil
 }

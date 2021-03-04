@@ -414,9 +414,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	if c.migrationNeeded {
 		migration.SetTyphaAntiAffinity(&d)
 	}
-	if c.migrationNeeded {
-		migration.LimitDeploymentToMigratedNodes(&d)
-	}
 	return &d
 }
 

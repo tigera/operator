@@ -6,7 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/common"
 )
 
 func checkTypha(c *components, _ *operatorv1.Installation) error {
@@ -30,7 +30,7 @@ func checkTypha(c *components, _ *operatorv1.Installation) error {
 	}
 	nodeCount := len(nodes.Items)
 	// If the number of current typha replicas plus the number of expected replicas of the operator deployed typhas is less than the node count then we can continue.
-	if nodeCount >= curReplicas+utils.GetExpectedTyphaScale(nodeCount) {
+	if nodeCount >= curReplicas+common.GetExpectedTyphaScale(nodeCount) {
 		return nil
 	}
 

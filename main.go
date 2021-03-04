@@ -155,11 +155,12 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr(),
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "operator-lock",
+		Scheme:                  scheme,
+		MetricsBindAddress:      metricsAddr(),
+		Port:                    9443,
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionID:        "operator-lock",
+		LeaderElectionNamespace: "tigera-operator",
 		// We should test this again in the future to see if the problem with LicenseKey updates
 		// being missed is resolved. Prior to controller-runtime 0.7 we observed Test failures
 		// where LicenseKey updates would be missed and the client cache did not have the LicenseKey.

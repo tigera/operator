@@ -23,6 +23,7 @@ import (
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/go-logr/logr"
+	"github.com/juju/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -220,10 +221,6 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 		return fmt.Errorf("failed deleting kube-system calico-kube-controllers: %s", err.Error())
 	}
 	log.V(1).Info("Deleted previous calico-kube-controllers deployment")
-	if err := m.waitForOperatorTyphaDeploymentReady(ctx); err != nil {
-		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
-	}
-	log.V(1).Info("Operator Typha Deployment is ready")
 	if err := m.labelUnmigratedNodes(ctx); err != nil {
 		return fmt.Errorf("failed to label unmigrated nodes: %s", err.Error())
 	}
@@ -232,6 +229,14 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 		return fmt.Errorf("the kube-system node DaemonSet is not ready with the updated nodeSelector: %s", err.Error())
 	}
 	log.V(1).Info("Node selector added to kube-system node DaemonSet")
+	if err := m.ensureTyphaRoom(ctx); err != nil {
+		return fmt.Errorf("unable to ensure room for enough typhas: %s", err.Error())
+	}
+	log.V(1).Info("Ensured room for Typha deployments")
+	if err := m.waitForOperatorTyphaDeploymentReady(ctx); err != nil {
+		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
+	}
+	log.V(1).Info("New Typha is running in calico-system")
 	if err := m.migrateEachNode(ctx, log); err != nil {
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
@@ -243,8 +248,69 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	if err := m.deleteKubeSystemTypha(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
+	log.V(1).Info("Operator Typha Deployment is ready")
 
 	return nil
+}
+
+func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context) error {
+	// Get typha, if it exists.
+	typha, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	if typha == nil {
+		// No Typha running - we're good to go.
+		return nil
+	}
+
+	// Number of currently running typhas.
+	curReplicas := *typha.Spec.Replicas
+
+	// Number of nodes in the cluster.
+	nodeCount := 0
+	for range m.indexer.List() {
+		nodeCount++
+	}
+
+	// Total number of typhas we expect this cluster to need.
+	expectedTyphas := common.GetExpectedTyphaScale(nodeCount)
+
+	// We might need to scale down the currently running Typha.
+	var desiredReplicas int32
+	if nodeCount <= 1 {
+		// If this is a single node cluster, just scale down Typha to 0 in order to
+		// make room for the new Typha pod.
+		desiredReplicas = 0
+	} else if nodeCount <= 3 {
+		// 2 or 3 node cluster, just keep a single Typha around during the update.
+		desiredReplicas = 1
+	} else {
+		// More than 3 nodes. Make sure we have enough space for both to run.
+		// Pick the smaller value of either the current count, or the total number of nodes
+		// minus the number the operator will deploy.
+		maxAvailableNodes := nodeCount - expectedTyphas
+		if maxAvailableNodes < 0 {
+			maxAvailableNodes = 1
+		}
+		desiredReplicas = min(int32(maxAvailableNodes), curReplicas)
+	}
+	if desiredReplicas != curReplicas {
+		log.Infof("Scaling kube-system calico/typha to %d replicas to make room for migration", desiredReplicas)
+		typha.Spec.Replicas = &desiredReplicas
+		_, err = m.client.AppsV1().Deployments(kubeSystem).Update(ctx, typha, metav1.UpdateOptions{})
+		return err
+	}
+	return nil
+}
+
+func min(a, b int32) int32 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // NeedCleanup returns if the migration has been marked completed or not.
@@ -365,7 +431,6 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if err != nil {
 			return false, err
 		}
-
 		if ds.Spec.Template.Spec.NodeSelector == nil {
 			ds.Spec.Template.Spec.NodeSelector = make(map[string]string)
 		}
@@ -387,6 +452,7 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady || ds.Status.ObservedGeneration != ds.ObjectMeta.Generation {
 			return false, fmt.Errorf("not all pods are ready yet: %d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 		}
+		log.Info("All kube-system calico/node pods are now ready after nodeSelector update")
 
 		// Successful update
 		return true, nil
@@ -396,7 +462,6 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context, ds *appsv1.DaemonSet, namespace, key, value string) error {
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
-
 		var patchBytes []byte
 		if len(ds.Spec.Template.Spec.NodeSelector) > 0 {
 			k := strings.Replace(key, "/", "~1", -1)

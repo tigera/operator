@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/juju/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -235,7 +234,7 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	if err := m.waitForOperatorTyphaDeploymentReady(ctx, log); err != nil {
 		return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
 	}
-	log.V(1).Info("New Typha is running in calico-system")
+	log.V(1).Info("calico-system/calico-typha is running with expected replica count")
 	if err := m.migrateEachNode(ctx, log); err != nil {
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
@@ -252,11 +251,18 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	return nil
 }
 
+// ensureTyphaRoom analyzes the cluster and scales down the existing kube-system Typha deployment if needed
+// in order to make room for the new operator-managed Typha deployment in the calico-system namespace.
 func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context, log logr.Logger) error {
+	// Remove the typha autoscaler if one exists.
+	if err := m.removeTyphaAutoscaler(ctx, log); err != nil {
+		return err
+	}
+
 	// Get typha, if it exists.
 	typha, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrs.IsNotFound(err) {
 			return err
 		}
 	}
@@ -300,6 +306,16 @@ func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context, log logr.L
 		log.Info(fmt.Sprintf("Scaling kube-system/calico-typha deployment to %d replicas to make room for migration", desiredReplicas))
 		typha.Spec.Replicas = &desiredReplicas
 		_, err = m.client.AppsV1().Deployments(kubeSystem).Update(ctx, typha, metav1.UpdateOptions{})
+		return err
+	}
+	return nil
+}
+
+// removeTyphaAutoscaler removes any typha autoscaler for the kube-system/calico-typha deployment so that the
+// migration controller can manage the scale of that deployment.
+func (m *CoreNamespaceMigration) removeTyphaAutoscaler(ctx context.Context, log logr.Logger) error {
+	err := m.client.AppsV1().Deployments(kubeSystem).Delete(ctx, "calico-typha-horizontal-autoscaler", metav1.DeleteOptions{})
+	if !apierrs.IsNotFound(err) {
 		return err
 	}
 	return nil
@@ -369,7 +385,7 @@ func (m *CoreNamespaceMigration) deleteKubeSystemCalicoNode(ctx context.Context)
 
 // waitForOperatorTyphaDeploymentReady waits until the 'new' typha deployment in
 // the calico-system namespace is ready before continuing, it will wait up to
-// 1 minute before returning with an error.
+// 10 minutes before returning with an error.
 func (m *CoreNamespaceMigration) waitForOperatorTyphaDeploymentReady(ctx context.Context, log logr.Logger) error {
 	return wait.PollImmediate(5*time.Second, 10*time.Minute, func() (bool, error) {
 		d, err := m.client.AppsV1().Deployments(common.CalicoNamespace).Get(ctx, common.TyphaDeploymentName, metav1.GetOptions{})
@@ -504,8 +520,8 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context,
 func (m *CoreNamespaceMigration) migrateEachNode(ctx context.Context, log logr.Logger) error {
 	nodes := m.getNodesToMigrate()
 	for len(nodes) > 0 {
-		log.WithValues("count", len(nodes)).V(1).Info("nodes to migrate")
-		for _, node := range nodes {
+		log.WithValues("count", len(nodes)).Info("nodes to migrate")
+		for i, node := range nodes {
 			// This is to ensure that our new pods are becoming healthy before continuing on.
 			// We only wait up to 3 minutes after switching a node to allow the new pod
 			// to come up. Also if the operator crashed we don't want to continue
@@ -524,6 +540,14 @@ func (m *CoreNamespaceMigration) migrateEachNode(ctx context.Context, log logr.L
 				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
 				time.Sleep(10 * time.Second)
 			}
+
+			// Wait for the operator-managed Typha deployment to be ready.
+			if err := m.waitForOperatorTyphaDeploymentReady(ctx, log); err != nil {
+				return fmt.Errorf("failed to wait for operator typha deployment to be ready: %s", err.Error())
+			}
+			log.V(1).Info("calico-system/calico-typha is running with expected replica count after migrating node")
+
+			log.Info(fmt.Sprintf("Migrated %d out of %d nodes", i, len(nodes)))
 		}
 		// Fetch any new nodes that have been added during migration.
 		nodes = m.getNodesToMigrate()

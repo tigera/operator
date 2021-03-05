@@ -26,7 +26,9 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -53,6 +55,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -91,6 +94,17 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	statusManager := status.New(mgr.GetClient(), "calico")
 
+	// The typhaAutoscaler needs a clientset.
+	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a Typha autoscaler.
+	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
+	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
+
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
@@ -98,7 +112,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
-		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetConfig(), mgr.GetClient(), statusManager),
+		typhaAutoscaler:      typhaScaler,
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,

@@ -152,6 +152,11 @@ var (
 		Image:   "tigera/cloud-controllers",
 	}
 
+	ComponentElasticsearchMetrics = component{
+		Version: "master",
+		Image:   "tigera/elasticsearch-metrics",
+	}
+
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -180,5 +185,6 @@ var (
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
+		ComponentElasticsearchMetrics,
 	}
 )

@@ -27,4 +27,5 @@ func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../../../report/installation_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/installation Suite", []Reporter{junitReporter})
+
 }

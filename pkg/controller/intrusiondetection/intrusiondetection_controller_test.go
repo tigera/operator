@@ -17,6 +17,7 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -69,19 +70,24 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileIntrusionDetection{
-			client:   c,
-			scheme:   scheme,
-			provider: operatorv1.ProviderNone,
-			status:   mockStatus,
+			client:          c,
+			scheme:          scheme,
+			provider:        operatorv1.ProviderNone,
+			status:          mockStatus,
+			ready:           make(chan bool),
+			wg:              sync.WaitGroup{},
+			hasLicenseWatch: false,
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -142,6 +148,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+		go func(r *ReconcileIntrusionDetection) {
+			r.ready <- true
+		}(&r)
 	})
 
 	Context("image reconciliation", func() {
@@ -323,7 +333,29 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(10 * time.Second))
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "intrusion-detection-controller",
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).NotTo(BeNil())
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
+			Expect(controller).To(BeNil())
+
+			j := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.IntrusionDetectionInstallerJobName,
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &j)).NotTo(BeNil())
+			installer := test.GetContainer(j.Spec.Template.Spec.Containers, "elasticsearch-job-installer")
+			Expect(installer).To(BeNil())
 		})
 
 		AfterEach(func() {

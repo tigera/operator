@@ -470,7 +470,7 @@ func fillDefaults(instance *operator.Installation) error {
 
 		if v4pool != nil {
 			if v4pool.Encapsulation == "" {
-				if instance.Spec.CNI.Type == operator.PluginCalico && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
+				if instance.Spec.CNI.Type == operator.PluginCalico {
 					v4pool.Encapsulation = operator.EncapsulationIPIP
 				} else {
 					v4pool.Encapsulation = operator.EncapsulationNone

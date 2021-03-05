@@ -384,7 +384,9 @@ spec:
                 description: "ImagePath allows for the path part of an image to be
                   specified. If specified then the specified value will be used as
                   the image path for each image. If not specified or empty, the default
-                  for each image will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                  for each image will be used. A special case value, UseDefault, is
+                  supported to explicitly specify the default image path will be used
+                  for each image. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                   \n This option allows configuring the `<imagePath>` portion of the
                   above format."
                 type: string
@@ -466,7 +468,8 @@ spec:
                 description: "Registry is the default Docker registry used for component
                   Docker images. If specified, all images will be pulled from this
                   registry. If not specified then the default registries will be used.
-                  \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                  A special case value, UseDefault, is supported to explicitly specify
+                  the default registries will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                   \n This option allows configuring the `<registry>` portion of the
                   above format."
                 type: string
@@ -947,7 +950,9 @@ spec:
                     description: "ImagePath allows for the path part of an image to
                       be specified. If specified then the specified value will be
                       used as the image path for each image. If not specified or empty,
-                      the default for each image will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                      the default for each image will be used. A special case value,
+                      UseDefault, is supported to explicitly specify the default image
+                      path will be used for each image. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                       \n This option allows configuring the `<imagePath>` portion
                       of the above format."
                     type: string
@@ -1030,7 +1035,9 @@ spec:
                     description: "Registry is the default Docker registry used for
                       component Docker images. If specified, all images will be pulled
                       from this registry. If not specified then the default registries
-                      will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                      will be used. A special case value, UseDefault, is supported
+                      to explicitly specify the default registries will be used. \n
+                      Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                       \n This option allows configuring the `<registry>` portion of
                       the above format."
                     type: string

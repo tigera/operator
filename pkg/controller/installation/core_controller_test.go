@@ -24,6 +24,7 @@ import (
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	kfake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -298,6 +299,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 	Context("image reconciliation tests", func() {
 		var c client.Client
+		var cs *kfake.Clientset
 		var ctx context.Context
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
@@ -315,6 +317,25 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
 			ctx = context.Background()
+
+			// Create a fake clientset for the autoscaler.
+			var replicas int32 = 1
+			objs := []runtime.Object{
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+				},
+			}
+			cs = kfake.NewSimpleClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -335,7 +356,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(nil, c, mockStatus),
+				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
@@ -558,6 +579,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 	Context("management cluster exists", func() {
 		var c client.Client
+		var cs *kfake.Clientset
 		var ctx context.Context
 		var r ReconcileInstallation
 		var cr *operator.Installation
@@ -581,6 +603,27 @@ var _ = Describe("Testing core-controller installation", func() {
 			c = fake.NewFakeClientWithScheme(scheme)
 			ctx = context.Background()
 
+			// Create a fake clientset for the autoscaler.
+			var replicas int32 = 1
+			objs := []runtime.Object{
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: &replicas,
+					},
+				},
+			}
+			cs = kfake.NewSimpleClientset(objs...)
+
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
@@ -600,7 +643,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(nil, c, mockStatus),
+				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,

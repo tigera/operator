@@ -26,11 +26,13 @@ type component struct {
 	Version string
 }
 
+const UseDefault = "UseDefault"
+
 // GetReference returns the fully qualified image to use, including registry and version.
 func GetReference(c component, registry, imagepath string, is *operator.ImageSet) (string, error) {
 	// If a user did not supply a registry, use the default registry
 	// based on component
-	if registry == "" {
+	if registry == "" || registry == UseDefault {
 		switch c {
 		case ComponentCalicoNode,
 			ComponentCalicoCNI,
@@ -50,7 +52,7 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 	}
 
 	image := c.Image
-	if imagepath != "" {
+	if imagepath != "" && imagepath != UseDefault {
 		image = ReplaceImagePath(image, imagepath)
 	}
 

@@ -2,6 +2,7 @@ package kibana
 
 import (
 	"fmt"
+
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 

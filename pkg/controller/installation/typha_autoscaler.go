@@ -22,16 +22,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var typhaLog = logf.Log.WithName("typha_autoscaler")
@@ -56,13 +53,15 @@ const (
 //    .....
 // >3600             20
 type typhaAutoscaler struct {
-	client         client.Client
+	client         kubernetes.Interface
 	syncPeriod     time.Duration
 	statusManager  status.StatusManager
 	triggerRunChan chan chan error
 	isDegradedChan chan chan bool
-	informer       cache.Controller
-	indexer        cache.Indexer
+	nodeInformer   cache.Controller
+	nodeIndexer    cache.Indexer
+	typhaInformer  cache.Controller
+	typhaIndexer   cache.Indexer
 
 	// Number of currently running replicas.
 	activeReplicas int32
@@ -78,51 +77,42 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 }
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
-// The default sync period is 15 seconds.
-func newTyphaAutoscaler(cfg *rest.Config, client client.Client, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
-	// Create a Node watcher to signal us when nodes are updated.
-	cs, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		log.Error(err, "Unable to build typha autoscaler")
-		return nil
-	}
-	listWatcher := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
-	handlers := cache.ResourceEventHandlerFuncs{AddFunc: func(obj interface{}) {}}
-	nodeIndexer, nodeInformer := cache.NewIndexerInformer(listWatcher, &v1.Node{}, 0, handlers, cache.Indexers{})
+// The default sync period is 10 seconds.
+func newTyphaAutoscaler(cs kubernetes.Interface, nodeListWatch, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
-		client:         client,
+		client:         cs,
 		statusManager:  statusManager,
 		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
 		triggerRunChan: make(chan chan error),
 		isDegradedChan: make(chan chan bool),
-		indexer:        nodeIndexer,
-		informer:       nodeInformer,
 	}
 
+	// Create an informer to signal us when nodes are updated.
+	nodeHandlers := cache.ResourceEventHandlerFuncs{AddFunc: func(obj interface{}) {}}
+	ta.nodeIndexer, ta.nodeInformer = cache.NewIndexerInformer(nodeListWatch, &v1.Node{}, 0, nodeHandlers, cache.Indexers{})
+
 	// Configure an informer to monitor the active replicas.
-	typhaWatcher := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.Everything()) //fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaHandlers := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			ta.activeReplicas = *obj.(*appsv1.Deployment).Spec.Replicas
+			if d, ok := obj.(*appsv1.Deployment); ok {
+				if d.Spec.Replicas != nil {
+					ta.activeReplicas = *d.Spec.Replicas
+				}
+			}
 		},
 		UpdateFunc: func(old, obj interface{}) {
-			ta.activeReplicas = *obj.(*appsv1.Deployment).Spec.Replicas
+			if d, ok := obj.(*appsv1.Deployment); ok {
+				if d.Spec.Replicas != nil {
+					ta.activeReplicas = *d.Spec.Replicas
+				}
+			}
 		},
 	}
-	_, typhaInformer := cache.NewIndexerInformer(typhaWatcher, &appsv1.Deployment{}, 0, typhaHandlers, cache.Indexers{})
+	ta.typhaIndexer, ta.typhaInformer = cache.NewIndexerInformer(typhaListWatch, &appsv1.Deployment{}, 0, typhaHandlers, cache.Indexers{})
 
 	for _, option := range options {
 		option(ta)
 	}
-
-	// Start the informers and wait for them to sync.
-	stopCh := make(chan struct{})
-	go nodeInformer.Run(stopCh)
-	go typhaInformer.Run(stopCh)
-	for !nodeInformer.HasSynced() && !typhaInformer.HasSynced() {
-		time.Sleep(100 * time.Millisecond)
-	}
-
 	return ta
 }
 
@@ -134,15 +124,23 @@ func (t *typhaAutoscaler) start() {
 		degraded := false
 		ticker := time.NewTicker(t.syncPeriod)
 		defer ticker.Stop()
-		log.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
+		typhaLog.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
 
+		// Start the informers and wait for them to sync.
+		stopCh := make(chan struct{})
+		go t.nodeInformer.Run(stopCh)
+		go t.typhaInformer.Run(stopCh)
+		for !t.nodeInformer.HasSynced() && !t.typhaInformer.HasSynced() {
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Autoscale on start up then do it again every tick.
 		if err := t.autoscaleReplicas(); err != nil {
 			degraded = true
 			typhaLog.Error(err, "Failed to autoscale typha")
 			t.statusManager.SetDegraded("Failed to autoscale typha", err.Error())
 		}
 
-		// Autoscale on start up then do it again every tick.
 		for {
 			select {
 			case <-ticker.C:
@@ -198,13 +196,13 @@ func (t *typhaAutoscaler) autoscaleReplicas() error {
 	if err != nil {
 		return fmt.Errorf("could not get number of nodes: %w", err)
 	}
-	log.V(1).Info("Number of nodes to consider for typha autoscaling", "all", allSchedulableNodes, "linux", linuxNodes)
+	typhaLog.V(5).Info("Number of nodes to consider for typha autoscaling", "all", allSchedulableNodes, "linux", linuxNodes)
 	expectedReplicas := common.GetExpectedTyphaScale(allSchedulableNodes)
 	if linuxNodes < expectedReplicas {
 		return fmt.Errorf("not enough linux nodes to schedule typha pods on, require %d and have %d", expectedReplicas, linuxNodes)
 	}
 
-	log.V(1).Info("Checking if we need to scale typha", "expectedReplicas", expectedReplicas, "currentReplicas", t.activeReplicas)
+	typhaLog.V(5).Info("Checking if we need to scale typha", "expectedReplicas", expectedReplicas, "currentReplicas", t.activeReplicas)
 	if int32(expectedReplicas) != t.activeReplicas {
 		err = t.updateReplicas(int32(expectedReplicas))
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -217,9 +215,7 @@ func (t *typhaAutoscaler) autoscaleReplicas() error {
 
 // updateReplicas updates the Typha deployment to the expected replicas if the current replica count differs.
 func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
-	key := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.TyphaDeploymentName}
-	typha := &appsv1.Deployment{}
-	err := t.client.Get(context.Background(), key, typha)
+	typha, err := t.client.AppsV1().Deployments(common.CalicoNamespace).Get(context.Background(), common.TyphaDeploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -237,7 +233,8 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 
 	typhaLog.Info(fmt.Sprintf("Updating typha replicas from %d to %d", prevReplicas, expectedReplicas))
 	typha.Spec.Replicas = &expectedReplicas
-	return t.client.Update(context.Background(), typha)
+	_, err = t.client.AppsV1().Deployments(common.CalicoNamespace).Update(context.Background(), typha, metav1.UpdateOptions{})
+	return err
 }
 
 // getNodeCounts returns the number of all the schedulable nodes and the number of the schedulable linux nodes. The linux
@@ -246,7 +243,7 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	linuxNodes := 0
 	schedulable := 0
-	for _, obj := range t.indexer.List() {
+	for _, obj := range t.nodeIndexer.List() {
 		n := obj.(*v1.Node)
 		if n.Spec.Unschedulable {
 			continue
@@ -270,7 +267,6 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 		if n.Labels["kubernetes.io/os"] == "linux" {
 			linuxNodes++
 		}
-
 	}
 	return schedulable, linuxNodes, nil
 }

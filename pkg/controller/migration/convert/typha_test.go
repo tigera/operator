@@ -47,22 +47,22 @@ var _ = Describe("Convert typha check tests", func() {
 		}
 	})
 
-	Describe("handle not enough nodes with previous Typha", func() {
-		It("should return an error with 2 nodes and 1 typha", func() {
+	Describe("handle when there are limited nodes for Typha", func() {
+		It("should not return an error with 2 nodes and 1 typha", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
 			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(2))
 			_, err := Convert(ctx, c)
-			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 		})
-		It("should return an error with 3 nodes and 1 typha", func() {
+		It("should not return an error with 3 nodes and 1 typha", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
 			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(3))
 			_, err := Convert(ctx, c)
-			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 	Describe("handle enough nodes with previous Typha", func() {

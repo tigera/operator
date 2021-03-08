@@ -167,7 +167,8 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticsearchLicenseType) Component {
+	elasticLicenseType ElasticsearchLicenseType,
+) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,

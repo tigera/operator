@@ -74,6 +74,9 @@ func AnnotationHash(i interface{}) string {
 func SecretsAnnotationHash(secrets ...*corev1.Secret) string {
 	var annoteArr []map[string][]byte
 	for _, secret := range secrets {
+		if secret == nil {
+			continue
+		}
 		annoteArr = append(annoteArr, secret.Data)
 	}
 

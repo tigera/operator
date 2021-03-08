@@ -34,7 +34,8 @@ type InstallationSpec struct {
 
 	// Registry is the default Docker registry used for component Docker images. If specified,
 	// all images will be pulled from this registry. If not specified then the default registries
-	// will be used.
+	// will be used. A special case value, UseDefault, is supported to explicitly specify
+	// the default registries will be used.
 	//
 	// Image format:
 	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
@@ -46,6 +47,8 @@ type InstallationSpec struct {
 	// ImagePath allows for the path part of an image to be specified. If specified
 	// then the specified value will be used as the image path for each image. If not specified
 	// or empty, the default for each image will be used.
+	// A special case value, UseDefault, is supported to explicitly specify the default
+	// image path will be used for each image.
 	//
 	// Image format:
 	//    `<registry>/<imagePath>/<imageName>:<image-tag>`

@@ -74,11 +74,12 @@ var (
 	kbCertPubSecretKey     = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
 	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}
 
-	esPublicCertObjMeta      = metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	kbPublicCertObjMeta      = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	curatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}
-	operatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: rmeta.OperatorNamespace()}
-	storageClassName         = "test-storage-class"
+	esPublicCertObjMeta       = metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
+	kbPublicCertObjMeta       = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
+	curatorUsrSecretObjMeta   = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}
+	esMetricsUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchMetricsSecret, Namespace: rmeta.OperatorNamespace()}
+	operatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: rmeta.OperatorNamespace()}
+	storageClassName          = "test-storage-class"
 
 	esDNSNames = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	kbDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
@@ -438,6 +439,12 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Get(ctx, kbCertPubSecretOperKey, secret)).ShouldNot(HaveOccurred())
 					test.VerifyPublicCert(secret, "tls.crt", kbDNSNames...)
 
+					mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
+					result, err = r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+
 					mockStatus.On("ClearDegraded")
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
@@ -543,6 +550,7 @@ var _ = Describe("LogStorage controller", func() {
 					// Expect to be waiting for curator secret
 					Expect(result).Should(Equal(reconcile.Result{}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("ClearDegraded")
 					result, err = r.Reconcile(ctx, reconcile.Request{})
@@ -808,6 +816,7 @@ var _ = Describe("LogStorage controller", func() {
 								Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 							},
 							&corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta},
+							&corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta},
 							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 								Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace}},
 						}
@@ -903,6 +912,7 @@ var _ = Describe("LogStorage controller", func() {
 									{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 									{Image: "eck/eck-operator", Digest: "sha256:eckoperatorhash"},
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
+									{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 								},
 							},
 						})).ToNot(HaveOccurred())
@@ -1224,6 +1234,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			ObjectMeta: curatorUsrSecretObjMeta,
 		}),
 	).ShouldNot(HaveOccurred())
+	Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 }
 
 func toSecrets(objs []client.Object) []*corev1.Secret {

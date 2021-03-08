@@ -67,6 +67,7 @@ const (
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
+	ElasticsearchMetricsSecret            = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
 
 	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
 	KibanaName             = "tigera-secure"
@@ -167,7 +168,8 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticsearchLicenseType) Component {
+	elasticLicenseType ElasticsearchLicenseType,
+) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -330,7 +332,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		}
 
 		if len(es.elasticsearchSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.elasticsearchSecrets...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(
+				secret.CopyToNamespace(rmeta.OperatorNamespace(), es.elasticsearchSecrets...)...)...)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())

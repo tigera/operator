@@ -368,6 +368,12 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 			CSRLabelCalicoSystem))
 	}
 
+	// Include annotation for prometheus scraping configuration.
+	if c.installation.TyphaMetricsPort != nil {
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.installation.TyphaMetricsPort)
+	}
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -545,6 +551,14 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 
 	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
 	typhaEnv = append(typhaEnv, c.k8sServiceEp.EnvVars()...)
+
+	if c.installation.TyphaMetricsPort != nil {
+		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.
+		typhaEnv = append(typhaEnv,
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.installation.TyphaMetricsPort)},
+		)
+	}
 
 	return typhaEnv
 }

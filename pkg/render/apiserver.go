@@ -195,8 +195,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	objs = append(objs,
-		c.k8sKubeControllerClusterRole(),
-		c.k8sRoleBinding(),
+		c.tigeraTierGetter(),
+		c.kubeControllersRoleBinding(),
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 	)
@@ -881,8 +881,8 @@ func (c *apiServerComponent) getTLSObjects() []client.Object {
 	return objs
 }
 
-// k8sKubeControllerClusterRole creates a clusterrole that gives permissions to get tiers.
-func (c *apiServerComponent) k8sKubeControllerClusterRole() *rbacv1.ClusterRole {
+// tigeraTierGetter creates a clusterrole that gives permissions to get tiers.
+func (c *apiServerComponent) tigeraTierGetter() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -900,10 +900,10 @@ func (c *apiServerComponent) k8sKubeControllerClusterRole() *rbacv1.ClusterRole 
 	}
 }
 
-// k8sRoleBinding creates a rolebinding that allows the k8s kube-controller to get tiers
+// kubeControllersRoleBinding creates a rolebinding that allows the k8s kube-controller to get tiers
 // In k8s 1.15+, cascading resource deletions (for instance pods for a replicaset) failed
 // due to k8s kube-controller not having permissions to get tiers.
-func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *apiServerComponent) kubeControllersRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

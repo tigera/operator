@@ -19,6 +19,7 @@ var handlers = []handler{
 	handleAnnotations,
 	handleNodeSelectors,
 	handleFelixNodeMetrics,
+	handleTyphaMetrics,
 	handleCalicoCNI,
 	handleNonCalicoCNI,
 	handleMTU,

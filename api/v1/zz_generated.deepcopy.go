@@ -942,6 +942,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.TyphaMetricsPort != nil {
+		in, out := &in.TyphaMetricsPort, &out.TyphaMetricsPort
+		*out = new(int32)
+		**out = **in
+	}
 	in.NodeUpdateStrategy.DeepCopyInto(&out.NodeUpdateStrategy)
 	if in.ComponentResources != nil {
 		in, out := &in.ComponentResources, &out.ComponentResources

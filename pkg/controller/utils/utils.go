@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -130,7 +131,7 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, client client.Cl
 	for {
 		select {
 		case <-ticker.C:
-			if IsAPIServerReady(client, log) {
+			if AreCalicoAPIsReady(client.(kubernetes.Interface)) {
 				err := addLicenseWatch(controller)
 				if err != nil {
 					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
@@ -191,6 +192,19 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 	return true
+}
+
+func AreCalicoAPIsReady(client kubernetes.Interface) bool {
+	groups, err := client.Discovery().ServerGroups()
+	if err != nil {
+		return false
+	}
+	for _, g := range groups.Groups {
+		if g.Name == "projectcalico.org" {
+			return true
+		}
+	}
+	return false
 }
 
 func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {

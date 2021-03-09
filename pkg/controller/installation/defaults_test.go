@@ -135,6 +135,22 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
+	It("should allow for zero IP pools to be specified", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{},
+				},
+			},
+		}
+		fillDefaults(instance)
+		Expect(len(instance.Spec.CalicoNetwork.IPPools)).To(Equal(0))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
 	It("should default BGP to enabled for Calico CNI", func() {
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{

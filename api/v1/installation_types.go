@@ -95,6 +95,10 @@ type InstallationSpec struct {
 	// +optional
 	NodeMetricsPort *int32 `json:"nodeMetricsPort,omitempty"`
 
+	// TyphaMetricsPort specifies which port calico/typha serves prometheus metrics on. By default, metrics are not enabled.
+	// +optional
+	TyphaMetricsPort *int32 `json:"typhaMetricsPort,omitempty"`
+
 	// FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be
 	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the
 	// kubernetesProvider.

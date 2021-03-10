@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -67,7 +68,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("Failed to create intrusiondetection-controller: %v", err)
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, reconciler.client, log, reconciler.ready)
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.ready)
 
 	return add(mgr, controller)
 }
@@ -81,7 +88,6 @@ func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain str
 		status:        status.New(mgr.GetClient(), "intrusion-detection"),
 		clusterDomain: clusterDomain,
 		ready:         make(chan bool),
-		wg:            sync.WaitGroup{},
 	}
 	r.status.Run()
 	return r
@@ -159,7 +165,19 @@ type ReconcileIntrusionDetection struct {
 	clusterDomain   string
 	ready           chan bool
 	hasLicenseWatch bool
-	wg              sync.WaitGroup
+	mu              sync.RWMutex
+}
+
+func (r *ReconcileIntrusionDetection) isReady() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasLicenseWatch
+}
+
+func (r *ReconcileIntrusionDetection) markAsReady() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hasLicenseWatch = true
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -196,23 +214,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !r.hasLicenseWatch {
-		r.wg.Add(1)
-
-		go func() {
-			defer close(r.ready)
-			for {
-				select {
-				case <-r.ready:
-					r.hasLicenseWatch = true
-					r.wg.Done()
-					return
-				default:
-					r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-				}
-			}
-		}()
-		r.wg.Wait()
+	if !r.isReady() {
+		select {
+		case <-r.ready:
+			r.markAsReady()
+			close(r.ready)
+		default:
+			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+			return reconcile.Result{}, err
+		}
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
@@ -338,9 +348,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if !utils.IsFeatureActive(license, common.ThreatDefenseFeature) {
 		log.V(4).Info("IntrusionDetection is not activated as part of this license")
-		if err := handler.Delete(context.Background(), component, r.status); err != nil {
-			r.status.SetDegraded("Error deleting resource", err.Error())
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		if r.status.IsAvailable() {
+			if err := handler.Delete(context.Background(), component, r.status); err != nil {
+				r.status.SetDegraded("Error deleting resource", err.Error())
+				return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			}
 		}
 		r.status.SetDegraded("Feature is not active", "License does not support this feature")
 		return reconcile.Result{}, nil

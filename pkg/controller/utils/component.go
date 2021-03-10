@@ -83,6 +83,11 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	osType := component.SupportedOSType()
 
 	for _, obj := range objsToCreate {
+		// Skip any resource from tigera-operator namespace
+		if obj.GetNamespace() == rmeta.OperatorNamespace() {
+			continue
+		}
+
 		// Set CR instance as the owner and controller.
 		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
 			return err

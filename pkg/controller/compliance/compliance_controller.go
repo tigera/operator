@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -64,7 +65,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, reconciler.client, log, reconciler.ready)
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.ready)
 
 	return add(mgr, controller)
 }
@@ -78,7 +85,6 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDom
 		status:        status.New(mgr.GetClient(), "compliance"),
 		clusterDomain: clusterDomain,
 		ready:         make(chan bool),
-		wg:            sync.WaitGroup{},
 	}
 	r.status.Run()
 	return r
@@ -157,7 +163,19 @@ type ReconcileCompliance struct {
 	clusterDomain   string
 	ready           chan bool
 	hasLicenseWatch bool
-	wg              sync.WaitGroup
+	mu              sync.RWMutex
+}
+
+func (r *ReconcileCompliance) isReady() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasLicenseWatch
+}
+
+func (r *ReconcileCompliance) markAsReady() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hasLicenseWatch = true
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -200,23 +218,15 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if !r.hasLicenseWatch {
-		r.wg.Add(1)
-
-		go func() {
-			defer close(r.ready)
-			for {
-				select {
-				case <-r.ready:
-					r.hasLicenseWatch = true
-					r.wg.Done()
-					return
-				default:
-					r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-				}
-			}
-		}()
-		r.wg.Wait()
+	if !r.isReady() {
+		select {
+		case <-r.ready:
+			r.markAsReady()
+			close(r.ready)
+		default:
+			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+			return reconcile.Result{}, err
+		}
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
@@ -384,9 +394,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	if !utils.IsFeatureActive(license, common.ComplianceFeature) {
 		log.V(4).Info("Compliance is not activated as part of this license")
-		if err := handler.Delete(context.Background(), component, r.status); err != nil {
-			r.status.SetDegraded("Error deleting resource", err.Error())
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		if r.status.IsAvailable() {
+			if err := handler.Delete(context.Background(), component, r.status); err != nil {
+				r.status.SetDegraded("Error deleting resource", err.Error())
+				return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			}
 		}
 
 		r.status.SetDegraded("Feature is not active", "License does not support this feature")

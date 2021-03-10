@@ -17,7 +17,6 @@ package logcollector
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -79,13 +78,11 @@ var _ = Describe("LogCollector controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileLogCollector{
-			client:          c,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			ready:           make(chan bool),
-			wg:              sync.WaitGroup{},
-			hasLicenseWatch: false,
+			client:   c,
+			scheme:   scheme,
+			provider: operatorv1.ProviderNone,
+			status:   mockStatus,
+			ready:    make(chan bool),
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -132,9 +129,8 @@ var _ = Describe("LogCollector controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		go func(r *ReconcileLogCollector) {
-			r.ready <- true
-		}(&r)
+		// mark that the watch for license key was successful
+		r.markAsReady()
 	})
 
 	Context("image reconciliation", func() {

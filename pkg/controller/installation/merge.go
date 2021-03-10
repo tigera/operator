@@ -93,6 +93,11 @@ func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.NodeMetricsPort = override.NodeMetricsPort
 	}
 
+	switch compareFields(inst.TyphaMetricsPort, override.TyphaMetricsPort) {
+	case BOnlySet, Different:
+		inst.TyphaMetricsPort = override.TyphaMetricsPort
+	}
+
 	switch compareFields(inst.FlexVolumePath, override.FlexVolumePath) {
 	case BOnlySet, Different:
 		inst.FlexVolumePath = override.FlexVolumePath

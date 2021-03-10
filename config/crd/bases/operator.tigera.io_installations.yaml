@@ -533,6 +533,11 @@ spec:
                         type: array
                     type: object
                 type: object
+              typhaMetricsPort:
+                description: TyphaMetricsPort specifies which port calico/typha serves
+                  prometheus metrics on. By default, metrics are not enabled.
+                format: int32
+                type: integer
               variant:
                 description: 'Variant is the product to install - one of Calico or
                   TigeraSecureEnterprise Default: Calico'
@@ -1054,6 +1059,11 @@ spec:
                             type: array
                         type: object
                     type: object
+                  typhaMetricsPort:
+                    description: TyphaMetricsPort specifies which port calico/typha
+                      serves prometheus metrics on. By default, metrics are not enabled.
+                    format: int32
+                    type: integer
                   variant:
                     description: 'Variant is the product to install - one of Calico
                       or TigeraSecureEnterprise Default: Calico'

@@ -248,7 +248,7 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 		if n.Spec.Unschedulable {
 			continue
 		}
-		if n.GetObjectMeta().GetAnnotations()["projectcalico.org/operator-node-migration"] == "pre-operator" {
+		if n.GetObjectMeta().GetLabels()["projectcalico.org/operator-node-migration"] == "pre-operator" {
 			// This node hasn't been migrated to the operator yet. Don't include it in the number of desired Typhas.
 			continue
 		}

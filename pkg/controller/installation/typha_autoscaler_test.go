@@ -168,6 +168,38 @@ var _ = Describe("Test typha autoscaler ", func() {
 		verifyTyphaReplicas(c, 2)
 	})
 
+	It("should ignore non-migrated nodes in its count", func() {
+		typhaMeta := metav1.ObjectMeta{
+			Name:      "calico-typha",
+			Namespace: "calico-system",
+		}
+
+		// Create a typha deployment
+		var r int32 = 0
+		typha := &appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: typhaMeta,
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &r,
+			},
+		}
+		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
+		Expect(err).To(BeNil())
+
+		// Create three nodes, one of which is not yet migrated
+		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"})
+		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"})
+		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"})
+
+		// Create the autoscaler and run it
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta.start()
+
+		// normally we'd expect to see three replicas for three nodes, but since one node is not migrated,
+		// we should still only expect two
+		verifyTyphaReplicas(c, 2)
+	})
+
 	It("should ignore aks virtual nodes in its count", func() {
 		typhaMeta := metav1.ObjectMeta{
 			Name:      "calico-typha",

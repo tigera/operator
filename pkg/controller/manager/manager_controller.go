@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -64,7 +65,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create manager-controller: %w", err)
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, reconciler.client, log, reconciler.ready)
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.ready)
 
 	return add(mgr, controller)
 }
@@ -78,7 +85,6 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDom
 		status:        status.New(mgr.GetClient(), "manager"),
 		clusterDomain: clusterDomain,
 		ready:         make(chan bool),
-		wg:            sync.WaitGroup{},
 	}
 	c.status.Run()
 	return c
@@ -176,7 +182,7 @@ type ReconcileManager struct {
 	clusterDomain   string
 	ready           chan bool
 	hasLicenseWatch bool
-	wg              sync.WaitGroup
+	mu              sync.RWMutex
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -192,6 +198,18 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 			"please use the Authentication CR instead")
 	}
 	return instance, nil
+}
+
+func (r *ReconcileManager) isReady() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasLicenseWatch
+}
+
+func (r *ReconcileManager) markAsReady() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hasLicenseWatch = true
 }
 
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
@@ -221,24 +239,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	if !r.hasLicenseWatch {
-		r.wg.Add(1)
-
-		go func() {
-			defer close(r.ready)
-			for {
-				select {
-				case <-r.ready:
-					r.hasLicenseWatch = true
-					r.wg.Done()
-					return
-				default:
-					r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-				}
-			}
-		}()
-		r.wg.Wait()
+	if !r.isReady() {
+		select {
+		case <-r.ready:
+			r.markAsReady()
+			close(r.ready)
+		default:
+			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+			return reconcile.Result{}, err
+		}
 	}
+
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

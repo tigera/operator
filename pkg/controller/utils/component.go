@@ -208,6 +208,11 @@ func (c componentHandler) Delete(ctx context.Context, component render.Component
 	objsToDelete, _ := component.Objects()
 
 	for _, obj := range objsToDelete {
+		// Skip any resource from tigera-operator namespace
+		if obj.GetNamespace() == rmeta.OperatorNamespace() {
+			continue
+		}
+
 		err := c.client.Delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)

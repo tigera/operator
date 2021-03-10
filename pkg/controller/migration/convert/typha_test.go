@@ -13,6 +13,7 @@ import (
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
@@ -103,6 +104,51 @@ var _ = Describe("Convert typha check tests", func() {
 			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), getK8sNodes(2))
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+	Context("typha prometheus metrics", func() {
+		var (
+			comps = emptyComponents()
+			i     = &operatorv1.Installation{}
+		)
+
+		BeforeEach(func() {
+			comps = emptyComponents()
+			i = &operatorv1.Installation{}
+		})
+		It("with metrics enabled the default port is used", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "TYPHA_PROMETHEUSMETRICSENABLED",
+				Value: "true",
+			}}
+			Expect(handleTyphaMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(*i.Spec.TyphaMetricsPort).To(Equal(int32(9091)))
+		})
+		It("defaults prometheus off when no prometheus environment variables set", func() {
+
+			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.TyphaMetricsPort).To(BeNil())
+		})
+		It("with metrics port env var only, metrics are still disabled", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "TYPHA_PROMETHEUSMETRICSPORT",
+				Value: "5555",
+			}}
+
+			Expect(handleTyphaMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.TyphaMetricsPort).To(BeNil())
+		})
+		It("with metrics port and enabled is reflected in installation", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "TYPHA_PROMETHEUSMETRICSENABLED",
+				Value: "true",
+			}, {
+				Name:  "TYPHA_PROMETHEUSMETRICSPORT",
+				Value: "7777",
+			}}
+
+			Expect(handleTyphaMetrics(&comps, i)).ToNot(HaveOccurred())
+			Expect(*i.Spec.TyphaMetricsPort).To(Equal(int32(7777)))
 		})
 	})
 })

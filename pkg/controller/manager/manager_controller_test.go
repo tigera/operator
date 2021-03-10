@@ -17,7 +17,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/apis"
@@ -105,7 +104,6 @@ var _ = Describe("Manager controller tests", func() {
 				status:          mockStatus,
 				clusterDomain:   clusterDomain,
 				ready:           make(chan bool),
-				wg:              sync.WaitGroup{},
 				hasLicenseWatch: false,
 			}
 
@@ -187,9 +185,8 @@ var _ = Describe("Manager controller tests", func() {
 			}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
-			go func(r *ReconcileManager) {
-				r.ready <- true
-			}(&r)
+			// mark that the watch for license key was successful
+			r.markAsReady()
 		})
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
@@ -299,7 +296,6 @@ var _ = Describe("Manager controller tests", func() {
 				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				ready:           make(chan bool),
-				wg:              sync.WaitGroup{},
 				hasLicenseWatch: false,
 			}
 
@@ -379,9 +375,8 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
-			go func(r *ReconcileManager) {
-				r.ready <- true
-			}(&r)
+			// mark that the watch for license key was successful
+			r.markAsReady()
 		})
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})

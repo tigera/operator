@@ -123,15 +123,22 @@ func addLicenseWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
 }
 
-// WaitToAddLicenseKeyWatch will check if the API server is available and if so, it will add a watch for LicenseKey
+// WaitToAddLicenseKeyWatch will check if projectcalico.org APIs are available and if so, it will add a watch for LicenseKey
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddLicenseKeyWatch(controller controller.Controller, client client.Client, log logr.Logger, ready chan bool) {
-	ticker := time.NewTicker(10 * time.Minute)
+func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, ready chan bool) {
+	maxDuration := 10 * time.Minute
+	duration := 1 * time.Second
+	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			if AreCalicoAPIsReady(client.(kubernetes.Interface)) {
+			duration = duration * 2
+			if duration >= maxDuration {
+				duration = maxDuration
+			}
+			ticker.Reset(duration)
+			if areCalicoAPIsReady(client) {
 				err := addLicenseWatch(controller)
 				if err != nil {
 					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
@@ -194,7 +201,7 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	return true
 }
 
-func AreCalicoAPIsReady(client kubernetes.Interface) bool {
+func areCalicoAPIsReady(client kubernetes.Interface) bool {
 	groups, err := client.Discovery().ServerGroups()
 	if err != nil {
 		return false

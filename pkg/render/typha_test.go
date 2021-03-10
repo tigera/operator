@@ -337,4 +337,40 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
 		ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
+	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
+		installation.Variant = operator.TigeraSecureEnterprise
+		installation.TyphaMetricsPort = nil
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		notExpectedEnvVar := v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED"}
+		d := dResource.(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(notExpectedEnvVar))
+	})
+
+	It("should set TYPHA_PROMETHEUSMETRICSPORT with a custom value if TyphaMetricsPort is set", func() {
+		var typhaMetricsPort int32 = 1234
+		installation.Variant = operator.TigeraSecureEnterprise
+		installation.TyphaMetricsPort = &typhaMetricsPort
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		d := dResource.(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: "1234"}))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"}))
+
+		// Assert we set annotations properly.
+		Expect(d.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+		Expect(d.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
+	})
 })

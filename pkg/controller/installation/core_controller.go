@@ -71,7 +71,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
+const (
+	techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
+
+	// The default port used by calico/node to report Calico Enterprise internal metrics.
+	// This is separate from the calico/node prometheus metrics port, which is user configurable.
+	defaultNodeReporterPort = 9081
+)
 
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
@@ -245,6 +251,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), err)
+		}
+
+		// Watch for changes to FelixConfiguration. Currently this is only used to grab the prometheusReporterPort which is enterprise-only.
+		err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 		}
 	}
 
@@ -913,11 +925,37 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
+	// Operator is responsible for creating a service which maps to that port.
+	// Here, we'll check the default felixconfiguration to see if the user is specifying
+	// a non-default port, and use that value if they are.
+	nodeReporterMetricsPort := defaultNodeReporterPort
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Query the FelixConfiguration object. We'll use this to help configure felix.
+		felixConfiguration := &crdv1.FelixConfiguration{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.SetDegraded("Unable to read FelixConfiguration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Determine the port to use for nodeReporter metrics.
+		if felixConfiguration.Spec.PrometheusReporterPort != nil {
+			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
+		}
+
+		if nodeReporterMetricsPort == 0 {
+			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+			r.SetDegraded("invalid metrics port", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.
 	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
 	if err != nil && !apierrors.IsNotFound(err) {
-		r.SetDegraded("Unable to ready KubeControllersConfiguration", err, reqLogger)
+		r.SetDegraded("Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -959,6 +997,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		esLicenseType,
 		esAdminSecret,
 		kubeControllersMetricsPort,
+		nodeReporterMetricsPort,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

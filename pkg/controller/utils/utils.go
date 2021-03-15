@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -114,6 +116,41 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
+func addLicenseWatch(c controller.Controller) error {
+	lic := &v3.LicenseKey{
+		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
+	}
+	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
+}
+
+// WaitToAddLicenseKeyWatch will check if projectcalico.org APIs are available and if so, it will add a watch for LicenseKey
+// The completion of this operation will be signaled on a ready channel
+func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, ready chan bool) {
+	maxDuration := 10 * time.Minute
+	duration := 1 * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			duration = duration * 2
+			if duration >= maxDuration {
+				duration = maxDuration
+			}
+			ticker.Reset(duration)
+			if areCalicoAPIsReady(client) {
+				err := addLicenseWatch(controller)
+				if err != nil {
+					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
+				} else {
+					ready <- true
+					return
+				}
+			}
+		}
+	}
+}
+
 // addWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.
@@ -162,6 +199,19 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 	return true
+}
+
+func areCalicoAPIsReady(client kubernetes.Interface) bool {
+	groups, err := client.Discovery().ServerGroups()
+	if err != nil {
+		return false
+	}
+	for _, g := range groups.Groups {
+		if g.Name == "projectcalico.org" {
+			return true
+		}
+	}
+	return false
 }
 
 func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {

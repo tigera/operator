@@ -239,7 +239,7 @@ func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, err
 // IsFeatureActive return true if the feature is listed in LicenseStatusKey
 func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 	for _, v := range license.Status.Features {
-		if v == featureName {
+		if v == featureName || v == "all" {
 			return true
 		}
 	}

@@ -82,3 +82,6 @@ components:
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master
+  elasticsearch-metrics:
+    image: tigera/elasticsearch-metrics
+    version: master

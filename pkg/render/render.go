@@ -82,6 +82,7 @@ func Calico(
 	esLicenseType ElasticsearchLicenseType,
 	esAdminSecret *corev1.Secret,
 	kubeControllersMetricsPort int,
+	nodeReporterMetricsPort int,
 ) (Renderer, error) {
 	var tcms []*corev1.ConfigMap
 	var tss []*corev1.Secret
@@ -154,6 +155,7 @@ func Calico(
 		clusterDomain:               clusterDomain,
 		esAdminSecret:               esAdminSecret,
 		kubeControllersMetricsPort:  kubeControllersMetricsPort,
+		nodeReporterMetricsPort:     nodeReporterMetricsPort,
 	}, nil
 }
 
@@ -238,6 +240,7 @@ type calicoRenderer struct {
 	esLicenseType               ElasticsearchLicenseType
 	esAdminSecret               *corev1.Secret
 	kubeControllersMetricsPort  int
+	nodeReporterMetricsPort     int
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -247,7 +250,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
 		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
 		r.esLicenseType, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))

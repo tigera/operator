@@ -943,6 +943,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
 			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
 		}
+
+		if nodeReporterMetricsPort == 0 {
+			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+			r.SetDegraded("", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.

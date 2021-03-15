@@ -37,6 +37,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&IPPool{},
 		&IPPoolList{},
 		&FelixConfiguration{},
+		&FelixConfigurationList{},
 		&KubeControllersConfiguration{},
 		&KubeControllersConfigurationList{},
 	)

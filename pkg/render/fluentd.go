@@ -455,6 +455,10 @@ func (c *fluentdComponent) container() corev1.Container {
 		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
+		Ports: []corev1.ContainerPort{{
+			Name:          "metrics-port",
+			ContainerPort: 9081,
+		}},
 	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.clusterDomain, c.osType)
 }
 

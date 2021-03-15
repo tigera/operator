@@ -273,6 +273,10 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.Cl
 				Name:     "system:authenticated",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
+			// RBAC for tiered policies is enforced by our aggregate apiserver (tigera-apiserver).
+			// Before the request reaches our apiserver it goes through the kubernetes apiserver.
+			// We add this RBAC that will essentially let requests for our policy resources through the
+			// kubernetes apiserver but the next level of RBAC is enforced by our tigera-apiserver.
 			{
 				Kind:     "Group",
 				Name:     "system:unauthenticated",

@@ -43,6 +43,11 @@ var (
 		Version: "master",
 		Image:   "calico/pod2daemon-flexvol",
 	}
+
+	ComponentCalicoAPIServer = component{
+		Version: "latest",
+		Image:   "caseydavenport/apiserver",
+	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

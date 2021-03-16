@@ -318,6 +318,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
+	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	component := render.IntrusionDetection(
 		lc,
 		esSecrets,
@@ -329,6 +330,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.clusterDomain,
 		esLicenseType,
 		managementClusterConnection != nil,
+		hasNoLicense,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -337,21 +339,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !utils.IsFeatureActive(license, common.ThreatDefenseFeature) {
-		log.V(4).Info("IntrusionDetection is not activated as part of this license")
-		if r.status.IsAvailable() {
-			if err := handler.Delete(context.Background(), component, r.status); err != nil {
-				r.status.SetDegraded("Error deleting resource", err.Error())
-				return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-			}
-		}
-		r.status.SetDegraded("Feature is not active", "License does not support this feature")
-		return reconcile.Result{}, nil
-	}
-
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+	if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	if hasNoLicense {
+		log.V(4).Info("IntrusionDetection is not activated as part of this license")
+		r.status.SetDegraded("Feature is not active", "License does not support this feature")
+		return reconcile.Result{}, nil
 	}
 
 	// Clear the degraded bit if we've reached this far.

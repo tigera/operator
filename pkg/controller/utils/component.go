@@ -41,8 +41,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
-	Delete(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 }
 
 type ReadyMarker interface {
@@ -66,7 +65,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -172,52 +171,6 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	}
 
 	for _, obj := range objsToDelete {
-		err := c.client.Delete(ctx, obj)
-		if err != nil && !errors.IsNotFound(err) {
-			logCtx := ContextLoggerForResource(c.log, obj)
-			logCtx.Error(err, "Error deleting object %v", obj)
-			return err
-		}
-
-		key := client.ObjectKeyFromObject(obj)
-		if status != nil {
-			switch obj.(type) {
-			case *apps.Deployment:
-				status.RemoveDeployments(key)
-			case *apps.DaemonSet:
-				status.RemoveDaemonsets(key)
-			case *apps.StatefulSet:
-				status.RemoveStatefulSets(key)
-			case *batchv1beta.CronJob:
-				status.RemoveCronJobs(key)
-			}
-		}
-	}
-
-	cmpLog.V(1).Info("Done reconciling component")
-	return nil
-}
-
-func (c componentHandler) Delete(ctx context.Context, component render.Component, status status.StatusManager) error {
-	// Before deleting the component, make sure that it is ready. This provides a hook to do
-	// dependency checking for the component.
-	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
-	cmpLog.V(2).Info("Checking if component is ready")
-	if !component.Ready() {
-		cmpLog.Info("Component is not ready, skipping")
-		return nil
-	}
-	cmpLog.V(2).Info("Reconciling")
-
-	// We use the objects that were created in order to perform the cleanup
-	objsToDelete, _ := component.Objects()
-
-	for _, obj := range objsToDelete {
-		// Skip any resource from tigera-operator namespace
-		if obj.GetNamespace() == rmeta.OperatorNamespace() {
-			continue
-		}
-
 		err := c.client.Delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)

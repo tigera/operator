@@ -18,12 +18,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -34,6 +36,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -54,7 +57,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+
+	// Create a new controller
+	controller, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
+
+	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -70,13 +90,9 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDom
 	return c
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource LogCollector
 	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
@@ -112,6 +128,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)
 	}
+
 	return nil
 }
 
@@ -122,11 +139,13 @@ var _ reconcile.Reconciler = &ReconcileLogCollector{}
 type ReconcileLogCollector struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	hasLicenseWatch bool
+	mu              sync.RWMutex
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -148,6 +167,18 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	}
 
 	return instance, nil
+}
+
+func (r *ReconcileLogCollector) IsReady() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasLicenseWatch
+}
+
+func (r *ReconcileLogCollector) MarkAsReady() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hasLicenseWatch = true
 }
 
 // Reconcile reads that state of the cluster for a LogCollector object and makes changes based on the state read
@@ -184,13 +215,19 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
+	if !r.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{}, nil
+	}
+
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -236,8 +273,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
 	var s3Credential *render.S3Credential
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.S3 != nil {
 			s3Credential, err = getS3Credential(r.client)
 			if err != nil {
@@ -254,7 +292,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var splunkCredential *render.SplunkCredential
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Splunk != nil {
 			splunkCredential, err = getSplunkCredential(r.client)
 			if err != nil {
@@ -270,7 +308,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if instance.Spec.AdditionalStores != nil {
+	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 
@@ -385,6 +423,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		installation,
 		r.clusterDomain,
 		rmeta.OSTypeLinux,
+		exportLogs,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -417,6 +456,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			installation,
 			r.clusterDomain,
 			rmeta.OSTypeWindows,
+			exportLogs,
 		)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

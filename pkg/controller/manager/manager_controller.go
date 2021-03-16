@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -54,7 +56,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+
+	// Create a new controller
+	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("failed to create manager-controller: %w", err)
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
+
+	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -71,13 +90,9 @@ func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDom
 
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("failed to create manager-controller: %w", err)
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource Manager
 	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
@@ -149,6 +164,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 	}
+
 	return nil
 }
 
@@ -158,11 +174,13 @@ var _ reconcile.Reconciler = &ReconcileManager{}
 type ReconcileManager struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	hasLicenseWatch bool
+	mu              sync.RWMutex
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -178,6 +196,18 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 			"please use the Authentication CR instead")
 	}
 	return instance, nil
+}
+
+func (r *ReconcileManager) IsReady() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasLicenseWatch
+}
+
+func (r *ReconcileManager) MarkAsReady() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hasLicenseWatch = true
 }
 
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
@@ -207,14 +237,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	if !r.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{}, nil
+	}
+
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.

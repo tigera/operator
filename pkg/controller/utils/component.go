@@ -41,7 +41,12 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
+}
+
+type ReadyMarker interface {
+	MarkAsReady()
+	IsReady() bool
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -60,7 +65,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -166,6 +171,11 @@ func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.C
 	}
 
 	for _, obj := range objsToDelete {
+		// Skip any resource from tigera-operator namespace
+		if obj.GetNamespace() == rmeta.OperatorNamespace() {
+			continue
+		}
+
 		err := c.client.Delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)

@@ -295,6 +295,8 @@ var _ = Describe("LogCollector controller tests", func() {
 				})
 
 				It("should not forward logs to s3", func() {
+					mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: export-logs").Return()
+
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -305,11 +307,7 @@ var _ = Describe("LogCollector controller tests", func() {
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
-					Expect(test.GetResource(c, &ds)).To(BeNil())
-					Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-					node := ds.Spec.Template.Spec.Containers[0]
-					Expect(node).ToNot(BeNil())
-					Expect(node.Env).NotTo(ContainElements(s3Vars))
+					Expect(test.GetResource(c, &ds)).Should(HaveOccurred())
 				})
 			})
 
@@ -396,6 +394,8 @@ var _ = Describe("LogCollector controller tests", func() {
 				})
 
 				It("should not forward logs to splunk", func() {
+					mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: export-logs").Return()
+
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -406,11 +406,7 @@ var _ = Describe("LogCollector controller tests", func() {
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
-					Expect(test.GetResource(c, &ds)).To(BeNil())
-					Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-					node := ds.Spec.Template.Spec.Containers[0]
-					Expect(node).ToNot(BeNil())
-					Expect(node.Env).NotTo(ContainElements(splunkVars))
+					Expect(test.GetResource(c, &ds)).Should(HaveOccurred())
 				})
 			})
 
@@ -500,6 +496,8 @@ var _ = Describe("LogCollector controller tests", func() {
 				})
 
 				It("should not forward logs to syslog", func() {
+					mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: export-logs").Return()
+
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -510,11 +508,7 @@ var _ = Describe("LogCollector controller tests", func() {
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
-					Expect(test.GetResource(c, &ds)).To(BeNil())
-					Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-					node := ds.Spec.Template.Spec.Containers[0]
-					Expect(node).ToNot(BeNil())
-					Expect(node.Env).NotTo(ContainElements(syslogVars))
+					Expect(test.GetResource(c, &ds)).Should(HaveOccurred())
 				})
 			})
 

@@ -280,7 +280,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var s3Credential *render.S3Credential
-	if exportLogs && instance.Spec.AdditionalStores != nil {
+	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.S3 != nil {
 			s3Credential, err = getS3Credential(r.client)
 			if err != nil {
@@ -297,7 +297,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var splunkCredential *render.SplunkCredential
-	if exportLogs && instance.Spec.AdditionalStores != nil {
+	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Splunk != nil {
 			splunkCredential, err = getSplunkCredential(r.client)
 			if err != nil {
@@ -313,7 +313,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if exportLogs && instance.Spec.AdditionalStores != nil {
+	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 

@@ -998,7 +998,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	for _, component := range components {
-		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

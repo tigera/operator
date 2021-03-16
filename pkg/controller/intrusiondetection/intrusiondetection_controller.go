@@ -213,6 +213,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	if !r.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

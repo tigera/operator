@@ -72,20 +72,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.ready)
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
 
 	return add(mgr, controller)
 }
 
-// newReconciler returns a new rReconcileLogCollector
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) *ReconcileLogCollector {
+// newReconciler returns a new reconcile.Reconciler
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		provider:      provider,
 		status:        status.New(mgr.GetClient(), "log-collector"),
 		clusterDomain: clusterDomain,
-		ready:         make(chan bool),
 	}
 	c.status.Run()
 	return c
@@ -145,7 +144,6 @@ type ReconcileLogCollector struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	ready           chan bool
 	hasLicenseWatch bool
 	mu              sync.RWMutex
 }
@@ -171,13 +169,13 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return instance, nil
 }
 
-func (r *ReconcileLogCollector) isReady() bool {
+func (r *ReconcileLogCollector) IsReady() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.hasLicenseWatch
 }
 
-func (r *ReconcileLogCollector) markAsReady() {
+func (r *ReconcileLogCollector) MarkAsReady() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.hasLicenseWatch = true
@@ -217,15 +215,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if !r.isReady() {
-		select {
-		case <-r.ready:
-			r.markAsReady()
-			close(r.ready)
-		default:
-			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-			return reconcile.Result{}, err
-		}
+	if !r.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)

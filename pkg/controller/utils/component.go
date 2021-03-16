@@ -45,6 +45,11 @@ type ComponentHandler interface {
 	Delete(context.Context, render.Component, status.StatusManager) error
 }
 
+type ReadyMarker interface {
+	MarkAsReady()
+	IsReady() bool
+}
+
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
 		client: client,

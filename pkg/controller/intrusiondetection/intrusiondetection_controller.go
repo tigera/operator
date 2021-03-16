@@ -74,20 +74,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.ready)
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
 
 	return add(mgr, controller)
 }
 
-// newReconciler returns a new ReconcileIntrusionDetection
-func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string) *ReconcileIntrusionDetection {
+// newReconciler returns a new reconcile.Reconciler
+func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		provider:      p,
 		status:        status.New(mgr.GetClient(), "intrusion-detection"),
 		clusterDomain: clusterDomain,
-		ready:         make(chan bool),
 	}
 	r.status.Run()
 	return r
@@ -163,18 +162,17 @@ type ReconcileIntrusionDetection struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	ready           chan bool
 	hasLicenseWatch bool
 	mu              sync.RWMutex
 }
 
-func (r *ReconcileIntrusionDetection) isReady() bool {
+func (r *ReconcileIntrusionDetection) IsReady() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.hasLicenseWatch
 }
 
-func (r *ReconcileIntrusionDetection) markAsReady() {
+func (r *ReconcileIntrusionDetection) MarkAsReady() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.hasLicenseWatch = true
@@ -214,15 +212,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !r.isReady() {
-		select {
-		case <-r.ready:
-			r.markAsReady()
-			close(r.ready)
-		default:
-			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-			return reconcile.Result{}, err
-		}
+	if !r.IsReady() {
+		return reconcile.Result{}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)

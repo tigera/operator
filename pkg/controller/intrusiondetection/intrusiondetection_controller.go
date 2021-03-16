@@ -220,10 +220,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{}, err
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{}, err
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 	}
 
 	// Query for the installation object.

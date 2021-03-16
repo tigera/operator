@@ -428,7 +428,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		installation,
 		r.clusterDomain,
 		rmeta.OSTypeLinux,
-		exportLogs,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

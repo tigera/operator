@@ -95,12 +95,15 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+
 			r = ReconcileManager{
-				client:        c,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: clusterDomain,
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				clusterDomain:   clusterDomain,
+				hasLicenseWatch: false,
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -180,6 +183,9 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			// mark that the watch for license key was successful
+			r.MarkAsReady()
 		})
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
@@ -281,11 +287,14 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+
 			r = ReconcileManager{
-				client:   c,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				hasLicenseWatch: false,
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -363,6 +372,9 @@ var _ = Describe("Manager controller tests", func() {
 					Name: "tigera-secure",
 				},
 			})).NotTo(HaveOccurred())
+
+			// mark that the watch for license key was successful
+			r.MarkAsReady()
 		})
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})

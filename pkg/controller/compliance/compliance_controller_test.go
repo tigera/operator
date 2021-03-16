@@ -75,11 +75,13 @@ var _ = Describe("Compliance controller tests", func() {
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
 		mockStatus.On("RemoveDeployments", mock.Anything).Return()
+		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -133,6 +135,9 @@ var _ = Describe("Compliance controller tests", func() {
 		// Apply the compliance CR to the fake cluster.
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 		Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+		// mark that the watch for license key was successful
+		r.MarkAsReady()
 	})
 
 	It("should create resources for standalone clusters", func() {
@@ -514,8 +519,68 @@ var _ = Describe("Compliance controller tests", func() {
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(10 * time.Second))
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceControllerName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).NotTo(BeNil())
+
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceControllerName)
+			Expect(controller).To(BeNil())
+
+			pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera.io.report",
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &pt)).NotTo(BeNil())
+
+			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
+			Expect(reporter).To(BeNil())
+
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceSnapshotterName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).NotTo(BeNil())
+
+			snap := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceSnapshotterName)
+			Expect(snap).To(BeNil())
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "compliance-benchmarker",
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &ds)).NotTo(BeNil())
+			bench := test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
+
+			Expect(bench).To(BeNil())
+			d = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ComplianceServerName,
+					Namespace: render.ComplianceNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).NotTo(BeNil())
+
+			server := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceServerName)
+			Expect(server).To(BeNil())
 		})
+
 		AfterEach(func() {
 			By("Deleting the previous license")
 			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())

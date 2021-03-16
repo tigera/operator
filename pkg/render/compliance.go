@@ -71,6 +71,7 @@ func Compliance(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	dexCfg DexKeyValidatorConfig,
 	clusterDomain string,
+	hasNoLicense bool,
 ) (Component, error) {
 	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, secret.CopyToNamespace(ComplianceNamespace, complianceServerCertSecret)...)
@@ -87,6 +88,7 @@ func Compliance(
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		dexCfg:                      dexCfg,
+		hasNoLicense:                hasNoLicense,
 	}, nil
 }
 
@@ -107,6 +109,7 @@ type complianceComponent struct {
 	serverImage                 string
 	controllerImage             string
 	reporterImage               string
+	hasNoLicense                bool
 }
 
 func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -231,6 +234,10 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.esSecrets...)...)...)
+
+	if c.hasNoLicense {
+		return nil, complianceObjs
+	}
 
 	return complianceObjs, objsToDelete
 }

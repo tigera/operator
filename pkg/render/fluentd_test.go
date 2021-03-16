@@ -69,7 +69,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -116,7 +116,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeWindows, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeWindows)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -201,7 +201,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -274,7 +274,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -357,7 +357,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -438,7 +438,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -507,7 +507,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -565,7 +565,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux, true)
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 

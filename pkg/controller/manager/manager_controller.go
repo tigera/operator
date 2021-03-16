@@ -246,10 +246,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
-			return reconcile.Result{}, nil
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.

@@ -84,7 +84,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			scheme:   scheme,
 			provider: operatorv1.ProviderNone,
 			status:   mockStatus,
-			ready:    make(chan bool),
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -147,7 +146,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
 		// mark that the watch for license key was successful
-		r.markAsReady()
+		r.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {

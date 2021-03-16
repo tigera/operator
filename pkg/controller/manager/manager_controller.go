@@ -71,20 +71,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.ready)
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
 
 	return add(mgr, controller)
 }
 
-// newReconciler returns a new *ReconcileManager
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) *ReconcileManager {
+// newReconciler returns a new reconcile.Reconciler
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
 	c := &ReconcileManager{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		provider:      provider,
 		status:        status.New(mgr.GetClient(), "manager"),
 		clusterDomain: clusterDomain,
-		ready:         make(chan bool),
 	}
 	c.status.Run()
 	return c
@@ -180,7 +179,6 @@ type ReconcileManager struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	ready           chan bool
 	hasLicenseWatch bool
 	mu              sync.RWMutex
 }
@@ -200,13 +198,13 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 	return instance, nil
 }
 
-func (r *ReconcileManager) isReady() bool {
+func (r *ReconcileManager) IsReady() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.hasLicenseWatch
 }
 
-func (r *ReconcileManager) markAsReady() {
+func (r *ReconcileManager) MarkAsReady() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.hasLicenseWatch = true
@@ -239,15 +237,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	if !r.isReady() {
-		select {
-		case <-r.ready:
-			r.markAsReady()
-			close(r.ready)
-		default:
-			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-			return reconcile.Result{}, err
-		}
+	if !r.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)

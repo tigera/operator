@@ -91,7 +91,6 @@ var _ = Describe("Compliance controller tests", func() {
 			provider:      operatorv1.ProviderNone,
 			status:        mockStatus,
 			clusterDomain: dns.DefaultClusterDomain,
-			ready:         make(chan bool),
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -138,7 +137,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 		// mark that the watch for license key was successful
-		r.markAsReady()
+		r.MarkAsReady()
 	})
 
 	It("should create resources for standalone clusters", func() {

@@ -274,6 +274,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
+	if !exportLogs && instance.Spec.AdditionalStores != nil {
+		r.status.SetDegraded("Feature is not active", "License does not support feature: export-logs")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+	}
+
 	var s3Credential *render.S3Credential
 	if exportLogs && instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.S3 != nil {

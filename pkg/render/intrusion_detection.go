@@ -60,6 +60,7 @@ func IntrusionDetection(
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 	managedCluster bool,
+	hasNoLicense bool,
 ) Component {
 	return &intrusionDetectionComponent{
 		lc:               lc,
@@ -72,6 +73,7 @@ func IntrusionDetection(
 		clusterDomain:    clusterDomain,
 		esLicenseType:    esLicenseType,
 		managedCluster:   managedCluster,
+		hasNoLicense:     hasNoLicense,
 	}
 }
 
@@ -88,6 +90,7 @@ type intrusionDetectionComponent struct {
 	jobInstallerImage string
 	controllerImage   string
 	managedCluster    bool
+	hasNoLicense      bool
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error {
@@ -141,6 +144,10 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.intrusionDetectionPodSecurityPolicy(),
 			c.intrusionDetectionPSPClusterRole(),
 			c.intrusionDetectionPSPClusterRoleBinding())
+	}
+
+	if c.hasNoLicense {
+		return nil, objs
 	}
 
 	return objs, nil

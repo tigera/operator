@@ -217,7 +217,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if !r.IsReady() {
 		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
@@ -276,7 +276,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
 	if !exportLogs && instance.Spec.AdditionalStores != nil {
 		r.status.SetDegraded("Feature is not active", "License does not support feature: export-logs")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{}, err
 	}
 
 	var s3Credential *render.S3Credential

@@ -213,7 +213,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	if !r.IsReady() {
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)

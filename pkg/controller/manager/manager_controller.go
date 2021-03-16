@@ -239,7 +239,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if !r.IsReady() {
 		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)

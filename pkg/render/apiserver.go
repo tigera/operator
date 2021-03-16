@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -133,16 +134,22 @@ func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	var err error
-	c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, is)
-
 	errMsgs := []string{}
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
 
-	c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
+		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	} else {
+		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if c.installation.CertificateManagement != nil {
@@ -163,23 +170,24 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
+
+	// Objects used by Calico as well as Calico Enterprise
 	objs := []client.Object{
 		createNamespace(APIServerNamespace, c.installation.KubernetesProvider),
-	}
-	secrets := secret.CopyToNamespace(APIServerNamespace, c.pullSecrets...)
-	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)
-	objs = append(objs,
-		c.auditPolicyConfigMap(),
 		c.apiServerServiceAccount(),
 		c.apiServiceAccountClusterRole(),
 		c.apiServiceAccountClusterRoleBinding(),
-		c.tieredPolicyPassthruClusterRole(),
-		c.tieredPolicyPassthruClusterRolebinding(),
+		c.delegateAuthClusterRoleBinding(),
 		c.authClusterRole(),
 		c.authClusterRoleBinding(),
-		c.delegateAuthClusterRoleBinding(),
 		c.authReaderRoleBinding(),
-	)
+		c.apiServer(),
+		c.apiServerService(),
+		c.webhookReaderClusterRole(),
+		c.webhookReaderClusterRoleBinding(),
+	}
+	secrets := secret.CopyToNamespace(APIServerNamespace, c.pullSecrets...)
+	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)
 
 	if c.installation.CertificateManagement == nil {
 		objs = append(objs, c.getTLSObjects()...)
@@ -189,25 +197,21 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, csrClusterRoleBinding("tigera-apiserver", APIServerNamespace))
 	}
 
-	objs = append(objs,
-		c.apiServer(),
-		c.apiServerService(),
-	)
-
-	objs = append(objs,
-		c.k8sKubeControllerClusterRole(),
-		c.k8sRoleBinding(),
-		c.tigeraUserClusterRole(),
-		c.tigeraNetworkAdminClusterRole(),
-	)
-
-	objs = append(objs,
-		c.webhookReaderClusterRole(),
-		c.webhookReaderClusterRoleBinding(),
-	)
-
 	if !c.openshift {
 		objs = append(objs, c.apiServerPodSecurityPolicy())
+	}
+
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Add objects used only by Calico Enterprise
+		objs = append(objs,
+			c.k8sRoleBinding(),
+			c.tigeraUserClusterRole(),
+			c.tigeraNetworkAdminClusterRole(),
+			c.k8sKubeControllerClusterRole(),
+			c.auditPolicyConfigMap(),
+			c.tieredPolicyPassthruClusterRole(),
+			c.tieredPolicyPassthruClusterRolebinding(),
+		)
 	}
 
 	return objs, nil
@@ -689,12 +693,15 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
-						c.queryServerContainer(),
 					},
 					Volumes: c.apiServerVolumes(),
 				},
 			},
 		},
+	}
+
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
 	}
 
 	return d
@@ -703,9 +710,14 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
-		{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
-		{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
 		{Name: APIServerTLSSecretName, MountPath: "/code/apiserver.local.config/certificates"},
+	}
+
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
+			corev1.VolumeMount{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
+		)
 	}
 
 	if c.managementCluster != nil {
@@ -776,8 +788,14 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
 		fmt.Sprintf("--secure-port=%d", apiServerPort),
-		"--audit-policy-file=/etc/tigera/audit/policy.conf",
-		"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+		"-v=5",
+	}
+
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		args = append(args,
+			"--audit-policy-file=/etc/tigera/audit/policy.conf",
+			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+		)
 	}
 
 	if c.managementCluster != nil {
@@ -826,47 +844,51 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 // apiServerVolumes creates the volumes used by the API server deployment.
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
-	hostPathType := corev1.HostPathDirectoryOrCreate
 	volumes := []corev1.Volume{
-		{
-			Name: "tigera-audit-logs",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/var/log/calico/audit",
-					Type: &hostPathType,
-				},
-			},
-		},
-		{
-			Name: "tigera-audit-policy",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-audit-policy"},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  "config",
-							Path: "policy.conf",
-						},
-					},
-				},
-			},
-		},
 		{
 			Name:         APIServerTLSSecretName,
 			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, APIServerTLSSecretName),
 		},
 	}
-
-	if c.managementCluster != nil {
-		volumes = append(volumes, corev1.Volume{
-			// Append volume for tunnel CA certificate
-			Name: VoltronTunnelSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: VoltronTunnelSecretName,
+	hostPathType := corev1.HostPathDirectoryOrCreate
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: "tigera-audit-logs",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico/audit",
+						Type: &hostPathType,
+					},
 				},
 			},
-		})
+			corev1.Volume{
+				Name: "tigera-audit-policy",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-audit-policy"},
+						Items: []corev1.KeyToPath{
+							{
+								Key:  "config",
+								Path: "policy.conf",
+							},
+						},
+					},
+				},
+			},
+		)
+
+		if c.managementCluster != nil {
+			volumes = append(volumes, corev1.Volume{
+				// Append volume for tunnel CA certificate
+				Name: VoltronTunnelSecretName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: VoltronTunnelSecretName,
+					},
+				},
+			})
+		}
 	}
 	return volumes
 }
@@ -928,7 +950,7 @@ func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
-// tigeraUserClusterRole returns a cluster role for a default Tigera Secure user.
+// tigeraUserClusterRole returns a cluster role for a default Calico Enterprise user.
 func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		// List requests that the Tigera manager needs.

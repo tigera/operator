@@ -178,6 +178,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "elasticsearch-metrics" }}
+	ComponentElasticsearchMetrics = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
@@ -207,5 +213,6 @@ var (
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
+		ComponentElasticsearchMetrics,
 	}
 )

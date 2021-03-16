@@ -92,9 +92,12 @@ func CopyToNamespace(ns string, oSecrets ...*corev1.Secret) []*corev1.Secret {
 
 // ToRuntimeObjects converts the given list of secrets to a list of client.Objects
 func ToRuntimeObjects(secrets ...*corev1.Secret) []client.Object {
-	objs := make([]client.Object, len(secrets))
-	for i, secret := range secrets {
-		objs[i] = secret
+	var objs []client.Object
+	for _, secret := range secrets {
+		if secret == nil {
+			continue
+		}
+		objs = append(objs, secret)
 	}
 	return objs
 }

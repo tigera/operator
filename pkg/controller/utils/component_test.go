@@ -97,7 +97,7 @@ var _ = Describe("Component handler tests", func() {
 			}},
 		}
 
-		err := handler.CreateOrUpdate(ctx, fc, sm)
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
 		By("checking that the namespace is created and desired annotations is present")
@@ -144,7 +144,7 @@ var _ = Describe("Component handler tests", func() {
 		}
 
 		By("initiating a merge with Openshift SCC annotations")
-		err = handler.CreateOrUpdate(ctx, fc, sm)
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
 		By("retrieving the namespace and checking that both current and desired annotations are still present")
@@ -193,7 +193,7 @@ var _ = Describe("Component handler tests", func() {
 		}
 
 		By("initiating a merge with namespace containing modified desired annotation")
-		err = handler.CreateOrUpdate(ctx, fc, sm)
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
 		By("retrieving the namespace and checking that desired annotation is reconciled, everything else is left as-is")
@@ -208,7 +208,7 @@ var _ = Describe("Component handler tests", func() {
 	})
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
-		Expect(handler.CreateOrUpdate(ctx, component, sm)).ShouldNot(HaveOccurred())
+		Expect(handler.CreateOrUpdateOrDelete(ctx, component, sm)).ShouldNot(HaveOccurred())
 		Expect(c.Get(ctx, key, obj)).ShouldNot(HaveOccurred())
 
 		var nodeSelectors map[string]string

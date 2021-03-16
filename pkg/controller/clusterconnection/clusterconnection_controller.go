@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -123,7 +122,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
-	variant, instl, err := installation.GetInstallation(ctx, r.Client)
+	variant, instl, err := utils.GetInstallation(ctx, r.Client)
 	if err != nil {
 		return result, err
 	}

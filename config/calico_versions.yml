@@ -10,3 +10,5 @@ components:
     version: master
   flexvol:
     version: master
+  apiserver:
+    version: master

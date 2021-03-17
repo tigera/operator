@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -41,7 +42,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdate(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 }
 
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -60,7 +61,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdate(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -352,4 +353,27 @@ func mapExistsOrInitialize(m map[string]string) map[string]string {
 		return m
 	}
 	return make(map[string]string)
+}
+
+// ReadyFlag is used to synchronize access to a boolean flag
+// flag that can be shared between go routines. The flag can be
+// marked as ready once,as part of a initialization procedure and
+// read multiple times afterwards
+type ReadyFlag struct {
+	mu      sync.RWMutex
+	isReady bool
+}
+
+// IsReady returns true if was marked as ready
+func (r *ReadyFlag) IsReady() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isReady
+}
+
+// MarkAsReady sets the flag as true
+func (r *ReadyFlag) MarkAsReady() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.isReady = true
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -103,7 +104,7 @@ var _ = Describe("Manager controller tests", func() {
 				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				clusterDomain:   clusterDomain,
-				hasLicenseWatch: false,
+				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -185,7 +186,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 			// mark that the watch for license key was successful
-			r.MarkAsReady()
+			r.licenseAPIReady.MarkAsReady()
 		})
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
@@ -294,7 +295,7 @@ var _ = Describe("Manager controller tests", func() {
 				scheme:          scheme,
 				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
-				hasLicenseWatch: false,
+				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -374,7 +375,7 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			// mark that the watch for license key was successful
-			r.MarkAsReady()
+			r.licenseAPIReady.MarkAsReady()
 		})
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})

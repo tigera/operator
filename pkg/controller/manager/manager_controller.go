@@ -17,7 +17,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -56,8 +55,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
+
+	var licenseAPIReady = &utils.ReadyFlag{}
+
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -71,19 +73,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "manager"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		status:          status.New(mgr.GetClient(), "manager"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	c.status.Run()
 	return c
@@ -179,8 +182,7 @@ type ReconcileManager struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	hasLicenseWatch bool
-	mu              sync.RWMutex
+	licenseAPIReady *utils.ReadyFlag
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -196,18 +198,6 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 			"please use the Authentication CR instead")
 	}
 	return instance, nil
-}
-
-func (r *ReconcileManager) IsReady() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.hasLicenseWatch
-}
-
-func (r *ReconcileManager) MarkAsReady() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.hasLicenseWatch = true
 }
 
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
@@ -237,7 +227,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	if !r.IsReady() {
+	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}

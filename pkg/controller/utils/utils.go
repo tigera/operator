@@ -125,7 +125,7 @@ func addLicenseWatch(c controller.Controller) error {
 
 // WaitToAddLicenseKeyWatch will check if projectcalico.org APIs are available and if so, it will add a watch for LicenseKey
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, ready ReadyMarker) {
+func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
@@ -143,7 +143,7 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernete
 				if err != nil {
 					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
 				} else {
-					ready.MarkAsReady()
+					flag.MarkAsReady()
 					return
 				}
 			}

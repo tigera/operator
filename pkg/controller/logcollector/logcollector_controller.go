@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -57,8 +56,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
+
+	var licenseAPIReady = &utils.ReadyFlag{}
+
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -72,19 +74,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "log-collector"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		status:          status.New(mgr.GetClient(), "log-collector"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	c.status.Run()
 	return c
@@ -144,8 +147,7 @@ type ReconcileLogCollector struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	hasLicenseWatch bool
-	mu              sync.RWMutex
+	licenseAPIReady *utils.ReadyFlag
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -167,18 +169,6 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	}
 
 	return instance, nil
-}
-
-func (r *ReconcileLogCollector) IsReady() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.hasLicenseWatch
-}
-
-func (r *ReconcileLogCollector) MarkAsReady() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.hasLicenseWatch = true
 }
 
 // Reconcile reads that state of the cluster for a LogCollector object and makes changes based on the state read
@@ -215,7 +205,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if !r.IsReady() {
+	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}

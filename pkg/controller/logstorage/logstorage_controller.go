@@ -434,13 +434,16 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		// Get the secret - might be nil
+		// Get the admin user secret to copy to the operator namespace.
 		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
+		if esAdminUserSecret != nil {
+			esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
+		}
 
-		if esCertSecretESCopy, esPubCertSecret, esAdminUserSecret, err = r.getElasticsearchCertificateSecrets(ctx); err != nil {
+		if esCertSecret, esCertSecretESCopy, esPubCertSecret, err = r.getElasticsearchCertificateSecrets(ctx); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
 			return reconcile.Result{}, err

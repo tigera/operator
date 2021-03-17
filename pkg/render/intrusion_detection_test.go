@@ -43,6 +43,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
 
@@ -108,6 +109,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
 
@@ -189,6 +191,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, managedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
 
@@ -241,6 +244,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 			},
 			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
@@ -259,7 +263,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster)
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
 		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)

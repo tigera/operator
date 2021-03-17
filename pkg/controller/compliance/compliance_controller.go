@@ -17,7 +17,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -56,8 +55,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
+	var licenseAPIReady = &utils.ReadyFlag{}
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -71,19 +71,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new *reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileCompliance{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "compliance"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		status:          status.New(mgr.GetClient(), "compliance"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	r.status.Run()
 	return r
@@ -160,20 +161,7 @@ type ReconcileCompliance struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	hasLicenseWatch bool
-	mu              sync.RWMutex
-}
-
-func (r *ReconcileCompliance) IsReady() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.hasLicenseWatch
-}
-
-func (r *ReconcileCompliance) MarkAsReady() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.hasLicenseWatch = true
+	licenseAPIReady *utils.ReadyFlag
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -216,7 +204,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if !r.IsReady() {
+	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}

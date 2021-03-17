@@ -627,7 +627,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		if err := hdler.CreateOrUpdate(ctx, esMetricsComponent, r.status); err != nil {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, esMetricsComponent, r.status); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err

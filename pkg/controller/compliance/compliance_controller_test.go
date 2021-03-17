@@ -86,11 +86,12 @@ var _ = Describe("Compliance controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileCompliance{
-			client:        c,
-			scheme:        scheme,
-			provider:      operatorv1.ProviderNone,
-			status:        mockStatus,
-			clusterDomain: dns.DefaultClusterDomain,
+			client:          c,
+			scheme:          scheme,
+			provider:        operatorv1.ProviderNone,
+			status:          mockStatus,
+			clusterDomain:   dns.DefaultClusterDomain,
+			licenseAPIReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -137,7 +138,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 		// mark that the watch for license key was successful
-		r.MarkAsReady()
+		r.licenseAPIReady.MarkAsReady()
 	})
 
 	It("should create resources for standalone clusters", func() {

@@ -17,7 +17,6 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -59,8 +58,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
+	var licenseAPIReady = &utils.ReadyFlag{}
+
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain)
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -74,19 +75,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, reconciler.(utils.ReadyMarker))
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      p,
-		status:        status.New(mgr.GetClient(), "intrusion-detection"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        p,
+		status:          status.New(mgr.GetClient(), "intrusion-detection"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	r.status.Run()
 	return r
@@ -162,20 +164,7 @@ type ReconcileIntrusionDetection struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
-	hasLicenseWatch bool
-	mu              sync.RWMutex
-}
-
-func (r *ReconcileIntrusionDetection) IsReady() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.hasLicenseWatch
-}
-
-func (r *ReconcileIntrusionDetection) MarkAsReady() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.hasLicenseWatch = true
+	licenseAPIReady *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -212,7 +201,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !r.IsReady() {
+	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}

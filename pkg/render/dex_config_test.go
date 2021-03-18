@@ -323,4 +323,27 @@ var _ = Describe("dex config tests", func() {
 		Entry("Compare actual and expected LDAP config", ldap),
 		Entry("Compare actual and expected Openshift config", ocp),
 	)
+
+	DescribeTable("Test values for promptTypes ", func(in []operatorv1.PromptType, result string) {
+		auth := oidc.DeepCopy()
+		auth.Spec.OIDC.PromptTypes = in
+		dexConfig := render.NewDexConfig(auth, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain)
+		config, ok := dexConfig.Connector()["config"].(map[string]interface{})
+		Expect(ok).To(BeTrue())
+		if result == "" {
+			Expect(config["promptType"]).To(BeNil())
+		} else {
+			promptTypes, ok := config["promptType"].(string)
+			Expect(ok).To(BeTrue())
+			Expect(promptTypes).To(Equal(result))
+		}
+	},
+		Entry("Compare actual and expected promptType", nil, ""),
+		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeConsent}, "consent"),
+		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount}, "select_account"),
+		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeNone}, "none"),
+		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeLogin}, "login"),
+		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeConsent, operatorv1.PromptTypeSelectAccount}, "consent select_account"),
+		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeConsent, operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin}, "consent select_account login"),
+	)
 })

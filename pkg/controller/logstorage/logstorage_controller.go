@@ -620,7 +620,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		esMetricsComponent := esmetrics.ElasticsearchMetrics(install, clusterConfig, esMetricsSecret, esPubCertSecret, r.clusterDomain)
+		esMetricsComponent := esmetrics.ElasticsearchMetrics(install, pullSecrets, clusterConfig, esMetricsSecret, esPubCertSecret, r.clusterDomain)
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
 			r.status.SetDegraded("Error with images from ImageSet", err.Error())

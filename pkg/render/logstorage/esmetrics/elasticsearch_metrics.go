@@ -36,6 +36,7 @@ const (
 
 func ElasticsearchMetrics(
 	installation *operatorv1.InstallationSpec,
+	pullSecrets []*corev1.Secret,
 	esConfig *relasticsearch.ClusterConfig,
 	esMetricsCredsSecret *corev1.Secret,
 	esCertSecret *corev1.Secret,
@@ -43,6 +44,7 @@ func ElasticsearchMetrics(
 ) render.Component {
 	return &elasticsearchMetrics{
 		installation:         installation,
+		pullSecrets:          pullSecrets,
 		esConfig:             esConfig,
 		esMetricsCredsSecret: esMetricsCredsSecret,
 		esCertSecret:         esCertSecret,
@@ -52,6 +54,7 @@ func ElasticsearchMetrics(
 
 type elasticsearchMetrics struct {
 	installation         *operatorv1.InstallationSpec
+	pullSecrets          []*corev1.Secret
 	esMetricsImage       string
 	esMetricsCredsSecret *corev1.Secret
 	esCertSecret         *corev1.Secret
@@ -132,6 +135,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					},
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+					ImagePullSecrets: secret.GetReferenceList(e.pullSecrets),
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(
 							corev1.Container{

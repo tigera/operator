@@ -265,13 +265,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("spec.calicoNetwork.hostPorts is supported only for Calico CNI")
 			}
 
-			if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
-				return fmt.Errorf("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane")
-			}
-
 			err := validateHostPorts(instance.Spec.CalicoNetwork.HostPorts)
 			if err != nil {
 				return err
+			}
+
+			if *instance.Spec.CalicoNetwork.HostPorts != operatorv1.HostPortsDisabled &&
+				instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
+				*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+				return fmt.Errorf("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane")
 			}
 		}
 

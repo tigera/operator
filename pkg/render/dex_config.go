@@ -458,7 +458,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 	}
 
 	//Google specific.
-	if d.idpSecret.Data[serviceAccountSecretField] != nil || d.idpSecret.Data[adminEmailSecretField] == nil {
+	if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
 		config["serviceAccountFilePath"] = serviceAccountSecretLocation
 		config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
 	}

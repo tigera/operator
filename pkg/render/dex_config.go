@@ -478,6 +478,25 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
 				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
 		}
+		promptTypes := d.authentication.Spec.OIDC.PromptTypes
+		if promptTypes != nil {
+			length := len(promptTypes)
+			prompts := make([]string, length)
+			for i, v := range promptTypes {
+				switch v {
+				case oprv1.PromptTypeNone:
+					prompts[i] = "none"
+				case oprv1.PromptTypeSelectAccount:
+					prompts[i] = "select_account"
+				case oprv1.PromptTypeLogin:
+					prompts[i] = "login"
+				case oprv1.PromptTypeConsent:
+					prompts[i] = "consent"
+				}
+			}
+			// RFC specifies space delimited case sensitive list: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
+			config["promptType"] = strings.Join(prompts, " ")
+		}
 
 	case connectorTypeGoogle:
 		config = map[string]interface{}{

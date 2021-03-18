@@ -383,9 +383,7 @@ var _ = Describe("dex config tests", func() {
 			promptTypes, ok := config["promptType"].(string)
 			Expect(ok).To(BeTrue())
 			Expect(promptTypes).To(Equal(result))
-
 		}
-
 	},
 		Entry("Compare actual and expected promptType", nil, ""),
 		Entry("Compare actual and expected promptType", []operatorv1.PromptType{operatorv1.PromptTypeConsent}, "consent"),

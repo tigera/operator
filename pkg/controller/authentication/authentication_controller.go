@@ -382,6 +382,15 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 			return fmt.Errorf("you set groups prefix twice, but with different values, please remove Authentication.Spec.OIDC.GroupsPrefix")
 		}
 
+		promptTypes := authentication.Spec.OIDC.PromptTypes
+		if promptTypes != nil && len(authentication.Spec.OIDC.PromptTypes) > 1 {
+			for _, pt := range promptTypes {
+				if pt == oprv1.PromptTypeNone {
+					return fmt.Errorf("you cannot combine PromptType None with other prompt types, please mofify Authentication.Spec.OIDC.PromptType")
+				}
+			}
+		}
+
 	}
 
 	if ldp != nil {

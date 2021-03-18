@@ -68,6 +68,30 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should prevent IPv6 if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "1eef::/64",
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				Encapsulation: operator.EncapsulationNone,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("IPv6 IP pool is specified but eBPF mode does not support IPv6"))
+	})
+
+	It("should prevent host ports if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		hp := operator.HostPortsEnabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane"))
+	})
+
 	It("should prevent IPIP if BGP is disabled", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled

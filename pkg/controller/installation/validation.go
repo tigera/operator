@@ -211,6 +211,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("Encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
 			}
 
+			if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+				return fmt.Errorf("IPv6 IP pool is specified but eBPF mode does not support IPv6")
+			}
+
 			// Verify NAT outgoing values.
 			switch v6pool.NATOutgoing {
 			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
@@ -260,9 +264,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("spec.calicoNetwork.hostPorts is supported only for Calico CNI")
 			}
+
 			err := validateHostPorts(instance.Spec.CalicoNetwork.HostPorts)
 			if err != nil {
 				return err
+			}
+
+			if *instance.Spec.CalicoNetwork.HostPorts != operatorv1.HostPortsDisabled &&
+				instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
+				*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+				return fmt.Errorf("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane")
 			}
 		}
 

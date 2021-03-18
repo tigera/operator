@@ -44,6 +44,7 @@ const (
 	serviceAccountSecretField    = "serviceAccountSecret"
 	ClientSecretSecretField      = "clientSecret"
 	adminEmailSecretField        = "adminEmail"
+	serviceAccountFilePathField  = "serviceAccountFilePath"
 	RootCASecretField            = "rootCA"
 	OIDCSecretName               = "tigera-oidc-credentials"
 	OpenshiftSecretName          = "tigera-openshift-credentials"
@@ -481,14 +482,17 @@ func (d *dexConfig) Connector() map[string]interface{} {
 
 	case connectorTypeGoogle:
 		config = map[string]interface{}{
-			"issuer":                 googleIssuer,
-			"clientID":               fmt.Sprintf("$%s", clientIDEnv),
-			"clientSecret":           fmt.Sprintf("$%s", clientSecretEnv),
-			"redirectURI":            fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
-			"scopes":                 d.RequestedScopes(),
-			"serviceAccountFilePath": serviceAccountSecretLocation,
-			adminEmailSecretField:    fmt.Sprintf("$%s", googleAdminEmailEnv),
+			"issuer":       googleIssuer,
+			"clientID":     fmt.Sprintf("$%s", clientIDEnv),
+			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
+			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			"scopes":       d.RequestedScopes(),
 		}
+		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
+			config[serviceAccountFilePathField] = serviceAccountSecretLocation
+			config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
+		}
+
 	case connectorTypeOpenshift:
 		config = map[string]interface{}{
 			"issuer":          d.authentication.Spec.Openshift.IssuerURL,

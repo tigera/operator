@@ -32,6 +32,7 @@ import (
 
 var _ = Describe("dex config tests", func() {
 	verify := operatorv1.EmailVerificationTypeSkip
+	email := "a@b.com"
 
 	// Create two different authentication objects
 	authentication := &operatorv1.Authentication{
@@ -63,7 +64,7 @@ var _ = Describe("dex config tests", func() {
 		},
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		Data: map[string][]byte{
-			"adminEmail":           []byte("a@b.com"),
+			"adminEmail":           []byte(email),
 			"clientID":             []byte("a.b.com"),
 			"clientSecret":         []byte("my-secret"),
 			"serviceAccountSecret": []byte("my-secret2"),
@@ -123,6 +124,7 @@ var _ = Describe("dex config tests", func() {
 		validFilter = "(objectClass=posixGroup)"
 		attribute   = "uid"
 		oidc        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}}}
+		google      = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 		ocp         = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, Openshift: &operatorv1.AuthenticationOpenshift{IssuerURL: iss}}}
 		ldap        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, LDAP: &operatorv1.AuthenticationLDAP{Host: iss, UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}, GroupSearch: &operatorv1.GroupSearch{NameAttribute: attribute, Filter: validFilter, BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}}}}
 		ldapSecret  = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LDAPSecretName, Namespace: rmeta.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -323,4 +325,49 @@ var _ = Describe("dex config tests", func() {
 		Entry("Compare actual and expected LDAP config", ldap),
 		Entry("Compare actual and expected Openshift config", ocp),
 	)
+
+	DescribeTable("Test dex connector for Google ", func(secretData map[string][]byte, expectPresent bool) {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.OIDCSecretName,
+				Namespace: rmeta.OperatorNamespace(),
+			},
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			Data:     secretData,
+		}
+		dexConfig := render.NewDexConfig(google, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
+		connector := dexConfig.Connector()["config"].(map[string]interface{})
+
+		email, emailFound := connector["adminEmail"]
+		saPath, saFound := connector["serviceAccountFilePath"]
+		if expectPresent {
+			Expect(email).To(Equal(email))
+			Expect(emailFound).To(BeTrue())
+			Expect(saPath).To(Equal("/etc/dex/secrets/google-groups.json"))
+			Expect(saFound).To(BeTrue())
+		} else {
+			Expect(emailFound).To(BeFalse())
+			Expect(saFound).To(BeFalse())
+		}
+	},
+		Entry("Compare actual and expected OIDC config", map[string][]byte{
+			"adminEmail":           []byte(email),
+			"clientID":             []byte("a.b.com"),
+			"clientSecret":         []byte("my-secret"),
+			"serviceAccountSecret": []byte("my-secret2"),
+		}, true),
+		Entry("Compare actual and expected OIDC config", map[string][]byte{
+			"clientID":     []byte("a.b.com"),
+			"clientSecret": []byte("my-secret"),
+		}, false),
+		Entry("Compare actual and expected OIDC config", map[string][]byte{
+			"clientID":             []byte("a.b.com"),
+			"clientSecret":         []byte("my-secret"),
+			"serviceAccountSecret": []byte("my-secret2"),
+		}, false),
+		Entry("Compare actual and expected OIDC config", map[string][]byte{
+			"adminEmail":   []byte(email),
+			"clientID":     []byte("a.b.com"),
+			"clientSecret": []byte("my-secret"),
+		}, false))
 })

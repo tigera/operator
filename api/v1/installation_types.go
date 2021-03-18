@@ -248,8 +248,22 @@ const (
 	BGPDisabled BGPOption = "Disabled"
 )
 
+type LinuxDataplaneOption string
+
+const (
+	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
+	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
+	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
+	// causes the operator to add required mounts and environment variables for the particular dataplane.
+	// If not specified, iptables mode is used.
+	// +optional
+	// +kubebuilder:validation:Enum=Iptables;BPF
+	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
+
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled

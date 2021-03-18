@@ -672,6 +672,7 @@ func (c *nodeComponent) cniDirectories() (string, string, string) {
 func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
+	dirMustExist := v1.HostPathDirectory
 
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
@@ -679,7 +680,6 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
-		{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirOrCreate}}},
 		{
 			Name: "typha-ca",
 			VolumeSource: v1.VolumeSource{
@@ -694,6 +694,12 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 			Name:         "felix-certs",
 			VolumeSource: certificateVolumeSource(c.cr.CertificateManagement, NodeTLSSecretName),
 		},
+	}
+
+	if c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+		volumes = append(volumes, v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}})
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
@@ -843,9 +849,13 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/var/run/calico", Name: "var-run-calico"},
 		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+	}
+	if c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
@@ -1010,7 +1020,12 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
 			}
 		}
+	}
 
+	if c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall

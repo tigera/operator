@@ -90,6 +90,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 								},
 							},
 							Spec: corev1.PodSpec{
+								ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pullsecret"}},
 								Containers: []corev1.Container{{
 									Name:    "tigera-elasticsearch-metrics",
 									Image:   "testregistry.com/tigera/elasticsearch-metrics@testdigest",
@@ -162,7 +163,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 				},
 			}
 
-			component := ElasticsearchMetrics(installation, esConfig,
+			component := ElasticsearchMetrics(installation,
+				[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
+				esConfig,
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				"cluster.local")

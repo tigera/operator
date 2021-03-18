@@ -270,8 +270,10 @@ func (m *CoreNamespaceMigration) ensureTyphaRoom(ctx context.Context, log logr.L
 		// No Typha running - we're good to go.
 		return nil
 	}
-
-	// Number of currently running typhas.
+	if typha.Spec.Replicas == nil {
+		// No replicas - nothing to do.
+		return nil
+	}
 	curReplicas := *typha.Spec.Replicas
 
 	// Number of nodes in the cluster.

@@ -114,7 +114,7 @@ var _ = Describe("dex config tests", func() {
 			Expect(reflect.DeepEqual(hashes1, hashes3)).To(BeFalse())
 		})
 	})
-	google      := &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+	google := &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: "https://127.0.0.1:9443", OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 	DescribeTable("Test dex connector for Google ", func(secretData map[string][]byte, expectPresent bool) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

@@ -171,7 +171,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.
-	variant, network, err := installation.GetInstallation(context.Background(), r.client)
+	statusVariant, network, err := installation.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -180,6 +180,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
+	variant := network.Variant
+	hostNetwork := statusVariant == ""
 
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
@@ -276,7 +278,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(k8sapi.Endpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(k8sapi.Endpoint, network, hostNetwork, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

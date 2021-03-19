@@ -185,6 +185,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.MTU = override.MTU
 	}
 
+	switch compareFields(out.LinuxDataplane, override.LinuxDataplane) {
+	case BOnlySet, Different:
+		out.LinuxDataplane = override.LinuxDataplane
+	}
+
 	switch compareFields(out.NodeAddressAutodetectionV4, override.NodeAddressAutodetectionV4) {
 	case BOnlySet, Different:
 		out.NodeAddressAutodetectionV4 = override.NodeAddressAutodetectionV4

@@ -451,9 +451,15 @@ func fillDefaults(instance *operator.Installation) error {
 	// Default any unspecified fields within the CalicoNetworkSpec.
 	var v4pool, v6pool *operator.IPPool
 	if instance.Spec.CalicoNetwork != nil {
-		// Default IP pools, only if it is nil. If it is an empty slice then that
-		// means no default IPPools should be created.
-		if instance.Spec.CalicoNetwork.IPPools == nil {
+		// Default dataplane is iptables.
+		if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
+			dpIptables := operator.LinuxDataplaneIptables
+			instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
+		}
+
+		// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
+		// Only default IP pools if we're using Calico IPAM, otherwise there's no-one to use the IP pool.
+		if instance.Spec.CalicoNetwork.IPPools == nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
 			switch instance.Spec.KubernetesProvider {
 			case operator.ProviderEKS:
 				// On EKS, default to a CIDR that doesn't overlap with the host range,
@@ -491,6 +497,14 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		}
 
+		needIPv4Autodetection := false
+		if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
+			// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
+			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+				needIPv4Autodetection = true
+			}
+		}
+
 		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 
@@ -508,24 +522,33 @@ func fillDefaults(instance *operator.Installation) error {
 			if v4pool.NodeSelector == "" {
 				v4pool.NodeSelector = operator.NodeSelectorDefault
 			}
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-				if instance.Spec.KubernetesProvider == operator.ProviderDockerEE {
-					// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
-					// node address, so instead skip the interface br-.
-					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-						SkipInterface: "^br-.*",
-					}
-				} else {
-					// Default IPv4 address detection to "first found" if not specified.
-					t := true
-					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-						FirstFound: &t,
-					}
-				}
-			}
 			if v4pool.BlockSize == nil {
 				var twentySix int32 = 26
 				v4pool.BlockSize = &twentySix
+			}
+			needIPv4Autodetection = true
+		}
+
+		if needIPv4Autodetection && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+			switch instance.Spec.KubernetesProvider {
+			case operator.ProviderDockerEE:
+				// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
+				// node address, so instead skip the interface br-.
+				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+					SkipInterface: "^br-.*",
+				}
+			case operator.ProviderEKS:
+				// EKS uses multiple interfaces to spread load; we want to pick the main interface with the
+				// default route.
+				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+					CanReach: "8.8.8.8",
+				}
+			default:
+				// Default IPv4 address detection to "first found" if not specified.
+				t := true
+				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+					FirstFound: &t,
+				}
 			}
 		}
 
@@ -557,7 +580,13 @@ func fillDefaults(instance *operator.Installation) error {
 		// Handle those here.
 		if instance.Spec.CNI.Type == operator.PluginCalico {
 			if instance.Spec.CalicoNetwork.HostPorts == nil {
-				hp := operator.HostPortsEnabled
+				var hp operator.HostPortsType
+				if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
+					// Host ports not supported with BPF mode.
+					hp = operator.HostPortsDisabled
+				} else {
+					hp = operator.HostPortsEnabled
+				}
 				instance.Spec.CalicoNetwork.HostPorts = &hp
 			}
 

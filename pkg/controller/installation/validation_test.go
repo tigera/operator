@@ -88,6 +88,9 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		hp := operator.HostPortsEnabled
 		instance.Spec.CalicoNetwork.HostPorts = &hp
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach:      "8.8.8.8",
+		}
 		err := validateCustomResource(instance)
 		Expect(err).To(MatchError("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane"))
 	})
@@ -97,6 +100,9 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		hp := operator.HostPortsDisabled
 		instance.Spec.CalicoNetwork.HostPorts = &hp
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach:      "8.8.8.8",
+		}
 		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
 	})

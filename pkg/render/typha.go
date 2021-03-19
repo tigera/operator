@@ -364,6 +364,12 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 			CSRLabelCalicoSystem))
 	}
 
+	// Include annotation for prometheus scraping configuration.
+	if c.installation.TyphaMetricsPort != nil {
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.installation.TyphaMetricsPort)
+	}
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -394,7 +400,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				},
 				Spec: v1.PodSpec{
 					Tolerations:                   tolerateAll,
-					Affinity:                      toAffinity(c.installation.TyphaAffinity),
+					Affinity:                      c.affinity(),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -542,6 +548,14 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
 	typhaEnv = append(typhaEnv, c.k8sServiceEp.EnvVars()...)
 
+	if c.installation.TyphaMetricsPort != nil {
+		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.
+		typhaEnv = append(typhaEnv,
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.installation.TyphaMetricsPort)},
+		)
+	}
+
 	return typhaEnv
 }
 
@@ -603,17 +617,43 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 	return psp
 }
 
-// toAffinity converts a typha affinity to a k8s affinity.
-func toAffinity(t *operator.TyphaAffinity) *v1.Affinity {
-	if t == nil {
-		return nil
+// affinity sets the affinity on typha, accounting for the kubernetes-provider and user-specified values.
+func (c *typhaComponent) affinity() (aff *v1.Affinity) {
+	// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
+	// virtual-nodes have many limitations, namely it's unable to run hostNetworked pods. virtual-kubelets are tainted to prevent pods from running on them,
+	// but typha tolerates all taints and will run there.
+	// as such, we add a required anti-affinity for virtual-nodes if running on azure
+	if c.installation.KubernetesProvider == operator.ProviderAKS {
+		aff = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "type",
+								Operator: corev1.NodeSelectorOpNotIn,
+								Values:   []string{"virtual-node"},
+							},
+							{
+								Key:      "kubernetes.azure.com/cluster",
+								Operator: v1.NodeSelectorOpExists,
+							},
+						},
+					}},
+				},
+			},
+		}
 	}
-	if t.NodeAffinity == nil {
-		return nil
+
+	// add the user-specified typha preferred affinity if specified.
+	if c.installation.TyphaAffinity != nil && c.installation.TyphaAffinity.NodeAffinity != nil {
+		// check if above code initialized affintiy or not.
+		// this ensures we still return nil if neither condition is hit.
+		if aff == nil {
+			aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{}}
+		}
+		aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
 	}
-	return &v1.Affinity{
-		NodeAffinity: &v1.NodeAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: t.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-		},
-	}
+
+	return aff
 }

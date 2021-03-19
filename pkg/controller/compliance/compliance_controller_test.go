@@ -190,13 +190,15 @@ var _ = Describe("Compliance controller tests", func() {
 		assertExpectedCertDNSNames(c, expectedDNSNames...)
 	})
 
-	It("should return an error if the compliance server cert is user-supplied and has the wrong DNS names", func() {
+	It("should reconcile if the compliance server cert is user-supplied", func() {
+		// This test just validates that user-provided certs reconcile and do
+		// not overwrite the certs.
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 
-		By("replacing the server certs with ones that have the wrong DNS names")
+		By("replacing the server certs with user-supplied certs")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
 			Namespace: render.OperatorNamespace()}})).NotTo(HaveOccurred())
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
@@ -215,14 +217,9 @@ var _ = Describe("Compliance controller tests", func() {
 
 		assertExpectedCertDNSNames(c, oldDNSNames...)
 
-		By("checking that an error occurred and the cert didn't change")
-		mockStatus.On(
-			"SetDegraded",
-			"Error ensuring compliance TLS certificate \"tigera-compliance-server-tls\" exists and has valid DNS names",
-			"Expected cert \"tigera-compliance-server-tls\" to have DNS names: compliance, compliance.tigera-compliance, compliance.tigera-compliance.svc, compliance.tigera-compliance.svc.cluster.local",
-		).Return()
+		By("checking that an error did not occur and the cert didn't change")
 		result, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).To(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Requeue).NotTo(BeTrue())
 		assertExpectedCertDNSNames(c, oldDNSNames...)
 	})

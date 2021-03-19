@@ -105,6 +105,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
+		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
@@ -211,7 +212,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("Encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
 			}
 
-			if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+			if bpfDataplane {
 				return fmt.Errorf("IPv6 IP pool is specified but eBPF mode does not support IPv6")
 			}
 
@@ -246,6 +247,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+			return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
+		}
+
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {
 			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
 			if err != nil {
@@ -270,9 +275,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return err
 			}
 
-			if *instance.Spec.CalicoNetwork.HostPorts != operatorv1.HostPortsDisabled &&
-				instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
-				*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+			if *instance.Spec.CalicoNetwork.HostPorts != operatorv1.HostPortsDisabled && bpfDataplane {
 				return fmt.Errorf("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane")
 			}
 		}

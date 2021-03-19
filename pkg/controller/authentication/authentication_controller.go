@@ -386,7 +386,7 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 		if promptTypes != nil && len(authentication.Spec.OIDC.PromptTypes) > 1 {
 			for _, pt := range promptTypes {
 				if pt == oprv1.PromptTypeNone {
-					return fmt.Errorf("you cannot combine PromptType None with other prompt types, please mofify Authentication.Spec.OIDC.PromptType")
+					return fmt.Errorf("you cannot combine PromptType None with other prompt types, please modify Authentication.Spec.OIDC.PromptType")
 				}
 			}
 		}

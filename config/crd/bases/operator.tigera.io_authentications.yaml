@@ -153,8 +153,8 @@ spec:
                     type: string
                   promptTypes:
                     description: 'PromptTypes is an optional list of string values
-                      that specifies whether the Authorization Server prompts the
-                      End-User for reauthentication and consent. The defined values
+                      that specifies whether the authorization server prompts the
+                      end user for re-authentication and consent. The defined values
                       are: ["None", "Login", "Consent", "SelectAccount"].'
                     items:
                       description: 'See the RFC for more information on prompt types:

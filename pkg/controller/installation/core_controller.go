@@ -821,6 +821,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	freshInstall := reflect.DeepEqual(status, operator.InstallationStatus{})
+	if freshInstall {
+		// This is a fresh deployment. Check if an API server has been requested. If it has, we should
+		// wait for it to roll out successfully before proceeding, allowing for configuration to be
+		// specified prior to calico/node launching.
+		log.Info("Fresh install")
+		apiserver := &operator.APIServer{}
+		err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, apiserver)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
+				r.status.SetDegraded("Error querying APIServer", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+		if apiserver.Status.State != operator.TigeraStatusReady {
+			// API server is not yet ready. Wait for it.
+			r.status.SetDegraded("Waiting for API server to be ready", "")
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		// API server is ready. Artificially wait, giving time for API resources to be created.
+		log.Info("API server ready, proceeding")
+	}
+
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
@@ -930,11 +955,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-	// Elasticsearch.
-	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
-	if err != nil {
-		return reconcile.Result{}, err
+	var esAdminSecret *v1.Secret
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
+		// Elasticsearch.
+		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS

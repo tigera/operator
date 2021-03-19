@@ -52,6 +52,7 @@ const (
 
 func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	installation *operator.InstallationSpec,
+	hostNetwork bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
 	aci *operator.AmazonCloudIntegration,
@@ -101,6 +102,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 
 	return &apiServerComponent{
 		installation:                installation,
+		hostNetwork:                 hostNetwork,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		amazonCloudIntegration:      aci,
@@ -124,6 +126,7 @@ type apiServerComponent struct {
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
 	isManagement                bool
+	hostNetwork                 bool
 	clusterDomain               string
 	apiServerImage              string
 	queryServerImage            string
@@ -632,7 +635,7 @@ rules:
 func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	var replicas int32 = 1
 
-	hostNetwork := false
+	hostNetwork := c.hostNetwork
 	dnsPolicy := corev1.DNSClusterFirst
 	if c.installation.KubernetesProvider == operator.ProviderEKS &&
 		c.installation.CNI.Type == operator.PluginCalico {

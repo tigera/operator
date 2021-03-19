@@ -101,23 +101,26 @@ type AuthenticationOIDC struct {
 	// +kubebuilder:validation:Enum=Verify;InsecureSkip
 	EmailVerification *EmailVerificationType `json:"emailVerification,omitempty"`
 
-	// PromptTypes is an optional list of string values that specifies whether the authorization server prompts the end user
-	// for re-authentication and consent. The defined values are: ["None", "Login", "Consent", "SelectAccount"].
+	// PromptTypes is an optional list of string values that specifies whether the identity provider prompts the end user
+	// for re-authentication and consent. See the RFC for more information on prompt types:
+	// https://openid.net/specs/openid-connect-core-1_0.html. The defined values are:
+	// ["None", "Login", "Consent", "SelectAccount"].
 	// +optional
 	PromptTypes []PromptType `json:"promptTypes,omitempty"`
 }
 
-// See the RFC for more information on prompt types: https://openid.net/specs/openid-connect-core-1_0.html
+// PromptType is a value that specifies whether the identity provider prompts the end user for re-authentication and
+// consent. See the RFC for more information on prompt types: https://openid.net/specs/openid-connect-core-1_0.html
 type PromptType string
 
 const (
-	// The Authorization Server MUST NOT display any authentication or consent user interface pages.
+	// The identity provider must not display any authentication or consent user interface pages.
 	PromptTypeNone PromptType = "None"
-	// The Authorization Server SHOULD prompt the End-User for reauthentication. If it cannot reauthenticate the End-User, it MUST return an error, typically "login_required".
+	// The identity provider should prompt the end user for reauthentication.
 	PromptTypeLogin PromptType = "Login"
-	// The Authorization Server SHOULD prompt the End-User for consent before returning information to the Client. If it cannot obtain consent, it MUST return an error, typically consent_required.
+	// The identity provider should prompt the end user for consent before returning information to the client.
 	PromptTypeConsent PromptType = "Consent"
-	// The Authorization Server SHOULD prompt the End-User to select a user account.
+	// The identity provider should prompt the end user to select a user account.
 	PromptTypeSelectAccount PromptType = "SelectAccount"
 )
 

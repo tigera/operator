@@ -295,6 +295,8 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType render.OSType) {
 
 	var podSpecs []*v1.PodSpec
 	switch obj.(type) {
+	case *v1.PodTemplate:
+		podSpecs = []*v1.PodSpec{&obj.(*v1.PodTemplate).Template.Spec}
 	case *apps.Deployment:
 		podSpecs = []*v1.PodSpec{&obj.(*apps.Deployment).Spec.Template.Spec}
 	case *apps.DaemonSet:

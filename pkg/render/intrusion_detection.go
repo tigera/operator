@@ -107,7 +107,7 @@ func (c *intrusionDetectionComponent) SupportedOSType() OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{createNamespace(IntrusionDetectionNamespace, c.openshift)}
+	objs := []client.Object{createNamespace(IntrusionDetectionNamespace, c.installation.KubernetesProvider)}
 	objs = append(objs, copyImagePullSecrets(c.pullSecrets, IntrusionDetectionNamespace)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secretsToRuntimeObjects(CopySecrets(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)
@@ -182,7 +182,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
-	kScheme, kHost, kPort, _ := ParseEndpoint(fmt.Sprintf(KibanaHTTPSEndpoint, c.clusterDomain))
+	kScheme, kHost, kPort, _ := ParseEndpoint(KibanaHTTPSEndpoint(c.SupportedOSType(), c.clusterDomain))
+
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
 		Name:  "elasticsearch-job-installer",

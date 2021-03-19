@@ -20,6 +20,7 @@ import (
 	"github.com/onsi/gomega/gstruct"
 
 	apps "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -235,6 +236,68 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(na).To(Equal(pfts))
 	})
 
+	It("should include virtual kubelet affinity for aks", func() {
+		installation.KubernetesProvider = operator.ProviderAKS
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		resources, _ := component.Objects()
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		Expect(na).To(Equal(&v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{{
+			MatchExpressions: []v1.NodeSelectorRequirement{
+				{
+					Key:      "type",
+					Operator: corev1.NodeSelectorOpNotIn,
+					Values:   []string{"virtual-node"},
+				},
+				{
+					Key:      "kubernetes.azure.com/cluster",
+					Operator: "Exists",
+				},
+			},
+		}}}))
+	})
+
+	It("should combine virtual kubelet with user-specified affinity for aks", func() {
+		pfts := []v1.PreferredSchedulingTerm{{
+			Weight: 100,
+			Preference: v1.NodeSelectorTerm{
+				MatchFields: []v1.NodeSelectorRequirement{{
+					Key:      "foo",
+					Operator: "in",
+					Values:   []string{"foo", "bar"},
+				}},
+			},
+		}}
+		installation.KubernetesProvider = operator.ProviderAKS
+		installation.TyphaAffinity = &operator.TyphaAffinity{
+			NodeAffinity: &operator.PreferredNodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
+			},
+		}
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		resources, _ := component.Objects()
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity
+		Expect(na.PreferredDuringSchedulingIgnoredDuringExecution).To(Equal(pfts))
+		Expect(na.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(Equal([]v1.NodeSelectorTerm{{
+			MatchExpressions: []v1.NodeSelectorRequirement{
+				{
+					Key:      "type",
+					Operator: corev1.NodeSelectorOpNotIn,
+					Values:   []string{"virtual-node"},
+				},
+				{
+					Key:      "kubernetes.azure.com/cluster",
+					Operator: "Exists",
+				},
+			},
+		}}))
+	})
+
 	It("should render all resources when certificate management is enabled", func() {
 		installation.CertificateManagement = &operator.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
 		expectedResources := []struct {
@@ -273,5 +336,41 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
 		ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
+	})
+	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
+		installation.Variant = operator.TigeraSecureEnterprise
+		installation.TyphaMetricsPort = nil
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		notExpectedEnvVar := v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED"}
+		d := dResource.(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(notExpectedEnvVar))
+	})
+
+	It("should set TYPHA_PROMETHEUSMETRICSPORT with a custom value if TyphaMetricsPort is set", func() {
+		var typhaMetricsPort int32 = 1234
+		installation.Variant = operator.TigeraSecureEnterprise
+		installation.TyphaMetricsPort = &typhaMetricsPort
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		d := dResource.(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: "1234"}))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"}))
+
+		// Assert we set annotations properly.
+		Expect(d.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+		Expect(d.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
 	})
 })

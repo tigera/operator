@@ -101,7 +101,7 @@ func ConvertSecretToCredential(s *corev1.Secret) (*AmazonCredential, error) {
 
 func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(AmazonCloudIntegrationNamespace, c.openshift),
+		createNamespace(AmazonCloudIntegrationNamespace, c.installation.KubernetesProvider),
 	}
 	secrets := copyImagePullSecrets(c.pullSecrets, AmazonCloudIntegrationNamespace)
 	objs = append(objs, secrets...)

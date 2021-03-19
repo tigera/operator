@@ -47,9 +47,6 @@ const (
 )
 
 var (
-	// The port used by calico/node to report Calico Enterprise internal metrics.
-	// This is separate from the calico/node prometheus metrics port, which is user configurable.
-	nodeReporterPort int32 = 9081
 	// The port used by calico/node to report Calico Enterprise BGP metrics.
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
@@ -65,32 +62,35 @@ func Node(
 	migrate bool,
 	nodeAppArmorProfile string,
 	clusterDomain string,
+	nodeReporterMetricsPort int,
 ) Component {
 	return &nodeComponent{
-		k8sServiceEp:        k8sServiceEp,
-		cr:                  cr,
-		birdTemplates:       bt,
-		typhaNodeTLS:        tnTLS,
-		amazonCloudInt:      aci,
-		migrationNeeded:     migrate,
-		nodeAppArmorProfile: nodeAppArmorProfile,
-		clusterDomain:       clusterDomain,
+		k8sServiceEp:            k8sServiceEp,
+		cr:                      cr,
+		birdTemplates:           bt,
+		typhaNodeTLS:            tnTLS,
+		amazonCloudInt:          aci,
+		migrationNeeded:         migrate,
+		nodeAppArmorProfile:     nodeAppArmorProfile,
+		clusterDomain:           clusterDomain,
+		nodeReporterMetricsPort: nodeReporterMetricsPort,
 	}
 }
 
 type nodeComponent struct {
-	k8sServiceEp        k8sapi.ServiceEndpoint
-	cr                  *operator.InstallationSpec
-	birdTemplates       map[string]string
-	typhaNodeTLS        *TyphaNodeTLS
-	amazonCloudInt      *operator.AmazonCloudIntegration
-	migrationNeeded     bool
-	nodeAppArmorProfile string
-	clusterDomain       string
-	nodeImage           string
-	cniImage            string
-	flexvolImage        string
-	certSignReqImage    string
+	k8sServiceEp            k8sapi.ServiceEndpoint
+	cr                      *operator.InstallationSpec
+	birdTemplates           map[string]string
+	typhaNodeTLS            *TyphaNodeTLS
+	amazonCloudInt          *operator.AmazonCloudIntegration
+	migrationNeeded         bool
+	nodeAppArmorProfile     string
+	clusterDomain           string
+	nodeImage               string
+	cniImage                string
+	flexvolImage            string
+	certSignReqImage        string
+	nodeReporterMetricsPort int
 }
 
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
@@ -1082,7 +1082,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []v1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort)},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.nodeReporterMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -1211,8 +1211,8 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 			Ports: []v1.ServicePort{
 				{
 					Name:       "calico-metrics-port",
-					Port:       nodeReporterPort,
-					TargetPort: intstr.FromInt(int(nodeReporterPort)),
+					Port:       int32(c.nodeReporterMetricsPort),
+					TargetPort: intstr.FromInt(c.nodeReporterMetricsPort),
 					Protocol:   v1.ProtocolTCP,
 				},
 				{

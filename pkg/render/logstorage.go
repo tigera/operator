@@ -52,23 +52,24 @@ const (
 	ECKLicenseConfigMapName = "elastic-licensing"
 
 	ElasticsearchNamespace                = "tigera-elasticsearch"
-	ElasticsearchHTTPURL                  = "tigera-secure-es-http.tigera-elasticsearch.svc.%s"
-	ElasticsearchHTTPSEndpoint            = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
+	elasticsearchHTTPSEndpoint            = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	elasticsearchHTTPSFQDNEndpoint        = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
 	ElasticsearchName                     = "tigera-secure"
 	ElasticsearchConfigMapName            = "tigera-secure-elasticsearch"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 
-	KibanaHTTPURL          = "tigera-secure-kb-http.tigera-kibana.svc.%s"
-	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName             = "tigera-secure"
-	KibanaNamespace        = "tigera-kibana"
-	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
-	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
-	KibanaBasePath         = "tigera-kibana"
-	KibanaServiceName      = "tigera-secure-kb-http"
+	KibanaHTTPURL           = "tigera-secure-kb-http.tigera-kibana.svc.%s"
+	kibanaHTTPSEndpoint     = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	kibanaHTTPSFQDNEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
+	KibanaName              = "tigera-secure"
+	KibanaNamespace         = "tigera-kibana"
+	KibanaPublicCertSecret  = "tigera-secure-kb-http-certs-public"
+	TigeraKibanaCertSecret  = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath   = "/etc/ssl/kibana/ca.pem"
+	KibanaBasePath          = "tigera-kibana"
+	KibanaServiceName       = "tigera-secure-kb-http"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -158,9 +159,7 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticsearchLicenseType,
-	oidcUserConfigMap *corev1.ConfigMap,
-	oidcUserSecret *corev1.Secret) Component {
+	elasticLicenseType ElasticsearchLicenseType) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -181,8 +180,6 @@ func LogStorage(
 		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
 		elasticLicenseType:          elasticLicenseType,
-		oidcUserConfigMap:           oidcUserConfigMap,
-		oidcUserSecret:              oidcUserSecret,
 	}
 }
 
@@ -205,8 +202,6 @@ type elasticsearchComponent struct {
 	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
 	elasticLicenseType          ElasticsearchLicenseType
-	oidcUserConfigMap           *corev1.ConfigMap
-	oidcUserSecret              *corev1.Secret
 	esImage                     string
 	esOperatorImage             string
 	kibanaImage                 string
@@ -289,7 +284,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// ECK CRs
 		toCreate = append(toCreate,
-			createNamespace(ECKOperatorNamespace, es.provider == operatorv1.ProviderOpenShift),
+			createNamespace(ECKOperatorNamespace, es.installation.KubernetesProvider),
 		)
 
 		toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(ECKOperatorNamespace, es.pullSecrets...)...)...)
@@ -320,7 +315,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 		// Elasticsearch CRs
-		toCreate = append(toCreate, createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift))
+		toCreate = append(toCreate, createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider))
 
 		if len(es.pullSecrets) > 0 {
 			toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(ElasticsearchNamespace, es.pullSecrets...)...)...)
@@ -341,7 +336,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
 
 		// Kibana CRs
-		toCreate = append(toCreate, createNamespace(KibanaNamespace, false))
+		toCreate = append(toCreate, createNamespace(KibanaNamespace, es.installation.KubernetesProvider))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.pullSecrets) > 0 {
@@ -378,17 +373,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.oidcUserRole()...)
 		toCreate = append(toCreate, es.oidcUserRoleBinding()...)
 
-		// OIDCUsersConfigMapName and OIDCUsersEsSecreteName should be created only once
-		// when the external IdP is set and Elasticsearch uses basic license.
-		// If external IdP is not configured or if Elasticsearch is not using Basic license, delete these objects if available.
-		if es.elasticLicenseType == ElasticsearchLicenseTypeBasic && es.dexCfg != nil {
-			toCreate = append(toCreate, es.oidcUserConfigMap)
-			toCreate = append(toCreate, es.oidcUserSecret)
-		} else {
-			toDelete = append(toDelete, es.oidcUserConfigMap)
-			toDelete = append(toDelete, es.oidcUserSecret)
-		}
-
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
 		// service as it differs between these cluster types
 		if es.esService != nil && es.esService.Spec.Type == corev1.ServiceTypeExternalName {
@@ -400,8 +384,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	} else {
 		toCreate = append(toCreate,
-			createNamespace(ElasticsearchNamespace, es.provider == operatorv1.ProviderOpenShift),
-			createNamespace(KibanaNamespace, es.provider == operatorv1.ProviderOpenShift),
+			createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
+			createNamespace(KibanaNamespace, es.installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
 			es.kibanaExternalService(),
 		)
@@ -853,7 +837,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"claims.principal":            es.dexCfg.UsernameClaim(),
 			"claims.groups":               es.dexCfg.GroupsClaim(),
 			"rp.response_type":            "code",
-			"rp.requested_scopes":         es.dexCfg.RequestedScopes(),
+			"rp.requested_scopes":         []string{"openid", "email", "profile", "groups", "offline_access"},
 			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerURI()),
 			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
@@ -1479,13 +1463,13 @@ func (es elasticsearchComponent) oidcUserRole() []client.Object {
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
 					ResourceNames: []string{OIDCUsersConfigMapName},
-					Verbs:         []string{"get", "list", "watch"},
+					Verbs:         []string{"get", "list", "watch", "create", "delete"},
 				},
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
 					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"update", "get"},
+					Verbs:         []string{"get", "list", "watch", "create", "update", "delete"},
 				},
 			},
 		},
@@ -1592,4 +1576,22 @@ func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrid
 		updatedReq.Requests["storage"] = userOverrides.Requests["storage"]
 	}
 	return updatedReq
+}
+
+func ElasticsearchHTTPSEndpoint(osType OSType, clusterDomain string) string {
+	// If this is for Windows, use the clusterDomain to get the FQDN version of
+	// the ES https endpoint.
+	if osType == OSTypeWindows {
+		return fmt.Sprintf(elasticsearchHTTPSFQDNEndpoint, clusterDomain)
+	}
+	return elasticsearchHTTPSEndpoint
+}
+
+func KibanaHTTPSEndpoint(osType OSType, clusterDomain string) string {
+	// If this is for Windows, use the clusterDomain to get the FQDN version of
+	// the Kibana https endpoint.
+	if osType == OSTypeWindows {
+		return fmt.Sprintf(kibanaHTTPSFQDNEndpoint, clusterDomain)
+	}
+	return kibanaHTTPSEndpoint
 }

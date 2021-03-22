@@ -156,11 +156,11 @@ spec:
                       that specifies whether the identity provider prompts the end
                       user for re-authentication and consent. See the RFC for more
                       information on prompt types: https://openid.net/specs/openid-connect-core-1_0.html.
-                      Default: "Consent".'
+                      Default: "Consent"'
                     items:
-                      description: PromptType is a value that specifies whether the
+                      description: 'PromptType is a value that specifies whether the
                         identity provider prompts the end user for re-authentication
-                        and consent.
+                        and consent. One of: None, Login, Consent, SelectAccount.'
                       enum:
                       - None
                       - Login

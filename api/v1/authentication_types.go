@@ -104,13 +104,14 @@ type AuthenticationOIDC struct {
 	// PromptTypes is an optional list of string values that specifies whether the identity provider prompts the end user
 	// for re-authentication and consent. See the RFC for more information on prompt types:
 	// https://openid.net/specs/openid-connect-core-1_0.html.
-	// Default: "Consent".
+	// Default: "Consent"
 	// +optional
 	PromptTypes []PromptType `json:"promptTypes,omitempty"`
 }
 
 // PromptType is a value that specifies whether the identity provider prompts the end user for re-authentication and
 // consent.
+// One of: None, Login, Consent, SelectAccount.
 // +kubebuilder:validation:Enum=None;Login;Consent;SelectAccount
 type PromptType string
 

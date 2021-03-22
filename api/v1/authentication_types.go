@@ -100,7 +100,31 @@ type AuthenticationOIDC struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Verify;InsecureSkip
 	EmailVerification *EmailVerificationType `json:"emailVerification,omitempty"`
+
+	// PromptTypes is an optional list of string values that specifies whether the identity provider prompts the end user
+	// for re-authentication and consent. See the RFC for more information on prompt types:
+	// https://openid.net/specs/openid-connect-core-1_0.html. The defined values are:
+	// ["None", "Login", "Consent", "SelectAccount"].
+	// +optional
+	PromptTypes []PromptType `json:"promptTypes,omitempty"`
 }
+
+// PromptType is a value that specifies whether the identity provider prompts the end user for re-authentication and
+// consent. See the RFC for more information on prompt types: https://openid.net/specs/openid-connect-core-1_0.html
+// The defined values are: ["None", "Login", "Consent", "SelectAccount"].
+// +kubebuilder:validation:Enum=None;Login;Consent;SelectAccount
+type PromptType string
+
+const (
+	// The identity provider must not display any authentication or consent user interface pages.
+	PromptTypeNone PromptType = "None"
+	// The identity provider should prompt the end user for reauthentication.
+	PromptTypeLogin PromptType = "Login"
+	// The identity provider should prompt the end user for consent before returning information to the client.
+	PromptTypeConsent PromptType = "Consent"
+	// The identity provider should prompt the end user to select a user account.
+	PromptTypeSelectAccount PromptType = "SelectAccount"
+)
 
 // AuthenticationOpenshift is the configuration needed to setup Openshift.
 type AuthenticationOpenshift struct {

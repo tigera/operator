@@ -151,6 +151,25 @@ spec:
                   issuerURL:
                     description: IssuerURL is the URL to the OIDC provider.
                     type: string
+                  promptTypes:
+                    description: 'PromptTypes is an optional list of string values
+                      that specifies whether the identity provider prompts the end
+                      user for re-authentication and consent. See the RFC for more
+                      information on prompt types: https://openid.net/specs/openid-connect-core-1_0.html.
+                      The defined values are: ["None", "Login", "Consent", "SelectAccount"].'
+                    items:
+                      description: 'PromptType is a value that specifies whether the
+                        identity provider prompts the end user for re-authentication
+                        and consent. See the RFC for more information on prompt types:
+                        https://openid.net/specs/openid-connect-core-1_0.html The
+                        defined values are: ["None", "Login", "Consent", "SelectAccount"].'
+                      enum:
+                      - None
+                      - Login
+                      - Consent
+                      - SelectAccount
+                      type: string
+                    type: array
                   requestedScopes:
                     description: 'RequestedScopes is a list of scopes to request from
                       the OIDC provider. If not provided, the following scopes are

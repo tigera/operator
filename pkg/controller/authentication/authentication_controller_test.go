@@ -360,5 +360,14 @@ var _ = Describe("authentication controller tests", func() {
 		Entry("Expect 0 configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{}}, false),
 		Entry("Expect two configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap}}, false),
 		Entry("Expect three configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap, Openshift: ocp}}, false),
+		Entry("Expect prompt type to be used without other values", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone})}}, true),
+		Entry("Expect prompt type to fail when none is combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone, operatorv1.PromptTypeLogin})}}, false),
+		Entry("Expect prompt type to be able to be combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin})}}, true),
 	)
 })
+
+func copyAndAddPromptTypes(auth *operatorv1.AuthenticationOIDC, promptTypes []operatorv1.PromptType) *operatorv1.AuthenticationOIDC {
+	copy := auth.DeepCopy()
+	copy.PromptTypes = promptTypes
+	return copy
+}

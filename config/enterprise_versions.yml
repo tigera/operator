@@ -2,7 +2,7 @@ title: v3.5.0
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.5.1-1
+    version: tesla-v3.5.1-1
   voltron:
     image: tigera/voltron
     version: v3.5.0
@@ -37,7 +37,8 @@ components:
     version: v3.5.0
   kibana:
     image: tigera/kibana
-    version: v3.5.0
+    version: tesla
+    -v3.5.0
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator

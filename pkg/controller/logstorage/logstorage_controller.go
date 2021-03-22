@@ -64,7 +64,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient(), opts.ClusterDomain)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage"), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain)
 	if err != nil {
 		return err
 	}
@@ -73,13 +73,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esClient utils.ElasticClient, clusterDomain string) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
 		client:        cli,
 		scheme:        schema,
 		status:        statusMgr,
 		provider:      provider,
-		esClient:      esClient,
+		esCliCreator:  esCliCreator,
 		clusterDomain: clusterDomain,
 	}
 
@@ -219,7 +219,7 @@ type ReconcileLogStorage struct {
 	scheme        *runtime.Scheme
 	status        status.StatusManager
 	provider      operatorv1.Provider
-	esClient      utils.ElasticClient
+	esCliCreator  utils.ElasticsearchClientCreator
 	clusterDomain string
 }
 
@@ -372,8 +372,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *render.ElasticsearchClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
-	var oidcUserConfigMap *corev1.ConfigMap
-	var oidcUserSecret *corev1.Secret
 	applyTrial := false
 
 	if managementClusterConnection == nil {
@@ -429,15 +427,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			}
 		}
 
-		if oidcUserConfigMap, err = r.getOIDCUserConfigMap(ctx); err != nil {
-			r.status.SetDegraded("Failed to read oid user configmap", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if oidcUserSecret, err = r.oidcUsersEsSecret(ctx); err != nil {
-			r.status.SetDegraded("Failed to read oid user secret", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -512,8 +501,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		applyTrial,
 		dexCfg,
 		esLicenseType,
-		oidcUserConfigMap,
-		oidcUserSecret,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -546,11 +533,27 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// ES should be in ready phase when execution reaches here, apply ILM polices
-		esEndpoint := fmt.Sprintf(render.ElasticsearchHTTPSEndpoint, r.clusterDomain)
-		if err = r.esClient.SetILMPolicies(r.client, ctx, ls, esEndpoint); err != nil {
+		esClient, err := r.esCliCreator(r.client, ctx, render.ElasticsearchHTTPSEndpoint(component.SupportedOSType(), r.clusterDomain))
+		if err != nil {
+			reqLogger.Error(err, "failed to create the Elasticsearch client")
+			r.status.SetDegraded("Failed to connect to Elasticsearch", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err = esClient.SetILMPolicies(ctx, ls); err != nil {
 			reqLogger.Error(err, "failed to create or update Elasticsearch lifecycle policies")
 			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
 			return reconcile.Result{}, err
+		}
+
+		// kube-controller creates the ConfigMap and Secret needed for SSO into Kibana.
+		// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
+		// needed for logging user into Kibana is not available.
+		if esLicenseType == render.ElasticsearchLicenseTypeBasic {
+			if err = r.checkOIDCUsersEsResource(ctx); err != nil {
+				r.status.SetDegraded("Failed to get oidc user Secret and ConfigMap", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -603,15 +606,21 @@ func (r *ReconcileLogStorage) elasticsearchSecrets(ctx context.Context) ([]*core
 		return secrets, nil
 	}
 
-	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
-	if err == utils.ErrInvalidCertDNSNames {
-		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
-			return nil, err
-		}
-	} else {
-		// If the cert was not deleted, copy the valid cert to operator namespace.
-		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+	operatorManaged, err := utils.IsOperatorManaged(secret, "tls.crt")
+	if err != nil {
+		return nil, err
 	}
+
+	if operatorManaged {
+		err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err == utils.ErrInvalidCertDNSNames {
+			if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// If the cert was not deleted, copy the valid cert to operator namespace.
+	secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
 
 	return secrets, nil
 }
@@ -659,15 +668,22 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context) ([]*corev1.Secr
 		return secrets, nil
 	}
 
-	err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
-	if err == utils.ErrInvalidCertDNSNames {
-		if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
-			return nil, err
-		}
-	} else {
-		// If the cert was not deleted, copy the valid cert to operator namespace.
-		secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
+	operatorManaged, err := utils.IsOperatorManaged(secret, "tls.crt")
+	if err != nil {
+		return nil, err
 	}
+
+	if operatorManaged {
+		err = utils.SecretHasExpectedDNSNames(pubSecret, "tls.crt", svcDNSNames)
+		if err == utils.ErrInvalidCertDNSNames {
+			if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// If the cert was not deleted, copy the valid cert to operator namespace.
+	secrets = append(secrets, render.CopySecrets(render.OperatorNamespace(), pubSecret)...)
 
 	return secrets, nil
 }
@@ -720,38 +736,15 @@ func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Ser
 	return &svc, nil
 }
 
-func (r *ReconcileLogStorage) getOIDCUserConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, cm); err != nil {
-		if errors.IsNotFound(err) {
-			return &corev1.ConfigMap{
-				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCUsersConfigMapName,
-					Namespace: render.ElasticsearchNamespace,
-				},
-			}, nil
-		}
-		return nil, err
+func (r *ReconcileLogStorage) checkOIDCUsersEsResource(ctx context.Context) error {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersConfigMapName, Namespace: render.ElasticsearchNamespace}, &corev1.ConfigMap{}); err != nil {
+		return err
 	}
-	return cm, nil
-}
 
-func (r *ReconcileLogStorage) oidcUsersEsSecret(ctx context.Context) (*corev1.Secret, error) {
-	secret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersEsSecreteName, Namespace: render.ElasticsearchNamespace}, secret); err != nil {
-		if errors.IsNotFound(err) {
-			return &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.OIDCUsersEsSecreteName,
-					Namespace: render.ElasticsearchNamespace,
-				},
-			}, nil
-		}
-		return nil, err
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersEsSecreteName, Namespace: render.ElasticsearchNamespace}, &corev1.Secret{}); err != nil {
+		return err
 	}
-	return secret, nil
+	return nil
 }
 
 func calculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

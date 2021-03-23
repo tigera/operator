@@ -94,12 +94,6 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
-	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
-		if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-		}
-	}
-
 	if r.amazonCRDExists {
 		err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -119,6 +113,12 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+		}
+
+		for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
+			if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
+				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+			}
 		}
 	}
 
@@ -184,6 +184,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	variant := network.Variant
 	freshInstall := statusVariant == ""
 
+	ns := "calico-system"
+	if variant == operatorv1.TigeraSecureEnterprise {
+		ns = render.APIServerNamespace
+	}
+
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
@@ -199,12 +204,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded("Error validating TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
-		r.status.RemoveCertificateSigningRequests(render.APIServerNamespace)
+		r.status.RemoveCertificateSigningRequests(ns)
 	} else {
 		// Monitor pending CSRs for the TigeraStatus
-		r.status.AddCertificateSigningRequests(render.APIServerNamespace, map[string]string{
-			"k8s-app": render.APIServerNamespace,
-		})
+		r.status.AddCertificateSigningRequests(ns, map[string]string{"k8s-app": ns})
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)

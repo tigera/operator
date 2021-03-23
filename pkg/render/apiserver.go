@@ -61,7 +61,12 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
-	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, clusterDomain)
+
+	ns := "calico-system"
+	if installation.Variant == operator.TigeraSecureEnterprise {
+		ns = "tigera-system"
+	}
+	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, ns, clusterDomain)
 
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
@@ -86,7 +91,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
 			Name:      APIServerTLSSecretName,
-			Namespace: APIServerNamespace,
+			Namespace: ns,
 		}
 		tlsSecrets = append(tlsSecrets, copy)
 	}
@@ -96,7 +101,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(APIServerNamespace, tunnelCASecret)...)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ns, tunnelCASecret)...)
 		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelCASecret.Data)
 	}
 
@@ -131,6 +136,13 @@ type apiServerComponent struct {
 	apiServerImage              string
 	queryServerImage            string
 	certSignReqImage            string
+}
+
+func (c *apiServerComponent) namespace() string {
+	if c.installation.Variant == operator.TigeraSecureEnterprise {
+		return "tigera-system"
+	}
+	return "calico-system"
 }
 
 func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -173,40 +185,52 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
+	// Namespace depends on whether this is OSS or Enterprise. For Enterprise,
+	// the API server gets its own tigera-system namespace.
+	objsToCreate := []client.Object{}
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Create the tigera-system namespace.
+		objsToCreate = append(objsToCreate, createNamespace(c.namespace(), c.installation.KubernetesProvider))
+	} else {
+		// Create the calico-system namespace
+		objsToCreate = append(objsToCreate, createNamespace("calico-system", c.installation.KubernetesProvider))
+	}
 
-	// Objects used by Calico as well as Calico Enterprise
-	objs := []client.Object{
-		createNamespace(APIServerNamespace, c.installation.KubernetesProvider),
-		c.apiServerServiceAccount(),
+	// Add in all cluster-scoped resources that are shared between Calico and Calico Enterprise.
+	objsToCreate = append(objsToCreate,
 		c.apiServiceAccountClusterRole(),
 		c.apiServiceAccountClusterRoleBinding(),
 		c.delegateAuthClusterRoleBinding(),
 		c.authClusterRole(),
 		c.authClusterRoleBinding(),
 		c.authReaderRoleBinding(),
-		c.apiServer(),
-		c.apiServerService(),
 		c.webhookReaderClusterRole(),
 		c.webhookReaderClusterRoleBinding(),
-	}
-	secrets := secret.CopyToNamespace(APIServerNamespace, c.pullSecrets...)
-	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)
-
-	if c.installation.CertificateManagement == nil {
-		objs = append(objs, c.getTLSObjects()...)
-		objs = append(objs, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
-	} else {
-		objs = append(objs, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
-		objs = append(objs, csrClusterRoleBinding("tigera-apiserver", APIServerNamespace))
-	}
-
+	)
 	if !c.openshift {
-		objs = append(objs, c.apiServerPodSecurityPolicy())
+		objsToCreate = append(objsToCreate, c.apiServerPodSecurityPolicy())
+	}
+
+	// Namespaced objects that are shared between Calico and Calico Enterprise.
+	// These objects need to have their namespace adjusted appropriately.
+	objsToCreate = append(objsToCreate,
+		c.apiServerServiceAccount(),
+		c.apiServer(),
+		c.apiServerService(),
+	)
+	secrets := secret.CopyToNamespace(c.namespace(), c.pullSecrets...)
+	objsToCreate = append(objsToCreate, secret.ToRuntimeObjects(secrets...)...)
+	if c.installation.CertificateManagement == nil {
+		objsToCreate = append(objsToCreate, c.getTLSObjects()...)
+		objsToCreate = append(objsToCreate, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
+	} else {
+		objsToCreate = append(objsToCreate, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
+		objsToCreate = append(objsToCreate, csrClusterRoleBinding("tigera-apiserver", c.namespace()))
 	}
 
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// Add objects used only by Calico Enterprise
-		objs = append(objs,
+		// Add objects used only by Calico Enterprise.
+		objsToCreate = append(objsToCreate,
 			c.k8sRoleBinding(),
 			c.tigeraUserClusterRole(),
 			c.tigeraNetworkAdminClusterRole(),
@@ -217,7 +241,32 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
-	return objs, nil
+	return objsToCreate, c.objectsToDelete()
+}
+
+// objectsToDelete returns the objects we should attempt to delete baed on the given
+// configuration. This is used to clean up OSS objects when switching to enterprise,
+// and vice-versa.
+func (c *apiServerComponent) objectsToDelete() []client.Object {
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// This is a Calico Enterprise cluster, delete Calico resources.
+		// Cluster scoped resources will be updated in place. We mostly need to delete
+		// any resources that were provisioned into the calico-system namespace.
+		// - Deployment
+		// - ServiceAccount
+		// - Service
+		return []client.Object{
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "calico-system", Name: "tigera-apiserver"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: "calico-system", Name: "tigera-apiserver"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: "calico-system", Name: "tigera-apiserver"}},
+		}
+	} else {
+		// This is a Calico cluster, delete Enterprise resources. We can do this
+		// by deleting the "tigera-system" namespace and letting GC take over.
+		return []client.Object{
+			createNamespace("tigera-system", ""),
+		}
+	}
 }
 
 func (c *apiServerComponent) Ready() bool {
@@ -237,7 +286,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
 				Name:      APIServiceName,
-				Namespace: APIServerNamespace,
+				Namespace: c.namespace(),
 			},
 			Version:  "v3",
 			CABundle: cert,
@@ -310,7 +359,7 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() *rbacv1.ClusterRol
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-apiserver",
-				Namespace: APIServerNamespace,
+				Namespace: c.namespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -340,7 +389,7 @@ func (c *apiServerComponent) authReaderRoleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-apiserver",
-				Namespace: APIServerNamespace,
+				Namespace: c.namespace(),
 			},
 		},
 	}
@@ -352,7 +401,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-apiserver",
-			Namespace: APIServerNamespace,
+			Namespace: c.namespace(),
 		},
 	}
 }
@@ -444,7 +493,7 @@ func (c *apiServerComponent) apiServiceAccountClusterRoleBinding() *rbacv1.Clust
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-apiserver",
-				Namespace: APIServerNamespace,
+				Namespace: c.namespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -506,7 +555,7 @@ func (c *apiServerComponent) authClusterRoleBinding() *rbacv1.ClusterRoleBinding
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-apiserver",
-				Namespace: APIServerNamespace,
+				Namespace: c.namespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -553,7 +602,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRo
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-apiserver",
-				Namespace: APIServerNamespace,
+				Namespace: c.namespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -570,7 +619,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-api",
-			Namespace: APIServerNamespace,
+			Namespace: c.namespace(),
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -623,7 +672,7 @@ rules:
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-audit-policy",
-			Namespace: APIServerNamespace,
+			Namespace: c.namespace(),
 		},
 		Data: map[string]string{
 			"config": defaultAuditPolicy,
@@ -656,15 +705,15 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 			APIServerTLSSecretName, TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, c.clusterDomain),
-			APIServerNamespace))
+			dns.GetServiceDNSNames(APIServiceName, c.namespace(), c.clusterDomain),
+			c.namespace()))
 	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-apiserver",
-			Namespace: APIServerNamespace,
+			Namespace: c.namespace(),
 			Labels: map[string]string{
 				"apiserver": "true",
 				"k8s-app":   "tigera-apiserver",
@@ -679,7 +728,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tigera-apiserver",
-					Namespace: APIServerNamespace,
+					Namespace: c.namespace(),
 					Labels: map[string]string{
 						"apiserver": "true",
 						"k8s-app":   "tigera-apiserver",

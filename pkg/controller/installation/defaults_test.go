@@ -20,11 +20,12 @@ import (
 	. "github.com/onsi/gomega"
 
 	osconfigv1 "github.com/openshift/api/config/v1"
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
@@ -404,7 +405,12 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
-			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			iptables := operator.LinuxDataplaneIptables
+			bgpDisabled := operator.BGPDisabled
+			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
+				LinuxDataplane: &iptables,
+				BGP:            &bgpDisabled,
+			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
@@ -421,7 +427,12 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
-			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			iptables := operator.LinuxDataplaneIptables
+			bgpDisabled := operator.BGPDisabled
+			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
+				LinuxDataplane: &iptables,
+				BGP:            &bgpDisabled,
+			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
@@ -462,7 +473,12 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 			err := fillDefaults(instance)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			iptables := operator.LinuxDataplaneIptables
+			bgpDisabled := operator.BGPDisabled
+			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
+				LinuxDataplane: &iptables,
+				BGP:            &bgpDisabled,
+			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 

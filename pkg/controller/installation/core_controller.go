@@ -449,122 +449,151 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	// Default any unspecified fields within the CalicoNetworkSpec.
-	var v4pool, v6pool *operator.IPPool
-	if instance.Spec.CalicoNetwork != nil {
-		// Default IP pools, only if it is nil. If it is an empty slice then that
-		// means no default IPPools should be created.
-		if instance.Spec.CalicoNetwork.IPPools == nil {
+	if instance.Spec.CalicoNetwork == nil {
+		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	}
+
+	// Default dataplane is iptables.
+	if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
+		dpIptables := operator.LinuxDataplaneIptables
+		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
+	}
+
+	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
+	// Only default IP pools if we're using Calico IPAM, otherwise there's no-one to use the IP pool.
+	if instance.Spec.CalicoNetwork.IPPools == nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
+		switch instance.Spec.KubernetesProvider {
+		case operator.ProviderEKS:
+			// On EKS, default to a CIDR that doesn't overlap with the host range,
+			// and also use VXLAN encap by default.
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "172.16.0.0/16",
+					Encapsulation: operator.EncapsulationVXLAN,
+				},
+			}
+		default:
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{CIDR: "192.168.0.0/16"},
+			}
+		}
+	}
+
+	// Default BGP enablement based on CNI plugin and provider.
+	if instance.Spec.CalicoNetwork.BGP == nil {
+		enabled := operator.BGPEnabled
+		disabled := operator.BGPDisabled
+		switch instance.Spec.CNI.Type {
+		case operator.PluginCalico:
 			switch instance.Spec.KubernetesProvider {
 			case operator.ProviderEKS:
-				// On EKS, default to a CIDR that doesn't overlap with the host range,
-				// and also use VXLAN encap by default.
-				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-					{
-						CIDR:          "172.16.0.0/16",
-						Encapsulation: operator.EncapsulationVXLAN,
-					},
-				}
-			default:
-				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-					{CIDR: "192.168.0.0/16"},
-				}
-			}
-		}
-
-		// Default BGP enablement based on CNI plugin and provider.
-		if instance.Spec.CalicoNetwork.BGP == nil {
-			enabled := operator.BGPEnabled
-			disabled := operator.BGPDisabled
-			switch instance.Spec.CNI.Type {
-			case operator.PluginCalico:
-				switch instance.Spec.KubernetesProvider {
-				case operator.ProviderEKS:
-					// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
-					instance.Spec.CalicoNetwork.BGP = &disabled
-				default:
-					// Other platforms assume BGP is needed.
-					instance.Spec.CalicoNetwork.BGP = &enabled
-				}
-			default:
-				// For non-Calico CNIs, assume BGP should be off.
+				// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
 				instance.Spec.CalicoNetwork.BGP = &disabled
+			default:
+				// Other platforms assume BGP is needed.
+				instance.Spec.CalicoNetwork.BGP = &enabled
+			}
+		default:
+			// For non-Calico CNIs, assume BGP should be off.
+			instance.Spec.CalicoNetwork.BGP = &disabled
+		}
+	}
+
+	needIPv4Autodetection := false
+	if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
+		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
+		needIPv4Autodetection = true
+	}
+
+	var v4pool, v6pool *operator.IPPool
+	v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
+	v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
+
+	if v4pool != nil {
+		if v4pool.Encapsulation == "" {
+			if instance.Spec.CNI.Type == operator.PluginCalico {
+				v4pool.Encapsulation = operator.EncapsulationIPIP
+			} else {
+				v4pool.Encapsulation = operator.EncapsulationNone
 			}
 		}
+		if v4pool.NATOutgoing == "" {
+			v4pool.NATOutgoing = operator.NATOutgoingEnabled
+		}
+		if v4pool.NodeSelector == "" {
+			v4pool.NodeSelector = operator.NodeSelectorDefault
+		}
+		if v4pool.BlockSize == nil {
+			var twentySix int32 = 26
+			v4pool.BlockSize = &twentySix
+		}
+		needIPv4Autodetection = true
+	}
 
-		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
-		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
-
-		if v4pool != nil {
-			if v4pool.Encapsulation == "" {
-				if instance.Spec.CNI.Type == operator.PluginCalico {
-					v4pool.Encapsulation = operator.EncapsulationIPIP
-				} else {
-					v4pool.Encapsulation = operator.EncapsulationNone
-				}
+	if needIPv4Autodetection && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+		switch instance.Spec.KubernetesProvider {
+		case operator.ProviderDockerEE:
+			// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
+			// node address, so instead skip the interface br-.
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				SkipInterface: "^br-.*",
 			}
-			if v4pool.NATOutgoing == "" {
-				v4pool.NATOutgoing = operator.NATOutgoingEnabled
+		case operator.ProviderEKS:
+			// EKS uses multiple interfaces to spread load; we want to pick the main interface with the
+			// default route.
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				CanReach: "8.8.8.8",
 			}
-			if v4pool.NodeSelector == "" {
-				v4pool.NodeSelector = operator.NodeSelectorDefault
-			}
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-				if instance.Spec.KubernetesProvider == operator.ProviderDockerEE {
-					// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
-					// node address, so instead skip the interface br-.
-					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-						SkipInterface: "^br-.*",
-					}
-				} else {
-					// Default IPv4 address detection to "first found" if not specified.
-					t := true
-					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-						FirstFound: &t,
-					}
-				}
-			}
-			if v4pool.BlockSize == nil {
-				var twentySix int32 = 26
-				v4pool.BlockSize = &twentySix
+		default:
+			// Default IPv4 address detection to "first found" if not specified.
+			t := true
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				FirstFound: &t,
 			}
 		}
+	}
 
-		if v6pool != nil {
-			if v6pool.Encapsulation == "" {
-				v6pool.Encapsulation = operator.EncapsulationNone
-			}
-			if v6pool.NATOutgoing == "" {
-				v6pool.NATOutgoing = operator.NATOutgoingDisabled
-			}
-			if v6pool.NodeSelector == "" {
-				v6pool.NodeSelector = operator.NodeSelectorDefault
-			}
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
-				// Default IPv6 address detection to "first found" if not specified.
-				t := true
-				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
-					FirstFound: &t,
-				}
-			}
-			if v6pool.BlockSize == nil {
-				var oneTwentyTwo int32 = 122
-				v6pool.BlockSize = &oneTwentyTwo
+	if v6pool != nil {
+		if v6pool.Encapsulation == "" {
+			v6pool.Encapsulation = operator.EncapsulationNone
+		}
+		if v6pool.NATOutgoing == "" {
+			v6pool.NATOutgoing = operator.NATOutgoingDisabled
+		}
+		if v6pool.NodeSelector == "" {
+			v6pool.NodeSelector = operator.NodeSelectorDefault
+		}
+		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+			// Default IPv6 address detection to "first found" if not specified.
+			t := true
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+				FirstFound: &t,
 			}
 		}
+		if v6pool.BlockSize == nil {
+			var oneTwentyTwo int32 = 122
+			v6pool.BlockSize = &oneTwentyTwo
+		}
+	}
 
-		// While a number of the fields in this section are relevant to all CNI plugins,
-		// there are some settings which are currently only applicable if using Calico CNI.
-		// Handle those here.
-		if instance.Spec.CNI.Type == operator.PluginCalico {
-			if instance.Spec.CalicoNetwork.HostPorts == nil {
-				hp := operator.HostPortsEnabled
-				instance.Spec.CalicoNetwork.HostPorts = &hp
+	// While a number of the fields in this section are relevant to all CNI plugins,
+	// there are some settings which are currently only applicable if using Calico CNI.
+	// Handle those here.
+	if instance.Spec.CNI.Type == operator.PluginCalico {
+		if instance.Spec.CalicoNetwork.HostPorts == nil {
+			var hp operator.HostPortsType
+			if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
+				// Host ports not supported with BPF mode.
+				hp = operator.HostPortsDisabled
+			} else {
+				hp = operator.HostPortsEnabled
 			}
+			instance.Spec.CalicoNetwork.HostPorts = &hp
+		}
 
-			if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
-				mm := operator.MultiInterfaceModeNone
-				instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
-			}
+		if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
+			mm := operator.MultiInterfaceModeNone
+			instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
 		}
 	}
 

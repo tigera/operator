@@ -210,8 +210,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToCreate = append(objsToCreate, c.enterpriseOnlyObjects()...)
 	}
 
-	objsToCreate = append(objsToCreate, c.networkPolicies())
-
 	return objsToCreate, c.objectsToDelete()
 }
 
@@ -261,6 +259,7 @@ func (c apiServerComponent) enterpriseOnlyObjects() []client.Object {
 		c.auditPolicyConfigMap(),
 		c.tieredPolicyPassthruClusterRole(),
 		c.tieredPolicyPassthruClusterRolebinding(),
+		c.networkPolicies(),
 	}
 }
 
@@ -1280,14 +1279,13 @@ func (c *apiServerComponent) networkPolicies() *v3.NetworkPolicy {
 	p := v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			//			Name:      "allow-tigera.apiserver-access",
-			Name:      "apiserver-access",
+			Name:      "allow-tigera.apiserver-access",
 			Namespace: rmeta.APIServerNamespace(),
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &order,
 			Tier:     "allow-tigera",
-			Selector: "k8s-app == 'tigera-apiserver'",
+			Selector: "k8s-app == 'calico-apiserver'",
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{

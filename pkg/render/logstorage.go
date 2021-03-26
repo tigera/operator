@@ -1136,6 +1136,10 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"rewriteBasePath": true,
 		},
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
+		"tigera": map[string]interface{}{
+			"enabled":        true,
+			"licenseEdition": "enterpriseEdition",
+		},
 	}
 
 	if es.supportsOIDC() {

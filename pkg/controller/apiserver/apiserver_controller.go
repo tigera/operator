@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -115,7 +114,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
-		for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
+		for _, namespace := range []string{rmeta.OperatorNamespace(), rmeta.APIServerNamespace()} {
 			if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
 				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 			}
@@ -155,24 +154,22 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIServer")
 
-	// Fetch the APIServer instance
-	instance := &operatorv1.APIServer{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("APIServer CR not found", "err", err)
+			reqLogger.Info("APIServer config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
-		r.status.SetDegraded("Error querying APIServer", err.Error())
+		r.status.SetDegraded(msg, err.Error())
+		reqLogger.Error(err, fmt.Sprintf("An error occurred when querying the APIServer resource: %s", msg))
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.
-	statusVariant, network, err := installation.GetInstallation(context.Background(), r.client)
+	statusVariant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -183,11 +180,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	variant := network.Variant
 	freshInstall := statusVariant == ""
-
-	ns := "calico-system"
-	if variant == operatorv1.TigeraSecureEnterprise {
-		ns = render.APIServerNamespace
-	}
+	ns := rmeta.APIServerNamespace()
 
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
@@ -330,8 +323,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 			err = r.client.Create(ctx, &u)
 			if err != nil {
-				r.status.SetDegraded("Error creating / updating resource", err.Error())
-				return reconcile.Result{}, err
+				if !errors.IsAlreadyExists(err) {
+					r.status.SetDegraded("Error creating / updating resource", err.Error())
+					return reconcile.Result{}, err
+				}
 			}
 		}
 	}

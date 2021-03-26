@@ -35,6 +35,7 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -44,7 +45,7 @@ import (
 	"github.com/tigera/operator/test"
 )
 
-var _ = Describe("API server rendering tests", func() {
+var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	var instance *operator.InstallationSpec
 	var managementCluster = &operator.ManagementCluster{Spec: operator.ManagementClusterSpec{Address: "example.com:1234"}}
 	var k8sServiceEp k8sapi.ServiceEndpoint
@@ -52,6 +53,7 @@ var _ = Describe("API server rendering tests", func() {
 	BeforeEach(func() {
 		instance = &operator.InstallationSpec{
 			Registry: "testregistry.com/",
+			Variant:  operatorv1.TigeraSecureEnterprise,
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
@@ -124,7 +126,7 @@ var _ = Describe("API server rendering tests", func() {
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, render.APIServerNamespace, clusterDomain)
+		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, "tigera-system", clusterDomain)
 		operatorCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
@@ -546,7 +548,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: rmeta.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: render.APIServerNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
@@ -568,11 +570,11 @@ var _ = Describe("API server rendering tests", func() {
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
 		operatorTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret")
-		apiServerTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, render.APIServerNamespace, "", "v1", "Secret")
+		apiServerTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, "tigera-system", "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
 
-		dep := rtest.GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 
 		By("Validating startup args")
@@ -628,7 +630,7 @@ var _ = Describe("API server rendering tests", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: render.APIServerNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
@@ -647,7 +649,7 @@ var _ = Describe("API server rendering tests", func() {
 			i++
 		}
 
-		dep := rtest.GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 
 		By("Validating startup args")
@@ -701,7 +703,7 @@ var _ = Describe("API server rendering tests", func() {
 			i++
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
-		dep := rtest.GetResource(resources, "tigera-apiserver", render.APIServerNamespace, "", "v1", "Deployment")
+		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -942,3 +944,285 @@ var (
 		},
 	}
 )
+
+var _ = Describe("API server rendering tests (Calico)", func() {
+	var instance *operator.InstallationSpec
+	var k8sServiceEp k8sapi.ServiceEndpoint
+
+	BeforeEach(func() {
+		instance = &operator.InstallationSpec{
+			Registry: "testregistry.com/",
+			Variant:  operatorv1.Calico,
+		}
+		k8sServiceEp = k8sapi.ServiceEndpoint{}
+	})
+
+	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
+		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, clusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		// - 1 namespace
+		// - 1 ConfigMap audit Policy
+		// - 1 Service account
+		// - 2 ServiceAccount ClusterRole and binding
+		// - 2 ClusterRole and binding for auth configmap
+		// - 2 tiered policy passthru ClusterRole and binding
+		// - 1 delegate auth binding
+		// - 1 auth reader binding
+		// - 2 webhook reader ClusterRole and binding
+		// - 2 cert secrets
+		// - 1 api server
+		// - 1 service registration
+		// - 1 Server service
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		ns := rtest.GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
+		rtest.ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
+		meta := ns.GetObjectMeta()
+		Expect(meta.GetLabels()["name"]).To(Equal("tigera-system"))
+		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
+		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
+
+		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, "tigera-system", clusterDomain)
+		operatorCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue(), "Expected v1.Secret")
+		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
+
+		tigeraCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue(), "Expected v1.Secret")
+		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
+
+		apiService, ok := rtest.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
+		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
+		verifyAPIService(apiService, clusterDomain)
+
+		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+
+		Expect(d.Name).To(Equal("tigera-apiserver"))
+		Expect(len(d.Labels)).To(Equal(2))
+		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
+		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
+
+		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
+		Expect(d.Spec.Strategy.Type).To(Equal(v1.RecreateDeploymentStrategyType))
+		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
+		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
+
+		Expect(d.Spec.Template.Name).To(Equal("tigera-apiserver"))
+		Expect(d.Spec.Template.Namespace).To(Equal("tigera-system"))
+		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
+		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
+		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
+
+		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
+
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
+
+		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
+		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
+			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
+		))
+
+		expectedArgs := []string{
+			"--secure-port=5443",
+			"--audit-policy-file=/etc/tigera/audit/policy.conf",
+			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+		}
+		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
+		Expect(len(d.Spec.Template.Spec.Containers[0].Env)).To(Equal(1))
+		Expect(d.Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("DATASTORE_TYPE"))
+		Expect(d.Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("kubernetes"))
+		Expect(d.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(BeNil())
+
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/var/log/calico/audit"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-audit-logs"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/tigera/audit"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-policy"))
+
+		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
+		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
+		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
+		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
+		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+
+		Expect(*(d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)).To(BeTrue())
+
+		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(
+			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
+		))
+		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
+		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
+
+		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("LOGLEVEL"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("info"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[0].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Name).To(Equal("DATASTORE_TYPE"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal("kubernetes"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[1].ValueFrom).To(BeNil())
+
+		// Expect the SECURITY_GROUP env variables to not be set
+		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
+
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts).To(BeEmpty())
+		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
+		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))
+		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
+		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
+		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
+		Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-audit-logs"))
+		Expect(d.Spec.Template.Spec.Volumes[0].HostPath.Path).To(Equal("/var/log/calico/audit"))
+		Expect(*d.Spec.Template.Spec.Volumes[0].HostPath.Type).To(BeEquivalentTo("DirectoryOrCreate"))
+		Expect(d.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Key).To(Equal("config"))
+		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
+		Expect(len(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items)).To(Equal(1))
+
+		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
+
+		clusterRole = rtest.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
+	},
+		Entry("default cluster domain", dns.DefaultClusterDomain),
+		Entry("custom cluster domain", "custom-domain.internal"),
+	)
+
+	It("should render an API server with custom configuration", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-access-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
+			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		// Expect same number as above
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		rtest.ExpectResource(dep, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		d := dep.(*v1.Deployment)
+
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
+	})
+
+	It("should include a ControlPlaneNodeSelector when specified", func() {
+		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+	})
+
+	It("should include a ControlPlaneToleration when specified", func() {
+		tol := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+			Effect:   corev1.TaintEffectNoExecute,
+		}
+		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+	})
+
+	It("should set KUBERENETES_SERVICE_... variables", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploymentResource := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		deployment := deploymentResource.(*v1.Deployment)
+		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+})

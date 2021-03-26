@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	v3 "github.com/tigera/operator/pkg/apis/projectcalico.org/v3"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 
@@ -43,11 +44,10 @@ import (
 const (
 	apiServerPort           = 5443
 	queryServerPort         = 8080
-	APIServerNamespace      = "tigera-system"
-	APIServerTLSSecretName  = "tigera-apiserver-certs"
+	APIServerTLSSecretName  = "calico-apiserver-certs"
 	APIServerSecretKeyName  = "apiserver.key"
 	APIServerSecretCertName = "apiserver.crt"
-	APIServiceName          = "tigera-api"
+	APIServiceName          = "calico-api"
 )
 
 func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
@@ -61,12 +61,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
-
-	ns := "calico-system"
-	if installation.Variant == operator.TigeraSecureEnterprise {
-		ns = "tigera-system"
-	}
-	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, ns, clusterDomain)
+	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, rmeta.APIServerNamespace(), clusterDomain)
 
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
@@ -91,7 +86,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
 			Name:      APIServerTLSSecretName,
-			Namespace: ns,
+			Namespace: rmeta.APIServerNamespace(),
 		}
 		tlsSecrets = append(tlsSecrets, copy)
 	}
@@ -101,7 +96,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ns, tunnelCASecret)...)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(rmeta.APIServerNamespace(), tunnelCASecret)...)
 		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelCASecret.Data)
 	}
 
@@ -136,13 +131,6 @@ type apiServerComponent struct {
 	apiServerImage              string
 	queryServerImage            string
 	certSignReqImage            string
-}
-
-func (c *apiServerComponent) namespace() string {
-	if c.installation.Variant == operator.TigeraSecureEnterprise {
-		return "tigera-system"
-	}
-	return "calico-system"
 }
 
 func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -185,19 +173,9 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
-	// Namespace depends on whether this is OSS or Enterprise. For Enterprise,
-	// the API server gets its own tigera-system namespace.
-	objsToCreate := []client.Object{}
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// Create the tigera-system namespace.
-		objsToCreate = append(objsToCreate, createNamespace(c.namespace(), c.installation.KubernetesProvider))
-	} else {
-		// Create the calico-system namespace
-		objsToCreate = append(objsToCreate, createNamespace("calico-system", c.installation.KubernetesProvider))
-	}
-
-	// Add in all cluster-scoped resources that are shared between Calico and Calico Enterprise.
-	objsToCreate = append(objsToCreate,
+	// Start with all of the cluster-scoped resources that are used for both Calico and Calico Enterprise.
+	objsToCreate := []client.Object{
+		createNamespace(rmeta.APIServerNamespace(), c.installation.KubernetesProvider),
 		c.apiServiceAccountClusterRole(),
 		c.apiServiceAccountClusterRoleBinding(),
 		c.delegateAuthClusterRoleBinding(),
@@ -206,40 +184,33 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.authReaderRoleBinding(),
 		c.webhookReaderClusterRole(),
 		c.webhookReaderClusterRoleBinding(),
-	)
+	}
 	if !c.openshift {
 		objsToCreate = append(objsToCreate, c.apiServerPodSecurityPolicy())
 	}
 
-	// Namespaced objects that are shared between Calico and Calico Enterprise.
-	// These objects need to have their namespace adjusted appropriately.
+	// Namespaced objects that are common between Calico and Calico Enterprise.
 	objsToCreate = append(objsToCreate,
 		c.apiServerServiceAccount(),
-		c.apiServer(),
+		c.apiServerDeployment(),
 		c.apiServerService(),
 	)
-	secrets := secret.CopyToNamespace(c.namespace(), c.pullSecrets...)
+	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(), c.pullSecrets...)
 	objsToCreate = append(objsToCreate, secret.ToRuntimeObjects(secrets...)...)
 	if c.installation.CertificateManagement == nil {
 		objsToCreate = append(objsToCreate, c.getTLSObjects()...)
 		objsToCreate = append(objsToCreate, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
 	} else {
 		objsToCreate = append(objsToCreate, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
-		objsToCreate = append(objsToCreate, csrClusterRoleBinding("tigera-apiserver", c.namespace()))
+		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-apiserver", rmeta.APIServerNamespace()))
 	}
 
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Add objects used only by Calico Enterprise.
-		objsToCreate = append(objsToCreate,
-			c.k8sRoleBinding(),
-			c.tigeraUserClusterRole(),
-			c.tigeraNetworkAdminClusterRole(),
-			c.k8sKubeControllerClusterRole(),
-			c.auditPolicyConfigMap(),
-			c.tieredPolicyPassthruClusterRole(),
-			c.tieredPolicyPassthruClusterRolebinding(),
-		)
+		objsToCreate = append(objsToCreate, c.enterpriseOnlyObjects()...)
 	}
+
+	objsToCreate = append(objsToCreate, c.networkPolicies())
 
 	return objsToCreate, c.objectsToDelete()
 }
@@ -248,24 +219,48 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 // configuration. This is used to clean up OSS objects when switching to enterprise,
 // and vice-versa.
 func (c *apiServerComponent) objectsToDelete() []client.Object {
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// This is a Calico Enterprise cluster, delete Calico resources.
-		// Cluster scoped resources will be updated in place. We mostly need to delete
-		// any resources that were provisioned into the calico-system namespace.
-		// - Deployment
-		// - ServiceAccount
-		// - Service
-		return []client.Object{
-			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "calico-system", Name: "tigera-apiserver"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: "calico-system", Name: "tigera-apiserver"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: "calico-system", Name: "tigera-apiserver"}},
-		}
-	} else {
-		// This is a Calico cluster, delete Enterprise resources. We can do this
-		// by deleting the "tigera-system" namespace and letting GC take over.
-		return []client.Object{
-			createNamespace("tigera-system", ""),
-		}
+	objs := []client.Object{}
+	switch c.installation.Variant {
+	case operatorv1.TigeraSecureEnterprise:
+		// Nothing to do, since there are no Calico-only resources.
+	case operatorv1.Calico:
+		// This is a Calico cluster, delete Enterprise-only resources.
+		objs = append(objs, c.enterpriseOnlyObjects()...)
+	}
+
+	// We also need to delete the following resources that have had their names changed, and may yet exist on
+	// upgraded clusters. Each of these has either been replaced with a new object of a different name, or is
+	// otherwise no longer required upon upgrade.
+	objs = append(objs,
+		// Namespace tigera-system has moved to calico-apiserver. Deleting the namespace will remove any resources within.
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}},
+
+		// Global resources that have had a name change or are no longer required.
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}},
+		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-crds"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-access-crds"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}},
+		&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver:csr-creator"}},
+	)
+	return objs
+}
+
+// enterpriseOnlyObjects returns all of the objects which are created for Calico
+// Enterprise deployments but not for variant: Calico.
+func (c apiServerComponent) enterpriseOnlyObjects() []client.Object {
+	return []client.Object{
+		c.tierGetterClusterRole(),
+		c.kubeControllersTierGetterClusterRoleBinding(),
+		c.tigeraUserClusterRole(),
+		c.tigeraNetworkAdminClusterRole(),
+		c.auditPolicyConfigMap(),
+		c.tieredPolicyPassthruClusterRole(),
+		c.tieredPolicyPassthruClusterRolebinding(),
 	}
 }
 
@@ -286,7 +281,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
 				Name:      APIServiceName,
-				Namespace: c.namespace(),
+				Namespace: rmeta.APIServerNamespace(),
 			},
 			Version:  "v3",
 			CABundle: cert,
@@ -295,71 +290,19 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 	return s
 }
 
-// tieredPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
-// mechanism for Tigera Secure tiered policy.
-func (c *apiServerComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tiered-policy-passthrough",
-		},
-		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
-		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the
-		// StagedKubernetesNetworkPolicy are handled using normal (non-tiered) RBAC.
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"},
-				Verbs:     []string{"*"},
-			},
-		},
-	}
-}
-
-// tieredPolicyPassthruClusterRolebinding creates a clusterrolebinding that applies tieredPolicyPassthruClusterRole to all users.
-func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tiered-policy-passthrough",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:     "Group",
-				Name:     "system:authenticated",
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			// RBAC for tiered policies is enforced by our aggregate apiserver (tigera-apiserver).
-			// Before the request reaches our apiserver it goes through the kubernetes apiserver.
-			// We add this RBAC that will essentially let requests for our policy resources through the
-			// kubernetes apiserver but the next level of RBAC is enforced by our tigera-apiserver.
-			{
-				Kind:     "Group",
-				Name:     "system:unauthenticated",
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     "tigera-tiered-policy-passthrough",
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-	}
-}
-
 // delegateAuthClusterRoleBinding creates a clusterrolebinding that allows the API server to delegate
 // authn/authz requests to main API server.
 func (c *apiServerComponent) delegateAuthClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver-delegate-auth",
+			Name: "calico-apiserver-delegate-auth",
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-apiserver",
-				Namespace: c.namespace(),
+				Name:      "calico-apiserver",
+				Namespace: rmeta.APIServerNamespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -377,7 +320,7 @@ func (c *apiServerComponent) authReaderRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-auth-reader",
+			Name:      "calico-apiserver-auth-reader",
 			Namespace: "kube-system",
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -388,8 +331,8 @@ func (c *apiServerComponent) authReaderRoleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-apiserver",
-				Namespace: c.namespace(),
+				Name:      "calico-apiserver",
+				Namespace: rmeta.APIServerNamespace(),
 			},
 		},
 	}
@@ -400,8 +343,8 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-apiserver",
-			Namespace: c.namespace(),
+			Name:      "calico-apiserver",
+			Namespace: rmeta.APIServerNamespace(),
 		},
 	}
 }
@@ -468,37 +411,37 @@ func (c *apiServerComponent) apiServiceAccountClusterRole() *rbacv1.ClusterRole 
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{"tigera-apiserver"},
+			ResourceNames: []string{"calico-apiserver"},
 		})
 	}
 
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-crds",
+			Name: "calico-crds",
 		},
 		Rules: rules,
 	}
 }
 
 // apiServiceAccountClusterRoleBinding creates a clusterrolebinding that applies apiServiceAccountClusterRole to
-// the tigera-apiserver service account.
+// the calico-apiserver service account.
 func (c *apiServerComponent) apiServiceAccountClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver-access-crds",
+			Name: "calico-apiserver-access-crds",
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-apiserver",
-				Namespace: c.namespace(),
+				Name:      "calico-apiserver",
+				Namespace: rmeta.APIServerNamespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-crds",
+			Name:     "calico-crds",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -508,7 +451,7 @@ func (c *apiServerComponent) authClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-extension-apiserver-auth-access",
+			Name: "calico-extension-apiserver-auth-access",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -549,18 +492,18 @@ func (c *apiServerComponent) authClusterRoleBinding() *rbacv1.ClusterRoleBinding
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-extension-apiserver-auth-access",
+			Name: "calico-extension-apiserver-auth-access",
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-apiserver",
-				Namespace: c.namespace(),
+				Name:      "calico-apiserver",
+				Namespace: rmeta.APIServerNamespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-extension-apiserver-auth-access",
+			Name:     "calico-extension-apiserver-auth-access",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -571,7 +514,7 @@ func (c *apiServerComponent) webhookReaderClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-webhook-reader",
+			Name: "calico-webhook-reader",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -591,23 +534,23 @@ func (c *apiServerComponent) webhookReaderClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// webhookReaderClusterRoleBinding binds the tigera-apiserver ServiceAccount to the tigera-webhook-reader
+// webhookReaderClusterRoleBinding binds the calico-apiserver ServiceAccount to the webhook-reader
 func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver-webhook-reader",
+			Name: "calico-apiserver-webhook-reader",
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-apiserver",
-				Namespace: c.namespace(),
+				Name:      "calico-apiserver",
+				Namespace: rmeta.APIServerNamespace(),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-webhook-reader",
+			Name:     "calico-webhook-reader",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -615,11 +558,11 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRo
 
 // apiServerService creates a service backed by the API server and query server.
 func (c *apiServerComponent) apiServerService() *corev1.Service {
-	return &corev1.Service{
+	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-api",
-			Namespace: c.namespace(),
+			Name:      APIServiceName,
+			Namespace: rmeta.APIServerNamespace(),
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -629,61 +572,33 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(apiServerPort),
 				},
-				{
-					Name:       "queryserver",
-					Port:       queryServerPort,
-					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(queryServerPort),
-				},
 			},
 			Selector: map[string]string{
 				"apiserver": "true",
 			},
 		},
 	}
-}
 
-func (c *apiServerComponent) auditPolicyConfigMap() *corev1.ConfigMap {
-	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
-kind: Policy
-rules:
-- level: RequestResponse
-  omitStages:
-  - RequestReceived
-  verbs:
-  - create
-  - patch
-  - update
-  - delete
-  resources:
-  - group: projectcalico.org
-    resources:
-    - globalnetworkpolicies
-    - networkpolicies
-    - stagedglobalnetworkpolicies
-    - stagednetworkpolicies
-    - stagedkubernetesnetworkpolicies
-    - globalnetworksets
-    - networksets
-    - tiers
-    - hostendpoints`
+	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Add port for queryserver if enterprise.
+		s.Spec.Ports = append(s.Spec.Ports,
+			corev1.ServicePort{
+				Name:       "queryserver",
+				Port:       queryServerPort,
+				Protocol:   corev1.ProtocolTCP,
+				TargetPort: intstr.FromInt(queryServerPort),
+			},
+		)
 
-	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-audit-policy",
-			Namespace: c.namespace(),
-		},
-		Data: map[string]string{
-			"config": defaultAuditPolicy,
-		},
 	}
+	return s
 }
 
 // apiServer creates a deployment containing the API and query servers.
-func (c *apiServerComponent) apiServer() *appsv1.Deployment {
+func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
+	name := "calico-apiserver"
 	hostNetwork := c.hostNetwork
 	dnsPolicy := corev1.DNSClusterFirst
 	if c.installation.KubernetesProvider == operator.ProviderEKS &&
@@ -692,7 +607,9 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 		// when in this networking mode on EKS, because the control plane nodes don't run
 		// Calico.
 		hostNetwork = true
+	}
 
+	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
@@ -705,18 +622,18 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 			APIServerTLSSecretName, TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(APIServiceName, c.namespace(), c.clusterDomain),
-			c.namespace()))
+			dns.GetServiceDNSNames(APIServiceName, rmeta.APIServerNamespace(), c.clusterDomain),
+			rmeta.APIServerNamespace()))
 	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-apiserver",
-			Namespace: c.namespace(),
+			Name:      name,
+			Namespace: rmeta.APIServerNamespace(),
 			Labels: map[string]string{
 				"apiserver": "true",
-				"k8s-app":   "tigera-apiserver",
+				"k8s-app":   name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -727,11 +644,11 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"apiserver": "true"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-apiserver",
-					Namespace: c.namespace(),
+					Name:      name,
+					Namespace: rmeta.APIServerNamespace(),
 					Labels: map[string]string{
 						"apiserver": "true",
-						"k8s-app":   "tigera-apiserver",
+						"k8s-app":   name,
 					},
 					Annotations: c.tlsAnnotations,
 				},
@@ -739,7 +656,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					DNSPolicy:          dnsPolicy,
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
-					ServiceAccountName: "tigera-apiserver",
+					ServiceAccountName: "calico-apiserver",
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
 					InitContainers:     initContainers,
@@ -799,7 +716,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	apiServer := corev1.Container{
-		Name:  "tigera-apiserver",
+		Name:  "calico-apiserver",
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
@@ -962,8 +879,20 @@ func (c *apiServerComponent) getTLSObjects() []client.Object {
 	return objs
 }
 
-// k8sKubeControllerClusterRole creates a clusterrole that gives permissions to get tiers.
-func (c *apiServerComponent) k8sKubeControllerClusterRole() *rbacv1.ClusterRole {
+func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName("calico-apiserver")
+	psp.Spec.Privileged = false
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	return psp
+}
+
+// tierGetterClusterRole creates a clusterrole that gives permissions to get tiers.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) tierGetterClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -981,10 +910,12 @@ func (c *apiServerComponent) k8sKubeControllerClusterRole() *rbacv1.ClusterRole 
 	}
 }
 
-// k8sRoleBinding creates a rolebinding that allows the k8s kube-controller to get tiers
+// kubeControllersTierGetterClusterRoleBinding creates a rolebinding that allows the k8s kube-controller to get tiers
 // In k8s 1.15+, cascading resource deletions (for instance pods for a replicaset) failed
 // due to k8s kube-controller not having permissions to get tiers.
-func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
+//
+// Calico Enterprise only
+func (c *apiServerComponent) kubeControllersTierGetterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1006,6 +937,8 @@ func (c *apiServerComponent) k8sRoleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 // tigeraUserClusterRole returns a cluster role for a default Calico Enterprise user.
+//
+// Calico Enterprise only
 func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		// List requests that the Tigera manager needs.
@@ -1123,6 +1056,8 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 }
 
 // tigeraNetworkAdminClusterRole returns a cluster role for a Tigera Secure manager network admin.
+//
+// Calico Enterprise only
 func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		// Full access to all network policies
@@ -1244,12 +1179,173 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	}
 }
 
-func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-apiserver")
-	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
+// tieredPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
+// mechanism for Tigera Secure tiered policy.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-tiered-policy-passthrough",
+		},
+		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
+		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the
+		// StagedKubernetesNetworkPolicy are handled using normal (non-tiered) RBAC.
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"},
+				Verbs:     []string{"*"},
+			},
+		},
+	}
+}
+
+// tieredPolicyPassthruClusterRolebinding creates a clusterrolebinding that applies tieredPolicyPassthruClusterRole to all users.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-tiered-policy-passthrough",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:     "Group",
+				Name:     "system:authenticated",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			{
+				Kind:     "Group",
+				Name:     "system:unauthenticated",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "tigera-tiered-policy-passthrough",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+}
+
+// auditPolicyConfigMap returns a configmap with contents to configure audit logging for
+// projectcalico.org/v3 APIs.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) auditPolicyConfigMap() *corev1.ConfigMap {
+	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
+kind: Policy
+rules:
+- level: RequestResponse
+  omitStages:
+  - RequestReceived
+  verbs:
+  - create
+  - patch
+  - update
+  - delete
+  resources:
+  - group: projectcalico.org
+    resources:
+    - globalnetworkpolicies
+    - networkpolicies
+    - stagedglobalnetworkpolicies
+    - stagednetworkpolicies
+    - stagedkubernetesnetworkpolicies
+    - globalnetworksets
+    - networksets
+    - tiers
+    - hostendpoints`
+
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-audit-policy",
+			Namespace: rmeta.APIServerNamespace(),
+		},
+		Data: map[string]string{
+			"config": defaultAuditPolicy,
+		},
+	}
+}
+
+// networkPolicies returns the network policies to deploy for the API server.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) networkPolicies() *v3.NetworkPolicy {
+	var order float64 = 1
+	p := v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			//			Name:      "allow-tigera.apiserver-access",
+			Name:      "apiserver-access",
+			Namespace: rmeta.APIServerNamespace(),
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &order,
+			Tier:     "allow-tigera",
+			Selector: "k8s-app == 'tigera-apiserver'",
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: "TCP",
+					Source: v3.EntityRule{
+						Nets: []string{"0.0.0.0/0"},
+					},
+					Destination: v3.EntityRule{
+						Ports: []int32{443, 5443, 9090, 10443},
+					},
+				},
+			},
+		},
+	}
+
+	// Egress rules depend on platform in order to access DNS.
+	egress := []v3.Rule{}
+	if c.openshift {
+		egress = append(egress, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: "UDP",
+			Destination: v3.EntityRule{
+				Ports:    []int32{5353},
+				Selector: "dns.operator.openshift.io/daemonset-dns == \"default\"",
+			},
+		})
+	} else {
+		egress = append(egress, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: "UDP",
+			Destination: v3.EntityRule{
+				Ports:    []int32{53},
+				Selector: "k8s-app == \"kube-dns\"",
+			},
+		})
+	}
+
+	// This egress rule in this policy allows tigera api-server to communicate with kubernetes api server.
+	// By default, kubernetes api server listens on [12388, 6443, 443].
+	ports := []int32{6443, 443}
+	if c.installation.KubernetesProvider == operatorv1.ProviderDockerEE {
+		// DockerEE uses port 12388 for kubernetes apiserver service.
+		ports = []int32{12388}
+	}
+	egress = append(egress, v3.Rule{
+		Action:   v3.Allow,
+		Protocol: "TCP",
+		Destination: v3.EntityRule{
+			NamespaceSelector: "projectcalico.org/name == \"deafult\"",
+			Selector:          "provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes'",
+			Ports:             ports,
+		},
+	})
+
+	// Pass to subsequent tiers for further enforcement
+	egress = append(egress, v3.Rule{
+		Action: v3.Pass,
+	})
+	return &p
 }

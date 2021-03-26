@@ -30,7 +30,6 @@ import (
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -156,7 +155,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 	}
 
 	// Query for the installation object.
-	variant, network, err := installation.GetInstallation(context.Background(), r.client)
+	variant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.SetDegraded("Installation not found", err, reqLogger)

@@ -22,7 +22,6 @@ import (
 	"github.com/go-ldap/ldap"
 
 	oprv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -161,7 +160,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Query for the installation object.
-	variant, install, err := installation.GetInstallation(context.Background(), r.client)
+	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Error(err, "Installation not found")

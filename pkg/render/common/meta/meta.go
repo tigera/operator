@@ -93,6 +93,11 @@ func OperatorNamespace() string {
 	return "tigera-operator"
 }
 
+// APIServerNamespace returns the namespace to use for the API server component.
+func APIServerNamespace() string {
+	return "calico-apiserver"
+}
+
 // GetResourceRequirements retrieves the component ResourcesRequirements from the installation. If it doesn't exist, it
 // returns an empty ResourceRequirements struct.
 func GetResourceRequirements(i *operatorv1.InstallationSpec, name operatorv1.ComponentName) corev1.ResourceRequirements {

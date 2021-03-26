@@ -16,6 +16,7 @@ require (
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
+	github.com/projectcalico/go-yaml v0.0.0-20161201183616-955bc3e451ef
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.6.1
 	github.com/tigera/api v0.0.0-20210210003744-476f909e3f8f

@@ -22,6 +22,8 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -374,6 +376,58 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	}
 
 	return authentication, nil
+}
+
+// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
+// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
+// launch enterprise-dependent components.
+func GetInstallation(ctx context.Context, client client.Client) (operatorv1.ProductVariant, *operatorv1.InstallationSpec, error) {
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operatorv1.Installation{}
+	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
+		return instance.Status.Variant, nil, err
+	}
+
+	spec := instance.Spec
+
+	// update Installation with 'overlay'
+	overlay := operatorv1.Installation{}
+	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return instance.Status.Variant, nil, err
+		}
+	} else {
+		spec = OverrideInstallationSpec(spec, overlay.Spec)
+	}
+
+	return instance.Status.Variant, &spec, nil
+}
+
+// GetAPIServer finds the correct API server instance and returns a mesasge and error in the case of an error.
+func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APIServer, string, error) {
+	// Fetch the APIServer instance. Look for the "default" instance first.
+	instance := &operatorv1.APIServer{}
+	err := client.Get(ctx, DefaultInstanceKey, instance)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, "failed to get apiserver 'default'", err
+		}
+
+		// Default instance doesn't exist. Check for the legacy (enterprise only) CR.
+		err = client.Get(ctx, DefaultTSEEInstanceKey, instance)
+		if err != nil {
+			return nil, "failed to get apiserver 'tigera-secure'", err
+		}
+	} else {
+		// Assert there is no legacy "tigera-secure" instance present.
+		err = client.Get(ctx, DefaultTSEEInstanceKey, instance)
+		if err == nil {
+			return nil,
+				"Duplicate configuration detected",
+				fmt.Errorf("Multiple APIServer CRs provided. To fix, run \"kubectl delete apiserver tigera-secure\"")
+		}
+	}
+	return instance, "", nil
 }
 
 // GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.

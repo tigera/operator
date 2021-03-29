@@ -242,6 +242,12 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
+				// Needed to validate the license
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+			{
 				// calico-kube-controllers requires tiers create
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"tiers"},
@@ -281,6 +287,14 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"authenticationreviews"},
 				Verbs:     []string{"create"},
+			})
+		}
+
+		if c.managementClusterConnection != nil {
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"create", "update"},
 			})
 		}
 	}

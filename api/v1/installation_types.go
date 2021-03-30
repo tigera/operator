@@ -248,6 +248,9 @@ const (
 	BGPDisabled BGPOption = "Disabled"
 )
 
+// LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
+//
+// One of: Iptables, BPF
 type LinuxDataplaneOption string
 
 const (
@@ -260,6 +263,7 @@ type CalicoNetworkSpec struct {
 	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
 	// If not specified, iptables mode is used.
+	// Default: Iptables
 	// +optional
 	// +kubebuilder:validation:Enum=Iptables;BPF
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`

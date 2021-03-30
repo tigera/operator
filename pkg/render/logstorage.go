@@ -15,13 +15,12 @@
 package render
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"strings"
-
-	"github.com/tigera/operator/pkg/ptr"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -39,15 +38,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ElasticsearchLicenseType string
@@ -144,6 +145,37 @@ done
 
 echo "Keystore initialization successful."
 `
+
+	csrRootCAConfigMapName = "elasticsearch-config"
+)
+
+// Certificate management constants.
+const (
+	esMountCAScript = `#!/usr/bin/env bash
+
+echo "Mounting and chowning ca cert..."
+echo $CA_CERT | base64 -d > $CERT_LOCATION/ca.crt
+chown -v -R elasticsearch:elasticsearch  /certs-share
+echo "This script has finished."
+`
+
+	kbMountCAScript = `#!/usr/bin/env bash
+echo "Mounting ca cert..."
+echo $CA_CERT | base64 -d > $CERT_LOCATION/tls.crt
+echo "This script has finished."
+`
+	// Volume that is added by ECK and is overridden if certificate management is used.
+	csrVolumeNameHTTP = "elastic-internal-http-certificates"
+	// Volume that is added by ECK and is overridden if certificate management is used.
+	csrVolumeNameTransport = "elastic-internal-transport-certificates"
+	// Volume name that is added by ECK for the purpose of mounting certs.
+	caVolumeName = "elasticsearch-certs"
+	// Location where Kibana mounts caVolumeName
+	kbCAMountPath = "/usr/share/kibana/config/elasticsearch-certs"
+	// Name of the init container for mounting a ca.
+	caMountInitContainerNameHTTP = "tigera-init-certificate-management-http"
+	// Name of the init container for mounting a ca.
+	caMountInitContainerNameTransport = "tigera-init-certificate-management-transport"
 )
 
 var log = logf.Log.WithName("render")
@@ -215,6 +247,7 @@ type elasticsearchComponent struct {
 	esOperatorImage             string
 	kibanaImage                 string
 	curatorImage                string
+	csrImage                    string
 }
 
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -240,6 +273,13 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if es.installation.CertificateManagement != nil {
+		es.csrImage, err = ResolveCSRInitImage(es.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -404,6 +444,11 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
+	if es.installation.CertificateManagement != nil {
+		toCreate = append(toCreate, csrClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
+		toCreate = append(toCreate, csrClusterRoleBinding("tigera-kibana", KibanaNamespace))
+	}
+
 	return toCreate, toDelete
 }
 
@@ -486,8 +531,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	esContainer := corev1.Container{
-		Name:            "elasticsearch",
-		ImagePullPolicy: "Always",
+		Name: "elasticsearch",
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
@@ -586,6 +630,148 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		volumes = es.dexCfg.RequiredVolumes()
 	}
 
+	var autoMountToken bool
+	if es.installation.CertificateManagement != nil {
+
+		transportSecretVolumeName := "elastic-internal-transport-certificates2"
+
+		initFSName := "elastic-internal-init-filesystem"
+		initFSContainer := corev1.Container{
+			Name:  initFSName,
+			Image: es.esImage,
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(true),
+				RunAsUser:  ptr.Int64ToPtr(0),
+			},
+			Args: []string{"bash", "-c", "/mnt/elastic-internal/scripts/prepare-fs.sh"},
+			VolumeMounts: []corev1.VolumeMount{
+				// Even though it won't be used for TLS, we need to mount the secret volume for initialization.
+				{
+					Name:      transportSecretVolumeName,
+					MountPath: "/mnt/elastic-internal/transport-certificates",
+					ReadOnly:  false,
+				},
+				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
+				{
+					Name:      csrVolumeNameTransport,
+					MountPath: "/csr",
+					ReadOnly:  false,
+				},
+				{
+					Name:      "elastic-internal-elasticsearch-config-local",
+					MountPath: "/mnt/elastic-internal/elasticsearch-config-local",
+					ReadOnly:  false,
+				},
+				{
+					Name:      "elastic-internal-elasticsearch-bin-local",
+					MountPath: "/mnt/elastic-internal/elasticsearch-bin-local",
+					ReadOnly:  false,
+				},
+			},
+		}
+
+		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptydir.
+		csrInitContainerHTTP := CreateCSRInitContainer(
+			es.installation,
+			es.csrImage,
+			csrVolumeNameHTTP,
+			ElasticsearchServiceName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.clusterDomain),
+			ElasticsearchNamespace)
+		csrInitContainerHTTP.Name = "key-cert-elastic"
+
+		// Add the init container that will mount the ca cert for HTTP traffic into the designated location.
+		certInitContainerHTTP := corev1.Container{
+			Name:  caMountInitContainerNameHTTP,
+			Image: es.esImage,
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(true),
+				RunAsUser:  ptr.Int64ToPtr(0),
+			},
+			Env: []corev1.EnvVar{
+				{Name: "CERT_LOCATION", Value: CSRCMountPath},
+				{Name: "CA_CERT", Value: base64.StdEncoding.EncodeToString(es.installation.CertificateManagement.CACert)},
+			},
+			Command:      []string{"/usr/bin/env", "bash", "-c", esMountCAScript},
+			VolumeMounts: csrInitContainerHTTP.VolumeMounts,
+		}
+
+		// Add the init container that will issue a CSR for transport and mount it in an emptydir.
+		csrInitContainerTransport := CreateCSRInitContainer(
+			es.installation,
+			es.csrImage,
+			csrVolumeNameTransport,
+			ElasticsearchServiceName,
+			"transport.tls.key",
+			"transport.tls.crt",
+			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.clusterDomain),
+			ElasticsearchNamespace)
+		csrInitContainerTransport.Name = "key-cert-elastic-transport"
+
+		// Add the init container that will mount the ca cert for transport into the designated location.
+		certInitContainerTransport := corev1.Container{
+			Name:  caMountInitContainerNameTransport,
+			Image: es.esImage,
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(true),
+				RunAsUser:  ptr.Int64ToPtr(0),
+			},
+			Env: []corev1.EnvVar{
+				{Name: "CERT_LOCATION", Value: CSRCMountPath},
+				{Name: "CA_CERT", Value: base64.StdEncoding.EncodeToString(es.installation.CertificateManagement.CACert)},
+			},
+			Command:      []string{"/usr/bin/env", "bash", "-c", esMountCAScript},
+			VolumeMounts: csrInitContainerTransport.VolumeMounts,
+		}
+
+		// Force the right order of init containers.
+		initContainers = append(
+			initContainers,
+			initFSContainer,
+			csrInitContainerHTTP,
+			certInitContainerHTTP,
+			csrInitContainerTransport,
+			certInitContainerTransport)
+
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: csrVolumeNameHTTP,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				}},
+			corev1.Volume{
+				Name: csrVolumeNameTransport,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				}},
+			corev1.Volume{
+				Name: transportSecretVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "tigera-secure-es-transport-certificates",
+					},
+				},
+			},
+		)
+		autoMountToken = true
+		volumes = append(volumes, corev1.Volume{
+			Name: csrRootCAConfigMapName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: csrRootCAConfigMapName},
+				},
+			},
+		})
+		esContainer.VolumeMounts = append(esContainer.VolumeMounts,
+			corev1.VolumeMount{MountPath: CSRCMountPath, Name: csrVolumeNameHTTP, ReadOnly: false},
+			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/http-certs", Name: csrVolumeNameHTTP, ReadOnly: false},
+			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/transport-certs", Name: csrVolumeNameTransport, ReadOnly: false},
+			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: csrVolumeNameTransport, ReadOnly: false},
+		)
+	}
+
 	// default to controlPlaneNodeSelector unless DataNodeSelector is set
 	nodeSels := es.installation.ControlPlaneNodeSelector
 	if es.logStorage.Spec.DataNodeSelector != nil {
@@ -597,13 +783,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			InitContainers:     initContainers,
-			Containers:         []corev1.Container{esContainer},
-			ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
-			NodeSelector:       nodeSels,
-			Tolerations:        es.installation.ControlPlaneTolerations,
-			ServiceAccountName: "tigera-elasticsearch",
-			Volumes:            volumes,
+			InitContainers:               initContainers,
+			Containers:                   []corev1.Container{esContainer},
+			ImagePullSecrets:             secret.GetReferenceList(es.pullSecrets),
+			NodeSelector:                 nodeSels,
+			Tolerations:                  es.installation.ControlPlaneTolerations,
+			ServiceAccountName:           "tigera-elasticsearch",
+			Volumes:                      volumes,
+			AutomountServiceAccountToken: &autoMountToken,
 		},
 	}
 
@@ -836,7 +1023,9 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
+	var certAuthorities []string
 	if es.supportsOIDC() {
+		certAuthorities = append(certAuthorities, "/usr/share/elasticsearch/config/dex/tls-dex.crt")
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
 			"rp.client_id":                DexClientId,
@@ -851,8 +1040,13 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
 			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
-			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
+			"ssl.certificate_authorities": certAuthorities,
 		}
+	}
+
+	if es.installation.CertificateManagement != nil {
+		certAuthorities = append(certAuthorities, "/usr/share/elasticsearch/config/http-certs/ca.crt")
+		config["xpack.security.http.ssl.certificate_authorities"] = certAuthorities
 	}
 
 	return esv1.NodeSet{
@@ -1148,6 +1342,60 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
 	}
 
+	var initContainers []corev1.Container
+	var volumes []corev1.Volume
+	var automountToken bool
+	var volumeMounts []corev1.VolumeMount
+	if es.installation.CertificateManagement != nil {
+		automountToken = true
+		csrInitContainer := CreateCSRInitContainer(
+			es.installation,
+			es.csrImage,
+			csrVolumeNameHTTP,
+			ElasticsearchServiceName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			dns.GetServiceDNSNames(KibanaServiceName, KibanaNamespace, es.clusterDomain),
+			KibanaNamespace)
+
+		certInitContainer := corev1.Container{
+			Name:  caMountInitContainerNameHTTP,
+			Image: es.kibanaImage,
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(true),
+				RunAsUser:  ptr.Int64ToPtr(0),
+			},
+			Env: []corev1.EnvVar{
+				{Name: "CERT_LOCATION", Value: kbCAMountPath},
+				{Name: "CA_CERT", Value: base64.StdEncoding.EncodeToString(es.installation.CertificateManagement.CACert)},
+			},
+			Command: []string{"/usr/bin/env", "bash", "-c", kbMountCAScript},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      caVolumeName,
+					MountPath: kbCAMountPath,
+					ReadOnly:  false,
+				},
+			},
+		}
+		initContainers = append(initContainers, csrInitContainer, certInitContainer)
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+
+			Name:      csrVolumeNameHTTP,
+			MountPath: "/mnt/elastic-internal/http-certs/",
+		})
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: csrVolumeNameHTTP,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+			// Volume where we place the ca cert.
+			corev1.Volume{
+				Name: caVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
+	}
+
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
@@ -1189,10 +1437,12 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					},
 				},
 				Spec: corev1.PodSpec{
-					ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
-					ServiceAccountName: "tigera-kibana",
-					NodeSelector:       es.installation.ControlPlaneNodeSelector,
-					Tolerations:        es.installation.ControlPlaneTolerations,
+					ImagePullSecrets:             secret.GetReferenceList(es.pullSecrets),
+					ServiceAccountName:           "tigera-kibana",
+					NodeSelector:                 es.installation.ControlPlaneNodeSelector,
+					Tolerations:                  es.installation.ControlPlaneTolerations,
+					InitContainers:               initContainers,
+					AutomountServiceAccountToken: &automountToken,
 					Containers: []corev1.Container{{
 						Name: "kibana",
 						ReadinessProbe: &corev1.Probe{
@@ -1206,7 +1456,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
+						VolumeMounts: volumeMounts,
 					}},
+					Volumes: volumes,
 				},
 			},
 		},

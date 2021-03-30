@@ -26,12 +26,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 )
 
 const (
 	CSRClusterRoleName   = "tigera-csr-creator"
 	CSRInitContainerName = "key-cert-provisioner"
+	CSRCMountPath        = "/certs-share"
 )
 
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
@@ -46,10 +46,11 @@ func CreateCSRInitContainer(
 	dnsNames []string,
 	appNameLabel string) corev1.Container {
 	return corev1.Container{
-		Name:  CSRInitContainerName,
-		Image: image,
+		Name:            CSRInitContainerName,
+		Image:           image,
+		ImagePullPolicy: "Always", //todo: revert
 		VolumeMounts: []corev1.VolumeMount{
-			{MountPath: "/certs-share", Name: mountName, ReadOnly: false},
+			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
@@ -86,12 +87,15 @@ func CreateCSRInitContainer(
 
 // ResolveCsrInitImage resolves the image needed for the CSR init image taking into account the specified ImageSet
 func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet) (string, error) {
-	return components.GetReference(
-		components.ComponentCSRInitContainer,
-		inst.Registry,
-		inst.ImagePath,
-		is,
-	)
+
+	return "gcr.io/tigera-dev/cnx/tigera/tigera-init-injector", nil // todo: revert!!!
+
+	//return components.GetReference(
+	//	components.ComponentCSRInitContainer,
+	//	inst.Registry,
+	//	inst.ImagePath,
+	//	is,
+	//)
 }
 
 // csrClusterRole returns a role with the necessary permissions to create certificate signing requests.

@@ -109,10 +109,11 @@ spec:
                       type: object
                     type: array
                   linuxDataplane:
-                    description: LinuxDataplane is used to select the dataplane used
+                    description: 'LinuxDataplane is used to select the dataplane used
                       for Linux nodes. In particular, it causes the operator to add
                       required mounts and environment variables for the particular
-                      dataplane. If not specified, iptables mode is used.
+                      dataplane. If not specified, iptables mode is used. Default:
+                      Iptables'
                     enum:
                     - Iptables
                     - BPF
@@ -683,11 +684,11 @@ spec:
                           type: object
                         type: array
                       linuxDataplane:
-                        description: LinuxDataplane is used to select the dataplane
+                        description: 'LinuxDataplane is used to select the dataplane
                           used for Linux nodes. In particular, it causes the operator
                           to add required mounts and environment variables for the
                           particular dataplane. If not specified, iptables mode is
-                          used.
+                          used. Default: Iptables'
                         enum:
                         - Iptables
                         - BPF

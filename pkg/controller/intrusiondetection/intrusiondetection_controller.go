@@ -61,7 +61,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	var licenseAPIReady = &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -81,13 +81,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, p operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        p,
-		status:          status.New(mgr.GetClient(), "intrusion-detection"),
-		clusterDomain:   clusterDomain,
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
 	r.status.Run()

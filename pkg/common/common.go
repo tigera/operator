@@ -28,3 +28,8 @@ const (
 	// ExportLogsFeature to 3rd party systems feature name
 	ExportLogsFeature = "export-logs"
 )
+
+type VersionInfo struct {
+	Major int
+	Minor int
+}

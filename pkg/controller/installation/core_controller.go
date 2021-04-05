@@ -99,7 +99,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %w", err)
 	}
 
-	statusManager := status.New(mgr.GetClient(), "calico")
+	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
 	// The typhaAutoscaler needs a clientset.
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())

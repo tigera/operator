@@ -51,18 +51,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists, opts.ClusterDomain))
+	return add(mgr, newReconciler(mgr, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool, clusterDomain string) *ReconcileAPIServer {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        provider,
-		amazonCRDExists: amazonCRDExists,
-		status:          status.New(mgr.GetClient(), "apiserver"),
-		clusterDomain:   clusterDomain,
+		provider:        opts.DetectedProvider,
+		amazonCRDExists: opts.AmazonCRDExists,
+		status:          status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
 	}
 	r.status.Run()
 	return r

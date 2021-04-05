@@ -62,17 +62,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	return add(mgr, newReconciler(mgr, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider oprv1.Provider, clusterDomain string) *ReconcileAuthentication {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "authentication"),
-		clusterDomain: clusterDomain,
+		provider:      opts.DetectedProvider,
+		status:        status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
+		clusterDomain: opts.ClusterDomain,
 	}
 	r.status.Run()
 	return r

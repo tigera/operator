@@ -59,7 +59,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	var licenseAPIReady = &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -79,13 +79,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        provider,
-		status:          status.New(mgr.GetClient(), "manager"),
-		clusterDomain:   clusterDomain,
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
 	c.status.Run()

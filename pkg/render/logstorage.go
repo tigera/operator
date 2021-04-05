@@ -15,7 +15,6 @@
 package render
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -151,31 +150,12 @@ echo "Keystore initialization successful."
 
 // Certificate management constants.
 const (
-	esMountCAScript = `#!/usr/bin/env bash
-
-echo "Mounting and chowning ca cert..."
-echo $CA_CERT | base64 -d > $CERT_LOCATION/ca.crt
-chown -v -R elasticsearch:elasticsearch  /certs-share
-echo "This script has finished."
-`
-
-	kbMountCAScript = `#!/usr/bin/env bash
-echo "Mounting ca cert..."
-echo $CA_CERT | base64 -d > $CERT_LOCATION/tls.crt
-echo "This script has finished."
-`
 	// Volume that is added by ECK and is overridden if certificate management is used.
 	csrVolumeNameHTTP = "elastic-internal-http-certificates"
 	// Volume that is added by ECK and is overridden if certificate management is used.
 	csrVolumeNameTransport = "elastic-internal-transport-certificates"
 	// Volume name that is added by ECK for the purpose of mounting certs.
 	caVolumeName = "elasticsearch-certs"
-	// Location where Kibana mounts caVolumeName
-	kbCAMountPath = "/usr/share/kibana/config/elasticsearch-certs"
-	// Name of the init container for mounting a ca.
-	caMountInitContainerNameHTTP = "tigera-init-certificate-management-http"
-	// Name of the init container for mounting a ca.
-	caMountInitContainerNameTransport = "tigera-init-certificate-management-transport"
 )
 
 var log = logf.Log.WithName("render")
@@ -682,22 +662,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 
-		// Add the init container that will mount the ca cert for HTTP traffic into the designated location.
-		certInitContainerHTTP := corev1.Container{
-			Name:  caMountInitContainerNameHTTP,
-			Image: es.esImage,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(true),
-				RunAsUser:  ptr.Int64ToPtr(0),
-			},
-			Env: []corev1.EnvVar{
-				{Name: "CERT_LOCATION", Value: CSRCMountPath},
-				{Name: "CA_CERT", Value: base64.StdEncoding.EncodeToString(es.installation.CertificateManagement.CACert)},
-			},
-			Command:      []string{"/usr/bin/env", "bash", "-c", esMountCAScript},
-			VolumeMounts: csrInitContainerHTTP.VolumeMounts,
-		}
-
 		// Add the init container that will issue a CSR for transport and mount it in an emptydir.
 		csrInitContainerTransport := CreateCSRInitContainer(
 			es.installation,
@@ -710,30 +674,12 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			ElasticsearchNamespace)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 
-		// Add the init container that will mount the ca cert for transport into the designated location.
-		certInitContainerTransport := corev1.Container{
-			Name:  caMountInitContainerNameTransport,
-			Image: es.esImage,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(true),
-				RunAsUser:  ptr.Int64ToPtr(0),
-			},
-			Env: []corev1.EnvVar{
-				{Name: "CERT_LOCATION", Value: CSRCMountPath},
-				{Name: "CA_CERT", Value: base64.StdEncoding.EncodeToString(es.installation.CertificateManagement.CACert)},
-			},
-			Command:      []string{"/usr/bin/env", "bash", "-c", esMountCAScript},
-			VolumeMounts: csrInitContainerTransport.VolumeMounts,
-		}
-
 		// Force the right order of init containers.
 		initContainers = append(
 			initContainers,
 			initFSContainer,
 			csrInitContainerHTTP,
-			certInitContainerHTTP,
-			csrInitContainerTransport,
-			certInitContainerTransport)
+			csrInitContainerTransport)
 
 		volumes = append(volumes,
 			corev1.Volume{
@@ -1347,6 +1293,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	var automountToken bool
 	var volumeMounts []corev1.VolumeMount
 	if es.installation.CertificateManagement != nil {
+		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
 		automountToken = true
 		csrInitContainer := CreateCSRInitContainer(
 			es.installation,
@@ -1358,27 +1305,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			dns.GetServiceDNSNames(KibanaServiceName, KibanaNamespace, es.clusterDomain),
 			KibanaNamespace)
 
-		certInitContainer := corev1.Container{
-			Name:  caMountInitContainerNameHTTP,
-			Image: es.kibanaImage,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(true),
-				RunAsUser:  ptr.Int64ToPtr(0),
-			},
-			Env: []corev1.EnvVar{
-				{Name: "CERT_LOCATION", Value: kbCAMountPath},
-				{Name: "CA_CERT", Value: base64.StdEncoding.EncodeToString(es.installation.CertificateManagement.CACert)},
-			},
-			Command: []string{"/usr/bin/env", "bash", "-c", kbMountCAScript},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      caVolumeName,
-					MountPath: kbCAMountPath,
-					ReadOnly:  false,
-				},
-			},
-		}
-		initContainers = append(initContainers, csrInitContainer, certInitContainer)
+		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 
 			Name:      csrVolumeNameHTTP,

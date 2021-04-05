@@ -15,6 +15,7 @@
 package render
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -60,6 +61,8 @@ func CreateCSRInitContainer(
 			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},
 			{Name: "KEY_NAME", Value: keyName},
 			{Name: "CERT_NAME", Value: certName},
+			{Name: "CA_CERT_NAME", Value: "ca.crt"},
+			{Name: "CA_CERT", Value: base64.URLEncoding.EncodeToString(installation.CertificateManagement.CACert)},
 			{Name: "APP_NAME", Value: appNameLabel},
 			{Name: "DNS_NAMES", Value: strings.Join(dnsNames, ",")},
 			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{

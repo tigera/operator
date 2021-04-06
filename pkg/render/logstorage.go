@@ -154,8 +154,12 @@ const (
 	csrVolumeNameHTTP = "elastic-internal-http-certificates"
 	// Volume that is added by ECK and is overridden if certificate management is used.
 	csrVolumeNameTransport = "elastic-internal-transport-certificates"
+	// Volume that is added by us and contains the expected secret for ECK.
+	transportSecretVolumeName = "elastic-internal-transport-certificates-secret"
 	// Volume name that is added by ECK for the purpose of mounting certs.
 	caVolumeName = "elasticsearch-certs"
+	// Name of the secret that ECK mounts for the prepare-fs script.
+	transportSecretName = "tigera-secure-es-transport-certificates"
 )
 
 var log = logf.Log.WithName("render")
@@ -613,8 +617,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	var autoMountToken bool
 	if es.installation.CertificateManagement != nil {
 
-		transportSecretVolumeName := "elastic-internal-transport-certificates2"
-
+		// If certificate management is used, we need to override a mounting options for this init container.
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
 			Name:  initFSName,
@@ -650,7 +653,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 		}
 
-		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptydir.
+		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptyDir.
 		csrInitContainerHTTP := CreateCSRInitContainer(
 			es.installation,
 			es.csrImage,
@@ -662,7 +665,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 
-		// Add the init container that will issue a CSR for transport and mount it in an emptydir.
+		// Add the init container that will issue a CSR for transport and mount it in an emptyDir.
 		csrInitContainerTransport := CreateCSRInitContainer(
 			es.installation,
 			es.csrImage,
@@ -674,7 +677,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			ElasticsearchNamespace)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 
-		// Force the right order of init containers.
 		initContainers = append(
 			initContainers,
 			initFSContainer,
@@ -696,11 +698,12 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				Name: transportSecretVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: "tigera-secure-es-transport-certificates",
+						SecretName: transportSecretName,
 					},
 				},
 			},
 		)
+		// Make the pod mount the serviceaccount token of tigera-elasticsearch. On behalf of it, CSRs will be submitted.
 		autoMountToken = true
 		volumes = append(volumes, corev1.Volume{
 			Name: csrRootCAConfigMapName,
@@ -969,9 +972,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
 	}
-	var certAuthorities []string
 	if es.supportsOIDC() {
-		certAuthorities = append(certAuthorities, "/usr/share/elasticsearch/config/dex/tls-dex.crt")
 		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
 			"order":                       1,
 			"rp.client_id":                DexClientId,
@@ -986,13 +987,13 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
 			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
-			"ssl.certificate_authorities": certAuthorities,
+			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
+			// todo: Add certificate management for dex. This planned already and will be a separate PR.
 		}
 	}
 
 	if es.installation.CertificateManagement != nil {
-		certAuthorities = append(certAuthorities, "/usr/share/elasticsearch/config/http-certs/ca.crt")
-		config["xpack.security.http.ssl.certificate_authorities"] = certAuthorities
+		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
 	}
 
 	return esv1.NodeSet{

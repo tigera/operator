@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -47,9 +48,8 @@ func CreateCSRInitContainer(
 	dnsNames []string,
 	appNameLabel string) corev1.Container {
 	return corev1.Container{
-		Name:            CSRInitContainerName,
-		Image:           image,
-		ImagePullPolicy: "Always", //todo: revert
+		Name:  CSRInitContainerName,
+		Image: image,
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},
 		},
@@ -90,15 +90,12 @@ func CreateCSRInitContainer(
 
 // ResolveCsrInitImage resolves the image needed for the CSR init image taking into account the specified ImageSet
 func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet) (string, error) {
-
-	return "gcr.io/tigera-dev/cnx/tigera/tigera-init-injector", nil // todo: revert!!!
-
-	//return components.GetReference(
-	//	components.ComponentCSRInitContainer,
-	//	inst.Registry,
-	//	inst.ImagePath,
-	//	is,
-	//)
+	return components.GetReference(
+		components.ComponentCSRInitContainer,
+		inst.Registry,
+		inst.ImagePath,
+		is,
+	)
 }
 
 // csrClusterRole returns a role with the necessary permissions to create certificate signing requests.

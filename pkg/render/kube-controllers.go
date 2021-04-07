@@ -381,11 +381,25 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Env:       env,
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &v1.Probe{
+			PeriodSeconds: int32(10),
 			Handler: v1.Handler{
 				Exec: &v1.ExecAction{
 					Command: []string{
 						"/usr/bin/check-status",
 						"-r",
+					},
+				},
+			},
+		},
+		LivenessProbe: &v1.Probe{
+			PeriodSeconds:       int32(10),
+			InitialDelaySeconds: int32(10),
+			FailureThreshold:    int32(6),
+			Handler: v1.Handler{
+				Exec: &v1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-l",
 					},
 				},
 			},

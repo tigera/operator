@@ -114,6 +114,7 @@ func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, is)
+		c.nodeImage = "gcr.io/unique-caldron-775/neil/tigera/cnx-node:dual-tor-v3.5-amd64"
 	} else {
 		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, is)
 	}

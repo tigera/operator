@@ -17,13 +17,13 @@ package status
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/common"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"

@@ -29,6 +29,8 @@ const (
 	ExportLogsFeature = "export-logs"
 )
 
+// VersionInfo contains information about the version of Kubernetes API the cluster is using
+// Major and Minor fields map to the v<Major>.<Minor>+ part of the version string
 type VersionInfo struct {
 	Major int
 	Minor int

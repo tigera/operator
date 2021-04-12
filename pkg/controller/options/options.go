@@ -1,6 +1,9 @@
 package options
 
-import v1 "github.com/tigera/operator/api/v1"
+import (
+	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+)
 
 // AddOptions are passed to controllers when added to the controller manager. They
 // detail options detected by the daemon at startup that some controllers may either
@@ -11,4 +14,5 @@ type AddOptions struct {
 	EnterpriseCRDExists bool
 	AmazonCRDExists     bool
 	ClusterDomain       string
+	KubernetesVersion   *common.VersionInfo
 }

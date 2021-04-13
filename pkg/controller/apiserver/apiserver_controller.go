@@ -92,7 +92,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
+		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {

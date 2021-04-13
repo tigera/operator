@@ -36,6 +36,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -278,6 +279,28 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 	}
 
 	return secret, nil
+}
+
+func GetK8sServiceEndPoint(client client.Client) (*k8sapi.ServiceEndpoint, error) {
+	cmName := render.K8sSvcEndpointConfigMapName
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      cmName,
+		Namespace: rmeta.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		// If the configmap is unavailable, do not return error
+		statErr, ok := err.(*kerrors.StatusError)
+		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
+			return &k8sapi.Endpoint, nil
+		} else {
+			return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+		}
+	}
+	return &k8sapi.ServiceEndpoint{
+		Host: cm.Data["KUBERNETES_SERVICE_HOST"],
+		Port: cm.Data["KUBERNETES_SERVICE_PORT"],
+	}, nil
 }
 
 func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {

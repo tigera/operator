@@ -34,7 +34,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -90,6 +89,10 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 
 	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
@@ -259,12 +262,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	k8sEndpoint, err := utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(k8sapi.Endpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(*k8sEndpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

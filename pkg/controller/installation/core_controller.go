@@ -34,7 +34,6 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -166,6 +165,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	}
 
 	cm := render.BirdTemplatesConfigMapName
+	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+	}
+
+	cm = render.K8sSvcEndpointConfigMapName
 	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
@@ -914,6 +918,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	k8sEndpoint, err := utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.SetDegraded("Error reading services endpoint configmap", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	openShiftOnAws := false
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
@@ -999,7 +1010,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
-		k8sapi.Endpoint,
+		*k8sEndpoint,
 		&instance.Spec,
 		logStorageExists,
 		managementCluster,

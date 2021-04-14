@@ -968,6 +968,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}},
 	}
 
+	if c.cr.KubernetesProvider == operator.ProviderEKS {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
+	}
+
 	// If there are no IP pools specified, then configure no default IP pools.
 	if c.cr.CalicoNetwork == nil || len(c.cr.CalicoNetwork.IPPools) == 0 {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})

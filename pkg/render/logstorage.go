@@ -623,10 +623,19 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Name:  initFSName,
 			Image: es.esImage,
 			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(true),
-				RunAsUser:  ptr.Int64ToPtr(0),
+				Privileged: ptr.BoolToPtr(false),
 			},
 			Args: []string{"bash", "-c", "/mnt/elastic-internal/scripts/prepare-fs.sh"},
+			Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("100m"),
+					"memory": resource.MustParse("50Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("100m"),
+					"memory": resource.MustParse("50Mi"),
+				},
+			},
 			VolumeMounts: []corev1.VolumeMount{
 				// Even though it won't be used for TLS, we need to mount the secret volume for initialization.
 				{

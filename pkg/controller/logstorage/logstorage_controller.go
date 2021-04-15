@@ -675,7 +675,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		return nil, nil, nil, err
 	}
 
-	// If Certificate management is enabled, we only want to trust the CA cert and let private key generation being handled from an init container.
+	// If Certificate management is enabled, we only want to trust the CA cert andlet the init container handle private key generation.
 	if instl.CertificateManagement != nil {
 		cmCa := instl.CertificateManagement.CACert
 		cmIssuer, err := utils.GetCertificateIssuer(cmCa)
@@ -684,7 +684,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		}
 
 		if cmIssuer != oprKeyCertIssuer && !utils.IsOperatorIssued(oprKeyCertIssuer) {
-			return nil, nil, nil, fmt.Errorf("certificate management does not support custom Elastic secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
+			return nil, nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
 		}
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
@@ -705,7 +705,6 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		// Elasticsearch creates from that given secret (pubSecret) has the expected DNS name. If it doesn't, delete the
 		// public secret so it can get recreated.
 		if pubSecret != nil {
-
 			if operatorManaged {
 				err = utils.SecretHasExpectedDNSNames(pubSecret, corev1.TLSCertKey, svcDNSNames)
 				if err == utils.ErrInvalidCertDNSNames {

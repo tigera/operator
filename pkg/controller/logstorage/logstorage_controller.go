@@ -674,11 +674,11 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	// - The operator self-signed certificate
 	// - A user's BYO keypair for Elastic (uncommon)
 	// - The issuer that is provided through the certificate management feature.
-	oprKeyCertIssuer, err := utils.GetCertificateIssuer(oprKeyCert.Data[corev1.TLSCertKey])
+	keyCertIssuer, err := utils.GetCertificateIssuer(oprKeyCert.Data[corev1.TLSCertKey])
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	customerProvidedCert := !utils.IsOperatorIssued(oprKeyCertIssuer)
+	customerProvidedCert := !utils.IsOperatorIssued(keyCertIssuer)
 
 	// If Certificate management is enabled, we only want to trust the CA cert andlet the init container handle private key generation.
 	if instl.CertificateManagement != nil {
@@ -691,7 +691,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		// If the issuer of the current secret is not the same as the certificate management issuer and also is not
 		// issued by the tigera-operator, it means that it is added to this cluster by the customer. This is not supported
 		// in combination with certificate management.
-		if customerProvidedCert && cmIssuer != oprKeyCertIssuer {
+		if customerProvidedCert && cmIssuer != keyCertIssuer {
 			return nil, nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
 		}
 

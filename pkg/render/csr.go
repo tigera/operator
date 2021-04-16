@@ -15,9 +15,11 @@
 package render
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,12 +28,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 )
 
 const (
 	CSRClusterRoleName   = "tigera-csr-creator"
 	CSRInitContainerName = "key-cert-provisioner"
+	CSRCMountPath        = "/certs-share"
 )
 
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
@@ -49,7 +51,7 @@ func CreateCSRInitContainer(
 		Name:  CSRInitContainerName,
 		Image: image,
 		VolumeMounts: []corev1.VolumeMount{
-			{MountPath: "/certs-share", Name: mountName, ReadOnly: false},
+			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
@@ -59,6 +61,8 @@ func CreateCSRInitContainer(
 			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},
 			{Name: "KEY_NAME", Value: keyName},
 			{Name: "CERT_NAME", Value: certName},
+			{Name: "CA_CERT_NAME", Value: "ca.crt"},
+			{Name: "CA_CERT", Value: base64.URLEncoding.EncodeToString(installation.CertificateManagement.CACert)},
 			{Name: "APP_NAME", Value: appNameLabel},
 			{Name: "DNS_NAMES", Value: strings.Join(dnsNames, ",")},
 			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{

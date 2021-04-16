@@ -277,11 +277,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// operator.
 	var certOperatorManaged bool
 	if tlsSecret != nil {
-		certOperatorManaged, err = utils.IsOperatorManaged(tlsSecret, render.ManagerInternalSecretCertName)
+		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
 			return reconcile.Result{}, err
 		}
+		certOperatorManaged = utils.IsOperatorIssued(issuer)
 	}
 
 	// If the secret does not exist, then create one.

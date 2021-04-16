@@ -24,6 +24,7 @@ import (
 )
 
 var defaultImages = map[string]string{
+	"calico/apiserver":        "calico/apiserver",
 	"calico/cni":              "calico/cni",
 	"calico/dikastes":         "calico/dikastes",
 	"calico/kube-controllers": "calico/kube-controllers",

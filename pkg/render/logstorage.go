@@ -997,7 +997,6 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
 			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
 			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
-			// todo: Add certificate management for dex. This planned already and will be a separate PR.
 		}
 	}
 

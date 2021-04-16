@@ -675,9 +675,11 @@ func (m *statusManager) degradedReason() string {
 }
 
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {
-	if m.kubernetesVersion.Major > 1 || (m.kubernetesVersion.Major == 1 && m.kubernetesVersion.Minor >= 19) {
+	if m.kubernetesVersion.ProvidesCertV1API() {
 		return hasPendingCSRUsingCertV1(ctx, m.client, labelMap)
 	}
+	// For k8s v1.19 onwards, certificate/v1beta1 will be deprecated and is planning to be removed on 1.22
+	// Once in the future we stop support v1.18, we need to change the code to only use certificate/v1
 	return hasPendingCSRUsingCertV1beta1(ctx, m.client, labelMap)
 }
 

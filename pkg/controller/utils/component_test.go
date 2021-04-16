@@ -17,6 +17,7 @@ package utils_test
 import (
 	"context"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/common"
 
 	apps "k8s.io/api/apps/v1"

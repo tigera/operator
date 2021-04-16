@@ -16,10 +16,18 @@ package common
 
 import (
 	"fmt"
-	"k8s.io/client-go/kubernetes"
 	"strconv"
 	"strings"
+
+	"k8s.io/client-go/kubernetes"
 )
+
+// VersionInfo contains information about the version of Kubernetes API the cluster is using
+// Major and Minor fields map to the v<Major>.<Minor>+ part of the version string
+type VersionInfo struct {
+	Major int
+	Minor int
+}
 
 func GetKubernetesVersion(clientset kubernetes.Interface) (*VersionInfo, error) {
 	v, err := clientset.Discovery().ServerVersion()
@@ -42,4 +50,12 @@ func GetKubernetesVersion(clientset kubernetes.Interface) (*VersionInfo, error) 
 		Major: major,
 		Minor: minor,
 	}, nil
+}
+
+// ProvidesCertV1API returns if k8s.io/api/certificates/v1 is supported given the current k8s version
+func (v *VersionInfo) ProvidesCertV1API() bool {
+	if v != nil && (v.Major > 1 || (v.Major == 1 && v.Minor >= 19)) {
+		return true
+	}
+	return false
 }

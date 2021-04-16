@@ -213,8 +213,8 @@ func main() {
 
 	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Unable to resolve Kubernetes version"))
-		os.Exit(1)
+		log.Error(err, fmt.Sprintf("Unable to resolve Kubernetes version, defaulting to v1.18"))
+		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
 	}
 
 	options := options.AddOptions{

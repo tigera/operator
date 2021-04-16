@@ -655,7 +655,7 @@ func (r *ReconcileLogStorage) deleteInvalidECKManagedPublicCertSecret(ctx contex
 //    created.
 // 2) The certificate secret needed for Elasticsearch (in the Elasticsearch namespace).
 // 3) The certificate mounted by other clients that connect to Elasticsearch.
-func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (oprKeyCert *corev1.Secret, esKeyCert *corev1.Secret, pubSecret *corev1.Secret, err error) {
+func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (oprKeyCert *corev1.Secret, esKeyCert *corev1.Secret, certSecret *corev1.Secret, err error) {
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 
 	// Get the secret - might be nil
@@ -697,7 +697,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
 		esKeyCert = rsecret.CopyToNamespace(render.ElasticsearchNamespace, oprKeyCert)[0]
-		pubSecret = createCaCertSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		certSecret = createCaCertSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 
 	} else {
 		esKeyCert = rsecret.CopyToNamespace(render.ElasticsearchNamespace, oprKeyCert)[0]
@@ -720,11 +720,11 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 				}
 			}
 
-			pubSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)[0]
+			certSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)[0]
 		}
 	}
 
-	return oprKeyCert, esKeyCert, pubSecret, err
+	return oprKeyCert, esKeyCert, certSecret, err
 }
 
 // Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.

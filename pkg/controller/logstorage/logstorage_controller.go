@@ -678,6 +678,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	customerProvidedCert := !utils.IsOperatorIssued(oprKeyCertIssuer)
 
 	// If Certificate management is enabled, we only want to trust the CA cert andlet the init container handle private key generation.
 	if instl.CertificateManagement != nil {
@@ -687,7 +688,10 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			return nil, nil, nil, err
 		}
 
-		if cmIssuer != oprKeyCertIssuer && !utils.IsOperatorIssued(oprKeyCertIssuer) {
+		// If the issuer of the current secret is not the same as the certificate management issuer and also is not
+		// issued by the tigera-operator, it means that it is added to this cluster by the customer. This is not supported
+		// in combination with certificate management.
+		if customerProvidedCert && cmIssuer != oprKeyCertIssuer {
 			return nil, nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
 		}
 
@@ -703,13 +707,11 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			return nil, nil, nil, err
 		}
 
-		operatorManaged := utils.IsOperatorIssued(oprKeyCertIssuer)
-
 		// If the provided certificate secret (secret) is managed by the operator we need to check if the secret that
 		// Elasticsearch creates from that given secret (pubSecret) has the expected DNS name. If it doesn't, delete the
 		// public secret so it can get recreated.
 		if pubSecret != nil {
-			if operatorManaged {
+			if !customerProvidedCert {
 				err = utils.SecretHasExpectedDNSNames(pubSecret, corev1.TLSCertKey, svcDNSNames)
 				if err == utils.ErrInvalidCertDNSNames {
 					if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {

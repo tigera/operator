@@ -119,7 +119,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -288,7 +288,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// If the secret does not exist, then create one.
 	// If the secret exists but is operator managed, then check that it has the
 	// right DNS names and update it if necessary.
-	if tlsSecret == nil || certOperatorManaged {
+	if (tlsSecret == nil || certOperatorManaged) && installation.CertificateManagement == nil {
 		// Create the cert if doesn't exist. If the cert exists, check that the cert
 		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
 		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
@@ -303,6 +303,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
+	}
+
+	if certOperatorManaged && installation.CertificateManagement != nil {
+		tlsSecret = nil
 	}
 
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
@@ -327,8 +331,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
-			render.ComplianceServerCertName,
-			render.ComplianceServerKeyName,
+			"", // We don't need the key.
+			corev1.TLSCertKey,
 		)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
@@ -453,7 +457,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}

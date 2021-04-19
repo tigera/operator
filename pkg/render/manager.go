@@ -32,6 +32,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -94,15 +95,20 @@ func Manager(
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 ) (Component, error) {
-	tlsSecrets := []*corev1.Secret{tlsKeyPair}
-	tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
+	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := make(map[string]string)
+	if installation.CertificateManagement == nil {
+		tlsSecrets = append(tlsSecrets, tlsKeyPair)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
+		tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
+	} else {
+		tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(installation.CertificateManagement.CACert)
+	}
 
 	if dexCfg != nil {
 		tlsSecrets = append(tlsSecrets, dexCfg.RequiredSecrets(ManagerNamespace)...)
 		tlsAnnotations = dexCfg.RequiredAnnotations()
 	}
-	tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
 	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(kibanaSecrets...)
 
 	if managementCluster != nil {
@@ -148,6 +154,7 @@ type managerComponent struct {
 	managerImage               string
 	proxyImage                 string
 	esProxyImage               string
+	csrInitImage               string
 }
 
 func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -168,6 +175,13 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -217,6 +231,10 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, c.managerDeployment())
 
+	if c.installation.CertificateManagement != nil {
+		objs = append(objs, csrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
+	}
+
 	return objs, nil
 }
 
@@ -227,7 +245,7 @@ func (c *managerComponent) Ready() bool {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-	var annotations map[string]string = make(map[string]string)
+	var annotations = make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
 		annotations = map[string]string{
@@ -244,6 +262,19 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[k] = v
 	}
 
+	var initContainers []corev1.Container
+	if c.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation,
+			c.csrInitImage,
+			ManagerTLSSecretName,
+			ManagerServiceName,
+			ManagerSecretKeyName,
+			ManagerSecretCertName,
+			dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, c.clusterDomain),
+			ManagerNamespace))
+	}
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-manager",
@@ -258,6 +289,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
@@ -294,14 +326,12 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
+
+	tlsVolumeSource := certificateVolumeSource(c.installation.CertificateManagement, ManagerTLSSecretName)
 	v := []v1.Volume{
 		{
-			Name: ManagerTLSSecretName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: ManagerTLSSecretName,
-				},
-			},
+			Name:         ManagerTLSSecretName,
+			VolumeSource: tlsVolumeSource,
 		},
 		{
 			Name: KibanaPublicCertSecret,

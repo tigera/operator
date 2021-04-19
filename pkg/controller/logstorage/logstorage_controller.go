@@ -510,9 +510,9 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	var dexCfg render.DexRelyingPartyConfig
 	if authentication != nil {
-		var dexTLSSecret *corev1.Secret
-		dexTLSSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
+		var dexCertSecret *corev1.Secret
+		dexCertSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexCertSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -524,7 +524,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, err
 			}
 		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
+		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
 	component := render.LogStorage(
@@ -697,7 +697,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
 		esKeyCert = rsecret.CopyToNamespace(render.ElasticsearchNamespace, oprKeyCert)[0]
-		certSecret = createCaCertSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 
 	} else {
 		esKeyCert = rsecret.CopyToNamespace(render.ElasticsearchNamespace, oprKeyCert)[0]
@@ -741,20 +741,6 @@ func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context)
 	return false, nil
 }
 
-// createCaCert is a convenience method for creating a secret that contains the ca to trust.
-func createCaCertSecret(caPem []byte, secretName string, namespace string) *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
-		Data: map[string][]byte{
-			corev1.TLSCertKey: caPem,
-		},
-	}
-}
-
 func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) ([]*corev1.Secret, error) {
 
 	var secrets []*corev1.Secret
@@ -776,8 +762,8 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, instl *operator
 		return []*corev1.Secret{
 			secret,
 			rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0],
-			createCaCertSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, render.KibanaNamespace),
-			createCaCertSecret(instl.CertificateManagement.CACert, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()),
+			render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, render.KibanaNamespace),
+			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()),
 		}, nil
 	}
 

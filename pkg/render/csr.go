@@ -142,6 +142,7 @@ func csrClusterRoleBinding(name, namespace string) *rbacv1.ClusterRoleBinding {
 }
 
 func certificateVolumeSource(certificateManagement *operator.CertificateManagement, secretName string) corev1.VolumeSource {
+	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -149,8 +150,23 @@ func certificateVolumeSource(certificateManagement *operator.CertificateManageme
 	} else {
 		return corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: secretName,
+				SecretName:  secretName,
+				DefaultMode: &defaultMode,
 			},
 		}
+	}
+}
+
+// CreateCertificateSecret is a convenience method for creating a secret that contains only a ca or cert to trust.
+func CreateCertificateSecret(caPem []byte, secretName string, namespace string) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			corev1.TLSCertKey: caPem,
+		},
 	}
 }

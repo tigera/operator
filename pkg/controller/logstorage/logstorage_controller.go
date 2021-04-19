@@ -707,10 +707,10 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			return nil, nil, nil, err
 		}
 
-		// If the provided certificate secret (secret) is managed by the operator we need to check if the secret that
-		// Elasticsearch creates from that given secret (pubSecret) has the expected DNS name. If it doesn't, delete the
-		// public secret so it can get recreated.
 		if pubSecret != nil {
+			// If the provided certificate secret (secret) is managed by the operator we need to check if the secret that
+			// Elasticsearch creates from that given secret (pubSecret) has the expected DNS name. If it doesn't, delete the
+			// public secret so it can get recreated.
 			if !customerProvidedCert {
 				err = utils.SecretHasExpectedDNSNames(pubSecret, corev1.TLSCertKey, svcDNSNames)
 				if err == utils.ErrInvalidCertDNSNames {

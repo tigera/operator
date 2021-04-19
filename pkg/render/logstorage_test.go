@@ -25,8 +25,10 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -280,6 +282,104 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, expectedDeleteResources)
 			})
+
+			It("should render an elasticsearchComponent with certificate management enabled", func() {
+
+				installation.CertificateManagement = &operatorv1.CertificateManagement{
+					CACert:             []byte("my-cert"),
+					SignerName:         "my signer name",
+					SignatureAlgorithm: "ECDSAWithSHA256",
+					KeyAlgorithm:       "ECDSAWithCurve521",
+				}
+				expectedCreateResources := []resourceTestObj{
+					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
+						ls := resource.(*operatorv1.LogStorage)
+						Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
+					}},
+					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
+					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
+					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
+					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
+					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
+					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+					{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+					{relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace(), &corev1.ConfigMap{}, nil},
+					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
+					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
+					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
+					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
+					{render.TigeraKibanaCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
+					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
+					{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+					// Certificate management comes with two additional cluster role bindings:
+					{"tigera-elasticsearch:csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana:csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
+				}
+				component := render.LogStorage(
+					logStorage,
+					installation, nil, nil, nil, nil,
+					esConfig,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", true, nil, render.ElasticsearchLicenseTypeEnterpriseTrial)
+
+				createResources, deleteResources := component.Objects()
+
+				compareResources(createResources, expectedCreateResources)
+				compareResources(deleteResources, []resourceTestObj{})
+
+				resultES := rtest.GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
+					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
+
+				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
+				Expect(initContainers).To(HaveLen(4))
+				compareInitContainer := func(ic corev1.Container, expectedName string, expectedVolumes []corev1.VolumeMount) {
+					Expect(ic.Name).To(Equal(expectedName))
+					Expect(ic.VolumeMounts).To(HaveLen(len(expectedVolumes)))
+					for i, vm := range ic.VolumeMounts {
+						Expect(vm.Name).To(Equal(expectedVolumes[i].Name))
+						Expect(vm.MountPath).To(Equal(expectedVolumes[i].MountPath))
+					}
+				}
+				compareInitContainer(initContainers[0], "elastic-internal-init-os-settings", []corev1.VolumeMount{})
+				compareInitContainer(initContainers[1], "elastic-internal-init-filesystem", []corev1.VolumeMount{
+					{Name: "elastic-internal-transport-certificates-secret", MountPath: "/mnt/elastic-internal/transport-certificates"},
+					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
+					{Name: "elastic-internal-elasticsearch-config-local", MountPath: "/mnt/elastic-internal/elasticsearch-config-local"},
+					{Name: "elastic-internal-elasticsearch-bin-local", MountPath: "/mnt/elastic-internal/elasticsearch-bin-local"},
+				})
+				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
+					{Name: "elastic-internal-http-certificates", MountPath: render.CSRCMountPath},
+				})
+				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
+					{Name: "elastic-internal-transport-certificates", MountPath: render.CSRCMountPath},
+				})
+			})
+
 		})
 
 		Context("Elasticsearch and Kibana both ready", func() {

@@ -762,7 +762,8 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
+			Privileged: ptr.BoolToPtr(false),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 	}
 }
@@ -779,7 +780,8 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		Image:        c.flexvolImage,
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
+			Privileged: ptr.BoolToPtr(false),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 	}
 }
@@ -824,11 +826,26 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
+	sc := &v1.SecurityContext{
+		Privileged: ptr.BoolToPtr(true),
+	}
+	if c.cr.CalicoNetwork == nil ||
+		c.cr.CalicoNetwork.LinuxDataplane == nil ||
+		*c.cr.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneBPF {
+		sc.Capabilities = &v1.Capabilities{
+			Add: []v1.Capability{
+				v1.Capability("NET_RAW"),
+				v1.Capability("NET_ADMIN"),
+			},
+		}
+		sc.Privileged = ptr.BoolToPtr(false)
+		sc.RunAsUser = ptr.Int64ToPtr(0)
+	}
 	return v1.Container{
 		Name:            "calico-node",
 		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
-		SecurityContext: &v1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -1253,6 +1270,10 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+	psp.Spec.AllowedCapabilities = []v1.Capability{
+		v1.Capability("NET_ADMIN"),
+		v1.Capability("NET_RAW"),
+	}
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny

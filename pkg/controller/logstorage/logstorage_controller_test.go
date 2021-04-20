@@ -473,7 +473,7 @@ var _ = Describe("LogStorage controller", func() {
 					})).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, render.CreateDexClientSecret())).ToNot(HaveOccurred())
-					Expect(cli.Create(ctx, render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local"))).ToNot(HaveOccurred())
+					Expect(cli.Create(ctx, render.CreateCertificateSecret([]byte(""), render.DexCertSecretName, rmeta.OperatorNamespace()))).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{

@@ -270,9 +270,12 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 		}
 	}
 
-	if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
-		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
+	if keyName != "" {
+		if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
+			return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
+		}
 	}
+
 	if val, ok := secret.Data[certName]; !ok || len(val) == 0 {
 		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, certName)
 	}

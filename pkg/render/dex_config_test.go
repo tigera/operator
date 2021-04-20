@@ -278,7 +278,6 @@ var _ = Describe("dex config tests", func() {
 		Expect(dexConfig.JWKSURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"))
 		Expect(dexConfig.ClientSecret()).To(Equal(dexSecret.Data["clientSecret"]))
 		Expect(dexConfig.UsernameClaim()).To(Equal("email"))
-		Expect(dexConfig.GroupsClaim()).To(Equal("groups"))
 
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())

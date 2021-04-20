@@ -29,8 +29,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,9 +46,6 @@ var log = logf.Log.WithName("controller_authentication")
 
 const (
 	controllerName = "authentication-controller"
-
-	// Common name to add to the Dex TLS secret.
-	dexCN = "tigera-dex.tigera-dex.svc.%s"
 
 	defaultNameAttribute string = "uid"
 )
@@ -101,7 +96,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.DexNamespace} {
 		for _, secretName := range []string{
-			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
+			render.DexTLSSecretName, render.DexCertSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", controllerName, secretName, namespace, err)
@@ -208,16 +203,18 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
-	tlsSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
-		if errors.IsNotFound(err) {
-			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.clusterDomain))
-		} else {
-			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
-			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
-			return reconcile.Result{}, err
+	// Secret used for TLS between dex and other components.
+	var tlsSecret *corev1.Secret
+	if install.CertificateManagement == nil {
+		tlsSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
+			if errors.IsNotFound(err) {
+				tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCN, r.clusterDomain))
+			} else {
+				log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
+				r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -228,9 +225,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		r.status.SetDegraded("Invalid or missing identity provider secret", err.Error())
 		return reconcile.Result{}, err
 	}
-
-	// Set namespace for secrets so they can be used in the namespace of dex.
-	idpSecret = secret.CopyToNamespace(render.DexNamespace, idpSecret)[0]
 
 	dexSecret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
@@ -252,7 +246,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg := render.NewDexConfig(install, authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
@@ -264,6 +258,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		r.provider == oprv1.ProviderOpenShift,
 		install,
 		dexCfg,
+		r.clusterDomain,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

@@ -1609,7 +1609,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 }
 
 func compareResources(resources []client.Object, expectedResources []resourceTestObj) {
-	Expect(len(resources)).To(Equal(len(expectedResources)))
+	// First compare item-by-item, as it provides clear error messages.
 	for i, expectedResource := range expectedResources {
 		resource := resources[i]
 		actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
@@ -1622,6 +1622,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			expectedResource.f(resource)
 		}
 	}
+	Expect(len(resources)).To(Equal(len(expectedResources)))
 }
 
 func getElasticsearch(resources []client.Object) *esv1.Elasticsearch {

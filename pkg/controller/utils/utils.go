@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -35,6 +37,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -113,6 +116,41 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
+func addLicenseWatch(c controller.Controller) error {
+	lic := &v3.LicenseKey{
+		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
+	}
+	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
+}
+
+// WaitToAddLicenseKeyWatch will check if projectcalico.org APIs are available and if so, it will add a watch for LicenseKey
+// The completion of this operation will be signaled on a ready channel
+func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	maxDuration := 30 * time.Second
+	duration := 1 * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			duration = duration * 2
+			if duration >= maxDuration {
+				duration = maxDuration
+			}
+			ticker.Reset(duration)
+			if areCalicoAPIsReady(client) {
+				err := addLicenseWatch(controller)
+				if err != nil {
+					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
+				} else {
+					flag.MarkAsReady()
+					return
+				}
+			}
+		}
+	}
+}
+
 // addWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.
@@ -163,6 +201,19 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	return true
 }
 
+func areCalicoAPIsReady(client kubernetes.Interface) bool {
+	groups, err := client.Discovery().ServerGroups()
+	if err != nil {
+		return false
+	}
+	for _, g := range groups.Groups {
+		if g.Name == "projectcalico.org" {
+			return true
+		}
+	}
+	return false
+}
+
 func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	instance := &operatorv1.LogStorage{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
@@ -176,15 +227,27 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	return true, nil
 }
 
-// CheckLicenseKey checks if a license has been installed. It's useful
+// FetchLicenseKey returns the license if it has been installed. It's useful
 // to prevent rollout of TSEE components that might require it.
-// It will return an error if the license is not installed, and nil otherwise.
-func CheckLicenseKey(ctx context.Context, cli client.Client) error {
+// It will return an error if the license is not installed/cannot be read
+func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}
-	return cli.Get(ctx, DefaultInstanceKey, instance)
+	err := cli.Get(ctx, DefaultInstanceKey, instance)
+	return *instance, err
 }
 
-// ValidateCertPairInNamespace checks if the given secret exists in the given
+// IsFeatureActive return true if the feature is listed in LicenseStatusKey
+func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
+	for _, v := range license.Status.Features {
+		if v == featureName || v == "all" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ValidateCertPair checks if the given secret exists in the given
 // namespace and if so that it contains key and cert fields. If a secret exists then it is returned.
 // If there is an error accessing the secret (except NotFound) or the cert
 // does not have both a key and cert field then an appropriate error is returned.
@@ -221,7 +284,7 @@ func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) (
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.ImagePullSecrets {
 		s := &corev1.Secret{}
-		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: render.OperatorNamespace()}, s)
+		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: rmeta.OperatorNamespace()}, s)
 		if err != nil {
 			return nil, err
 		}
@@ -282,23 +345,6 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	}
 
 	return authentication, nil
-}
-
-// GetTyphaScaleCount will return the number of Typhas needed for the number of nodes.
-func GetExpectedTyphaScale(nodes int) int {
-	var maxNodesPerTypha int = 200
-	// This gives a count of how many 200s so we need 1+ this number to get at least
-	// 1 typha for every 200 nodes.
-	typhas := (nodes / maxNodesPerTypha) + 1
-	// We add one more to ensure there is always 1 extra for high availability purposes.
-	typhas += 1
-	// If we don't have enough nodes to have 3 typhs then make sure there is one typha for each node.
-	if nodes <= 3 {
-		typhas = nodes
-	} else if typhas < 3 { // If typhas is less than 3 always make sure we have 3
-		typhas = 3
-	}
-	return typhas
 }
 
 // GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.

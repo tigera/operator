@@ -19,6 +19,9 @@ import (
 	"strconv"
 	"strings"
 
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+
 	oprv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -28,6 +31,7 @@ const (
 	connectorTypeOIDC      = "oidc"
 	connectorTypeOpenshift = "openshift"
 	connectorTypeGoogle    = "google"
+	connectorTypeLDAP      = "ldap"
 
 	// Various annotations to keep the pod up-to-date
 	authenticationAnnotation = "hash.operator.tigera.io/tigera-dex-auth"
@@ -40,12 +44,16 @@ const (
 	serviceAccountSecretField    = "serviceAccountSecret"
 	ClientSecretSecretField      = "clientSecret"
 	adminEmailSecretField        = "adminEmail"
+	serviceAccountFilePathField  = "serviceAccountFilePath"
 	RootCASecretField            = "rootCA"
 	OIDCSecretName               = "tigera-oidc-credentials"
 	OpenshiftSecretName          = "tigera-openshift-credentials"
+	LDAPSecretName               = "tigera-ldap-credentials"
 	serviceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
 	rootCASecretLocation         = "/etc/ssl/certs/idp.pem"
 	ClientIDSecretField          = "clientID"
+	BindDNSecretField            = "bindDN"
+	BindPWSecretField            = "bindPW"
 
 	// OIDC well-known-config related constants.
 	jwksURI     = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/keys"
@@ -57,10 +65,15 @@ const (
 	clientIDEnv         = "CLIENT_ID"
 	clientSecretEnv     = "CLIENT_SECRET"
 	dexSecretEnv        = "DEX_SECRET"
+	bindDNEnv           = "BIND_DN"
+	bindPWEnv           = "BIND_PW"
 
 	// Default claims to use to data from a JWT.
 	defaultGroupsClaim   = "groups"
 	defaultUsernameClaim = "email"
+
+	// Other constants
+	googleIssuer = "https://accounts.google.com"
 )
 
 // DexConfig is a config for DexIdP itself.
@@ -156,17 +169,16 @@ func baseCfg(
 	}
 
 	var connType string
-	var issuer string
 	if authentication.Spec.OIDC != nil {
-		issuer = authentication.Spec.OIDC.IssuerURL
-		if issuer == "https://accounts.google.com" {
+		if authentication.Spec.OIDC.IssuerURL == googleIssuer {
 			connType = connectorTypeGoogle
 		} else {
 			connType = connectorTypeOIDC
 		}
 	} else if authentication.Spec.Openshift != nil {
-		issuer = authentication.Spec.Openshift.IssuerURL
 		connType = connectorTypeOpenshift
+	} else if authentication.Spec.LDAP != nil {
+		connType = connectorTypeLDAP
 	}
 
 	return &dexBaseCfg{
@@ -175,7 +187,6 @@ func baseCfg(
 		idpSecret:      idpSecret,
 		dexSecret:      dexSecret,
 		connectorType:  connType,
-		issuer:         issuer,
 		managerURI:     baseUrl,
 		clusterDomain:  clusterDomain,
 	}
@@ -187,7 +198,6 @@ type dexBaseCfg struct {
 	idpSecret      *corev1.Secret
 	dexSecret      *corev1.Secret
 	managerURI     string
-	issuer         string
 	connectorType  string
 	clusterDomain  string
 }
@@ -225,13 +235,13 @@ func (d *dexBaseCfg) RequestedScopes() []string {
 
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	secrets := []*corev1.Secret{
-		CopySecrets(namespace, d.tlsSecret)[0],
+		secret.CopyToNamespace(namespace, d.tlsSecret)[0],
 	}
 	if d.dexSecret != nil {
-		secrets = append(secrets, CopySecrets(namespace, d.dexSecret)...)
+		secrets = append(secrets, secret.CopyToNamespace(namespace, d.dexSecret)...)
 	}
 	if d.idpSecret != nil {
-		secrets = append(secrets, CopySecrets(namespace, d.idpSecret)...)
+		secrets = append(secrets, secret.CopyToNamespace(namespace, d.idpSecret)...)
 	}
 	return secrets
 }
@@ -239,14 +249,14 @@ func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 // RequiredAnnotations returns the annotations that are relevant for a Dex deployment.
 func (d *dexConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		dexConfigMapAnnotation: AnnotationHash(d.Connector()),
-		dexTLSSecretAnnotation: AnnotationHash(d.tlsSecret.Data),
+		dexConfigMapAnnotation: rmeta.AnnotationHash(d.Connector()),
+		dexTLSSecretAnnotation: rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.idpSecret != nil {
-		annotations[dexIdpSecretAnnotation] = AnnotationHash(d.idpSecret.Data)
+		annotations[dexIdpSecretAnnotation] = rmeta.AnnotationHash(d.idpSecret.Data)
 	}
 	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = AnnotationHash(d.dexSecret.Data)
+		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
 	}
 	return annotations
 }
@@ -254,11 +264,11 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
-		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = AnnotationHash(d.dexSecret.Data)
+		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
 	}
 	return annotations
 }
@@ -266,8 +276,8 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
-		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
+		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations
 }
@@ -295,13 +305,30 @@ func (d *dexRelyingPartyConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 // Append variables that are necessary for configuring dex.
 func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 	env := []corev1.EnvVar{
-		{Name: clientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
-		{Name: clientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}},
 		{Name: dexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
 	}
-	if d.idpSecret != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
-		env = append(env, corev1.EnvVar{Name: googleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: adminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+	if d.idpSecret != nil {
+		for key := range d.idpSecret.Data {
+			switch key {
+			case ClientIDSecretField:
+				env = append(env, corev1.EnvVar{Name: clientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+				break
+			case ClientSecretSecretField:
+				env = append(env, corev1.EnvVar{Name: clientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+				break
+			case adminEmailSecretField:
+				env = append(env, corev1.EnvVar{Name: googleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: adminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+				break
+			case BindDNSecretField:
+				env = append(env, corev1.EnvVar{Name: bindDNEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: BindDNSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+				break
+			case BindPWSecretField:
+				env = append(env, corev1.EnvVar{Name: bindPWEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: BindPWSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
+				break
+			}
+		}
 	}
+
 	return env
 }
 
@@ -436,44 +463,103 @@ func (d *dexRelyingPartyConfig) UserInfoURI() string {
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
 func (d *dexConfig) Connector() map[string]interface{} {
+	var config map[string]interface{}
 	connectorType := d.connectorType
-	config := map[string]interface{}{
-		"issuer":       d.issuer,
-		"clientID":     fmt.Sprintf("$%s", clientIDEnv),
-		"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
-		"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
 
-		// OIDC (and google) specific.
-		"userNameKey": d.UsernameClaim(),
-		"userIDKey":   d.UsernameClaim(),
+	switch connectorType {
+	case connectorTypeOIDC:
+		config = map[string]interface{}{
+			"issuer":       d.authentication.Spec.OIDC.IssuerURL,
+			"clientID":     fmt.Sprintf("$%s", clientIDEnv),
+			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
+			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			"scopes":       d.RequestedScopes(),
+			"userNameKey":  d.UsernameClaim(),
+			"userIDKey":    d.UsernameClaim(),
+			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
+				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
+		}
+		promptTypes := d.authentication.Spec.OIDC.PromptTypes
+		if promptTypes != nil {
+			length := len(promptTypes)
+			prompts := make([]string, length)
+			for i, v := range promptTypes {
+				switch v {
+				case oprv1.PromptTypeNone:
+					prompts[i] = "none"
+				case oprv1.PromptTypeSelectAccount:
+					prompts[i] = "select_account"
+				case oprv1.PromptTypeLogin:
+					prompts[i] = "login"
+				case oprv1.PromptTypeConsent:
+					prompts[i] = "consent"
+				}
+			}
+			// RFC specifies space delimited case sensitive list: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
+			config["promptType"] = strings.Join(prompts, " ")
+		}
 
-		//Openshift specific.
-		RootCASecretField: rootCASecretLocation,
+	case connectorTypeGoogle:
+		config = map[string]interface{}{
+			"issuer":       googleIssuer,
+			"clientID":     fmt.Sprintf("$%s", clientIDEnv),
+			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
+			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			"scopes":       d.RequestedScopes(),
+		}
+		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
+			config[serviceAccountFilePathField] = serviceAccountSecretLocation
+			config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
+		}
+
+	case connectorTypeOpenshift:
+		config = map[string]interface{}{
+			"issuer":          d.authentication.Spec.Openshift.IssuerURL,
+			"clientID":        fmt.Sprintf("$%s", clientIDEnv),
+			"clientSecret":    fmt.Sprintf("$%s", clientSecretEnv),
+			"redirectURI":     fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			RootCASecretField: rootCASecretLocation,
+		}
+	case connectorTypeLDAP:
+		config = map[string]interface{}{
+			"host":            d.authentication.Spec.LDAP.Host,
+			"bindDN":          fmt.Sprintf("$%s", bindDNEnv),
+			"bindPW":          fmt.Sprintf("$%s", bindPWEnv),
+			"startTLS":        d.authentication.Spec.LDAP.StartTLS != nil && *d.authentication.Spec.LDAP.StartTLS,
+			RootCASecretField: rootCASecretLocation,
+			"userSearch": map[string]string{
+				"baseDN":    d.authentication.Spec.LDAP.UserSearch.BaseDN,
+				"filter":    d.authentication.Spec.LDAP.UserSearch.Filter,
+				"emailAttr": d.authentication.Spec.LDAP.UserSearch.NameAttribute,
+				"idAttr":    d.authentication.Spec.LDAP.UserSearch.NameAttribute,
+				"username":  d.authentication.Spec.LDAP.UserSearch.NameAttribute,
+				"nameAttr":  d.authentication.Spec.LDAP.UserSearch.NameAttribute,
+			},
+		}
+		if d.authentication.Spec.LDAP.GroupSearch != nil {
+			matchers := make([]map[string]string, len(d.authentication.Spec.LDAP.GroupSearch.UserMatchers))
+			for i, match := range d.authentication.Spec.LDAP.GroupSearch.UserMatchers {
+				matchers[i] = map[string]string{
+					"userAttr":  match.UserAttribute,
+					"groupAttr": match.GroupAttribute,
+				}
+			}
+
+			config["groupSearch"] = map[string]interface{}{
+				"baseDN":       d.authentication.Spec.LDAP.GroupSearch.BaseDN,
+				"filter":       d.authentication.Spec.LDAP.GroupSearch.Filter,
+				"nameAttr":     d.authentication.Spec.LDAP.GroupSearch.NameAttribute,
+				"userMatchers": matchers,
+			}
+		}
+	default:
+
 	}
 
-	// TODO Instead of having to check if this is an OIDC Spec we should have a dex configuration object specifically
-	// for OIDC.
-	if d.authentication.Spec.OIDC != nil && len(d.RequestedScopes()) > 0 {
-		config["scopes"] = d.RequestedScopes()
-	}
-
-	//Google specific.
-	if d.idpSecret.Data[serviceAccountSecretField] != nil || d.idpSecret.Data[adminEmailSecretField] == nil {
-		config["serviceAccountFilePath"] = serviceAccountSecretLocation
-		config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
-	}
-
-	if connectorType == connectorTypeOIDC &&
-		d.authentication.Spec.OIDC.EmailVerification != nil &&
-		*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip {
-		config["insecureSkipEmailVerified"] = true
-	}
-
-	c := map[string]interface{}{
+	return map[string]interface{}{
 		"id":     connectorType,
 		"type":   connectorType,
 		"name":   connectorType,
 		"config": config,
 	}
-	return c
 }

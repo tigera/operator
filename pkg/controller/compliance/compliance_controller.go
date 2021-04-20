@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -30,6 +32,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,29 +55,44 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	var licenseAPIReady = &utils.ReadyFlag{}
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+
+	// Create a new controller
+	controller, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return err
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+
+	return add(mgr, controller)
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+// newReconciler returns a new *reconcile.Reconciler
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileCompliance{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "compliance"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		status:          status.New(mgr.GetClient(), "compliance"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	r.status.Run()
 	return r
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource Compliance
 	err = c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
@@ -94,9 +113,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch the given secrets in each both the compliance and operator namespaces
-	for _, namespace := range []string{render.OperatorNamespace(), render.ComplianceNamespace} {
+	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
-			render.ElasticsearchPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexTLSSecretName} {
@@ -106,7 +125,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -137,11 +156,12 @@ var _ reconcile.Reconciler = &ReconcileCompliance{}
 type ReconcileCompliance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	licenseAPIReady *utils.ReadyFlag
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -184,8 +204,18 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
-		r.status.SetDegraded("License not found", err.Error())
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("License not found", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -264,7 +294,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var managerInternalTLSSecret *corev1.Secret
 	if managementCluster != nil {
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-			render.OperatorNamespace(),
+			rmeta.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
 			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
@@ -277,7 +307,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
-		render.OperatorNamespace(),
+		rmeta.OperatorNamespace(),
 		render.ComplianceServerCertSecret,
 		render.ComplianceServerCertName,
 		render.ComplianceServerKeyName,
@@ -294,7 +324,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	// the user, set the component degraded.
 	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
 	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
-		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, render.DefaultCertificateDuration, svcDNSNames...,
+		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, svcDNSNames...,
 	)
 
 	if err != nil {
@@ -319,7 +349,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -327,9 +357,10 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(3).Info("rendering components")
+	var hasNoLicense = !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain)
+	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain, hasNoLicense)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())
@@ -342,9 +373,15 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	if hasNoLicense {
+		log.V(4).Info("Compliance is not activated as part of this license")
+		r.status.SetDegraded("Feature is not active", "License does not support this feature")
+		return reconcile.Result{}, nil
 	}
 
 	// Clear the degraded bit if we've reached this far.

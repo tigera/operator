@@ -36,6 +36,21 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentOperatorInit, "", "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
 		})
 	})
+	Context("UseDefault for registry and imagepath", func() {
+		ud := "UseDefault"
+		It("should render a calico image correctly", func() {
+			Expect(GetReference(ComponentCalicoNode, ud, ud, nil)).To(Equal("docker.io/calico/node:" + ComponentCalicoNode.Version))
+		})
+		It("should render a tigera image correctly", func() {
+			Expect(GetReference(ComponentTigeraNode, ud, ud, nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
+		})
+		It("should render an ECK image correctly", func() {
+			Expect(GetReference(ComponentElasticsearchOperator, ud, ud, nil)).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
+		})
+		It("should render an operator init image correctly", func() {
+			Expect(GetReference(ComponentOperatorInit, ud, ud, nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
+		})
+	})
 
 	Context("registry override", func() {
 		It("should render a calico image correctly", func() {

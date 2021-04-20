@@ -17,11 +17,20 @@ package render
 import (
 	"bytes"
 	"fmt"
+	"time"
+
+	"github.com/tigera/operator/pkg/render/common/configmap"
+
+	"github.com/go-logr/logr"
+
+	"github.com/tigera/operator/pkg/tls"
+
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	"github.com/openshift/library-go/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -40,26 +49,6 @@ var (
 	TyphaCommonName      = "typha-server"
 	FelixCommonName      = "typha-client"
 )
-
-type Component interface {
-	// ResolveImages should call components.GetReference for all images that the Component
-	// needs, passing 'is' to the GetReference call and if there are any errors those
-	// are returned. It is valid to pass nil for 'is' as GetReference accepts the value.
-	// ResolveImages must be called before Objects is called for the component.
-	ResolveImages(is *operator.ImageSet) error
-
-	// Objects returns the lists of objects in this component that should be created and/or deleted during
-	// rendering.
-	Objects() (objsToCreate, objsToDelete []client.Object)
-
-	// Ready returns true if the component is ready to be created.
-	Ready() bool
-
-	// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
-	// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
-	// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
-	SupportedOSType() OSType
-}
 
 // A Renderer is capable of generating components to be installed on the cluster.
 type Renderer interface {
@@ -91,6 +80,8 @@ func Calico(
 	nodeAppArmorProfile string,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	esAdminSecret *corev1.Secret,
+	kubeControllersMetricsPort int,
 	nodeReporterMetricsPort int,
 ) (Renderer, error) {
 	var tcms []*corev1.ConfigMap
@@ -102,7 +93,7 @@ func Calico(
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      TyphaCAConfigMapName,
-					Namespace: OperatorNamespace(),
+					Namespace: rmeta.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					TyphaCABundleName: string(cr.CertificateManagement.CACert),
@@ -131,10 +122,10 @@ func Calico(
 			}
 		}
 		// Create copy to go into Calico Namespace
-		tss = append(tss, CopySecrets(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
+		tss = append(tss, secret.CopyToNamespace(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
 	}
 	// Create copy to go into Calico Namespace
-	tcms = append(tcms, copyConfigMaps(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
+	tcms = append(tcms, configmap.CopyToNamespace(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
 	// If internal manager cert secret exists add it to the renderer.
 	if managerInternalTLSSecret != nil {
@@ -162,13 +153,15 @@ func Calico(
 		nodeAppArmorProfile:         nodeAppArmorProfile,
 		esLicenseType:               esLicenseType,
 		clusterDomain:               clusterDomain,
+		esAdminSecret:               esAdminSecret,
+		kubeControllersMetricsPort:  kubeControllersMetricsPort,
 		nodeReporterMetricsPort:     nodeReporterMetricsPort,
 	}, nil
 }
 
 func createTLS() (*TyphaNodeTLS, error) {
 	// Make CA
-	ca, err := makeCA()
+	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
 	if err != nil {
 		return nil, err
 	}
@@ -186,18 +179,19 @@ func createTLS() (*TyphaNodeTLS, error) {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaCAConfigMapName,
-			Namespace: OperatorNamespace(),
+			Namespace: rmeta.OperatorNamespace(),
 		},
 		Data: data,
 	}
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.NodeSecret, err = CreateOperatorTLSSecret(ca,
+	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
 		NodeTLSSecretName,
+		rmeta.OperatorNamespace(),
 		TLSSecretKeyName,
 		TLSSecretCertName,
-		DefaultCertificateDuration,
-		[]crypto.CertificateExtensionFunc{setClientAuth},
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
 		FelixCommonName)
 	if err != nil {
 		return nil, err
@@ -206,12 +200,13 @@ func createTLS() (*TyphaNodeTLS, error) {
 	tntls.NodeSecret.Data[CommonName] = []byte(FelixCommonName)
 
 	// Create TLS Secret for Felix using ca from above
-	tntls.TyphaSecret, err = CreateOperatorTLSSecret(ca,
+	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
 		TyphaTLSSecretName,
+		rmeta.OperatorNamespace(),
 		TLSSecretKeyName,
 		TLSSecretCertName,
-		DefaultCertificateDuration,
-		[]crypto.CertificateExtensionFunc{setServerAuth},
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
 		TyphaCommonName)
 	if err != nil {
 		return nil, err
@@ -243,6 +238,8 @@ type calicoRenderer struct {
 	nodeAppArmorProfile         string
 	clusterDomain               string
 	esLicenseType               ElasticsearchLicenseType
+	esAdminSecret               *corev1.Secret
+	kubeControllersMetricsPort  int
 	nodeReporterMetricsPort     int
 }
 
@@ -254,7 +251,9 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort))
-	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster, r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication, r.esLicenseType))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
+		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
+		r.esLicenseType, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))
 	return components
 }
 
@@ -263,4 +262,8 @@ func appendNotNil(components []Component, c Component) []Component {
 		components = append(components, c)
 	}
 	return components
+}
+
+func SetTestLogger(l logr.Logger) {
+	log = l
 }

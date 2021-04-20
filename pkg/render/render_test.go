@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"fmt"
 
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -84,12 +87,12 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
-		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy)
+		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, 0)
+		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, nil, 9094, 0)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 5 + 1 + 1))
+		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 6 + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -100,9 +103,9 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operator.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, 0)
+		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, nil, 9094, 0)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 5 + 1 + 1) + 1 + 1))
+		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 6 + 1 + 1) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -116,10 +119,10 @@ var _ = Describe("Rendering tests", func() {
 		internalManagerTLSSecret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: render.ManagerInternalTLSSecretName, Namespace: render.OperatorNamespace(),
+				Name: render.ManagerInternalTLSSecretName, Namespace: rmeta.OperatorNamespace(),
 			},
 		}
-		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, 0)
+		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, nil, 9094, 0)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -132,13 +135,13 @@ var _ = Describe("Rendering tests", func() {
 			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
 			{render.DexObjectName, "", "", "v1", "Namespace"},
-			{render.TyphaCAConfigMapName, render.OperatorNamespace(), "", "v1", "ConfigMap"},
+			{render.TyphaCAConfigMapName, rmeta.OperatorNamespace(), "", "v1", "ConfigMap"},
 			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{render.TyphaTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
-			{render.NodeTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+			{render.NodeTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, render.OperatorNamespace(), "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
@@ -159,6 +162,7 @@ var _ = Describe("Rendering tests", func() {
 			{"calico-kube-controllers", common.CalicoNamespace, "apps", "v1", "Deployment"},
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{"calico-kube-controllers", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 		}
 
 		var resources []client.Object
@@ -169,19 +173,19 @@ var _ = Describe("Rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
 		apparmorProf := "foobar"
-		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, apparmorProf, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, 0)
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, apparmorProf, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, nil, 0, 0)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		comps := r.Render()
 		var cn *appsv1.DaemonSet
 		for _, comp := range comps {
 			resources, _ := comp.Objects()
-			r := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			r := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 			if r != nil {
 				cn = r.(*appsv1.DaemonSet)
 				break

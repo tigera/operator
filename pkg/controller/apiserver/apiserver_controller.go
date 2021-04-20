@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,11 +88,11 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
-	for _, namespace := range []string{render.OperatorNamespace(), render.APIServerNamespace} {
+	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
 		if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}
@@ -184,7 +186,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
-			render.OperatorNamespace(),
+			rmeta.OperatorNamespace(),
 			render.APIServerTLSSecretName,
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
@@ -226,7 +228,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var tunnelCASecret *v1.Secret
 	if managementCluster != nil {
 		tunnelCASecret, err = utils.ValidateCertPair(r.client,
-			render.OperatorNamespace(),
+			rmeta.OperatorNamespace(),
 			render.VoltronTunnelSecretName,
 			render.VoltronTunnelSecretKeyName,
 			render.VoltronTunnelSecretCertName,
@@ -276,7 +278,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(context.Background(), component, r.status); err != nil {
+	if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

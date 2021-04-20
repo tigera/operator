@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -39,6 +40,7 @@ var _ = Describe("Installation validation tests", func() {
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
+				ComponentResources: []operator.ComponentResource{},
 			},
 		}
 	})
@@ -63,6 +65,45 @@ var _ = Describe("Installation validation tests", func() {
 		// Try with a valid block size
 		instance.Spec.CalicoNetwork.IPPools[0].CIDR = "192.168.0.0/26"
 		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should prevent IPv6 if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "1eef::/64",
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				Encapsulation: operator.EncapsulationNone,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("IPv6 IP pool is specified but eBPF mode does not support IPv6"))
+	})
+
+	It("should prevent host ports if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		hp := operator.HostPortsEnabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach: "8.8.8.8",
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane"))
+	})
+
+	It("should allow disabled host ports if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		hp := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.HostPorts = &hp
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach: "8.8.8.8",
+		}
+		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -196,6 +237,51 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("Calico", operator.IPAMPluginCalico),
 			Entry("HostLocal", operator.IPAMPluginHostLocal),
 		)
+		DescribeTable("with HostLocal IPAM",
+			func(ipam operator.IPAMPluginType) {
+				instance.Spec.CNI.Type = operator.PluginCalico
+				instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			},
+
+			Entry("Calico", operator.IPAMPluginCalico),
+			Entry("HostLocal", operator.IPAMPluginHostLocal),
+		)
+		Describe("should validate HostLocal with IPPool", func() {
+			BeforeEach(func() {
+				instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: operator.IPAMPluginHostLocal}
+				disabled := operator.BGPDisabled
+				instance.Spec.CalicoNetwork.BGP = &disabled
+			})
+			It("with empty CalicoNetwork validates", func() {
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("with IPPool with Encapsulation None validates", func() {
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/24",
+						Encapsulation: operator.EncapsulationNone,
+						NATOutgoing:   operator.NATOutgoingEnabled,
+						NodeSelector:  "all()",
+					},
+				}
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("with BGP enabled validates", func() {
+				enable := operator.BGPEnabled
+				instance.Spec.CalicoNetwork.BGP = &enable
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
 	})
 	Describe("validate non-calico CNI plugin Type", func() {
 		BeforeEach(func() {
@@ -342,5 +428,62 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("AmazonVPC plugin is allowed on EKS", operator.ProviderEKS, operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC, true),
 			Entry("AzureVNET plugin is not allowed on EKS", operator.ProviderEKS, operator.PluginAzureVNET, operator.IPAMPluginAzureVNET, false),
 		)
+	})
+	Describe("validate ComponentResources", func() {
+		It("should return nil when there are no ComponentResources to validate.", func() {
+			Expect(validateCustomResource(instance)).To(BeNil())
+		})
+
+		It("should return nil when only supported ComponentNames are present.", func() {
+			instance.Spec.ComponentResources = append(instance.Spec.ComponentResources, []operator.ComponentResource{
+				{
+					ComponentName: operator.ComponentNameTypha,
+				},
+				{
+					ComponentName: operator.ComponentNameKubeControllers,
+				},
+				{
+					ComponentName: operator.ComponentNameNode,
+				},
+			}...)
+			Expect(validateCustomResource(instance)).To(BeNil())
+		})
+
+		It("should return an error when an invalid ComponentName is present", func() {
+			instance.Spec.ComponentResources = append(instance.Spec.ComponentResources, operator.ComponentResource{
+				ComponentName: "invalid-componentName",
+			})
+			Expect(validateCustomResource(instance)).ToNot(BeNil())
+		})
+	})
+
+	It("validate custom installation", func() {
+		disabled := operator.BGPDisabled
+		ipfw := operator.ContainerIPForwardingEnabled
+		var twentyEight int32 = 28
+		instance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				KubernetesProvider: operator.ProviderAKS,
+				ImagePullSecrets:   []v1.LocalObjectReference{},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					BGP:                   &disabled,
+					ContainerIPForwarding: &ipfw,
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "192.168.0.0/27",
+							BlockSize:     &twentyEight,
+							Encapsulation: operator.EncapsulationNone,
+						},
+					},
+				},
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginHostLocal},
+				},
+			},
+		}
+		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
 	})
 })

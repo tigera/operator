@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
 
 var _ = Describe("Typha rendering tests", func() {
@@ -81,11 +82,11 @@ var _ = Describe("Typha rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
 		tc := d.Spec.Template.Spec.Containers[0]
@@ -117,7 +118,7 @@ var _ = Describe("Typha rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
@@ -159,7 +160,7 @@ var _ = Describe("Typha rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		deploymentResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		deploymentResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
 		d := deploymentResource.(*apps.Deployment)
 		tc := d.Spec.Template.Spec.Containers[0]
@@ -197,7 +198,7 @@ var _ = Describe("Typha rendering tests", func() {
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
 		resources, _ := component.Objects()
 
-		depResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		depResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*apps.Deployment)
 
@@ -229,7 +230,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
 		resources, _ := component.Objects()
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
@@ -240,7 +241,7 @@ var _ = Describe("Typha rendering tests", func() {
 		installation.KubernetesProvider = operator.ProviderAKS
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
 		resources, _ := component.Objects()
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
@@ -278,7 +279,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
 		resources, _ := component.Objects()
-		dResource := GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity
@@ -325,17 +326,53 @@ var _ = Describe("Typha rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
-		dep := GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment")
+		dep := rtest.GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*apps.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
-		ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
+		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
+	})
+	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
+		installation.Variant = operator.TigeraSecureEnterprise
+		installation.TyphaMetricsPort = nil
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		notExpectedEnvVar := v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED"}
+		d := dResource.(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(notExpectedEnvVar))
+	})
+
+	It("should set TYPHA_PROMETHEUSMETRICSPORT with a custom value if TyphaMetricsPort is set", func() {
+		var typhaMetricsPort int32 = 1234
+		installation.Variant = operator.TigeraSecureEnterprise
+		installation.TyphaMetricsPort = &typhaMetricsPort
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		d := dResource.(*apps.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: "1234"}))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"}))
+
+		// Assert we set annotations properly.
+		Expect(d.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+		Expect(d.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
 	})
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
 		installation.Variant = operator.TigeraSecureEnterprise

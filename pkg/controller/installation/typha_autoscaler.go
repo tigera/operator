@@ -267,7 +267,6 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 		if n.Labels["kubernetes.io/os"] == "linux" {
 			linuxNodes++
 		}
-
 	}
 	return schedulable, linuxNodes, nil
 }

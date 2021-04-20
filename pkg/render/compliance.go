@@ -87,8 +87,8 @@ func Compliance(
 		clusterDomain:               clusterDomain,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
-		dexCfg:       dexCfg,
-		hasNoLicense: hasNoLicense,
+		dexCfg:                      dexCfg,
+		hasNoLicense:                hasNoLicense,
 	}, nil
 }
 

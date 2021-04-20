@@ -627,6 +627,18 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 	}
 }
 
+// Do this as a separate function to try to make updates in the future easier.
+func setFluentdCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
+	envs = append(envs,
+		corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
+	)
+	return envs
+}
+
 func (c *fluentdComponent) liveness() *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{

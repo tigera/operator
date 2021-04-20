@@ -23,10 +23,12 @@ import (
 	"time"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"
-	"k8s.io/api/certificates/v1beta1"
+	certV1 "k8s.io/api/certificates/v1"
+	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -84,6 +86,7 @@ type statusManager struct {
 	certificatestatusrequests map[string]map[string]string
 	lock                      sync.Mutex
 	enabled                   *bool
+	kubernetesVersion         *common.VersionInfo
 
 	// Track degraded state as set by external controllers.
 	degraded               bool
@@ -95,7 +98,7 @@ type statusManager struct {
 	failing     []string
 }
 
-func New(client client.Client, component string) StatusManager {
+func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
 	return &statusManager{
 		client:                    client,
 		component:                 component,
@@ -104,6 +107,7 @@ func New(client client.Client, component string) StatusManager {
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		kubernetesVersion:         kubernetesVersion,
 	}
 }
 
@@ -431,7 +435,7 @@ func (m *statusManager) syncState() bool {
 	}
 
 	for _, labels := range m.certificatestatusrequests {
-		pending, err := hasPendingCSR(context.TODO(), m.client, labels)
+		pending, err := hasPendingCSR(context.TODO(), m, labels)
 		if err != nil {
 			log.WithValues("error", err).Error(err, fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with labels value %v", labels))
 		} else if pending {
@@ -670,8 +674,17 @@ func (m *statusManager) degradedReason() string {
 	return strings.Join(reasons, "; ")
 }
 
-func hasPendingCSR(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
-	csrs := &v1beta1.CertificateSigningRequestList{}
+func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {
+	if m.kubernetesVersion.ProvidesCertV1API() {
+		return hasPendingCSRUsingCertV1(ctx, m.client, labelMap)
+	}
+	// For k8s v1.19 onwards, certificate/v1beta1 will be deprecated and is planning to be removed on 1.22
+	// Once in the future we stop support v1.18, we need to change the code to only use certificate/v1
+	return hasPendingCSRUsingCertV1beta1(ctx, m.client, labelMap)
+}
+
+func hasPendingCSRUsingCertV1(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
+	csrs := &certV1.CertificateSigningRequestList{}
 	selector := labels.SelectorFromSet(labelMap)
 	err := cli.List(ctx, csrs, &client.ListOptions{LabelSelector: selector})
 	if err != nil {
@@ -691,7 +704,36 @@ func hasPendingCSR(ctx context.Context, cli client.Client, labelMap map[string]s
 		for _, condition := range csr.Status.Conditions {
 			if condition.Status == v1.ConditionUnknown {
 				return true, nil
-			} else if condition.Type == v1beta1.CertificateApproved && csr.Status.Certificate == nil {
+			} else if condition.Type == certV1.CertificateApproved && csr.Status.Certificate == nil {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
+	csrs := &certV1beta1.CertificateSigningRequestList{}
+	selector := labels.SelectorFromSet(labelMap)
+	err := cli.List(ctx, csrs, &client.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return false, err
+	}
+
+	if len(csrs.Items) == 0 {
+		return false, nil
+	}
+
+	for _, csr := range csrs.Items {
+		if len(csr.Status.Conditions) == 0 {
+			// No conditions means status is pending
+			return true, nil
+		}
+		// no condition approved, means it is pending.
+		for _, condition := range csr.Status.Conditions {
+			if condition.Status == v1.ConditionUnknown {
+				return true, nil
+			} else if condition.Type == certV1beta1.CertificateApproved && csr.Status.Certificate == nil {
 				return true, nil
 			}
 		}

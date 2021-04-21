@@ -20,4 +20,11 @@ const (
 	NodeDaemonSetName   = "calico-node"
 
 	TigeraPrometheusNamespace = "tigera-prometheus"
+
+	// ComplianceFeature name
+	ComplianceFeature = "compliance-reports"
+	// ThreatDefenseFeature feature name
+	ThreatDefenseFeature = "threat-defense"
+	// ExportLogsFeature to 3rd party systems feature name
+	ExportLogsFeature = "export-logs"
 )

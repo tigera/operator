@@ -1,0 +1,5 @@
+title: v1.0.0
+components:
+  key-cert-provisioner:
+    image: tigera/key-cert-provisioner
+    version: v1.0.0

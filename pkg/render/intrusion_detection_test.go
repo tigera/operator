@@ -20,22 +20,30 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var (
+	managedCluster    = true
+	notManagedCluster = false
+)
+
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
-		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
+		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 		component := render.IntrusionDetection(
 			nil,
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
 
@@ -75,15 +83,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
 	})
 
 	It("should render all resources for a configuration that includes event forwarding turned on (Syslog)", func() {
-		esConfigMap := render.NewElasticsearchClusterConfig("clusterTestName", 1, 1, 1)
+		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 		// Initialize a default LogCollector instance to use.
 		lc := &operatorv1.LogCollector{}
@@ -100,7 +108,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
 
@@ -140,13 +149,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
 
-		dp := GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "", "v1", "Deployment").(*apps.Deployment)
+		dp := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "", "v1", "Deployment").(*apps.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -173,17 +182,73 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}
 	})
 
+	It("should not render intrusion-detection-es-job-installer when cluster is managed", func() {
+		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+
+		component := render.IntrusionDetection(
+			nil,
+			nil,
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
+			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, managedCluster,
+			false,
+		)
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.TigeraKibanaCertSecret, ns: "tigera-intrusion-detection", group: "", version: "", kind: ""},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Deployment"},
+			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		}
+
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			if expectedRes.kind == "GlobalAlertTemplate" {
+				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
+			}
+		}
+	})
+
 	It("should apply controlPlaneNodeSelector correctly", func() {
 		component := render.IntrusionDetection(nil, nil,
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			&operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown,
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
+			false,
 		)
 		resources, _ := component.Objects()
-		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
-		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
 		Expect(idc.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
@@ -198,10 +263,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&render.ElasticsearchClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown)
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false)
 		resources, _ := component.Objects()
-		idc := GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
-		job := GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		Expect(job.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})

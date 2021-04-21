@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,9 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -41,6 +43,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	configv1 "github.com/openshift/api/config/v1"
 
@@ -52,6 +56,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -96,6 +101,17 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	statusManager := status.New(mgr.GetClient(), "calico")
 
+	// The typhaAutoscaler needs a clientset.
+	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a Typha autoscaler.
+	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
+	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
+
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
@@ -103,7 +119,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
-		typhaAutoscaler:      newTyphaAutoscaler(mgr.GetClient(), statusManager),
+		typhaAutoscaler:      typhaScaler,
 		namespaceMigration:   nm,
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
@@ -144,13 +160,13 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for secrets in the operator namespace. We watch for all secrets, since we care
 	// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
 	// may have been provided by the user with arbitrary names.
-	err = utils.AddSecretsWatch(c, "", render.OperatorNamespace())
+	err = utils.AddSecretsWatch(c, "", rmeta.OperatorNamespace())
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	cm := render.BirdTemplatesConfigMapName
-	if err = utils.AddConfigMapWatch(c, cm, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
 
@@ -192,6 +208,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
+	// Watch for changes to KubeControllersConfiguration.
+	err = c.Watch(&source.Kind{Type: &crdv1.KubeControllersConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
+	}
+
 	if r.enterpriseCRDsExist {
 		// Watch for changes to primary resource ManagementCluster
 		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
@@ -214,17 +236,21 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
 		}
 
-		if err = utils.AddSecretsWatch(c, render.ElasticsearchPublicCertSecret, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.ElasticsearchPublicCertSecret, render.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret %s: %w", render.ElasticsearchAdminUserSecret, err)
 		}
 
-		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, render.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, render.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
+		}
+
+		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, render.OperatorNamespace(), err)
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), err)
 		}
 
 		// Watch for changes to FelixConfiguration. Currently this is only used to grab the prometheusReporterPort which is enterprise-only.
@@ -397,14 +423,7 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	// Default the CalicoNetworkSpec based on the CNI plugin.
-	if instance.Spec.CalicoNetwork == nil {
-		switch instance.Spec.CNI.Type {
-		case operator.PluginCalico:
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
-		}
-	}
-
+	// Default IPAM based on CNI.
 	if instance.Spec.CNI.IPAM == nil {
 		instance.Spec.CNI.IPAM = &operator.IPAMSpec{}
 	}
@@ -423,122 +442,151 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	// Default any unspecified fields within the CalicoNetworkSpec.
-	var v4pool, v6pool *operator.IPPool
-	if instance.Spec.CalicoNetwork != nil {
-		// Default IP pools, only if it is nil. If it is an empty slice then that
-		// means no default IPPools should be created.
-		if instance.Spec.CalicoNetwork.IPPools == nil {
+	if instance.Spec.CalicoNetwork == nil {
+		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	}
+
+	// Default dataplane is iptables.
+	if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
+		dpIptables := operator.LinuxDataplaneIptables
+		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
+	}
+
+	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
+	// Only default IP pools if we're using Calico IPAM, otherwise there's no-one to use the IP pool.
+	if instance.Spec.CalicoNetwork.IPPools == nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
+		switch instance.Spec.KubernetesProvider {
+		case operator.ProviderEKS:
+			// On EKS, default to a CIDR that doesn't overlap with the host range,
+			// and also use VXLAN encap by default.
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "172.16.0.0/16",
+					Encapsulation: operator.EncapsulationVXLAN,
+				},
+			}
+		default:
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{CIDR: "192.168.0.0/16"},
+			}
+		}
+	}
+
+	// Default BGP enablement based on CNI plugin and provider.
+	if instance.Spec.CalicoNetwork.BGP == nil {
+		enabled := operator.BGPEnabled
+		disabled := operator.BGPDisabled
+		switch instance.Spec.CNI.Type {
+		case operator.PluginCalico:
 			switch instance.Spec.KubernetesProvider {
 			case operator.ProviderEKS:
-				// On EKS, default to a CIDR that doesn't overlap with the host range,
-				// and also use VXLAN encap by default.
-				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-					{
-						CIDR:          "172.16.0.0/16",
-						Encapsulation: operator.EncapsulationVXLAN,
-					},
-				}
-			default:
-				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-					{CIDR: "192.168.0.0/16"},
-				}
-			}
-		}
-
-		// Default BGP enablement based on CNI plugin and provider.
-		if instance.Spec.CalicoNetwork.BGP == nil {
-			enabled := operator.BGPEnabled
-			disabled := operator.BGPDisabled
-			switch instance.Spec.CNI.Type {
-			case operator.PluginCalico:
-				switch instance.Spec.KubernetesProvider {
-				case operator.ProviderEKS:
-					// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
-					instance.Spec.CalicoNetwork.BGP = &disabled
-				default:
-					// Other platforms assume BGP is needed.
-					instance.Spec.CalicoNetwork.BGP = &enabled
-				}
-			default:
-				// For non-Calico CNIs, assume BGP should be off.
+				// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
 				instance.Spec.CalicoNetwork.BGP = &disabled
+			default:
+				// Other platforms assume BGP is needed.
+				instance.Spec.CalicoNetwork.BGP = &enabled
+			}
+		default:
+			// For non-Calico CNIs, assume BGP should be off.
+			instance.Spec.CalicoNetwork.BGP = &disabled
+		}
+	}
+
+	needIPv4Autodetection := false
+	if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
+		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
+		needIPv4Autodetection = true
+	}
+
+	var v4pool, v6pool *operator.IPPool
+	v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
+	v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
+
+	if v4pool != nil {
+		if v4pool.Encapsulation == "" {
+			if instance.Spec.CNI.Type == operator.PluginCalico {
+				v4pool.Encapsulation = operator.EncapsulationIPIP
+			} else {
+				v4pool.Encapsulation = operator.EncapsulationNone
 			}
 		}
+		if v4pool.NATOutgoing == "" {
+			v4pool.NATOutgoing = operator.NATOutgoingEnabled
+		}
+		if v4pool.NodeSelector == "" {
+			v4pool.NodeSelector = operator.NodeSelectorDefault
+		}
+		if v4pool.BlockSize == nil {
+			var twentySix int32 = 26
+			v4pool.BlockSize = &twentySix
+		}
+		needIPv4Autodetection = true
+	}
 
-		v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
-		v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
-
-		if v4pool != nil {
-			if v4pool.Encapsulation == "" {
-				if instance.Spec.CNI.Type == operator.PluginCalico {
-					v4pool.Encapsulation = operator.EncapsulationIPIP
-				} else {
-					v4pool.Encapsulation = operator.EncapsulationNone
-				}
+	if needIPv4Autodetection && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+		switch instance.Spec.KubernetesProvider {
+		case operator.ProviderDockerEE:
+			// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
+			// node address, so instead skip the interface br-.
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				SkipInterface: "^br-.*",
 			}
-			if v4pool.NATOutgoing == "" {
-				v4pool.NATOutgoing = operator.NATOutgoingEnabled
+		case operator.ProviderEKS:
+			// EKS uses multiple interfaces to spread load; we want to pick the main interface with the
+			// default route.
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				CanReach: "8.8.8.8",
 			}
-			if v4pool.NodeSelector == "" {
-				v4pool.NodeSelector = operator.NodeSelectorDefault
-			}
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-				if instance.Spec.KubernetesProvider == operator.ProviderDockerEE {
-					// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
-					// node address, so instead skip the interface br-.
-					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-						SkipInterface: "^br-.*",
-					}
-				} else {
-					// Default IPv4 address detection to "first found" if not specified.
-					t := true
-					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-						FirstFound: &t,
-					}
-				}
-			}
-			if v4pool.BlockSize == nil {
-				var twentySix int32 = 26
-				v4pool.BlockSize = &twentySix
+		default:
+			// Default IPv4 address detection to "first found" if not specified.
+			t := true
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				FirstFound: &t,
 			}
 		}
+	}
 
-		if v6pool != nil {
-			if v6pool.Encapsulation == "" {
-				v6pool.Encapsulation = operator.EncapsulationNone
-			}
-			if v6pool.NATOutgoing == "" {
-				v6pool.NATOutgoing = operator.NATOutgoingDisabled
-			}
-			if v6pool.NodeSelector == "" {
-				v6pool.NodeSelector = operator.NodeSelectorDefault
-			}
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
-				// Default IPv6 address detection to "first found" if not specified.
-				t := true
-				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
-					FirstFound: &t,
-				}
-			}
-			if v6pool.BlockSize == nil {
-				var oneTwentyTwo int32 = 122
-				v6pool.BlockSize = &oneTwentyTwo
+	if v6pool != nil {
+		if v6pool.Encapsulation == "" {
+			v6pool.Encapsulation = operator.EncapsulationNone
+		}
+		if v6pool.NATOutgoing == "" {
+			v6pool.NATOutgoing = operator.NATOutgoingDisabled
+		}
+		if v6pool.NodeSelector == "" {
+			v6pool.NodeSelector = operator.NodeSelectorDefault
+		}
+		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+			// Default IPv6 address detection to "first found" if not specified.
+			t := true
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+				FirstFound: &t,
 			}
 		}
+		if v6pool.BlockSize == nil {
+			var oneTwentyTwo int32 = 122
+			v6pool.BlockSize = &oneTwentyTwo
+		}
+	}
 
-		// While a number of the fields in this section are relevant to all CNI plugins,
-		// there are some settings which are currently only applicable if using Calico CNI.
-		// Handle those here.
-		if instance.Spec.CNI.Type == operator.PluginCalico {
-			if instance.Spec.CalicoNetwork.HostPorts == nil {
-				hp := operator.HostPortsEnabled
-				instance.Spec.CalicoNetwork.HostPorts = &hp
+	// While a number of the fields in this section are relevant to all CNI plugins,
+	// there are some settings which are currently only applicable if using Calico CNI.
+	// Handle those here.
+	if instance.Spec.CNI.Type == operator.PluginCalico {
+		if instance.Spec.CalicoNetwork.HostPorts == nil {
+			var hp operator.HostPortsType
+			if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
+				// Host ports not supported with BPF mode.
+				hp = operator.HostPortsDisabled
+			} else {
+				hp = operator.HostPortsEnabled
 			}
+			instance.Spec.CalicoNetwork.HostPorts = &hp
+		}
 
-			if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
-				mm := operator.MultiInterfaceModeNone
-				instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
-			}
+		if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
+			mm := operator.MultiInterfaceModeNone
+			instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
 		}
 	}
 
@@ -613,7 +661,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	status := instance.Status
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
-	// mark CR found so we can report converter problems via tigerastatus
+	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
 	if !r.migrationChecked {
@@ -799,16 +847,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
 			return reconcile.Result{}, err
 		}
-		elasticsearchSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchPublicCertSecret, Namespace: render.OperatorNamespace()}, elasticsearchSecret)
-		if err != nil && !apierrors.IsNotFound(err) {
+
+		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		kibanaSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaSecret)
-		if err != nil && !apierrors.IsNotFound(err) {
+
+		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
 			return reconcile.Result{}, err
@@ -840,6 +888,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
+	// Elasticsearch.
+	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -918,6 +973,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.
+	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.SetDegraded("Unable to read KubeControllersConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Determine the port to use for kube-controllers metrics.
+	kubeControllersMetricsPort := 0
+	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
+		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
+	}
+
 	nodeAppArmorProfile := ""
 	a := instance.GetObjectMeta().GetAnnotations()
 	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
@@ -948,6 +1017,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile,
 		r.clusterDomain,
 		esLicenseType,
+		esAdminSecret,
+		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
 	)
 	if err != nil {
@@ -988,16 +1059,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	for _, component := range components {
-		if err := handler.CreateOrUpdate(ctx, component, nil); err != nil {
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	}
-
-	if instance.Spec.CertificateManagement != nil && instance.Spec.Variant == operator.Calico {
-		err = fmt.Errorf("this version does not support certificate management for product variant Calico")
-		r.SetDegraded("This version does not support certificate management for product variant Calico", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
@@ -1145,7 +1210,7 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, 
 
 	node, err := utils.ValidateCertPair(
 		r.client,
-		render.OperatorNamespace(),
+		rmeta.OperatorNamespace(),
 		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1165,7 +1230,7 @@ func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, 
 
 	typha, err := utils.ValidateCertPair(
 		r.client,
-		render.OperatorNamespace(),
+		rmeta.OperatorNamespace(),
 		render.TyphaTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1208,7 +1273,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TyphaCAConfigMapName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	err := r.client.Get(context.Background(), cmNamespacedName, cm)
 	if err != nil {
@@ -1234,7 +1299,7 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if apierrors.IsNotFound(err) {

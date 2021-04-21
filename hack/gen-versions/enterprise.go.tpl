@@ -178,8 +178,8 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "key-cert-provisioner" }}
-	ComponentCSRInitContainer = component{
+{{ with index .Components "elasticsearch-metrics" }}
+	ComponentElasticsearchMetrics = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -213,6 +213,6 @@ var (
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
-		ComponentCSRInitContainer,
+		ComponentElasticsearchMetrics,
 	}
 )

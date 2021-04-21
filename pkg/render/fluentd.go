@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/tigera/operator/pkg/url"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -28,6 +30,10 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -38,7 +44,6 @@ const (
 	S3FluentdSecretName                      = "log-collector-s3-credentials"
 	S3KeyIdName                              = "key-id"
 	S3KeySecretName                          = "key-secret"
-	elasticsearchSecretsAnnotation           = "hash.operator.tigera.io/elasticsearch-secrets"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
@@ -88,7 +93,7 @@ type SplunkCredential struct {
 func Fluentd(
 	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
-	esClusterConfig *ElasticsearchClusterConfig,
+	esClusterConfig *relasticsearch.ClusterConfig,
 	s3C *S3Credential,
 	spC *SplunkCredential,
 	f *FluentdFilters,
@@ -96,7 +101,7 @@ func Fluentd(
 	pullSecrets []*corev1.Secret,
 	installation *operatorv1.InstallationSpec,
 	clusterDomain string,
-	osType OSType,
+	osType rmeta.OSType,
 ) Component {
 	return &fluentdComponent{
 		lc:              lc,
@@ -125,7 +130,7 @@ type EksCloudwatchLogConfig struct {
 type fluentdComponent struct {
 	lc              *operatorv1.LogCollector
 	esSecrets       []*corev1.Secret
-	esClusterConfig *ElasticsearchClusterConfig
+	esClusterConfig *relasticsearch.ClusterConfig
 	s3Credential    *S3Credential
 	splkCredential  *SplunkCredential
 	filters         *FluentdFilters
@@ -133,7 +138,7 @@ type fluentdComponent struct {
 	pullSecrets     []*corev1.Secret
 	installation    *operatorv1.InstallationSpec
 	clusterDomain   string
-	osType          OSType
+	osType          rmeta.OSType
 	image           string
 }
 
@@ -141,7 +146,7 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		var err error
 		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, is)
 		return err
@@ -152,33 +157,33 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return err
 }
 
-func (c *fluentdComponent) SupportedOSType() OSType {
+func (c *fluentdComponent) SupportedOSType() rmeta.OSType {
 	return c.osType
 }
 
 func (c *fluentdComponent) fluentdName() string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return fluentdWindowsName
 	}
 	return fluentdName
 }
 
 func (c *fluentdComponent) fluentdNodeName() string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return fluentdNodeWindowsName
 	}
 	return fluentdNodeName
 }
 
 func (c *fluentdComponent) eksLogForwarderName() string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return eksLogForwarderWindowsName
 	}
 	return eksLogForwarderName
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		// On Windows, we rely on bash via msys2 installed by the fluentd base image.
 		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}
 	}
@@ -186,7 +191,7 @@ func (c *fluentdComponent) readinessCmd() []string {
 }
 
 func (c *fluentdComponent) livenessCmd() []string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		// On Windows, we rely on bash via msys2 installed by the fluentd base image.
 		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
 	}
@@ -194,14 +199,14 @@ func (c *fluentdComponent) livenessCmd() []string {
 }
 
 func (c *fluentdComponent) volumeHostPath() string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return "c:/TigeraCalico"
 	}
 	return "/var/log/calico"
 }
 
 func (c *fluentdComponent) path(path string) string {
-	if c.osType == OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		// Use c: path prefix for windows.
 		return "c:" + path
 	}
@@ -215,12 +220,12 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		createNamespace(
 			LogCollectorNamespace,
 			c.installation.KubernetesProvider))
-	objs = append(objs, copyImagePullSecrets(c.pullSecrets, LogCollectorNamespace)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.pullSecrets...)...)...)
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())
 	}
 	if c.splkCredential != nil {
-		objs = append(objs, secretsToRuntimeObjects(CopySecrets(LogCollectorNamespace, c.splunkCredentialSecret()...)...)...)
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.splunkCredentialSecret()...)...)...)
 	}
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
@@ -228,7 +233,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.eksConfig != nil {
 		// Windows PSP does not support allowedHostPaths yet.
 		// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
+		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == rmeta.OSTypeLinux {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
 				c.eksLogForwarderClusterRoleBinding(),
@@ -241,14 +246,14 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-	if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == OSTypeLinux {
+	if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == rmeta.OSTypeLinux {
 		objs = append(objs,
 			c.fluentdClusterRole(),
 			c.fluentdClusterRoleBinding(),
 			c.fluentdPodSecurityPolicy())
 	}
 
-	objs = append(objs, secretsToRuntimeObjects(CopySecrets(LogCollectorNamespace, c.esSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.esSecrets...)...)...)
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.daemonset())
 
@@ -342,26 +347,26 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	annots := map[string]string{}
 	if c.s3Credential != nil {
-		annots[s3CredentialHashAnnotation] = AnnotationHash(c.s3Credential)
+		annots[s3CredentialHashAnnotation] = rmeta.AnnotationHash(c.s3Credential)
 	}
 	if c.splkCredential != nil {
-		annots[splunkCredentialHashAnnotation] = AnnotationHash(c.splkCredential)
+		annots[splunkCredentialHashAnnotation] = rmeta.AnnotationHash(c.splkCredential)
 	}
 	if c.filters != nil {
-		annots[filterHashAnnotation] = AnnotationHash(c.filters)
+		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.filters)
 	}
 
-	podTemplate := ElasticsearchDecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				"k8s-app": c.fluentdNodeName(),
 			},
 			Annotations: annots,
 		},
-		Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			NodeSelector:                  map[string]string{},
 			Tolerations:                   c.tolerations(),
-			ImagePullSecrets:              getImagePullSecretReferenceList(c.pullSecrets),
+			ImagePullSecrets:              secret.GetReferenceList(c.pullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			Containers:                    []corev1.Container{c.container()},
 			Volumes:                       c.volumes(),
@@ -441,7 +446,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		isPrivileged = true
 	}
 
-	return ElasticsearchContainerDecorateENVVars(corev1.Container{
+	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
 		Env:             envs,
@@ -450,6 +455,10 @@ func (c *fluentdComponent) container() corev1.Container {
 		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
 		ReadinessProbe:  c.readiness(),
+		Ports: []corev1.ContainerPort{{
+			Name:          "metrics-port",
+			ContainerPort: 9081,
+		}},
 	}, c.esClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.clusterDomain, c.osType)
 }
 
@@ -493,7 +502,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 		syslog := c.lc.Spec.AdditionalStores.Syslog
 		if syslog != nil {
-			proto, host, port, _ := ParseEndpoint(syslog.Endpoint)
+			proto, host, port, _ := url.ParseEndpoint(syslog.Endpoint)
 			envs = append(envs,
 				corev1.EnvVar{Name: "SYSLOG_HOST", Value: host},
 				corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
@@ -544,7 +553,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 		splunk := c.lc.Spec.AdditionalStores.Splunk
 		if splunk != nil {
-			proto, host, port, _ := ParseEndpoint(splunk.Endpoint)
+			proto, host, port, _ := url.ParseEndpoint(splunk.Endpoint)
 			envs = append(envs,
 				corev1.EnvVar{Name: "SPLUNK_HEC_TOKEN",
 					ValueFrom: &corev1.EnvVarSource{
@@ -599,18 +608,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	return envs
 }
 
-// Do this as a separate function to try to make updates in the future easier.
-func setFluentdCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
-	envs = append(envs,
-		corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
-	)
-	return envs
-}
-
 // The startup probe uses the same action as the liveness probe, but with
 // a higher failure threshold and a larger timeout to account for slow networks.
 func (c *fluentdComponent) startup() *corev1.Probe {
@@ -628,6 +625,18 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 		PeriodSeconds:    ProbePeriodSeconds,
 		FailureThreshold: startupProbeFailureThreshold,
 	}
+}
+
+// Do this as a separate function to try to make updates in the future easier.
+func setFluentdCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
+	envs = append(envs,
+		corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
+	)
+	return envs
 }
 
 func (c *fluentdComponent) liveness() *corev1.Probe {
@@ -700,7 +709,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) fluentdPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(c.fluentdName())
 	psp.Spec.RequiredDropCapabilities = nil
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
@@ -780,7 +789,7 @@ func (c *fluentdComponent) eksLogForwarderSecret() *corev1.Secret {
 
 func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	annots := map[string]string{
-		eksCloudwatchLogCredentialHashAnnotation: AnnotationHash(c.eksConfig),
+		eksCloudwatchLogCredentialHashAnnotation: rmeta.AnnotationHash(c.eksConfig),
 	}
 
 	envVars := []corev1.EnvVar{
@@ -796,8 +805,8 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: c.eksConfig.StreamPrefix},
 		{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fmt.Sprintf("%d", c.eksConfig.FetchInterval)},
 		{Name: "AWS_REGION", Value: c.eksConfig.AwsRegion},
-		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
-		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: envVarSourceFromSecret(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
+		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
+		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
 	}
 
 	var eksLogForwarderReplicas int32 = 1
@@ -833,15 +842,15 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					Tolerations:        c.installation.ControlPlaneTolerations,
 					ServiceAccountName: c.eksLogForwarderName(),
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
-					InitContainers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
+					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
 						Name:         c.eksLogForwarderName() + "-startup",
 						Image:        c.image,
 						Command:      []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.clusterDomain, c.osType)},
-					Containers: []corev1.Container{ElasticsearchContainerDecorateENVVars(corev1.Container{
+					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
 						Name:         c.eksLogForwarderName(),
 						Image:        c.image,
 						Env:          envVars,
@@ -856,7 +865,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		ElasticsearchDefaultVolumeMount(c.osType),
+		relasticsearch.DefaultVolumeMount(c.osType),
 		{
 			Name:      "plugin-statefile-dir",
 			MountPath: c.path("/fluentd/cloudwatch-logs/"),
@@ -870,7 +879,7 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 
 func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 	return []corev1.Volume{
-		ElasticsearchDefaultVolume(),
+		relasticsearch.DefaultVolume(),
 		{
 			Name: "plugin-statefile-dir",
 			VolumeSource: corev1.VolumeSource{
@@ -881,7 +890,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(c.eksLogForwarderName())
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp

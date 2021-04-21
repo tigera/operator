@@ -34,7 +34,8 @@ type InstallationSpec struct {
 
 	// Registry is the default Docker registry used for component Docker images. If specified,
 	// all images will be pulled from this registry. If not specified then the default registries
-	// will be used.
+	// will be used. A special case value, UseDefault, is supported to explicitly specify
+	// the default registries will be used.
 	//
 	// Image format:
 	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
@@ -46,6 +47,8 @@ type InstallationSpec struct {
 	// ImagePath allows for the path part of an image to be specified. If specified
 	// then the specified value will be used as the image path for each image. If not specified
 	// or empty, the default for each image will be used.
+	// A special case value, UseDefault, is supported to explicitly specify the default
+	// image path will be used for each image.
 	//
 	// Image format:
 	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
@@ -111,6 +114,7 @@ type InstallationSpec struct {
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
 	// ComponentResources can be used to customize the resource requirements for each component.
+	// Node, Typha, and KubeControllers are supported for installations.
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 
@@ -138,7 +142,9 @@ type PreferredNodeAffinity struct {
 	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
-// ComponentName CRD enum
+// ComponentName represents a single component.
+//
+// One of: Node, Typha, KubeControllers
 type ComponentName string
 
 const (
@@ -169,7 +175,9 @@ var (
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )
 
-// ProductVariant represents the variant of the product. Valid options are: Calico, TigeraSecureEnterprise.
+// ProductVariant represents the variant of the product.
+//
+// One of: Calico, TigeraSecureEnterprise
 type ProductVariant string
 
 var (
@@ -185,7 +193,9 @@ const (
 	ContainerIPForwardingDisabled ContainerIPForwardingType = "Disabled"
 )
 
-// HostPortsType specifies if the HostPorts plugin enabled status.
+// HostPortsType specifies host port support.
+//
+// One of: Enabled, Disabled
 type HostPortsType string
 
 const (
@@ -202,6 +212,9 @@ var HostPortsTypesString []string = []string{
 	HostPortsDisabled.String(),
 }
 
+// MultiInterfaceMode describes the method of providing multiple pod interfaces.
+//
+// One of: None, Multus
 type MultiInterfaceMode string
 
 func (m MultiInterfaceMode) Value() string {
@@ -221,6 +234,9 @@ func (nt HostPortsType) String() string {
 	return string(nt)
 }
 
+// BGPOption describes the mode of BGP to use.
+//
+// One of: Enabled, Disabled
 type BGPOption string
 
 func BGPOptionPtr(b BGPOption) *BGPOption {
@@ -232,8 +248,26 @@ const (
 	BGPDisabled BGPOption = "Disabled"
 )
 
+// LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
+//
+// One of: Iptables, BPF
+type LinuxDataplaneOption string
+
+const (
+	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
+	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
+	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
+	// causes the operator to add required mounts and environment variables for the particular dataplane.
+	// If not specified, iptables mode is used.
+	// Default: Iptables
+	// +optional
+	// +kubebuilder:validation:Enum=Iptables;BPF
+	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
+
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
@@ -307,8 +341,9 @@ type NodeAddressAutodetection struct {
 	CIDRS []string `json:"cidrs,omitempty"`
 }
 
-// EncapsulationType is the type of encapsulation to use on an IP pool. Valid
-// options are: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None.
+// EncapsulationType is the type of encapsulation to use on an IP pool.
+//
+// One of: IPIP, VXLAN, IPIPCrossSubnet, VXLANCrossSubnet, None
 type EncapsulationType string
 
 func (et EncapsulationType) String() string {
@@ -339,6 +374,8 @@ var EncapsulationTypesString []string = []string{
 }
 
 // NATOutgoingType describe the type of outgoing NAT to use.
+//
+// One of: Enabled, Disabled
 type NATOutgoingType string
 
 const (
@@ -390,7 +427,9 @@ type IPPool struct {
 	BlockSize *int32 `json:"blockSize,omitempty"`
 }
 
-// CNIPluginType describe the type of CNI plugin used.
+// CNIPluginType describes the type of CNI plugin used.
+//
+// One of: Calico, GKE, AmazonVPC, AzureVNET
 type CNIPluginType string
 
 const (
@@ -543,7 +582,7 @@ type CertificateManagement struct {
 
 	// When a CSR is issued to the certificates.k8s.io API, the signerName is added to the request in order to accommodate for clusters
 	// with multiple signers.
-	// Must be formatted as: "<my-domain>/<my-signername>".
+	// Must be formatted as: `<my-domain>/<my-signername>`.
 	SignerName string `json:"signerName"`
 
 	// Specify the algorithm used by pods to generate a key pair that is associated with the X.509 certificate request.

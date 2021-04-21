@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -36,6 +38,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/dns"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 )
 
 const (
@@ -134,8 +138,8 @@ func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *nodeComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *nodeComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
@@ -548,13 +552,13 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 	annotations := make(map[string]string)
 	if len(c.birdTemplates) != 0 {
-		annotations[birdTemplateHashAnnotation] = AnnotationHash(c.birdTemplates)
+		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.birdTemplates)
 	}
-	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
+	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	if c.cr.CertificateManagement == nil {
-		annotations[nodeCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
+		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 	} else {
-		annotations[nodeCertHashAnnotation] = AnnotationHash(c.cr.CertificateManagement.CACert)
+		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cr,
 			c.certSignReqImage,
@@ -567,7 +571,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	}
 
 	if cniCfgMap != nil {
-		annotations[nodeCniConfigAnnotation] = AnnotationHash(cniCfgMap.Data)
+		annotations[nodeCniConfigAnnotation] = rmeta.AnnotationHash(cniCfgMap.Data)
 	}
 
 	// Include annotation for prometheus scraping configuration.
@@ -618,7 +622,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   tolerateAll,
+					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cr.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
@@ -668,6 +672,7 @@ func (c *nodeComponent) cniDirectories() (string, string, string) {
 func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	fileOrCreate := v1.HostPathFileOrCreate
 	dirOrCreate := v1.HostPathDirectoryOrCreate
+	dirMustExist := v1.HostPathDirectory
 
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
@@ -689,6 +694,12 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 			Name:         "felix-certs",
 			VolumeSource: certificateVolumeSource(c.cr.CertificateManagement, NodeTLSSecretName),
 		},
+	}
+
+	if c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+		volumes = append(volumes, v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}})
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
@@ -751,7 +762,7 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: Bool(true),
+			Privileged: ptr.BoolToPtr(true),
 		},
 	}
 }
@@ -768,7 +779,7 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		Image:        c.flexvolImage,
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: Bool(true),
+			Privileged: ptr.BoolToPtr(true),
 		},
 	}
 }
@@ -817,7 +828,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 		Name:            "calico-node",
 		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
-		SecurityContext: &v1.SecurityContext{Privileged: Bool(true)},
+		SecurityContext: &v1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -827,7 +838,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 
 // nodeResources creates the node's resource requirements.
 func (c *nodeComponent) nodeResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.cr, operator.ComponentNameNode)
+	return rmeta.GetResourceRequirements(c.cr, operator.ComponentNameNode)
 }
 
 // nodeVolumeMounts creates the node's volume mounts.
@@ -840,6 +851,11 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+	}
+	if c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
@@ -907,7 +923,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 						Name: TyphaTLSSecretName,
 					},
 					Key:      CommonName,
-					Optional: Bool(true),
+					Optional: ptr.BoolToPtr(true),
 				},
 			},
 		}
@@ -947,7 +963,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 					Name: TyphaTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: Bool(true),
+				Optional: ptr.BoolToPtr(true),
 			},
 		}},
 	}
@@ -1004,7 +1020,12 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
 			}
 		}
+	}
 
+	if c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
@@ -1227,10 +1248,10 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 }
 
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = Bool(true)
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny

@@ -23,7 +23,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,7 +39,7 @@ var (
 	ErrInvalidCertDNSNames  = errors.New("cert has the wrong DNS names")
 	ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
-	operatorIssuedCertRegexp = regexp.MustCompile(fmt.Sprintf(`%s@\d+`, render.TigeraOperatorCAIssuerPrefix))
+	operatorIssuedCertRegexp = regexp.MustCompile(fmt.Sprintf(`%s@\d+`, rmeta.TigeraOperatorCAIssuerPrefix))
 )
 
 func GetSecret(ctx context.Context, client client.Client, name string, ns string) (*corev1.Secret, error) {
@@ -64,8 +66,9 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 	// Create the secret if it doesn't exist.
 	if secret == nil {
 		certsLogger.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
-		return render.CreateOperatorTLSSecret(nil,
-			secretName, keyName, certName,
+
+		return rsecret.CreateTLSSecret(nil,
+			secretName, rmeta.OperatorNamespace(), keyName, certName,
 			certDuration, nil, svcDNSNames...,
 		)
 	}
@@ -86,13 +89,13 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		// If the cert's DNS names are invalid, then create a new secret to
 		// replace the invalid one since it's managed by the operator.
 		certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
-		return render.CreateOperatorTLSSecret(nil,
-			secretName, keyName, certName,
-			render.DefaultCertificateDuration, nil, svcDNSNames...,
+
+		return rsecret.CreateTLSSecret(nil,
+			secretName, rmeta.OperatorNamespace(), keyName, certName,
+			rmeta.DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}
 
-	// Return the original secret.
 	return secret, err
 }
 

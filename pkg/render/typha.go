@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -33,6 +35,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/dns"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 )
 
 const (
@@ -56,24 +60,24 @@ func Typha(
 	clusterDomain string,
 ) Component {
 	return &typhaComponent{
-		k8sServiceEp:       k8sServiceEp,
-		installation:       installation,
-		typhaNodeTLS:       tnTLS,
-		amazonCloudInt:     aci,
-		namespaceMigration: migrationNeeded,
-		clusterDomain:      clusterDomain,
+		k8sServiceEp:    k8sServiceEp,
+		installation:    installation,
+		typhaNodeTLS:    tnTLS,
+		amazonCloudInt:  aci,
+		migrationNeeded: migrationNeeded,
+		clusterDomain:   clusterDomain,
 	}
 }
 
 type typhaComponent struct {
-	k8sServiceEp       k8sapi.ServiceEndpoint
-	installation       *operator.InstallationSpec
-	typhaNodeTLS       *TyphaNodeTLS
-	amazonCloudInt     *operator.AmazonCloudIntegration
-	namespaceMigration bool
-	clusterDomain      string
-	typhaImage         string
-	certSignReqImage   string
+	k8sServiceEp     k8sapi.ServiceEndpoint
+	installation     *operator.InstallationSpec
+	typhaNodeTLS     *TyphaNodeTLS
+	amazonCloudInt   *operator.AmazonCloudIntegration
+	migrationNeeded  bool
+	clusterDomain    string
+	typhaImage       string
+	certSignReqImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
@@ -103,8 +107,8 @@ func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *typhaComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *typhaComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
@@ -348,11 +352,11 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 
 	var initContainers []v1.Container
 	annotations := make(map[string]string)
-	annotations[typhaCAHashAnnotation] = AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
+	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
 	if c.installation.CertificateManagement == nil {
-		annotations[typhaCertHashAnnotation] = AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
+		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
 	} else {
-		annotations[typhaCertHashAnnotation] = AnnotationHash(c.installation.CertificateManagement.CACert)
+		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.installation.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
 			c.certSignReqImage,
@@ -399,7 +403,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
-					Tolerations:                   tolerateAll,
+					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      c.affinity(),
 					ImagePullSecrets:              c.installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
@@ -413,7 +417,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
-	if c.namespaceMigration {
+	if c.migrationNeeded {
 		migration.SetTyphaAntiAffinity(&d)
 	}
 	return &d
@@ -479,7 +483,7 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.installation, operator.ComponentNameTypha)
+	return rmeta.GetResourceRequirements(c.installation, operator.ComponentNameTypha)
 }
 
 // typhaEnvVars creates the typha's envvars.
@@ -497,7 +501,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 						Name: NodeTLSSecretName,
 					},
 					Key:      CommonName,
-					Optional: Bool(true),
+					Optional: ptr.BoolToPtr(true),
 				},
 			},
 		}
@@ -523,7 +527,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 					Name: NodeTLSSecretName,
 				},
 				Key:      URISAN,
-				Optional: Bool(true),
+				Optional: ptr.BoolToPtr(true),
 			},
 		}},
 	}
@@ -611,7 +615,7 @@ func (c *typhaComponent) typhaService() *v1.Service {
 }
 
 func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
 	psp.Spec.HostNetwork = true
 	return psp

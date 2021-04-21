@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,11 +29,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -52,30 +55,47 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+
+	var licenseAPIReady = &utils.ReadyFlag{}
+
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+
+	// Create a new controller
+	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("failed to create manager-controller: %w", err)
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+
+	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "manager"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		status:          status.New(mgr.GetClient(), "manager"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	c.status.Run()
 	return c
 
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("manager-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("failed to create manager-controller: %w", err)
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource Manager
 	err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
@@ -94,9 +114,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch the given secrets in each both the manager and operator namespaces
-	for _, namespace := range []string{render.OperatorNamespace(), render.ManagerNamespace} {
+	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, render.ElasticsearchPublicCertSecret,
+			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
 			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
@@ -107,11 +127,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", render.ManagerOIDCConfig, err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ElasticsearchConfigMapName, render.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -147,6 +167,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 	}
+
 	return nil
 }
 
@@ -156,11 +177,12 @@ var _ reconcile.Reconciler = &ReconcileManager{}
 type ReconcileManager struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	licenseAPIReady *utils.ReadyFlag
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -205,8 +227,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
-		r.status.SetDegraded("License not found", err.Error())
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("License not found", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -227,7 +259,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
 	tlsSecret, err := utils.ValidateCertPair(r.client,
-		render.OperatorNamespace(),
+		rmeta.OperatorNamespace(),
 		render.ManagerTLSSecretName,
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
@@ -272,19 +304,40 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// Check that compliance is running.
-	compliance, err := compliance.GetCompliance(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded("Compliance not found", err.Error())
+	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
+	var complianceServerCertSecret *corev1.Secret
+
+	if installCompliance {
+		// Check that compliance is running.
+		compliance, err := compliance.GetCompliance(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded("Compliance not found", err.Error())
+				return reconcile.Result{}, err
+			}
+			r.status.SetDegraded("Error querying compliance", err.Error())
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded("Error querying compliance", err.Error())
-		return reconcile.Result{}, err
-	}
-	if compliance.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
-		return reconcile.Result{}, nil
+		if compliance.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
+			return reconcile.Result{}, nil
+		}
+
+		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
+			render.ComplianceServerCertSecret,
+			render.ComplianceServerCertName,
+			render.ComplianceServerKeyName,
+		)
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		} else if complianceServerCertSecret == nil {
+			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret), "")
+			return reconcile.Result{}, nil
+		}
 	}
 
 	// check that prometheus is running
@@ -329,26 +382,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: render.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
-	}
-
-	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
-		render.OperatorNamespace(),
-		render.ComplianceServerCertSecret,
-		render.ComplianceServerCertName,
-		render.ComplianceServerKeyName,
-	)
-	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
-		return reconcile.Result{}, err
-	} else if complianceServerCertSecret == nil {
-		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret), "")
-		return reconcile.Result{}, nil
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
@@ -378,7 +415,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret = &corev1.Secret{}
-		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: render.OperatorNamespace()}, tunnelSecret)
+		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: rmeta.OperatorNamespace()}, tunnelSecret)
 		if err != nil {
 			r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
 			return reconcile.Result{}, nil
@@ -389,14 +426,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret = &corev1.Secret{}
 		err = r.client.Get(ctx, client.ObjectKey{
 			Name:      render.ManagerInternalTLSSecretName,
-			Namespace: render.OperatorNamespace(),
+			Namespace: rmeta.OperatorNamespace(),
 		}, internalTrafficSecret)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, render.OperatorNamespace()), "")
+				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace()), "")
 				return reconcile.Result{}, nil
 			}
-			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, render.OperatorNamespace()), err.Error())
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -415,7 +452,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: render.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -462,7 +499,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}

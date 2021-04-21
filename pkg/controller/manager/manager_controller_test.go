@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,8 +23,15 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
+
 	"github.com/tigera/operator/test"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -89,12 +96,15 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+
 			r = ReconcileManager{
-				client:        c,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: clusterDomain,
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				clusterDomain:   clusterDomain,
+				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -135,10 +145,10 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchPublicCertSecret,
+					Name:      relasticsearch.PublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -152,7 +162,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ComplianceServerCertSecret,
-					Namespace: render.OperatorNamespace(),
+					Namespace: rmeta.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -174,12 +184,18 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			// mark that the watch for license key was successful
+			r.licenseAPIReady.MarkAsReady()
 		})
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
 			// Create a manager cert managed by the operator.
-			oldCert, err := render.CreateOperatorTLSSecret(
-				nil, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
+			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			Expect(err).ShouldNot(HaveOccurred())
+			oldCert, err := secret.CreateTLSSecret(
+				ca, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
+				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
 
@@ -188,7 +204,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			secret := &corev1.Secret{}
 			// Verify that certs now have expected DNS names.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rmeta.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -199,8 +215,9 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			userSecret, err := render.CreateOperatorTLSSecret(
-				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+			userSecret, err := secret.CreateTLSSecret(
+				testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
+				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -209,7 +226,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Verify that the existing cert didn't change
 			secret := &corev1.Secret{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rmeta.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.Data).To(Equal(userSecret.Data))
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -224,7 +241,7 @@ var _ = Describe("Manager controller tests", func() {
 			secret := &corev1.Secret{}
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rmeta.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -233,13 +250,14 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a custom manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			customSecret, err := render.CreateOperatorTLSSecret(
-				testCA, render.ManagerTLSSecretName, render.ManagerSecretKeyName, render.ManagerSecretCertName, render.DefaultCertificateDuration, nil, dnsNames...)
+			customSecret, err := rsecret.CreateTLSSecret(
+				testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
+				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Update the existing operator managed cert secret with bytes from
 			// the custom manager cert secret.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rmeta.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			secret.Data[render.ManagerSecretCertName] = customSecret.Data[render.ManagerSecretCertName]
 			secret.Data[render.ManagerSecretKeyName] = customSecret.Data[render.ManagerSecretKeyName]
 			Expect(c.Update(ctx, secret)).NotTo(HaveOccurred())
@@ -249,7 +267,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Verify that the existing certs have changed - check that the
 			// certs have the DNS names in the user-supplied cert.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: rmeta.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
@@ -270,11 +288,14 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+
 			r = ReconcileManager{
-				client:   c,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -314,10 +335,10 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, render.NewElasticsearchClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchPublicCertSecret,
+					Name:      relasticsearch.PublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -331,7 +352,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ComplianceServerCertSecret,
-					Namespace: render.OperatorNamespace(),
+					Namespace: rmeta.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -352,6 +373,9 @@ var _ = Describe("Manager controller tests", func() {
 					Name: "tigera-secure",
 				},
 			})).NotTo(HaveOccurred())
+
+			// mark that the watch for license key was successful
+			r.licenseAPIReady.MarkAsReady()
 		})
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})

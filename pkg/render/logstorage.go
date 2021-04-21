@@ -21,6 +21,8 @@ import (
 	"hash/fnv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -41,6 +43,11 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ElasticsearchLicenseType string
@@ -51,25 +58,24 @@ const (
 	ECKEnterpriseTrial      = "eck-trial-license"
 	ECKLicenseConfigMapName = "elastic-licensing"
 
-	ElasticsearchNamespace                = "tigera-elasticsearch"
-	elasticsearchHTTPSEndpoint            = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
-	elasticsearchHTTPSFQDNEndpoint        = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
+	ElasticsearchNamespace = "tigera-elasticsearch"
+
+	TigeraElasticsearchCertSecret = "tigera-secure-elasticsearch-cert"
+
 	ElasticsearchName                     = "tigera-secure"
-	ElasticsearchConfigMapName            = "tigera-secure-elasticsearch"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
+	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
 
-	KibanaHTTPURL           = "tigera-secure-kb-http.tigera-kibana.svc.%s"
-	kibanaHTTPSEndpoint     = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	kibanaHTTPSFQDNEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName              = "tigera-secure"
-	KibanaNamespace         = "tigera-kibana"
-	KibanaPublicCertSecret  = "tigera-secure-kb-http-certs-public"
-	TigeraKibanaCertSecret  = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath   = "/etc/ssl/kibana/ca.pem"
-	KibanaBasePath          = "tigera-kibana"
-	KibanaServiceName       = "tigera-secure-kb-http"
+	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
+	KibanaName             = "tigera-secure"
+	KibanaNamespace        = "tigera-kibana"
+	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
+	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
+	KibanaBasePath         = "tigera-kibana"
+	KibanaServiceName      = "tigera-secure-kb-http"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -140,6 +146,8 @@ echo "Keystore initialization successful."
 `
 )
 
+var log = logf.Log.WithName("render")
+
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
@@ -148,7 +156,7 @@ func LogStorage(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	elasticsearch *esv1.Elasticsearch,
 	kibana *kbv1.Kibana,
-	clusterConfig *ElasticsearchClusterConfig,
+	clusterConfig *relasticsearch.ClusterConfig,
 	elasticsearchSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -159,7 +167,8 @@ func LogStorage(
 	clusterDomain string,
 	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
-	elasticLicenseType ElasticsearchLicenseType) Component {
+	elasticLicenseType ElasticsearchLicenseType,
+) Component {
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -190,7 +199,7 @@ type elasticsearchComponent struct {
 	managementClusterConnection *operatorv1.ManagementClusterConnection
 	elasticsearch               *esv1.Elasticsearch
 	kibana                      *kbv1.Kibana
-	clusterConfig               *ElasticsearchClusterConfig
+	clusterConfig               *relasticsearch.ClusterConfig
 	elasticsearchSecrets        []*corev1.Secret
 	kibanaSecrets               []*corev1.Secret
 	curatorSecrets              []*corev1.Secret
@@ -239,8 +248,8 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (es *elasticsearchComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (es *elasticsearchComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
@@ -287,7 +296,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			createNamespace(ECKOperatorNamespace, es.installation.KubernetesProvider),
 		)
 
-		toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(ECKOperatorNamespace, es.pullSecrets...)...)...)
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.pullSecrets...)...)...)
 
 		toCreate = append(toCreate,
 			es.eckOperatorClusterRole(),
@@ -318,11 +327,11 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider))
 
 		if len(es.pullSecrets) > 0 {
-			toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(ElasticsearchNamespace, es.pullSecrets...)...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.pullSecrets...)...)...)
 		}
 
 		if len(es.elasticsearchSecrets) > 0 {
-			toCreate = append(toCreate, secretsToRuntimeObjects(es.elasticsearchSecrets...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.elasticsearchSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
@@ -340,11 +349,11 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.pullSecrets) > 0 {
-			toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(KibanaNamespace, es.pullSecrets...)...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.pullSecrets...)...)...)
 		}
 
 		if len(es.kibanaSecrets) > 0 {
-			toCreate = append(toCreate, secretsToRuntimeObjects(es.kibanaSecrets...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.kibanaCR())
@@ -352,7 +361,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// Curator CRs
 		// If we have the curator secrets then create curator
 		if len(es.curatorSecrets) > 0 {
-			toCreate = append(toCreate, secretsToRuntimeObjects(CopySecrets(ElasticsearchNamespace, es.curatorSecrets...)...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.curatorSecrets...)...)...)
 			toCreate = append(toCreate, es.esCuratorServiceAccount())
 
 			// If the provider is not OpenShift apply the pod security policy for the curator.
@@ -392,7 +401,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.supportsOIDC() {
-		toCreate = append(toCreate, secretsToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
+		toCreate = append(toCreate, secret.ToRuntimeObjects(es.dexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
 	return toCreate, toDelete
@@ -512,7 +521,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// image which requires that root users have permissions to run CHROOT which is not given in OpenShift.
 	if es.provider == operatorv1.ProviderOpenShift {
 		esContainer.SecurityContext = &corev1.SecurityContext{
-			RunAsUser: Int64(1000),
+			RunAsUser: ptr.Int64ToPtr(1000),
 		}
 	}
 
@@ -536,8 +545,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	initOSSettingsContainer := corev1.Container{
 		Name: "elastic-internal-init-os-settings",
 		SecurityContext: &corev1.SecurityContext{
-			Privileged: Bool(true),
-			RunAsUser:  Int64(0),
+			Privileged: ptr.BoolToPtr(true),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 		Image: es.esImage,
 		Command: []string{
@@ -551,14 +560,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 	annotations := map[string]string{
-		ElasticsearchTLSHashAnnotation: secretsAnnotationHash(es.elasticsearchSecrets...),
+		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.elasticsearchSecrets...),
 	}
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
 			Image: es.esImage,
 			SecurityContext: &corev1.SecurityContext{
-				Privileged: Bool(false),
+				Privileged: ptr.BoolToPtr(false),
 			},
 			Command: []string{"/usr/bin/env", "bash", "-c", keystoreInitScript},
 			VolumeMounts: []corev1.VolumeMount{{
@@ -590,7 +599,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		Spec: corev1.PodSpec{
 			InitContainers:     initContainers,
 			Containers:         []corev1.Container{esContainer},
-			ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+			ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
 			NodeSelector:       nodeSels,
 			Tolerations:        es.installation.ControlPlaneTolerations,
 			ServiceAccountName: "tigera-elasticsearch",
@@ -1014,6 +1023,14 @@ func (es elasticsearchComponent) esCuratorServiceAccount() *corev1.ServiceAccoun
 
 func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	gracePeriod := int64(10)
+	memoryLimit := resource.Quantity{}
+	memoryRequest := resource.Quantity{}
+	for _, c := range es.logStorage.Spec.ComponentResources {
+		if c.ComponentName == operatorv1.ComponentNameECKOperator {
+			memoryLimit = c.ResourceRequirements.Limits[corev1.ResourceMemory]
+			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
+		}
+	}
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1047,7 +1064,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 				Spec: corev1.PodSpec{
 					DNSPolicy:          corev1.DNSClusterFirst,
 					ServiceAccountName: "elastic-operator",
-					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
 					HostNetwork:        false,
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
@@ -1082,11 +1099,11 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("1"),
-								"memory": resource.MustParse("512Mi"),
+								"memory": memoryLimit,
 							},
 							Requests: corev1.ResourceList{
 								"cpu":    resource.MustParse("100m"),
-								"memory": resource.MustParse("512Mi"),
+								"memory": memoryRequest,
 							},
 						},
 					}},
@@ -1098,7 +1115,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 }
 
 func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(ECKOperatorName)
 	return psp
 }
@@ -1119,6 +1136,10 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"rewriteBasePath": true,
 		},
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
+		"tigera": map[string]interface{}{
+			"enabled":        true,
+			"licenseEdition": "enterpriseEdition",
+		},
 	}
 
 	if es.supportsOIDC() {
@@ -1160,7 +1181,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: KibanaNamespace,
 					Annotations: map[string]string{
-						KibanaTLSAnnotationHash: secretsAnnotationHash(es.kibanaSecrets...),
+						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(es.kibanaSecrets...),
 					},
 					Labels: map[string]string{
 						"name":    KibanaName,
@@ -1168,7 +1189,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					},
 				},
 				Spec: corev1.PodSpec{
-					ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+					ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
 					ServiceAccountName: "tigera-kibana",
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
@@ -1232,11 +1253,11 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 								"k8s-app": EsCuratorName,
 							},
 						},
-						Spec: ElasticsearchPodSpecDecorate(corev1.PodSpec{
+						Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 							NodeSelector: es.installation.ControlPlaneNodeSelector,
 							Tolerations:  es.installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
-								ElasticsearchContainerDecorate(corev1.Container{
+								relasticsearch.ContainerDecorate(corev1.Container{
 									Name:          EsCuratorName,
 									Image:         es.curatorImage,
 									Env:           es.curatorEnvVars(),
@@ -1247,7 +1268,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 									},
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.clusterDomain, es.SupportedOSType()),
 							},
-							ImagePullSecrets:   getImagePullSecretReferenceList(es.pullSecrets),
+							ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
 							ServiceAccountName: EsCuratorServiceAccount,
 						}),
@@ -1307,7 +1328,7 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 }
 
 func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(EsCuratorName)
 	return psp
 }
@@ -1368,7 +1389,7 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	trueBool := true
 	ptrBoolTrue := &trueBool
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-elasticsearch")
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
@@ -1418,7 +1439,7 @@ func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleB
 }
 
 func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-kibana")
 	return psp
 }
@@ -1576,22 +1597,4 @@ func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrid
 		updatedReq.Requests["storage"] = userOverrides.Requests["storage"]
 	}
 	return updatedReq
-}
-
-func ElasticsearchHTTPSEndpoint(osType OSType, clusterDomain string) string {
-	// If this is for Windows, use the clusterDomain to get the FQDN version of
-	// the ES https endpoint.
-	if osType == OSTypeWindows {
-		return fmt.Sprintf(elasticsearchHTTPSFQDNEndpoint, clusterDomain)
-	}
-	return elasticsearchHTTPSEndpoint
-}
-
-func KibanaHTTPSEndpoint(osType OSType, clusterDomain string) string {
-	// If this is for Windows, use the clusterDomain to get the FQDN version of
-	// the Kibana https endpoint.
-	if osType == OSTypeWindows {
-		return fmt.Sprintf(kibanaHTTPSFQDNEndpoint, clusterDomain)
-	}
-	return kibanaHTTPSEndpoint
 }

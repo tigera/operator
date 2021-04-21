@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import github
 from github import Github  # https://github.com/PyGithub/PyGithub
+import yaml
 import os
 import re
 import io
@@ -76,6 +77,14 @@ def print_issues_to_file(f, issues):
                 f.write(" - %s [#%d](%s) (@%s)\n" % (note, i.number, i.html_url, i.user.login))
     f.write(u"\n")
 
+def calico_version():
+    v = yaml.load(file('config/calico_versions.yml', 'r'))
+    return v['title']
+
+def enterprise_version():
+    v = yaml.load(file('config/enterprise_versions.yml', 'r'))
+    return v['title']
+
 if __name__ == "__main__":
     # Get the list of issues.
     all_issues = issues_in_milestone()
@@ -100,8 +109,8 @@ if __name__ == "__main__":
         f.write(u"%s\n\n" % date)
 
         f.write(u"#### Included Calico versions\n\n")
-        f.write(u"Calico version: TODO\n")
-        f.write(u"Calico Enterprise version: TODO\n\n")
+        f.write(u"Calico version: %s\n" % calico_version())
+        f.write(u"Calico Enterprise version: %s\n\n" % enterprise_version())
 
         if len(enhancements) > 0:
             f.write(u"#### Enhancements\n\n")

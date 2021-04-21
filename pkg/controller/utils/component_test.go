@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -36,7 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	v1 "k8s.io/api/core/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -85,7 +86,7 @@ var _ = Describe("Component handler tests", func() {
 
 	It("merges annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
-			supportedOSType: render.OSTypeLinux,
+			supportedOSType: rmeta.OSTypeLinux,
 			objs: []client.Object{&v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
@@ -96,7 +97,7 @@ var _ = Describe("Component handler tests", func() {
 			}},
 		}
 
-		err := handler.CreateOrUpdate(ctx, fc, sm)
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
 		By("checking that the namespace is created and desired annotations is present")
@@ -128,8 +129,22 @@ var _ = Describe("Component handler tests", func() {
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Annotations: map[string]string{
+						fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+					},
+				},
+			}},
+		}
+
 		By("initiating a merge with Openshift SCC annotations")
-		err = handler.CreateOrUpdate(ctx, fc, sm)
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
 		By("retrieving the namespace and checking that both current and desired annotations are still present")
@@ -163,8 +178,22 @@ var _ = Describe("Component handler tests", func() {
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Annotations: map[string]string{
+						fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+					},
+				},
+			}},
+		}
+
 		By("initiating a merge with namespace containing modified desired annotation")
-		err = handler.CreateOrUpdate(ctx, fc, sm)
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
 		By("retrieving the namespace and checking that desired annotation is reconciled, everything else is left as-is")
@@ -179,7 +208,7 @@ var _ = Describe("Component handler tests", func() {
 	})
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
-		Expect(handler.CreateOrUpdate(ctx, component, sm)).ShouldNot(HaveOccurred())
+		Expect(handler.CreateOrUpdateOrDelete(ctx, component, sm)).ShouldNot(HaveOccurred())
 		Expect(c.Get(ctx, key, obj)).ShouldNot(HaveOccurred())
 
 		var nodeSelectors map[string]string
@@ -215,7 +244,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a podtemplate when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&v1.PodTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
 						Template: v1.PodTemplateSpec{
@@ -234,7 +263,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a podtemplate when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&v1.PodTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
 						Template: v1.PodTemplateSpec{
@@ -253,7 +282,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a deployment when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -274,7 +303,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a deployment when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -295,7 +324,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a daemonset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
@@ -316,7 +345,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a daemonset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
@@ -337,7 +366,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a statefulset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
@@ -358,7 +387,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a statefulset when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
@@ -379,7 +408,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a cronjob when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&batchv1beta.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
 						Spec: batchv1beta.CronJobSpec{
@@ -404,7 +433,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a cronjob when they're not set",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&batchv1beta.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
 						Spec: batchv1beta.CronJobSpec{
@@ -429,7 +458,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - sets the required annotations for a job",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
@@ -451,7 +480,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - sets the required annotations for a job",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
@@ -473,7 +502,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "sets the required annotations for kibana",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
 						Spec: kbv1.KibanaSpec{
@@ -495,7 +524,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "sets the required annotations for an elasticsearch nodeset",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&esv1.Elasticsearch{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-elasticsearch"},
 						Spec: esv1.ElasticsearchSpec{
@@ -528,7 +557,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "linux - leaves other annotations alone and sets the required ones",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeLinux,
+					supportedOSType: rmeta.OSTypeLinux,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -552,7 +581,7 @@ var _ = Describe("Component handler tests", func() {
 			Description: "windows - leaves other annotations alone and sets the required ones",
 			Parameters: []interface{}{
 				&fakeComponent{
-					supportedOSType: render.OSTypeWindows,
+					supportedOSType: rmeta.OSTypeWindows,
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
@@ -578,7 +607,7 @@ var _ = Describe("Component handler tests", func() {
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.
 type fakeComponent struct {
 	objs            []client.Object
-	supportedOSType render.OSType
+	supportedOSType rmeta.OSType
 }
 
 func (c *fakeComponent) Ready() bool {
@@ -593,6 +622,6 @@ func (c *fakeComponent) Objects() ([]client.Object, []client.Object) {
 	return c.objs, nil
 }
 
-func (c *fakeComponent) SupportedOSType() render.OSType {
+func (c *fakeComponent) SupportedOSType() rmeta.OSType {
 	return c.supportedOSType
 }

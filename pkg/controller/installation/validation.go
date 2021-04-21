@@ -105,6 +105,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
+		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 
 		nPools := len(instance.Spec.CalicoNetwork.IPPools)
 		if nPools > 2 {
@@ -130,22 +131,34 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if instance.Spec.CNI.Type == operatorv1.PluginCalico {
-				// Verify the specified encapsulation type is valid.
-				switch v4pool.Encapsulation {
-				case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
-					// IPIP currently requires BGP to be running in order to program routes.
-					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-						return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+				switch instance.Spec.CNI.IPAM.Type {
+				case operatorv1.IPAMPluginCalico:
+					// Verify the specified encapsulation type is valid.
+					switch v4pool.Encapsulation {
+					case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
+						// IPIP currently requires BGP to be running in order to program routes.
+						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+							return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+						}
+					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
+					case operatorv1.EncapsulationNone:
+						// Unencapsulated currently requires BGP to be running in order to program routes.
+						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+							return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+						}
+					default:
+						return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+							v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 					}
-				case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
-				case operatorv1.EncapsulationNone:
-					// Unencapsulated currently requires BGP to be running in order to program routes.
-					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-						return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+				case operatorv1.IPAMPluginHostLocal:
+					// Verify the specified encapsulation type is valid.
+					switch v4pool.Encapsulation {
+					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
+						return fmt.Errorf("%s is invalid for ipPool.encapsulation with %s CNI and %s IPAM",
+							v4pool.Encapsulation,
+							instance.Spec.CNI.Type,
+							instance.Spec.CNI.IPAM.Type)
 					}
-				default:
-					return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
-						v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 				}
 			} else {
 				// Verify the specified encapsulation type is valid.
@@ -199,6 +212,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("Encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
 			}
 
+			if bpfDataplane {
+				return fmt.Errorf("IPv6 IP pool is specified but eBPF mode does not support IPv6")
+			}
+
 			// Verify NAT outgoing values.
 			switch v6pool.NATOutgoing {
 			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
@@ -230,6 +247,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+			return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
+		}
+
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {
 			err := validateNodeAddressDetection(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4)
 			if err != nil {
@@ -248,9 +269,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("spec.calicoNetwork.hostPorts is supported only for Calico CNI")
 			}
+
 			err := validateHostPorts(instance.Spec.CalicoNetwork.HostPorts)
 			if err != nil {
 				return err
+			}
+
+			if *instance.Spec.CalicoNetwork.HostPorts != operatorv1.HostPortsDisabled && bpfDataplane {
+				return fmt.Errorf("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane")
 			}
 		}
 
@@ -285,6 +311,18 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 		if v, ok := instance.Spec.ControlPlaneNodeSelector["kubernetes.io/os"]; ok && v != "linux" {
 			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'kubernetes.io/os=%s' is not supported", v)
+		}
+	}
+
+	validComponentNames := map[operatorv1.ComponentName]struct{}{
+		operatorv1.ComponentNameKubeControllers: {},
+		operatorv1.ComponentNameNode:            {},
+		operatorv1.ComponentNameTypha:           {},
+	}
+
+	for _, resource := range instance.Spec.ComponentResources {
+		if _, ok := validComponentNames[resource.ComponentName]; !ok {
+			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
 		}
 	}
 

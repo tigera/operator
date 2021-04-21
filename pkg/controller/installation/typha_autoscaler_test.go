@@ -16,59 +16,119 @@ package installation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/tigera/operator/pkg/controller/status"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	kfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 )
 
-var _ = Describe("Test typha autoscaler ", func() {
-	var c client.Client
-	var statusManager *status.MockStatus
+// Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
+// mock available in the fake packages.
+// Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
+type nodeListWatch struct {
+	kubernetes.Interface
+}
 
+func (n nodeListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
+	return n.Interface.CoreV1().Nodes().List(context.Background(), options)
+}
+
+func (n nodeListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return n.Interface.CoreV1().Nodes().Watch(context.Background(), options)
+}
+
+// Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
+// mock available in the fake packages.
+// Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
+type typhaListWatch struct {
+	kubernetes.Interface
+}
+
+func (t typhaListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
+	return t.Interface.AppsV1().Deployments("calico-system").List(context.Background(), options)
+}
+
+func (t typhaListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return t.Interface.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
+}
+
+var _ = Describe("Test typha autoscaler ", func() {
+	var statusManager *status.MockStatus
+	var c *kfake.Clientset
 	var ctx context.Context
+	var nlw, tlw cache.ListerWatcher
 
 	BeforeEach(func() {
-		c = fake.NewFakeClientWithScheme(scheme.Scheme)
-		err := c.Create(ctx, &corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "calico-system",
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
 		statusManager = new(status.MockStatus)
 
+		objs := []runtime.Object{
+			&corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "calico-system",
+				},
+			},
+		}
+		c = kfake.NewSimpleClientset(objs...)
+		nlw = nodeListWatch{c}
+		tlw = typhaListWatch{c}
 		ctx = context.Background()
+	})
+
+	It("should initialize an autoscaler", func() {
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager)
+		ta.start()
 	})
 
 	It("should get the correct number of nodes", func() {
 		n1 := createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
-		ta := newTyphaAutoscaler(c, statusManager)
-		schedulableNodes, linuxNodes, err := ta.getNodeCounts()
-		Expect(err).To(BeNil())
-		Expect(schedulableNodes).To(Equal(2))
-		Expect(linuxNodes).To(Equal(2))
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager)
+		ta.start()
+
+		Eventually(func() error {
+			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
+			if err != nil {
+				return err
+			}
+			if schedulableNodes != 2 {
+				return fmt.Errorf("Expected 2 schedulable nodes, got %d", schedulableNodes)
+			}
+			if linuxNodes != 2 {
+				return fmt.Errorf("Expected 2 linux nodes, got %d", linuxNodes)
+			}
+			return nil
+		}, 5*time.Second).ShouldNot(HaveOccurred())
 
 		n1.Spec.Unschedulable = true
-		err = c.Update(ctx, n1)
+		_, err := c.CoreV1().Nodes().Update(ctx, n1, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
 
-		schedulableNodes, linuxNodes, err = ta.getNodeCounts()
-		Expect(err).To(BeNil())
-		Expect(schedulableNodes).To(Equal(1))
-		Expect(linuxNodes).To(Equal(1))
+		Eventually(func() error {
+			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
+			if err != nil {
+				return err
+			}
+			if schedulableNodes != 1 {
+				return fmt.Errorf("Expected 2 schedulable nodes, got %d", schedulableNodes)
+			}
+			if linuxNodes != 1 {
+				return fmt.Errorf("Expected 2 linux nodes, got %d", linuxNodes)
+			}
+			return nil
+		}, 5*time.Second).ShouldNot(HaveOccurred())
 	})
 
 	It("should scale the Typha up and down in response to the number of schedulable nodes", func() {
@@ -77,11 +137,15 @@ var _ = Describe("Test typha autoscaler ", func() {
 			Namespace: "calico-system",
 		}
 		// Create a typha deployment
+		var r int32 = 0
 		typha := &appsv1.Deployment{
 			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: typhaMeta,
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &r,
+			},
 		}
-		err := c.Create(ctx, typha)
+		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
 		// Create a few nodes
@@ -89,7 +153,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		verifyTyphaReplicas(c, 2)
@@ -99,8 +163,40 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Verify that making a node unschedulable updates replicas.
 		n3.Spec.Unschedulable = true
-		err = c.Update(context.Background(), n3)
+		_, err = c.CoreV1().Nodes().Update(ctx, n3, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
+		verifyTyphaReplicas(c, 2)
+	})
+
+	It("should ignore non-migrated nodes in its count", func() {
+		typhaMeta := metav1.ObjectMeta{
+			Name:      "calico-typha",
+			Namespace: "calico-system",
+		}
+
+		// Create a typha deployment
+		var r int32 = 0
+		typha := &appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: typhaMeta,
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &r,
+			},
+		}
+		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
+		Expect(err).To(BeNil())
+
+		// Create three nodes, one of which is not yet migrated
+		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"})
+		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"})
+		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"})
+
+		// Create the autoscaler and run it
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta.start()
+
+		// normally we'd expect to see three replicas for three nodes, but since one node is not migrated,
+		// we should still only expect two
 		verifyTyphaReplicas(c, 2)
 	})
 
@@ -110,11 +206,15 @@ var _ = Describe("Test typha autoscaler ", func() {
 			Namespace: "calico-system",
 		}
 		// Create a typha deployment
+		var r int32 = 0
 		typha := &appsv1.Deployment{
 			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: typhaMeta,
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &r,
+			},
 		}
-		err := c.Create(ctx, typha)
+		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
 		// Create two nodes, one of which is a virtual-kubelet
@@ -123,7 +223,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		// normally we'd expect to see three replicas for three nodes, but since one node is a virtual-kubelet,
@@ -137,11 +237,15 @@ var _ = Describe("Test typha autoscaler ", func() {
 			Namespace: "calico-system",
 		}
 		// Create a typha deployment
+		var r int32 = 0
 		typha := &appsv1.Deployment{
 			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: typhaMeta,
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &r,
+			},
 		}
-		err := c.Create(ctx, typha)
+		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
 		statusManager.On("SetDegraded", "Failed to autoscale typha", "not enough linux nodes to schedule typha pods on, require 3 and have 2")
@@ -153,7 +257,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "window"})
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start()
 
 		// This blocks until the first run is done.
@@ -163,7 +267,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 	})
 })
 
-func createNode(c client.Client, name string, labels map[string]string) *corev1.Node {
+func createNode(c kubernetes.Interface, name string, labels map[string]string) *corev1.Node {
 	node := &corev1.Node{
 		TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -171,25 +275,20 @@ func createNode(c client.Client, name string, labels map[string]string) *corev1.
 			Labels: labels,
 		},
 	}
-	err := c.Create(context.Background(), node)
+	var err error
+	node, err = c.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
 	Expect(err).To(BeNil())
 	return node
 }
 
-func verifyTyphaReplicas(c client.Client, expectedReplicas int) {
-	typha := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-typha",
-			Namespace: "calico-system",
-		},
-	}
+func verifyTyphaReplicas(c kubernetes.Interface, expectedReplicas int) {
 	Eventually(func() int32 {
-		err := test.GetResource(c, typha)
+		typha, err := c.AppsV1().Deployments("calico-system").Get(context.Background(), "calico-typha", metav1.GetOptions{})
 		Expect(err).To(BeNil())
 		// Just return an invalid number that will never match an expected replica count.
 		if typha.Spec.Replicas == nil {
 			return -1
 		}
 		return *typha.Spec.Replicas
-	}, 1*time.Second).Should(BeEquivalentTo(expectedReplicas))
+	}, 5*time.Second).Should(BeEquivalentTo(expectedReplicas))
 }

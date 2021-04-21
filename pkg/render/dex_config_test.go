@@ -41,7 +41,6 @@ var _ = Describe("dex config tests", func() {
 			OIDC: &operatorv1.AuthenticationOIDC{
 				IssuerURL:         "https://example.com",
 				UsernameClaim:     "email",
-				GroupsClaim:       "group",
 				RequestedScopes:   []string{"scope"},
 				EmailVerification: &verify,
 			},
@@ -49,9 +48,9 @@ var _ = Describe("dex config tests", func() {
 	}
 	authenticationDiff := &operatorv1.Authentication{
 		Spec: operatorv1.AuthenticationSpec{
-			ManagerDomain: "https://example.com",
+			ManagerDomain: "https://example.org",
 			OIDC: &operatorv1.AuthenticationOIDC{
-				IssuerURL:     "https://example.com",
+				IssuerURL:     "https://example.org",
 				UsernameClaim: "email",
 			},
 		},
@@ -162,6 +161,7 @@ var _ = Describe("dex config tests", func() {
 					"userNameKey":               "email",
 					"userIDKey":                 "email",
 					"insecureSkipEmailVerified": false,
+					"insecureEnableGroups":      true,
 				},
 			}, []corev1.Volume{
 				{

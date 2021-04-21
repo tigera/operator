@@ -107,11 +107,6 @@ type AuthenticationOIDC struct {
 	// Default: "Consent"
 	// +optional
 	PromptTypes []PromptType `json:"promptTypes,omitempty"`
-
-	// Some providers return non-standard claims. By defining a claim mapping you can turn non-standard claim
-	// names into standard claim names. (For example: '"email": "mail")
-	// claimMapping can only map a non-standard claim to a standard one if it's not returned in the id_token.
-	ClaimMapping map[string]string
 }
 
 // PromptType is a value that specifies whether the identity provider prompts the end user for re-authentication and

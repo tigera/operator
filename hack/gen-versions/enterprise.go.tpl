@@ -120,13 +120,13 @@ var (
 {{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
-		Version: "{{ .Version }}",
+		Version: "tesla-{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "cnx-manager" }}
 	ComponentManager = component{
-		Version: "{{ .Version }}",
+		Version: "tesla-{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}

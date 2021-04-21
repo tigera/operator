@@ -697,7 +697,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
-			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 			{Name: "MULTI_INTERFACE_MODE", Value: operator.MultiInterfaceModeNone.Value()},
@@ -1741,7 +1740,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
-			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 

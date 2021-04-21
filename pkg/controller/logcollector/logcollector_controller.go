@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -34,12 +35,16 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/url"
 )
 
 var log = logf.Log.WithName("controller_logcollector")
@@ -51,29 +56,46 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+
+	var licenseAPIReady = &utils.ReadyFlag{}
+
+	// create the reconciler
+	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+
+	// Create a new controller
+	controller, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+
+	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "log-collector"),
-		clusterDomain: clusterDomain,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        provider,
+		status:          status.New(mgr.GetClient(), "log-collector"),
+		clusterDomain:   clusterDomain,
+		licenseAPIReady: licenseAPIReady,
 	}
 	c.status.Run()
 	return c
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
-	}
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// Watch for changes to primary resource LogCollector
 	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
@@ -92,15 +114,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		render.ElasticsearchPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
-		if err = utils.AddSecretsWatch(c, secretName, render.OperatorNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
 	}
 
-	for _, configMapName := range []string{render.FluentdFilterConfigMapName, render.ElasticsearchConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, render.OperatorNamespace()); err != nil {
+	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, configMapName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}
@@ -109,6 +131,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)
 	}
+
 	return nil
 }
 
@@ -119,11 +142,12 @@ var _ reconcile.Reconciler = &ReconcileLogCollector{}
 type ReconcileLogCollector struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	licenseAPIReady *utils.ReadyFlag
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -137,7 +161,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
-			_, _, _, err := render.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint)
+			_, _, _, err := url.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint)
 			if err != nil {
 				return nil, fmt.Errorf("Syslog config has invalid Endpoint: %s", err)
 			}
@@ -181,8 +205,18 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if err = utils.CheckLicenseKey(ctx, r.client); err != nil {
-		r.status.SetDegraded("License not found", err.Error())
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("License not found", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -226,6 +260,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
+	if !exportLogs && instance.Spec.AdditionalStores != nil {
+		r.status.SetDegraded("Feature is not active", "License does not support feature: export-logs")
 		return reconcile.Result{}, err
 	}
 
@@ -377,7 +417,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		pullSecrets,
 		installation,
 		r.clusterDomain,
-		render.OSTypeLinux,
+		rmeta.OSTypeLinux,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -386,7 +426,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -409,7 +449,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			pullSecrets,
 			installation,
 			r.clusterDomain,
-			render.OSTypeWindows,
+			rmeta.OSTypeWindows,
 		)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -421,7 +461,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		// Create a component handler to manage the rendered component.
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-		if err := handler.CreateOrUpdate(ctx, component, r.status); err != nil {
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -458,7 +498,7 @@ func getS3Credential(client client.Client) (*render.S3Credential, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      render.S3FluentdSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {
@@ -491,7 +531,7 @@ func getSplunkCredential(client client.Client) (*render.SplunkCredential, error)
 	tokenSecret := &corev1.Secret{}
 	tokenNamespacedName := types.NamespacedName{
 		Name:      render.SplunkFluentdTokenSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), tokenNamespacedName, tokenSecret); err != nil {
 		if errors.IsNotFound(err) {
@@ -512,7 +552,7 @@ func getSplunkCredential(client client.Client) (*render.SplunkCredential, error)
 	certificateSecret := &corev1.Secret{}
 	certificateNamespacedName := types.NamespacedName{
 		Name:      render.SplunkFluentdCertificateSecretName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 
 	if err := client.Get(context.Background(), certificateNamespacedName, certificateSecret); err != nil {
@@ -539,7 +579,7 @@ func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.FluentdFilterConfigMapName,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if errors.IsNotFound(err) {
@@ -574,7 +614,7 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      render.EksLogForwarderSecret,
-		Namespace: render.OperatorNamespace(),
+		Namespace: rmeta.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {

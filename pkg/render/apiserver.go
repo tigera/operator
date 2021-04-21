@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -31,6 +34,9 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -43,7 +49,14 @@ const (
 	APIServiceName          = "tigera-api"
 )
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator.InstallationSpec, managementCluster *operator.ManagementCluster, managementClusterConnection *operator.ManagementClusterConnection, aci *operator.AmazonCloudIntegration, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
+func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
+	installation *operator.InstallationSpec,
+	managementCluster *operator.ManagementCluster,
+	managementClusterConnection *operator.ManagementClusterConnection,
+	aci *operator.AmazonCloudIntegration,
+	tlsKeyPair *corev1.Secret,
+	pullSecrets []*corev1.Secret,
+	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 	svcDNSNames := dns.GetServiceDNSNames(APIServiceName, APIServerNamespace, clusterDomain)
@@ -51,11 +64,12 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 	if installation.CertificateManagement == nil {
 		if tlsKeyPair == nil {
 			var err error
-			tlsKeyPair, err = CreateOperatorTLSSecret(nil,
+			tlsKeyPair, err = secret.CreateTLSSecret(nil,
 				APIServerTLSSecretName,
+				rmeta.OperatorNamespace(),
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
-				DefaultCertificateDuration,
+				rmeta.DefaultCertificateDuration,
 				nil,
 				svcDNSNames...,
 			)
@@ -65,7 +79,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 			// We only need to add the tlsKeyPair if we created it, otherwise
 			// it already exists.
 			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[tlsSecretHashAnnotation] = AnnotationHash(tlsKeyPair.Data)
+			tlsHashAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
 		}
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
@@ -80,8 +94,8 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint, installation *operator
 			tunnelCASecret = voltronTunnelSecret()
 			tlsSecrets = append(tlsSecrets, tunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, CopySecrets(APIServerNamespace, tunnelCASecret)...)
-		tlsHashAnnotations[voltronTunnelHashAnnotation] = AnnotationHash(tunnelCASecret.Data)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(APIServerNamespace, tunnelCASecret)...)
+		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelCASecret.Data)
 	}
 
 	return &apiServerComponent{
@@ -144,16 +158,16 @@ func (c *apiServerComponent) ResolveImages(is *operator.ImageSet) error {
 	return nil
 }
 
-func (c *apiServerComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(APIServerNamespace, c.installation.KubernetesProvider),
 	}
-	secrets := copyImagePullSecrets(c.pullSecrets, APIServerNamespace)
-	objs = append(objs, secrets...)
+	secrets := secret.CopyToNamespace(APIServerNamespace, c.pullSecrets...)
+	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.auditPolicyConfigMap(),
 		c.apiServerServiceAccount(),
@@ -259,6 +273,10 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.Cl
 				Name:     "system:authenticated",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
+			// RBAC for tiered policies is enforced by our aggregate apiserver (tigera-apiserver).
+			// Before the request reaches our apiserver it goes through the kubernetes apiserver.
+			// We add this RBAC that will essentially let requests for our policy resources through the
+			// kubernetes apiserver but the next level of RBAC is enforced by our tigera-apiserver.
 			{
 				Kind:     "Group",
 				Name:     "system:unauthenticated",
@@ -667,7 +685,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: "tigera-apiserver",
 					Tolerations:        c.tolerations(),
-					ImagePullSecrets:   getImagePullSecretReferenceList(c.pullSecrets),
+					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
@@ -724,7 +742,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &isPrivileged,
-			RunAsUser:  Int64(0),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
@@ -801,7 +819,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext: securityContext(),
+		SecurityContext: podsecuritycontext.NewBaseContext(),
 	}
 	return container
 }
@@ -855,7 +873,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	return append(c.installation.ControlPlaneTolerations, tolerateMaster)
+	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster)
 }
 
 func (c *apiServerComponent) getTLSObjects() []client.Object {
@@ -1150,10 +1168,10 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 }
 
 func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-apiserver")
 	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = Bool(false)
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp

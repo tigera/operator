@@ -17,20 +17,30 @@ package render
 import (
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 var replicas int32 = 1
+
+const (
+	ElasticsearchKubeControllersUserSecret = "tigera-ee-kube-controllers-elasticsearch-access"
+)
 
 func KubeControllers(
 	k8sServiceEp k8sapi.ServiceEndpoint,
@@ -43,7 +53,24 @@ func KubeControllers(
 	kibanaSecret *v1.Secret,
 	authentication *operator.Authentication,
 	esLicenseType ElasticsearchLicenseType,
+	clusterDomain string,
+	esAdminSecret *v1.Secret,
+	metricsPort int,
 ) *kubeControllersComponent {
+	var elasticsearchUserSecret *v1.Secret
+	if esAdminSecret != nil {
+		elasticsearchUserSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ElasticsearchKubeControllersUserSecret,
+				Namespace: common.CalicoNamespace,
+			},
+			Data: map[string][]byte{
+				"username": []byte("elastic"),
+				"password": esAdminSecret.Data["elastic"],
+			},
+		}
+	}
+
 	return &kubeControllersComponent{
 		cr:                          cr,
 		managementCluster:           managementCluster,
@@ -55,6 +82,9 @@ func KubeControllers(
 		authentication:              authentication,
 		k8sServiceEp:                k8sServiceEp,
 		esLicenseType:               esLicenseType,
+		clusterDomain:               clusterDomain,
+		elasticsearchUserSecret:     elasticsearchUserSecret,
+		metricsPort:                 metricsPort,
 	}
 }
 
@@ -70,6 +100,9 @@ type kubeControllersComponent struct {
 	k8sServiceEp                k8sapi.ServiceEndpoint
 	esLicenseType               ElasticsearchLicenseType
 	image                       string
+	clusterDomain               string
+	elasticsearchUserSecret     *v1.Secret
+	metricsPort                 int
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
@@ -84,26 +117,43 @@ func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
 	return err
 }
 
-func (c *kubeControllersComponent) SupportedOSType() OSType {
-	return OSTypeLinux
+func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }
 
 func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) {
-	kubeControllerObjects := []client.Object{
+	objectsToCreate := []client.Object{
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),
 		c.controllersDeployment(),
 	}
+	objectsToDelete := []client.Object{}
 	if c.managerInternalSecret != nil {
-		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
+		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
+			secret.CopyToNamespace(common.CalicoNamespace, c.managerInternalSecret)...)...)
+	}
+
+	if c.elasticsearchSecret != nil {
+		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
+			secret.CopyToNamespace(common.CalicoNamespace, c.elasticsearchSecret)...)...)
+	}
+
+	if !c.isManagedCluster() && c.elasticsearchUserSecret != nil {
+		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.elasticsearchUserSecret)...)
 	}
 
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
-		kubeControllerObjects = append(kubeControllerObjects, c.controllersPodSecurityPolicy())
+		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
 	}
 
-	return kubeControllerObjects, nil
+	if c.metricsPort != 0 {
+		objectsToCreate = append(objectsToCreate, c.prometheusService())
+	} else {
+		objectsToDelete = append(objectsToDelete, c.prometheusService())
+	}
+
+	return objectsToCreate, objectsToDelete
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -149,7 +199,7 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			{
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
-				Verbs:     []string{"get", "list", "create", "update", "delete"},
+				Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 			},
 			{
 				// Needs access to update clusterinformations.
@@ -192,6 +242,12 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
+				// Needed to validate the license
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+			{
 				// calico-kube-controllers requires tiers create
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"tiers"},
@@ -231,6 +287,14 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"authenticationreviews"},
 				Verbs:     []string{"create"},
+			})
+		}
+
+		if c.managementClusterConnection != nil {
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"create", "update"},
 			})
 		}
 	}
@@ -281,7 +345,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
-		if c.logStorageExists {
+		if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
 			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
 			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
@@ -311,6 +375,42 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 
 	defaultMode := int32(420)
 
+	container := v1.Container{
+		Name:      "calico-kube-controllers",
+		Image:     c.image,
+		Env:       env,
+		Resources: c.kubeControllersResources(),
+		ReadinessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				Exec: &v1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-r",
+					},
+				},
+			},
+		},
+		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
+	}
+
+	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
+			ElasticsearchKubeControllersUserSecret, c.clusterDomain, rmeta.OSTypeLinux)
+	}
+
+	podSpec := v1.PodSpec{
+		NodeSelector:       c.cr.ControlPlaneNodeSelector,
+		Tolerations:        append(c.cr.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+		ImagePullSecrets:   c.cr.ImagePullSecrets,
+		ServiceAccountName: "calico-kube-controllers",
+		Containers:         []v1.Container{container},
+		Volumes:            kubeControllersVolumes(defaultMode, c.managerInternalSecret),
+	}
+
+	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+		podSpec = relasticsearch.PodSpecDecorate(podSpec)
+	}
+
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -339,32 +439,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 					Annotations: c.annotations(),
 				},
-				Spec: v1.PodSpec{
-					NodeSelector:       c.cr.ControlPlaneNodeSelector,
-					Tolerations:        append(c.cr.ControlPlaneTolerations, tolerateMaster, tolerateCriticalAddonsOnly),
-					ImagePullSecrets:   c.cr.ImagePullSecrets,
-					ServiceAccountName: "calico-kube-controllers",
-					Containers: []v1.Container{
-						{
-							Name:      "calico-kube-controllers",
-							Image:     c.image,
-							Env:       env,
-							Resources: c.kubeControllersResources(),
-							ReadinessProbe: &v1.Probe{
-								Handler: v1.Handler{
-									Exec: &v1.ExecAction{
-										Command: []string{
-											"/usr/bin/check-status",
-											"-r",
-										},
-									},
-								},
-							},
-							VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
-						},
-					},
-					Volumes: kubeControllersVolumes(defaultMode, c.managerInternalSecret),
-				},
+				Spec: podSpec,
 			},
 		},
 	}
@@ -373,27 +448,59 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	return &d
 }
 
+// prometheusService creates a Service which exposes and endpoint on kube-controllers for
+// reporting Prometheus metrics.
+func (c *kubeControllersComponent) prometheusService() *v1.Service {
+	return &v1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-kube-controllers-metrics",
+			Namespace: common.CalicoNamespace,
+			Labels:    map[string]string{"k8s-app": "calico-kube-controllers"},
+		},
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": "calico-kube-controllers"},
+			Type:     v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
+				{
+					Name:       "metrics-port",
+					Port:       int32(c.metricsPort),
+					TargetPort: intstr.FromInt(int(c.metricsPort)),
+					Protocol:   v1.ProtocolTCP,
+				},
+			},
+		},
+	}
+}
+
+func (c *kubeControllersComponent) isManagedCluster() bool {
+	return c.managementClusterConnection != nil
+}
+
 // kubeControllerResources creates the kube-controller's resource requirements.
 func (c *kubeControllersComponent) kubeControllersResources() v1.ResourceRequirements {
-	return GetResourceRequirements(c.cr, operator.ComponentNameKubeControllers)
+	return rmeta.GetResourceRequirements(c.cr, operator.ComponentNameKubeControllers)
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
 	am := map[string]string{}
 	if c.managerInternalSecret != nil {
-		am[ManagerInternalTLSHashAnnotation] = AnnotationHash(c.managerInternalSecret.Data)
+		am[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.managerInternalSecret.Data)
 	}
 	if c.elasticsearchSecret != nil {
-		am[tlsSecretHashAnnotation] = AnnotationHash(c.elasticsearchSecret.Data)
+		am[tlsSecretHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchSecret.Data)
+	}
+	if c.elasticsearchUserSecret != nil {
+		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchUserSecret.Data)
 	}
 	if c.kibanaSecret != nil {
-		am[KibanaTLSHashAnnotation] = AnnotationHash(c.kibanaSecret.Data)
+		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.kibanaSecret.Data)
 	}
 	return am
 }
 
 func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := basePodSecurityPolicy()
+	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("calico-kube-controllers")
 	return psp
 }

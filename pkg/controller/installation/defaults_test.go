@@ -20,17 +20,19 @@ import (
 	. "github.com/onsi/gomega"
 
 	osconfigv1 "github.com/openshift/api/config/v1"
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
 	It("should properly fill defaults on an empty instance", func() {
 		instance := &operator.Installation{}
-		fillDefaults(instance)
+		err := fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
@@ -42,6 +44,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(v6pool).To(BeNil())
 		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
 		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
+		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
+		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
@@ -49,7 +53,8 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		fillDefaults(instance)
+		err := fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
@@ -60,6 +65,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v6pool).To(BeNil())
 		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
+		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
+		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
@@ -75,6 +82,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
+		dpIptables := operator.LinuxDataplaneIptables
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Variant:  operator.TigeraSecureEnterprise,
@@ -92,6 +100,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
+					LinuxDataplane: &dpIptables, // Actually the default but BPF would make other values invalid.
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",
@@ -130,8 +139,88 @@ var _ = Describe("Defaulting logic tests", func() {
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
-		fillDefaults(instanceCopy)
+		err := fillDefaults(instanceCopy)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should not override custom configuration (BPF)", func() {
+		var mtu int32 = 1500
+		var nodeMetricsPort int32 = 9081
+		var false_ = false
+		var twentySeven int32 = 27
+		var one intstr.IntOrString = intstr.FromInt(1)
+
+		disabled := operator.BGPDisabled
+		miMode := operator.MultiInterfaceModeNone
+		dpBPF := operator.LinuxDataplaneBPF
+		hpDisabled := operator.HostPortsDisabled
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				Variant:  operator.TigeraSecureEnterprise,
+				Registry: "test-reg/",
+				ImagePullSecrets: []v1.LocalObjectReference{
+					{
+						Name: "pullSecret1",
+					},
+					{
+						Name: "pullSecret2",
+					},
+				},
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					LinuxDataplane: &dpBPF, // Actually the default but BPF would make other values invalid.
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "1.2.3.0/24",
+							Encapsulation: "VXLANCrossSubnet",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "has(thiskey)",
+							BlockSize:     &twentySeven,
+						},
+					},
+					MTU: &mtu,
+					BGP: &disabled,
+					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{
+						FirstFound: &false_,
+					},
+					MultiInterfaceMode: &miMode,
+					HostPorts:          &hpDisabled, // Only one valid value in BPF mode.
+				},
+				NodeMetricsPort: &nodeMetricsPort,
+				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &one,
+					},
+				},
+			},
+		}
+		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
+		err := fillDefaults(instanceCopy)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(instanceCopy.Spec).To(Equal(instance.Spec))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should allow for zero IP pools to be specified", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{},
+				},
+			},
+		}
+		fillDefaults(instance)
+		Expect(len(instance.Spec.CalicoNetwork.IPPools)).To(Equal(0))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
@@ -143,7 +232,8 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 			},
 		}
-		fillDefaults(instance)
+		err := fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
@@ -157,7 +247,8 @@ var _ = Describe("Defaulting logic tests", func() {
 				CalicoNetwork: &operator.CalicoNetworkSpec{},
 			},
 		}
-		fillDefaults(instance)
+		err := fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
 
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -169,7 +260,8 @@ var _ = Describe("Defaulting logic tests", func() {
 				Registry: "test-reg",
 			},
 		}
-		fillDefaults(instance)
+		err := fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
@@ -183,7 +275,8 @@ var _ = Describe("Defaulting logic tests", func() {
 			},
 		}
 
-		fillDefaults(instance)
+		err := fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
 
 		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
 		Expect(v4pool).To(BeNil())
@@ -328,7 +421,12 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
-			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			iptables := operator.LinuxDataplaneIptables
+			bgpDisabled := operator.BGPDisabled
+			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
+				LinuxDataplane: &iptables,
+				BGP:            &bgpDisabled,
+			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
@@ -345,7 +443,12 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
-			Expect(instance.Spec.CalicoNetwork).To(BeNil())
+			iptables := operator.LinuxDataplaneIptables
+			bgpDisabled := operator.BGPDisabled
+			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
+				LinuxDataplane: &iptables,
+				BGP:            &bgpDisabled,
+			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
@@ -365,10 +468,77 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 			}
-			fillDefaults(instance)
+			err := fillDefaults(instance)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
 			Expect(*&instance.Spec.CalicoNetwork.IPPools[0].Encapsulation).To(Equal(operator.EncapsulationVXLAN))
 			Expect(*&instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("with AmazonVPC CNI", func() {
+		It("should default properly with no calicoNetwork specified", func() {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderEKS,
+					CNI: &operator.CNISpec{
+						Type: operator.PluginAmazonVPC,
+					},
+				},
+			}
+			err := fillDefaults(instance)
+			Expect(err).NotTo(HaveOccurred())
+			iptables := operator.LinuxDataplaneIptables
+			bgpDisabled := operator.BGPDisabled
+			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
+				LinuxDataplane: &iptables,
+				BGP:            &bgpDisabled,
+			}))
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+
+		It("should default properly with iptables explicitly enabled", func() {
+			dpIpt := operator.LinuxDataplaneIptables
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderEKS,
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						LinuxDataplane: &dpIpt,
+					},
+					CNI: &operator.CNISpec{
+						Type: operator.PluginAmazonVPC,
+					},
+				},
+			}
+			err := fillDefaults(instance)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
+			Expect(instance.Spec.CalicoNetwork.IPPools).To(BeEmpty())
+			Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4).To(BeNil())
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+
+		It("should default properly with BPF enabled", func() {
+			dpBPF := operator.LinuxDataplaneBPF
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderEKS,
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						LinuxDataplane: &dpBPF,
+					},
+					CNI: &operator.CNISpec{
+						Type: operator.PluginAmazonVPC,
+					},
+				},
+			}
+			err := fillDefaults(instance)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
+			Expect(instance.Spec.CalicoNetwork.IPPools).To(BeEmpty())
+			Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4).To(Equal(&operator.NodeAddressAutodetection{
+				CanReach: "8.8.8.8",
+			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 	})

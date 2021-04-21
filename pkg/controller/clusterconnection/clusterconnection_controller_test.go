@@ -20,6 +20,7 @@ import (
 
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
@@ -81,7 +82,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.GuardianSecretName,
-				Namespace: render.OperatorNamespace(),
+				Namespace: rmeta.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"cert": []byte("foo"),

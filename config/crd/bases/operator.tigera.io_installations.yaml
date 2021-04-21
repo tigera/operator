@@ -108,6 +108,16 @@ spec:
                       - cidr
                       type: object
                     type: array
+                  linuxDataplane:
+                    description: 'LinuxDataplane is used to select the dataplane used
+                      for Linux nodes. In particular, it causes the operator to add
+                      required mounts and environment variables for the particular
+                      dataplane. If not specified, iptables mode is used. Default:
+                      Iptables'
+                    enum:
+                    - Iptables
+                    - BPF
+                    type: string
                   mtu:
                     description: MTU specifies the maximum transmission unit to use
                       on the pod network. If not specified, Calico will perform MTU
@@ -223,7 +233,7 @@ spec:
                   signerName:
                     description: 'When a CSR is issued to the certificates.k8s.io
                       API, the signerName is added to the request in order to accommodate
-                      for clusters with multiple signers. Must be formatted as: "<my-domain>/<my-signername>".'
+                      for clusters with multiple signers. Must be formatted as: `<my-domain>/<my-signername>`.'
                     type: string
                 required:
                 - caCert
@@ -281,7 +291,8 @@ spec:
                 type: object
               componentResources:
                 description: ComponentResources can be used to customize the resource
-                  requirements for each component.
+                  requirements for each component. Node, Typha, and KubeControllers
+                  are supported for installations.
                 items:
                   description: The ComponentResource struct associates a ResourceRequirements
                     with a component by name
@@ -384,7 +395,9 @@ spec:
                 description: "ImagePath allows for the path part of an image to be
                   specified. If specified then the specified value will be used as
                   the image path for each image. If not specified or empty, the default
-                  for each image will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                  for each image will be used. A special case value, UseDefault, is
+                  supported to explicitly specify the default image path will be used
+                  for each image. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                   \n This option allows configuring the `<imagePath>` portion of the
                   above format."
                 type: string
@@ -466,7 +479,8 @@ spec:
                 description: "Registry is the default Docker registry used for component
                   Docker images. If specified, all images will be pulled from this
                   registry. If not specified then the default registries will be used.
-                  \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                  A special case value, UseDefault, is supported to explicitly specify
+                  the default registries will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                   \n This option allows configuring the `<registry>` portion of the
                   above format."
                 type: string
@@ -669,6 +683,16 @@ spec:
                           - cidr
                           type: object
                         type: array
+                      linuxDataplane:
+                        description: 'LinuxDataplane is used to select the dataplane
+                          used for Linux nodes. In particular, it causes the operator
+                          to add required mounts and environment variables for the
+                          particular dataplane. If not specified, iptables mode is
+                          used. Default: Iptables'
+                        enum:
+                        - Iptables
+                        - BPF
+                        type: string
                       mtu:
                         description: MTU specifies the maximum transmission unit to
                           use on the pod network. If not specified, Calico will perform
@@ -788,7 +812,7 @@ spec:
                         description: 'When a CSR is issued to the certificates.k8s.io
                           API, the signerName is added to the request in order to
                           accommodate for clusters with multiple signers. Must be
-                          formatted as: "<my-domain>/<my-signername>".'
+                          formatted as: `<my-domain>/<my-signername>`.'
                         type: string
                     required:
                     - caCert
@@ -846,7 +870,8 @@ spec:
                     type: object
                   componentResources:
                     description: ComponentResources can be used to customize the resource
-                      requirements for each component.
+                      requirements for each component. Node, Typha, and KubeControllers
+                      are supported for installations.
                     items:
                       description: The ComponentResource struct associates a ResourceRequirements
                         with a component by name
@@ -952,7 +977,9 @@ spec:
                     description: "ImagePath allows for the path part of an image to
                       be specified. If specified then the specified value will be
                       used as the image path for each image. If not specified or empty,
-                      the default for each image will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                      the default for each image will be used. A special case value,
+                      UseDefault, is supported to explicitly specify the default image
+                      path will be used for each image. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                       \n This option allows configuring the `<imagePath>` portion
                       of the above format."
                     type: string
@@ -1035,7 +1062,9 @@ spec:
                     description: "Registry is the default Docker registry used for
                       component Docker images. If specified, all images will be pulled
                       from this registry. If not specified then the default registries
-                      will be used. \n Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
+                      will be used. A special case value, UseDefault, is supported
+                      to explicitly specify the default registries will be used. \n
+                      Image format:    `<registry>/<imagePath>/<imageName>:<image-tag>`
                       \n This option allows configuring the `<registry>` portion of
                       the above format."
                     type: string

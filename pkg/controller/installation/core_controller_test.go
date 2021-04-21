@@ -24,6 +24,7 @@ import (
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	kfake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,6 +44,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/test"
 )
 
@@ -296,6 +299,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 	Context("image reconciliation tests", func() {
 		var c client.Client
+		var cs *kfake.Clientset
 		var ctx context.Context
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
@@ -313,6 +317,25 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
 			ctx = context.Background()
+
+			// Create a fake clientset for the autoscaler.
+			var replicas int32 = 1
+			objs := []runtime.Object{
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+				},
+			}
+			cs = kfake.NewSimpleClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -333,7 +356,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(c, mockStatus),
+				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
@@ -556,6 +579,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 	Context("management cluster exists", func() {
 		var c client.Client
+		var cs *kfake.Clientset
 		var ctx context.Context
 		var r ReconcileInstallation
 		var cr *operator.Installation
@@ -579,6 +603,27 @@ var _ = Describe("Testing core-controller installation", func() {
 			c = fake.NewFakeClientWithScheme(scheme)
 			ctx = context.Background()
 
+			// Create a fake clientset for the autoscaler.
+			var replicas int32 = 1
+			objs := []runtime.Object{
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: &replicas,
+					},
+				},
+			}
+			cs = kfake.NewSimpleClientset(objs...)
+
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
@@ -598,7 +643,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(c, mockStatus),
+				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
@@ -636,7 +681,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ManagerInternalTLSSecretName,
-					Namespace: render.OperatorNamespace(),
+					Namespace: rmeta.OperatorNamespace(),
 				},
 			}
 
@@ -656,8 +701,9 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Create a internal manager TLS secret with old DNS name.
-			oldSecret, err := render.CreateOperatorTLSSecret(nil,
-				render.ManagerInternalTLSSecretName, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, render.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
+			oldSecret, err := secret.CreateTLSSecret(nil,
+				render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), render.ManagerInternalSecretKeyName,
+				render.ManagerInternalSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldSecret)).NotTo(HaveOccurred())

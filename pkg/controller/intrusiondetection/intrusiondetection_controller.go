@@ -134,11 +134,15 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		relasticsearch.PublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
-		render.KibanaPublicCertSecret,
+		render.KibanaPublicCertSecret, render.ManagerInternalTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 		}
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, render.IntrusionDetectionNamespace); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
@@ -296,9 +300,22 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
+	var managerInternalTLSSecret *corev1.Secret
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
+			render.ManagerInternalTLSSecretName,
+			render.ManagerInternalSecretCertName,
+			render.ManagerInternalSecretKeyName,
+		)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalSecretKeyName), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -321,6 +338,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		esLicenseType,
 		managementClusterConnection != nil,
 		hasNoLicense,
+		managerInternalTLSSecret,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

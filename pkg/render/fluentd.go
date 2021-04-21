@@ -591,8 +591,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	envs = setFluentdCloudEnvs(envs)
-
 	envs = append(envs,
 		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.esClusterConfig.Replicas())},
@@ -625,18 +623,6 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 		PeriodSeconds:    ProbePeriodSeconds,
 		FailureThreshold: startupProbeFailureThreshold,
 	}
-}
-
-// Do this as a separate function to try to make updates in the future easier.
-func setFluentdCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
-	envs = append(envs,
-		corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
-		corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
-	)
-	return envs
 }
 
 func (c *fluentdComponent) liveness() *corev1.Probe {

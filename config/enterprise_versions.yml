@@ -1,43 +1,43 @@
-title: v3.6.0
+title: master
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.6.0
+    version: master
   voltron:
     image: tigera/voltron
-    version: v3.6.0
+    version: master
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v3.6.0
+    version: master
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: v3.6.0
+    version: master
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.6.0
+    version: master
   typha:
     image: tigera/typha
-    version: v3.6.0
+    version: master
   cnx-node:
     image: tigera/cnx-node
-    version: v3.6.0
+    version: master
   fluentd:
     image: tigera/fluentd
-    version: v3.6.0
+    version: master
   fluentd-windows:
     image: tigera/fluentd-windows
-    version: v3.6.0
+    version: master
   es-proxy:
     image: tigera/es-proxy
-    version: v3.6.0
+    version: master
   eck-kibana:
     version: 7.10.1
   dex:
     image: tigera/dex
-    version: v3.6.0
+    version: master
   kibana:
     image: tigera/kibana
-    version: v3.6.0
+    version: master
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
@@ -46,42 +46,42 @@ components:
     version: 7.10.1
   elasticsearch:
     image: tigera/elasticsearch
-    version: v3.6.0
+    version: master
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v3.6.0
+    version: master
   es-curator:
     image: tigera/es-curator
-    version: v3.6.0
+    version: master
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.6.0
+    version: master
   compliance-controller:
     image: tigera/compliance-controller
-    version: v3.6.0
+    version: master
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v3.6.0
+    version: master
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v3.6.0
+    version: master
   compliance-server:
     image: tigera/compliance-server
-    version: v3.6.0
+    version: master
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v3.6.0
+    version: master
   # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
   # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
-    version: v3.6.0
+    version: master
   tigera-cni:
     image: tigera/cni
-    version: v3.6.0
+    version: master
   cloud-controllers:
     image: tigera/cloud-controllers
-    version: v3.6.0
+    version: master
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
-    version: v3.6.0
+    version: master

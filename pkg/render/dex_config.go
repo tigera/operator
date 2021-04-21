@@ -491,11 +491,11 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			}
 			// RFC specifies space delimited case sensitive list: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
 			config["promptType"] = strings.Join(prompts, " ")
-			groupsClaim := d.authentication.Spec.OIDC.GroupsClaim
-			if groupsClaim != "" && groupsClaim != DefaultGroupsClaim {
-				config["claimMapping"] = map[string]string{
-					"groups": groupsClaim,
-				}
+		}
+		groupsClaim := d.authentication.Spec.OIDC.GroupsClaim
+		if groupsClaim != "" && groupsClaim != DefaultGroupsClaim {
+			config["claimMapping"] = map[string]string{
+				"groups": groupsClaim,
 			}
 		}
 

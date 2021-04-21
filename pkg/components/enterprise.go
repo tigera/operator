@@ -113,7 +113,7 @@ var (
 	}
 
 	ComponentDex = component{
-		Version: "rene", //todo: revert.
+		Version: "master",
 		Image:   "tigera/dex",
 	}
 

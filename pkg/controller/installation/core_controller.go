@@ -34,6 +34,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -918,7 +919,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	k8sEndpoint, err := utils.GetK8sServiceEndPoint(r.client)
+	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
 		log.Error(err, "Error reading services endpoint configmap")
 		r.SetDegraded("Error reading services endpoint configmap", err, reqLogger)
@@ -1010,7 +1011,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Render the desired Calico components based on our configuration and then
 	// create or update them.
 	calico, err := render.Calico(
-		*k8sEndpoint,
+		k8sapi.Endpoint,
 		&instance.Spec,
 		logStorageExists,
 		managementCluster,

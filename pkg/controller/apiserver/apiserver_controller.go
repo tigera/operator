@@ -34,6 +34,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -262,7 +263,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
-	k8sEndpoint, err := utils.GetK8sServiceEndPoint(r.client)
+	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
 		log.Error(err, "Error reading services endpoint configmap")
 		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
@@ -274,7 +275,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(*k8sEndpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(k8sapi.Endpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

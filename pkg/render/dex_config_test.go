@@ -41,6 +41,7 @@ var _ = Describe("dex config tests", func() {
 			OIDC: &operatorv1.AuthenticationOIDC{
 				IssuerURL:         "https://example.com",
 				UsernameClaim:     "email",
+				GroupsClaim:       "group",
 				RequestedScopes:   []string{"scope"},
 				EmailVerification: &verify,
 			},
@@ -122,7 +123,7 @@ var _ = Describe("dex config tests", func() {
 		validDN     = "dc=example,dc=com"
 		validFilter = "(objectClass=posixGroup)"
 		attribute   = "uid"
-		oidc        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}}}
+		oidc        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email", GroupsClaim: "group"}}}
 		google      = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 		ocp         = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, Openshift: &operatorv1.AuthenticationOpenshift{IssuerURL: iss}}}
 		ldap        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, LDAP: &operatorv1.AuthenticationLDAP{Host: iss, UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}, GroupSearch: &operatorv1.GroupSearch{NameAttribute: attribute, Filter: validFilter, BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}}}}
@@ -134,7 +135,7 @@ var _ = Describe("dex config tests", func() {
 
 	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
 		dexConfig := render.NewDexConfig(auth, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
-		Expect(reflect.DeepEqual(dexConfig.Connector(), expectedConnector)).To(BeTrue())
+		Expect(dexConfig.Connector()).To(BeEquivalentTo(expectedConnector))
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-config"]).NotTo(BeEmpty())
 		Expect(annotations["hash.operator.tigera.io/tigera-idp-secret"]).NotTo(BeEmpty())
@@ -160,6 +161,7 @@ var _ = Describe("dex config tests", func() {
 					"scopes":                    []string{"openid", "email", "profile"},
 					"userNameKey":               "email",
 					"userIDKey":                 "email",
+					"claimMapping":              map[string]string{"groups": "group"},
 					"insecureSkipEmailVerified": false,
 					"insecureEnableGroups":      true,
 				},

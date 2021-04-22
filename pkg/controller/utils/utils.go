@@ -284,7 +284,7 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 // GetK8sServiceEndPoint reads the kubernetes-service-endpoint configmap and pushes
 // KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT to calico-node daemonset, typha
 // apiserver deployments
-func GetK8sServiceEndPoint(client client.Client) (*k8sapi.ServiceEndpoint, error) {
+func GetK8sServiceEndPoint(client client.Client) error {
 	cmName := render.K8sSvcEndpointConfigMapName
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
@@ -293,16 +293,14 @@ func GetK8sServiceEndPoint(client client.Client) (*k8sapi.ServiceEndpoint, error
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		// If the configmap is unavailable, do not return error
-		if kerrors.IsNotFound(err) {
-			return &k8sapi.Endpoint, nil
-		} else {
-			return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+		if !kerrors.IsNotFound(err) {
+			return fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
 		}
+	} else {
+		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
+		k8sapi.Endpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT"]
 	}
-	return &k8sapi.ServiceEndpoint{
-		Host: cm.Data["KUBERNETES_SERVICE_HOST"],
-		Port: cm.Data["KUBERNETES_SERVICE_PORT"],
-	}, nil
+	return nil
 }
 
 func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {

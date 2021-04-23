@@ -392,16 +392,22 @@ var _ = Describe("Node rendering tests", func() {
 		rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		// Node image override results in correct image.
-		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
+		calicoNodeImage := fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 		// Validate correct number of init containers.
-		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(3))
 
 		// CNI container uses image override.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
+
+		// Verify the mount-bpffs image and command.
+		mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+		Expect(mountBpffs.Image).To(Equal(calicoNodeImage))
+		Expect(mountBpffs.Command).To(Equal([]string{{"calico-node", "-init"}))
 
 		optional := true
 		// Verify env
@@ -491,6 +497,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 			{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 			{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+			{Name: "sys-fs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirMustExist}}},
 			{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 			{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{

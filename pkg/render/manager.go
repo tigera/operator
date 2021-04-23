@@ -238,11 +238,22 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, c.managerDeployment())
 
+	var toDelete []client.Object
 	if c.useCertificateManagement {
 		objs = append(objs, csrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
+		// If we want to use certificate management, we should clean up any existing secrets that have been created by the operator.
+		secretToDelete := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ManagerTLSSecretName,
+				Namespace: rmeta.OperatorNamespace(),
+			},
+		}
+		toDelete = append(toDelete, secretToDelete)
+		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, secretToDelete)...)...)
 	}
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *managerComponent) Ready() bool {

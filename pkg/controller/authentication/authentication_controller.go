@@ -209,7 +209,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		tlsSecret = &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
 			if errors.IsNotFound(err) {
-				tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCN, r.clusterDomain))
+				tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCNPattern, r.clusterDomain))
 			} else {
 				log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
 				r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())

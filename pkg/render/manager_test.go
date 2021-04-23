@@ -46,7 +46,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	expectedDNSNames = append(expectedDNSNames, "localhost")
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(false, nil, installation)
+		resources := renderObjects(false, nil, installation, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -109,7 +109,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(false, nil, installation)
+		resources := renderObjects(false, nil, installation, true)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -187,7 +187,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(true, nil, installation)
+		resources := renderObjects(true, nil, installation, true)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -197,7 +197,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(false, &operator.ManagementCluster{}, installation)
+		resources := renderObjects(false, &operator.ManagementCluster{}, installation, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -378,7 +378,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for certificate management", func() {
-		resources := renderObjects(false, nil, &operator.InstallationSpec{CertificateManagement: &operator.CertificateManagement{}})
+		resources := renderObjects(false, nil, &operator.InstallationSpec{CertificateManagement: &operator.CertificateManagement{}}, false)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -418,7 +418,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 })
 
-func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, installation *operator.InstallationSpec) []client.Object {
+func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, installation *operator.InstallationSpec, includeManagerTLSSecret bool) []client.Object {
 	var dexCfg render.DexKeyValidatorConfig
 	if oidc {
 		var authentication *operator.Authentication
@@ -436,13 +436,18 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, ins
 		tunnelSecret = &voltronTunnelSecret
 		internalTraffic = &internalManagerTLSSecret
 	}
+	var managerTLS *corev1.Secret
+	if includeManagerTLSSecret {
+		managerTLS = rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace())
+	}
+
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
 		rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
 		esConfigMap,
-		rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
+		managerTLS,
 		nil,
 		false,
 		installation,

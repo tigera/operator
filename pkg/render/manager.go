@@ -96,20 +96,25 @@ func Manager(
 	esLicenseType ElasticsearchLicenseType,
 ) (Component, error) {
 	var tlsSecrets []*corev1.Secret
-	tlsAnnotations := make(map[string]string)
-	if installation.CertificateManagement == nil {
+	tlsAnnotations := map[string]string{
+		KibanaTLSHashAnnotation: rmeta.SecretsAnnotationHash(kibanaSecrets...),
+	}
+	// If the TLS Secret was passed it means we want to use it, regardless of the certificate management feature.
+	useCertificateManagement := tlsKeyPair == nil && installation.CertificateManagement != nil
+	var tlsAnnotation string
+	if useCertificateManagement {
+		tlsAnnotation = rmeta.AnnotationHash(installation.CertificateManagement.CACert)
+	} else {
 		tlsSecrets = append(tlsSecrets, tlsKeyPair)
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
-		tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
-	} else {
-		tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(installation.CertificateManagement.CACert)
+		tlsAnnotation = rmeta.AnnotationHash(tlsKeyPair.Data)
 	}
+	tlsAnnotations[tlsSecretHashAnnotation] = tlsAnnotation
 
 	if dexCfg != nil {
 		tlsSecrets = append(tlsSecrets, dexCfg.RequiredSecrets(ManagerNamespace)...)
 		tlsAnnotations = dexCfg.RequiredAnnotations()
 	}
-	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(kibanaSecrets...)
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
@@ -134,6 +139,7 @@ func Manager(
 		installation:               installation,
 		managementCluster:          managementCluster,
 		esLicenseType:              esLicenseType,
+		useCertificateManagement:   useCertificateManagement,
 	}, nil
 }
 
@@ -155,6 +161,7 @@ type managerComponent struct {
 	proxyImage                 string
 	esProxyImage               string
 	csrInitImage               string
+	useCertificateManagement   bool
 }
 
 func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -177,7 +184,7 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.installation.CertificateManagement != nil {
+	if c.useCertificateManagement {
 		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -231,7 +238,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, c.managerDeployment())
 
-	if c.installation.CertificateManagement != nil {
+	if c.useCertificateManagement {
 		objs = append(objs, csrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
 	}
 
@@ -263,7 +270,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	var initContainers []corev1.Container
-	if c.installation.CertificateManagement != nil {
+	if c.useCertificateManagement {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation,
 			c.csrInitImage,
@@ -326,8 +333,11 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
-
-	tlsVolumeSource := certificateVolumeSource(c.installation.CertificateManagement, ManagerTLSSecretName)
+	var certificateManagement *operator.CertificateManagement
+	if c.useCertificateManagement {
+		certificateManagement = c.installation.CertificateManagement
+	}
+	tlsVolumeSource := certificateVolumeSource(certificateManagement, ManagerTLSSecretName)
 	v := []v1.Volume{
 		{
 			Name:         ManagerTLSSecretName,

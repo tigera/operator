@@ -25,6 +25,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,6 +45,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
+			&internalManagerTLSSecret,
 		)
 		resources, _ := component.Objects()
 
@@ -57,6 +59,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}{
 			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.TigeraKibanaCertSecret, ns: "tigera-intrusion-detection", group: "", version: "", kind: ""},
+			{render.ManagerInternalTLSSecretName, "tigera-intrusion-detection", "", "v1", "Secret"},
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -88,6 +91,32 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
+
+		// Should mount ManagerTLSSecret for non-managed clusters
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
+
+		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalalerts", "globalalerts/status"},
+			Verbs:     []string{"*"},
+		}))
+
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"managedclusters"},
+			Verbs:     []string{"watch", "list", "get"},
+		}))
+
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		}))
 	})
 
 	It("should render all resources for a configuration that includes event forwarding turned on (Syslog)", func() {
@@ -110,6 +139,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
+			nil,
 		)
 		resources, _ := component.Objects()
 
@@ -182,7 +212,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}
 	})
 
-	It("should not render intrusion-detection-es-job-installer when cluster is managed", func() {
+	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {
 		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 		component := render.IntrusionDetection(
@@ -192,6 +222,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, managedCluster,
 			false,
+			nil,
 		)
 		resources, _ := component.Objects()
 
@@ -235,6 +266,28 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
+
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
+		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "DISABLE_ALERTS", Value: "yes"}))
+
+		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).NotTo(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"globalalerts", "globalalerts/status"},
+				Verbs:     []string{"*"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+		}))
 	})
 
 	It("should apply controlPlaneNodeSelector correctly", func() {
@@ -245,6 +298,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
+			nil,
 		)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
@@ -263,7 +317,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false)
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false, nil)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "", "v1", "Deployment").(*apps.Deployment)
 		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)

@@ -20,7 +20,7 @@ blocks:
             - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
             - make ci
             - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then 
+              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then
                 make cd CONFIRM=true;
               fi
             - >-
@@ -30,8 +30,10 @@ blocks:
       secrets:
         - name: quay-robot-semaphore_v2
         - name: operator-redhat-connect
+        - name: tigera-dev-ci-pull-credentials
       prologue:
         commands:
+          - docker login --username casey@tigera.io -u _json_key -p "$(cat /home/semaphore/tigera-dev-ci.json)" https://gcr.io
           - checkout
           - >-
             if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then

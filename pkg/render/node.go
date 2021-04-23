@@ -589,6 +589,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
+	if c.bpfDataplane() {
+		initContainers = append(initContainers, c.bpffsInitContainer())
+	}
+
 	var affinity *v1.Affinity
 	if c.cr.KubernetesProvider == operator.ProviderAKS {
 		affinity = &v1.Affinity{
@@ -696,10 +700,13 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		},
 	}
 
-	if c.cr.CalicoNetwork != nil &&
-		c.cr.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
-		volumes = append(volumes, v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}})
+	if c.bpfDataplane() {
+		volumes = append(volumes,
+			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
+			v1.Volume{Name: "sys-fs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+			// Volume for the bpffs itself, used by the main node container.
+			v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+		)
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
@@ -746,6 +753,12 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	return volumes
 }
 
+func (c *nodeComponent) bpfDataplane() bool {
+	return c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+}
+
 // cniContainer creates the node's init container that installs CNI.
 func (c *nodeComponent) cniContainer() v1.Container {
 	// Determine environment to pass to the CNI init container.
@@ -781,6 +794,33 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		SecurityContext: &v1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
+	}
+}
+
+// bpffsInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
+// init container reduces the privileges needed by the main container.  It's important that the BPF filesystem is
+// mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
+// the BPF dataplane's BPF maps.
+func (c *nodeComponent) bpffsInitContainer() v1.Container {
+	bidirectional := v1.MountPropagationBidirectional
+	mounts := []v1.VolumeMount{
+		{
+			MountPath: "/sys/fs",
+			Name:      "sys-fs",
+			// Bidirectional is required to ensure that the new mount we make at /sys/fs/bpf propagates to the host
+			// so that it outlives the init container.
+			MountPropagation: &bidirectional,
+		},
+	}
+
+	return v1.Container{
+		Name:         "mount-bpffs",
+		Image:        c.nodeImage,
+		VolumeMounts: mounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
+		},
+		Command: []string{"calico-node", "-init"},
 	}
 }
 
@@ -852,9 +892,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}
-	if c.cr.CalicoNetwork != nil &&
-		c.cr.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+	if c.bpfDataplane() {
 		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
@@ -1026,9 +1064,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 	}
 
-	if c.cr.CalicoNetwork != nil &&
-		c.cr.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+	if c.bpfDataplane() {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
 

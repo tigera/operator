@@ -589,7 +589,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	if c.bpfDataplane() {
+	if c.bpfDataplaneEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
@@ -700,7 +700,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		},
 	}
 
-	if c.bpfDataplane() {
+	if c.bpfDataplaneEnabled() {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 			v1.Volume{Name: "sys-fs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -753,7 +753,7 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	return volumes
 }
 
-func (c *nodeComponent) bpfDataplane() bool {
+func (c *nodeComponent) bpfDataplaneEnabled() bool {
 	return c.cr.CalicoNetwork != nil &&
 		c.cr.CalicoNetwork.LinuxDataplane != nil &&
 		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
@@ -892,7 +892,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}
-	if c.bpfDataplane() {
+	if c.bpfDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
@@ -1064,7 +1064,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 	}
 
-	if c.bpfDataplane() {
+	if c.bpfDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
 

@@ -260,6 +260,8 @@ run-uts:
 	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
+TIGERA_PULL_SECRET?=${HOME}/.docker/config.json
+
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
 cluster-create: kubectl
@@ -269,6 +271,7 @@ cluster-create: kubectl
 	cp ~/.kube/kind-config-kind $(KUBECONFIG)
 	$(MAKE) deploy-crds
 	$(MAKE) create-tigera-operator-namespace
+	$(MAKE) create-tigera-pull-secret
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
@@ -281,6 +284,14 @@ deploy-crds: kubectl
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
+
+create-tigera-pull-secret: kubectl
+	if [ "$(TIGERA_PULL_SECRET)" -a -r "$(TIGERA_PULL_SECRET)" ]; then \
+	     KUBECONFIG=$(KUBECONFIG) ./kubectl create secret \
+                 -n tigera-operator generic tigera-pull-secret \
+	         --from-file=.dockerconfigjson=$(TIGERA_PULL_SECRET) \
+	         --type=kubernetes.io/dockerconfigjson; \
+        else true; fi
 
 ## Destroy local kind cluster
 cluster-destroy:

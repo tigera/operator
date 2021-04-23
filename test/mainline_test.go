@@ -326,3 +326,189 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 		return assertAvailable(ts)
 	}, 60*time.Second).Should(BeNil())
 }
+
+var earlyNetworkCfg = `
+apiVersion: projectcalico.org/v3
+kind: EarlyNetworkConfiguration
+spec:
+  nodes:
+    - interfaceAddresses:
+        - %v
+      asNumber: 65001
+      labels:
+        rack: ra
+    - interfaceAddresses:
+        - %v
+      asNumber: 65001
+      labels:
+        rack: ra
+    - interfaceAddresses:
+        - %v
+      asNumber: 65001
+      labels:
+        rack: ra
+`
+
+var _ = Describe("Mainline with BGP layout", func() {
+	var c client.Client
+	var mgr manager.Manager
+
+	AfterEach(func() {
+		// Clean up Calico data that might be left behind.
+		Eventually(func() error {
+			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+			nodes, err := cs.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+			if err != nil {
+				return err
+			}
+			if len(nodes.Items) == 0 {
+				return fmt.Errorf("No nodes found")
+			}
+			for _, n := range nodes.Items {
+				for k, _ := range n.ObjectMeta.Annotations {
+					if strings.Contains(k, "projectcalico") {
+						delete(n.ObjectMeta.Annotations, k)
+					}
+				}
+				_, err = cs.CoreV1().Nodes().Update(context.Background(), &n, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}, 30*time.Second).Should(BeNil())
+
+		// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
+		// directly instead of using the client cache. This should help with flaky tests.
+		Eventually(func() error {
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			})
+
+			k := client.ObjectKey{Name: "calico-system"}
+			err := c.Get(context.Background(), k, u)
+			return err
+		}, 240*time.Second).ShouldNot(BeNil())
+		mgr = nil
+	})
+
+	It("handles BGP layout", func() {
+		c, mgr = setupManager()
+		ctx := context.Background()
+
+		By("Running the operator")
+		RunOperator(mgr, ctx)
+
+		By("Ensuring tigera-operator namespace exists")
+		ns := &corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},
+			Spec:       corev1.NamespaceSpec{},
+		}
+		err := c.Create(context.Background(), ns)
+		if err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		By("Finding node IPs")
+		nodes := corev1.NodeList{}
+		err = c.List(context.Background(), &nodes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodes.Items).To(HaveLen(3))
+		ips := []string{}
+		for _, node := range nodes.Items {
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP {
+					ips = append(ips, addr.Address)
+					break
+				}
+			}
+		}
+		Expect(ips).To(HaveLen(3))
+
+		By("Creating EarlyNetworkConfiguration with those IPs")
+		cm := &corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bgp-layout", Namespace: "tigera-operator"},
+			Data: map[string]string{
+				"earlyNetworkConfiguration": fmt.Sprintf(
+					earlyNetworkCfg,
+					ips[0],
+					ips[1],
+					ips[2],
+				),
+			},
+		}
+		err = c.Create(context.Background(), cm)
+		if err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		By("Creating Installation resource")
+		ctx, cancel := context.WithCancel(context.TODO())
+		defer cancel()
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		}
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{
+			Name: "tigera-pull-secret",
+		}}
+		err = c.Create(context.Background(), instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Verifying calico-node DS was created")
+		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
+		ExpectResourceCreated(c, ds)
+
+		By("Verifying calico-nodes are ready")
+		Eventually(func() error {
+			err = GetResource(c, ds)
+			if err != nil {
+				return err
+			}
+			if ds.Status.NumberAvailable == 0 {
+				return fmt.Errorf("No node pods running")
+			}
+			if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
+				return nil
+			}
+			return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
+		}, 240*time.Second).Should(BeNil())
+
+		By("Verifying the tigera status CRD is updated")
+		Eventually(func() error {
+			ts, err := getTigeraStatus(c, "calico")
+			if err != nil {
+				return err
+			}
+			return assertAvailable(ts)
+		}, 60*time.Second).Should(BeNil())
+
+		By("Verifying node labels and AS numbers")
+		nodes = corev1.NodeList{}
+		err = c.List(context.Background(), &nodes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodes.Items).To(HaveLen(3))
+		for _, node := range nodes.Items {
+			Expect(node.Annotations).To(HaveKey("projectcalico.org/ASNumber"))
+			Expect(node.Annotations["projectcalico.org/ASNumber"]).To(Equal("65001"))
+			Expect(node.Annotations).To(HaveKey("projectcalico.org/labels"))
+			Expect(node.Annotations["projectcalico.org/labels"]).To(ContainSubstring(`"rack":"ra"`))
+		}
+
+		By("Deleting Installation resource")
+		err = c.Delete(context.Background(), instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Verifying tigera status is removed")
+		Eventually(func() error {
+			_, err := getTigeraStatus(c, "calico")
+			return err
+		}, 120*time.Second).ShouldNot(BeNil())
+	})
+})

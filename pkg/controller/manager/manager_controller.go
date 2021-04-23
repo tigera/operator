@@ -276,36 +276,36 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// If the manager TLS secret exists, check whether it is managed by the
 	// operator.
 	var certOperatorManaged bool
-	if tlsSecret != nil {
-		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
-			return reconcile.Result{}, err
+	if installation.CertificateManagement == nil {
+		if tlsSecret != nil {
+			issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
+				return reconcile.Result{}, err
+			}
+			certOperatorManaged = utils.IsOperatorIssued(issuer)
 		}
-		certOperatorManaged = utils.IsOperatorIssued(issuer)
-	}
 
-	// If the secret does not exist, then create one.
-	// If the secret exists but is operator managed, then check that it has the
-	// right DNS names and update it if necessary.
-	if (tlsSecret == nil || certOperatorManaged) && installation.CertificateManagement == nil {
-		// Create the cert if doesn't exist. If the cert exists, check that the cert
-		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
-		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, "localhost")
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-		tlsSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
-		)
+		// If the secret does not exist, then create one.
+		// If the secret exists but is operator managed, then check that it has the
+		// right DNS names and update it if necessary.
+		if tlsSecret == nil || certOperatorManaged {
+			// Create the cert if doesn't exist. If the cert exists, check that the cert
+			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
+			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
+			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, "localhost")
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			tlsSecret, err = utils.EnsureCertificateSecret(
+				render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
+			)
 
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
-			return reconcile.Result{}, err
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			}
 		}
-	}
-
-	if certOperatorManaged && installation.CertificateManagement != nil {
+	} else if certOperatorManaged {
 		tlsSecret = nil
 	}
 

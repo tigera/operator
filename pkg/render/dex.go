@@ -46,7 +46,7 @@ const (
 	DexClientId = "tigera-manager"
 
 	// Common name to add to the Dex TLS secret.
-	DexCN = "tigera-dex.tigera-dex.svc.%s"
+	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
 func Dex(

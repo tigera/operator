@@ -52,6 +52,7 @@ var _ = Describe("Node rendering tests", func() {
 	one := intstr.FromInt(1)
 	defaultNumExpectedResources := 6
 	const defaultClusterDomain = "svc.cluster.local"
+	var defaultMode int32 = 420
 
 	BeforeEach(func() {
 		ff := true
@@ -272,7 +273,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},
@@ -507,7 +509,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},
@@ -901,7 +904,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},
@@ -1057,7 +1061,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},
@@ -1336,7 +1341,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},
@@ -1491,7 +1497,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},
@@ -1581,7 +1588,8 @@ var _ = Describe("Node rendering tests", func() {
 				Name: "felix-certs",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: render.NodeTLSSecretName,
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
 					},
 				},
 			},

@@ -397,7 +397,8 @@ var _ = Describe("Mainline with BGP layout", func() {
 
 	It("handles BGP layout", func() {
 		c, mgr = setupManager()
-		ctx := context.Background()
+		ctx, cancel := context.WithCancel(context.TODO())
+		defer cancel()
 
 		By("Running the operator")
 		RunOperator(mgr, ctx)
@@ -448,8 +449,6 @@ var _ = Describe("Mainline with BGP layout", func() {
 		}
 
 		By("Creating Installation resource")
-		ctx, cancel := context.WithCancel(context.TODO())
-		defer cancel()
 		instance := &operator.Installation{
 			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},

@@ -67,7 +67,6 @@ func CreateDexTLSSecret(dexCommonName string) *corev1.Secret {
 			Name:      DexTLSSecretName,
 			Namespace: rmeta.OperatorNamespace(),
 		},
-		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
 			corev1.TLSCertKey:       []byte(cert),
 			corev1.TLSPrivateKeyKey: []byte(key),

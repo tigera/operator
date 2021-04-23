@@ -895,9 +895,9 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	var nodeSets []esv1.NodeSet
 	if nodeConfig.NodeSets == nil || len(nodeConfig.NodeSets) < 1 {
 		nodeSet := es.nodeSetTemplate(pvcTemplate)
-		nodeSet.Name = nodeSetName(pvcTemplate)
-		nodeSet.Count = int32(nodeConfig.Count)
 		nodeSet.PodTemplate = es.podTemplate()
+		nodeSet.Name = nodeSetName(nodeSet.PodTemplate)
+		nodeSet.Count = int32(nodeConfig.Count)
 
 		nodeSets = append(nodeSets, nodeSet)
 	} else {
@@ -918,11 +918,10 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 			}
 
 			nodeSet := es.nodeSetTemplate(pvcTemplate)
-			// Each NodeSet needs a unique name, so just add the index as a suffix
-			nodeSet.Name = fmt.Sprintf("%s-%d", nodeSetName(pvcTemplate), i)
-			nodeSet.Count = int32(numNodes)
-
 			podTemplate := es.podTemplate()
+			// Each NodeSet needs a unique name, so just add the index as a suffix
+			nodeSet.Name = fmt.Sprintf("%s-%d", nodeSetName(podTemplate), i)
+			nodeSet.Count = int32(numNodes)
 
 			// If SelectionAttributes is set that means that the user wants the Elasticsearch Nodes and Replicas
 			// spread out across K8s nodes with specific attributes, like availability zone. Therefore, the Node Affinity
@@ -1013,24 +1012,24 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	}
 }
 
-// nodeSetName returns thumbprint of PersistentVolumeClaim object as string.
+// nodeSetName returns thumbprint of the podTemplate object as string.
 // As storage requirements of NodeSets are immutable,
 // renaming a NodeSet automatically creates a new StatefulSet with new PersistentVolumeClaim.
 // https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-orchestration.html#k8s-orchestration-limitations
-func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
-	pvcTemplateHash := fnv.New64a()
-	templateBytes, err := json.Marshal(pvcTemplate)
+func nodeSetName(podTemplate corev1.PodTemplateSpec) string {
+	hash := fnv.New64a()
+	templateBytes, err := json.Marshal(podTemplate)
 	if err != nil {
 		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
 		return "es"
 	}
 
-	if _, err := pvcTemplateHash.Write(templateBytes); err != nil {
+	if _, err := hash.Write(templateBytes); err != nil {
 		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
 		return "es"
 	}
 
-	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {

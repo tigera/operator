@@ -189,8 +189,8 @@ var _ = Describe("Compliance controller tests", func() {
 
 		oldDNSName := "compliance.tigera-compliance.svc"
 		newSecret, err := secret.CreateTLSSecret(nil,
-			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), render.ComplianceServerKeyName,
-			render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, nil, oldDNSName,
+			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, oldDNSName,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -220,8 +220,8 @@ var _ = Describe("Compliance controller tests", func() {
 		oldDNSNames := []string{"compliance.example.com", "compliance.tigera-compliance.svc"}
 		testCA := test.MakeTestCA("compliance-test")
 		newSecret, err := secret.CreateTLSSecret(testCA,
-			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), render.ComplianceServerKeyName,
-			render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, nil, oldDNSNames...,
+			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, oldDNSNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -253,8 +253,8 @@ var _ = Describe("Compliance controller tests", func() {
 		// Custom cert has the compliance svc DNS names as well as other DNS names
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
 		newSecret, err := secret.CreateTLSSecret(nil,
-			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), render.ComplianceServerKeyName,
-			render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...,
+			render.ComplianceServerCertSecret, rmeta.OperatorNamespace(), corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -596,10 +596,10 @@ func assertExpectedCertDNSNames(c client.Client, expectedDNSNames ...string) {
 	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
 		Namespace: rmeta.OperatorNamespace(),
 	}, secret)).NotTo(HaveOccurred())
-	test.VerifyCertSANs(secret.Data[render.ComplianceServerCertName], expectedDNSNames...)
+	test.VerifyCertSANs(secret.Data[corev1.TLSCertKey], expectedDNSNames...)
 
 	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
 		Namespace: render.ComplianceNamespace,
 	}, secret)).NotTo(HaveOccurred())
-	test.VerifyCertSANs(secret.Data[render.ComplianceServerCertName], expectedDNSNames...)
+	test.VerifyCertSANs(secret.Data[corev1.TLSCertKey], expectedDNSNames...)
 }

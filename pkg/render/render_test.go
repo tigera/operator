@@ -194,6 +194,37 @@ var _ = Describe("Rendering tests", func() {
 		Expect(cn).ToNot(BeNil())
 		Expect(cn.Spec.Template.ObjectMeta.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(apparmorProf))
 	})
+
+	It("should handle BGP layout ConfigMap", func() {
+		bgpLayout := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			Data: map[string]string{
+				render.BGPLayoutConfigMapKey: "",
+			},
+		}
+		bgpLayout.Name = "bgp-layout"
+		bgpLayout.Namespace = "tigera-operator"
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, nil, 0, 0, bgpLayout)
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		comps := r.Render()
+		var cm *corev1.ConfigMap
+		var ds *appsv1.DaemonSet
+		for _, comp := range comps {
+			resources, _ := comp.Objects()
+			r := rtest.GetResource(resources, "bgp-layout", "calico-system", "", "v1", "ConfigMap")
+			if r != nil {
+				cm = r.(*corev1.ConfigMap)
+			}
+			r = rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			if r != nil {
+				ds = r.(*appsv1.DaemonSet)
+			}
+		}
+		Expect(cm).ToNot(BeNil())
+		Expect(ds).ToNot(BeNil())
+		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/bgp-layout"))
+		Expect(ds.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).NotTo(BeEmpty())
+	})
 })
 
 func componentCount(components []render.Component) int {

@@ -2775,6 +2775,35 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
+
+	It("should handle BGP layout", func() {
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "bgp-layout-hash")
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		Expect(dep).ToNot(BeNil())
+		deploy, ok := dep.(*appsv1.DaemonSet)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/bgp-layout"))
+		Expect(deploy.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).To(Equal("bgp-layout-hash"))
+		Expect(deploy.Spec.Template.Spec.Volumes).To(ContainElement(v1.Volume{
+			Name: render.BGPLayoutVolumeName,
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: render.BGPLayoutConfigMapName,
+					},
+				},
+			},
+		}))
+		Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(v1.VolumeMount{
+			Name:      render.BGPLayoutVolumeName,
+			ReadOnly:  true,
+			MountPath: render.BGPLayoutPath,
+			SubPath:   render.BGPLayoutConfigMapKey,
+		}))
+		rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
+	})
 })
 
 // verifyProbes asserts the expected node liveness and readiness probe.

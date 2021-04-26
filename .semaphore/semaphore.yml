@@ -34,6 +34,7 @@ blocks:
       prologue:
         commands:
           - docker login --username casey@tigera.io -u _json_key -p "$(cat /home/semaphore/tigera-dev-ci.json)" https://gcr.io
+          - export TIGERA_PULL_SECRET=${HOME}/.docker/config.json
           - checkout
           - >-
             if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then

@@ -115,7 +115,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e GOPATH=/go \
 		-e GOCACHE=/go-cache \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
-		-e TIGERA_PULL_SECRET=$(TIGERA_PULL_SECRET) \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS) \
@@ -250,7 +249,6 @@ clean:
 ###############################################################################
 # Tests
 ###############################################################################
-TIGERA_PULL_SECRET?=
 WHAT?=.
 GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
@@ -271,7 +269,6 @@ cluster-create: kubectl
 	cp ~/.kube/kind-config-kind $(KUBECONFIG)
 	$(MAKE) deploy-crds
 	$(MAKE) create-tigera-operator-namespace
-	test -z "$(TIGERA_PULL_SECRET)" || $(MAKE) create-tigera-pull-secret
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
@@ -284,12 +281,6 @@ deploy-crds: kubectl
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
-
-create-tigera-pull-secret: kubectl
-	KUBECONFIG=$(KUBECONFIG) ./kubectl create secret \
-            -n tigera-operator generic tigera-pull-secret \
-	    --from-file=.dockerconfigjson=$(TIGERA_PULL_SECRET) \
-	    --type=kubernetes.io/dockerconfigjson; \
 
 ## Destroy local kind cluster
 cluster-destroy:

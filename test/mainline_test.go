@@ -354,10 +354,6 @@ var _ = Describe("Mainline with BGP layout", func() {
 	var c client.Client
 	var mgr manager.Manager
 
-	if os.Getenv("TIGERA_PULL_SECRET") == "" {
-		Skip("Skip Enterprise-specific test because no Tigera pull secret available")
-	}
-
 	AfterEach(func() {
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
@@ -401,6 +397,11 @@ var _ = Describe("Mainline with BGP layout", func() {
 	})
 
 	It("handles BGP layout", func() {
+
+		if os.Getenv("TIGERA_PULL_SECRET") == "" {
+			Skip("Skip Enterprise-specific test because no Tigera pull secret available")
+		}
+
 		c, mgr = setupManager()
 		ctx, cancel := context.WithCancel(context.TODO())
 		defer cancel()

@@ -135,10 +135,6 @@ func Calico(
 	}
 
 	if bgpLayout != nil {
-		// Validate that BGP layout ConfigMap has the expected key.
-		if _, ok := bgpLayout.Data[BGPLayoutConfigMapKey]; !ok {
-			return nil, fmt.Errorf("BGP layout ConfigMap does not have %v key", BGPLayoutConfigMapKey)
-		}
 		// Prepare copy in calico-system namespace.
 		cms = append(cms, configmap.CopyToNamespace(common.CalicoNamespace, bgpLayout)...)
 		bgpLayoutHash = rmeta.AnnotationHash(bgpLayout.Data)

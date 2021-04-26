@@ -927,6 +927,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	if bgpLayout != nil {
+		// Validate that BGP layout ConfigMap has the expected key.
+		if _, ok := bgpLayout.Data[render.BGPLayoutConfigMapKey]; !ok {
+			err = fmt.Errorf("BGP layout ConfigMap does not have %v key", render.BGPLayoutConfigMapKey)
+			r.SetDegraded("Error in BGP layout ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
 		log.Error(err, "Error reading services endpoint configmap")

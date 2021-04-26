@@ -165,15 +165,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
-	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName} {
+	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
-	}
-
-	cm = render.K8sSvcEndpointConfigMapName
-	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available

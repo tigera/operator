@@ -55,7 +55,6 @@ type ElasticsearchLicenseType string
 const (
 	ECKOperatorName         = "elastic-operator"
 	ECKOperatorNamespace    = "tigera-eck-operator"
-	ECKEnterpriseTrial      = "eck-trial-license"
 	ECKLicenseConfigMapName = "elastic-licensing"
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
@@ -181,7 +180,6 @@ func LogStorage(
 	esService *corev1.Service,
 	kbService *corev1.Service,
 	clusterDomain string,
-	applyTrial bool,
 	dexCfg DexRelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
 ) Component {
@@ -202,7 +200,6 @@ func LogStorage(
 		esService:                   esService,
 		kbService:                   kbService,
 		clusterDomain:               clusterDomain,
-		applyTrial:                  applyTrial,
 		dexCfg:                      dexCfg,
 		elasticLicenseType:          elasticLicenseType,
 	}
@@ -224,7 +221,6 @@ type elasticsearchComponent struct {
 	esService                   *corev1.Service
 	kbService                   *corev1.Service
 	clusterDomain               string
-	applyTrial                  bool
 	dexCfg                      DexRelyingPartyConfig
 	elasticLicenseType          ElasticsearchLicenseType
 	esImage                     string
@@ -397,10 +393,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			}
 
 			toCreate = append(toCreate, es.curatorCronJob())
-		}
-
-		if es.applyTrial {
-			toCreate = append(toCreate, es.elasticEnterpriseTrial())
 		}
 
 		toCreate = append(toCreate, es.oidcUserRole()...)
@@ -1519,22 +1511,6 @@ func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSe
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(EsCuratorName)
 	return psp
-}
-
-// Applying this in the eck namespace will start a trial license for enterprise features.
-func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKEnterpriseTrial,
-			Namespace: ECKOperatorNamespace,
-			Labels: map[string]string{
-				"license.k8s.elastic.co/type": "enterprise-trial",
-			},
-			Annotations: map[string]string{
-				"elastic.co/eula": "accepted",
-			},
-		},
-	}
 }
 
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {

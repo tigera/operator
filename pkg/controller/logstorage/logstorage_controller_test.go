@@ -1209,7 +1209,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic)
+		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {

@@ -92,6 +92,10 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
+	}
+
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
 		if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
@@ -257,6 +261,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
 			return reconcile.Result{}, err
 		}
+	}
+
+	err = utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to manage the rendered component.

@@ -170,6 +170,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 	}
 
+	cm = render.K8sSvcEndpointConfigMapName
+	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+	}
+
 	// Only watch the AmazonCloudIntegration if the CRD is available
 	if r.amazonCRDExists {
 		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
@@ -911,6 +916,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		log.Error(err, "Error retrieving confd templates")
 		r.SetDegraded("Error retrieving confd templates", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	err = utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.SetDegraded("Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

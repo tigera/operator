@@ -43,11 +43,12 @@ import (
 )
 
 const (
-	BirdTemplatesConfigMapName = "bird-templates"
-	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
-	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
-	nodeCniConfigAnnotation    = "hash.operator.tigera.io/cni-config"
-	CSRLabelCalicoSystem       = "calico-system"
+	BirdTemplatesConfigMapName  = "bird-templates"
+	birdTemplateHashAnnotation  = "hash.operator.tigera.io/bird-templates"
+	nodeCertHashAnnotation      = "hash.operator.tigera.io/node-cert"
+	nodeCniConfigAnnotation     = "hash.operator.tigera.io/cni-config"
+	CSRLabelCalicoSystem        = "calico-system"
+	K8sSvcEndpointConfigMapName = "kubernetes-services-endpoint"
 )
 
 var (

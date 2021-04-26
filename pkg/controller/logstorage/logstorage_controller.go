@@ -16,6 +16,7 @@ package logstorage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
@@ -208,6 +209,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 		}
+	}
+
+	// Cloud modifications
+	if err = utils.AddConfigMapWatch(c, "cloud-kibana-config", rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	return nil
@@ -530,6 +536,20 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			}
 		}
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexTLSSecret, dexSecret, r.clusterDomain)
+	}
+
+	// Cloud modifications
+	kbCm := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: "cloud-kibana-config", Namespace: rmeta.OperatorNamespace()}
+	if err = r.client.Get(ctx, key, kbCm); err != nil {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-kibana-config ConfigMap: %s", err.Error())
+		}
+	} else {
+		if err = json.Unmarshal([]byte(kbCm.Data["config"]), &render.CloudKibanaConfig); err != nil {
+			r.status.SetDegraded("Failed to unmarshall config in cloud-kibana-config ConfigMap", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	component := render.LogStorage(

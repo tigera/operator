@@ -165,14 +165,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
-	cm := render.BirdTemplatesConfigMapName
-	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
-	}
-
-	cm = render.K8sSvcEndpointConfigMapName
-	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+		}
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
@@ -919,6 +915,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	bgpLayout, err := getConfigMap(r.client, render.BGPLayoutConfigMapName)
+	if err != nil {
+		log.Error(err, "Error retrieving BGP layout ConfigMap")
+		r.SetDegraded("Error retrieving BGP layout ConfigMap", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if bgpLayout != nil {
+		// Validate that BGP layout ConfigMap has the expected key.
+		if _, ok := bgpLayout.Data[render.BGPLayoutConfigMapKey]; !ok {
+			err = fmt.Errorf("BGP layout ConfigMap does not have %v key", render.BGPLayoutConfigMapKey)
+			r.SetDegraded("Error in BGP layout ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
 		log.Error(err, "Error reading services endpoint configmap")
@@ -1032,6 +1044,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		esAdminSecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
+		bgpLayout,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -1306,8 +1319,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	return cm, nil
 }
 
-func getBirdTemplates(client client.Client) (map[string]string, error) {
-	cmName := render.BirdTemplatesConfigMapName
+func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
@@ -1319,7 +1331,14 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 		}
 		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
 	}
+	return cm, nil
+}
 
+func getBirdTemplates(client client.Client) (map[string]string, error) {
+	cm, err := getConfigMap(client, render.BirdTemplatesConfigMapName)
+	if err != nil || cm == nil {
+		return nil, err
+	}
 	bt := make(map[string]string)
 	for k, v := range cm.Data {
 		bt[k] = v

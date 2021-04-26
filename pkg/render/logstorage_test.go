@@ -627,7 +627,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"op.authorization_endpoint":   "https://example.com/dex/auth",
 					"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
 					"rp.post_logout_redirect_uri": "https://example.com/tigera-kibana/logged_out",
-					"claims.groups":               "group",
+					"claims.groups":               "groups",
 					"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 				},
 				"node.master": "true",

@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -171,6 +171,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		}
 	}
 
+	cm = render.K8sSvcEndpointConfigMapName
+	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+	}
+
 	// Only watch the AmazonCloudIntegration if the CRD is available
 	if r.amazonCRDExists {
 		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
@@ -273,7 +278,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
 		&corev1.ServiceAccount{},
-		&v1beta1.APIService{},
+		&apiregv1.APIService{},
 		&corev1.Service{},
 	}
 }
@@ -919,6 +924,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		log.Error(err, "Error retrieving BGP layout ConfigMap")
 		r.SetDegraded("Error retrieving BGP layout ConfigMap", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	err = utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.SetDegraded("Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

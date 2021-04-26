@@ -47,7 +47,12 @@ const (
 	birdTemplateHashAnnotation  = "hash.operator.tigera.io/bird-templates"
 	nodeCertHashAnnotation      = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation     = "hash.operator.tigera.io/cni-config"
+	bgpLayoutHashAnnotation     = "hash.operator.tigera.io/bgp-layout"
 	CSRLabelCalicoSystem        = "calico-system"
+	BGPLayoutConfigMapName      = "bgp-layout"
+	BGPLayoutConfigMapKey       = "earlyNetworkConfiguration"
+	BGPLayoutVolumeName         = "bgp-layout"
+	BGPLayoutPath               = "/etc/calico/early-networking.yaml"
 	K8sSvcEndpointConfigMapName = "kubernetes-services-endpoint"
 )
 
@@ -68,6 +73,7 @@ func Node(
 	nodeAppArmorProfile string,
 	clusterDomain string,
 	nodeReporterMetricsPort int,
+	bgpLayoutHash string,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:            k8sServiceEp,
@@ -79,6 +85,7 @@ func Node(
 		nodeAppArmorProfile:     nodeAppArmorProfile,
 		clusterDomain:           clusterDomain,
 		nodeReporterMetricsPort: nodeReporterMetricsPort,
+		bgpLayoutHash:           bgpLayoutHash,
 	}
 }
 
@@ -96,6 +103,7 @@ type nodeComponent struct {
 	flexvolImage            string
 	certSignReqImage        string
 	nodeReporterMetricsPort int
+	bgpLayoutHash           string
 }
 
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
@@ -586,6 +594,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
+	if c.bgpLayoutHash != "" {
+		annotations[bgpLayoutHashAnnotation] = c.bgpLayoutHash
+	}
+
 	if c.cr.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
@@ -751,6 +763,21 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 				},
 			})
 	}
+
+	if c.bgpLayoutHash != "" {
+		volumes = append(volumes,
+			v1.Volume{
+				Name: BGPLayoutVolumeName,
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: BGPLayoutConfigMapName,
+						},
+					},
+				},
+			})
+	}
+
 	return volumes
 }
 
@@ -926,6 +953,17 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 				})
 		}
 	}
+
+	if c.bgpLayoutHash != "" {
+		nodeVolumeMounts = append(nodeVolumeMounts,
+			v1.VolumeMount{
+				Name:      BGPLayoutVolumeName,
+				ReadOnly:  true,
+				MountPath: BGPLayoutPath,
+				SubPath:   BGPLayoutConfigMapKey,
+			})
+	}
+
 	return nodeVolumeMounts
 }
 
@@ -1216,6 +1254,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars()...)
+
+	if c.bgpLayoutHash != "" {
+		nodeEnv = append(nodeEnv, v1.EnvVar{
+			Name:  "CALICO_EARLY_NETWORKING",
+			Value: BGPLayoutPath,
+		})
+	}
 
 	return nodeEnv
 }

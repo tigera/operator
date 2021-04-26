@@ -450,9 +450,12 @@ var _ = Describe("Mainline with BGP layout", func() {
 			},
 		}
 		err = c.Create(context.Background(), cm)
-		if err != nil && !kerror.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			By("Deleting BGP Layout ConfigMap")
+			err = c.Delete(context.Background(), cm)
 			Expect(err).NotTo(HaveOccurred())
-		}
+		}()
 
 		By("Creating Installation resource")
 		instance := &operator.Installation{

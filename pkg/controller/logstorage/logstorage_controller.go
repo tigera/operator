@@ -409,7 +409,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
-	applyTrial := false
 
 	if managementClusterConnection == nil {
 		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
@@ -453,12 +452,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		applyTrial, err = r.shouldApplyElasticTrialSecret(ctx)
-		if err != nil {
-			r.status.SetDegraded("Failed to get eck trial license", err.Error())
 			return reconcile.Result{}, err
 		}
 
@@ -543,7 +536,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		esService,
 		kbService,
 		r.clusterDomain,
-		applyTrial,
 		dexCfg,
 		esLicenseType,
 	)
@@ -725,20 +717,6 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	}
 
 	return oprKeyCert, esKeyCert, certSecret, err
-}
-
-// Returns true if we want to apply a new trial license. Returns false if there already is a trial license in the cluster.
-// Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
-// installs a valid Elastic license, the trial will be ignored.
-func (r *ReconcileLogStorage) shouldApplyElasticTrialSecret(ctx context.Context) (bool, error) {
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
-		if errors.IsNotFound(err) {
-			return true, nil
-		} else {
-			return false, err
-		}
-	}
-	return false, nil
 }
 
 // createCaCert is a convenience method for creating a secret that contains the ca to trust.

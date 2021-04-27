@@ -148,6 +148,8 @@ echo "Keystore initialization successful."
 
 var log = logf.Log.WithName("render")
 
+var CloudKibanaConfig = map[string]interface{}{}
+
 // Elasticsearch renders the
 func LogStorage(
 	logStorage *operatorv1.LogStorage,
@@ -1140,6 +1142,12 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"enabled":        true,
 			"licenseEdition": "enterpriseEdition",
 		},
+	}
+
+	if len(CloudKibanaConfig) != 0 {
+		for k, v := range CloudKibanaConfig {
+			config[k] = v
+		}
 	}
 
 	if es.supportsOIDC() {

@@ -119,17 +119,17 @@ type DexRelyingPartyConfig interface {
 
 func NewDexRelyingPartyConfig(
 	authentication *oprv1.Authentication,
-	caSecret *corev1.Secret,
+	certSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	clusterDomain string) DexRelyingPartyConfig {
-	return &dexRelyingPartyConfig{baseCfg(nil, authentication, nil, dexSecret, nil, caSecret, clusterDomain)}
+	return &dexRelyingPartyConfig{baseCfg(nil, authentication, nil, dexSecret, nil, certSecret, clusterDomain)}
 }
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
-	caSecret *corev1.Secret,
+	certSecret *corev1.Secret,
 	clusterDomain string) DexKeyValidatorConfig {
-	return &dexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, nil, caSecret, clusterDomain)}
+	return &dexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, nil, certSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.

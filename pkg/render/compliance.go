@@ -73,9 +73,6 @@ func Compliance(
 	clusterDomain string,
 	hasNoLicense bool,
 ) (Component, error) {
-	if installation.CertificateManagement != nil {
-		complianceServerCertSecret = CreateCertificateSecret(installation.CertificateManagement.CACert, ComplianceServerCertSecret, rmeta.OperatorNamespace())
-	}
 	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
 	complianceServerCertSecrets = append(complianceServerCertSecrets, secret.CopyToNamespace(ComplianceNamespace, complianceServerCertSecret)...)
 

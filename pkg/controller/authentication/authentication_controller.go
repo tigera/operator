@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/go-ldap/ldap"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/installation"
@@ -215,6 +216,22 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 				r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
 				return reconcile.Result{}, err
 			}
+		} else if tlsSecret.Type == corev1.SecretTypeTLS {
+			// If the tls secret exists but has the type TLS, we want to replace it, because secret type is an immutable field.
+			// Ever since certificate management is introduced, we want to move away from secret type TLS because we no
+			// longer want to store private keys in the secrets.
+			dexNsTLSSecret := secret.CopyToNamespace(render.DexNamespace, tlsSecret)[0]
+			if err := r.client.Delete(ctx, dexNsTLSSecret); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to replace outdated secret tigera-dex/tigera-dex-tls secret")
+				r.status.SetDegraded("Failed to replace outdated secret tigera-dex/tigera-dex-tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			if err := r.client.Delete(ctx, tlsSecret); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to replace outdated secret tigera-operator/tigera-dex-tls secret")
+				r.status.SetDegraded("Failed to replace outdated secret tigera-operator/tigera-dex-tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCNPattern, r.clusterDomain))
 		}
 	}
 

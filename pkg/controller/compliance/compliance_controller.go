@@ -296,8 +296,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
+			render.ManagerInternalSecretCertName,
 		)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
@@ -311,7 +311,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
-			corev1.TLSCertKey,
+			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
 		)
 		if err != nil {
@@ -326,12 +326,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		// the user, set the component degraded.
 
 		complianceServerCertSecret, err = utils.EnsureCertificateSecret(
-			render.ComplianceServerCertSecret, complianceServerCertSecret, render.TLSSecretKeyName, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
+			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
 		)
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
 			return reconcile.Result{}, err
 		}
+	} else {
+		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, rmeta.OperatorNamespace())
 	}
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
 	authentication, err := utils.GetAuthentication(ctx, r.client)

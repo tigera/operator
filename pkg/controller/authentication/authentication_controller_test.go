@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	
+
 	"github.com/stretchr/testify/mock"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -31,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,7 +38,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -367,63 +365,6 @@ var _ = Describe("authentication controller tests", func() {
 		Entry("Expect prompt type to fail when none is combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone, operatorv1.PromptTypeLogin})}}, false),
 		Entry("Expect prompt type to be able to be combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin})}}, true),
 	)
-
-	Context("Upgrading dex", func() {
-		It("should replace TLS secrets created by an older version of the operator", func() {
-			Expect(cli.Create(ctx, &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{},
-				},
-				Spec: operatorv1.InstallationSpec{
-					Variant: operatorv1.TigeraSecureEnterprise,
-				},
-			})).ToNot(HaveOccurred())
-
-			// Create an outdated TLS secret that we want the controller to dispose of
-			tlsOpr := &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DexTLSSecretName,
-					Namespace: rmeta.OperatorNamespace(),
-				},
-				Type: corev1.SecretTypeTLS, // <= type no longer used.
-				Data: map[string][]byte{
-					corev1.TLSCertKey:       []byte(""),
-					corev1.TLSPrivateKeyKey: []byte(""),
-				},
-			}
-			tlsDex := secret.CopyToNamespace(render.DexNamespace, tlsOpr)[0]
-			Expect(cli.Create(ctx, tlsOpr))
-			Expect(cli.Create(ctx, tlsDex))
-
-			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
-			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
-				IssuerURL:     "https://example.com",
-				UsernameClaim: "email",
-				GroupsClaim:   "group",
-			}
-			// Apply an authentication spec that triggers all the logic in the updateAuthenticationWithDefaults() func.
-			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-
-			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundTLS := &corev1.Secret{}
-			Expect(cli.Get(ctx, types.NamespacedName{Name: tlsOpr.Name, Namespace: tlsOpr.Namespace}, foundTLS)).NotTo(HaveOccurred())
-			Expect(foundTLS.Type).NotTo(Equal(corev1.SecretTypeTLS))
-
-			foundTLS = &corev1.Secret{}
-			Expect(cli.Get(ctx, types.NamespacedName{Name: tlsDex.Name, Namespace: tlsDex.Namespace}, foundTLS)).NotTo(HaveOccurred())
-			Expect(foundTLS.Type).NotTo(Equal(corev1.SecretTypeTLS))
-		})
-	})
 })
 
 func copyAndAddPromptTypes(auth *operatorv1.AuthenticationOIDC, promptTypes []operatorv1.PromptType) *operatorv1.AuthenticationOIDC {

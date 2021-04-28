@@ -67,6 +67,7 @@ func CreateDexTLSSecret(dexCommonName string) *corev1.Secret {
 			Name:      DexTLSSecretName,
 			Namespace: rmeta.OperatorNamespace(),
 		},
+		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
 			corev1.TLSCertKey:       []byte(cert),
 			corev1.TLSPrivateKeyKey: []byte(key),
@@ -136,6 +137,20 @@ func CreateDexClientSecret() *corev1.Secret {
 		},
 		Data: map[string][]byte{
 			ClientSecretSecretField: []byte(generatePassword(24)),
+		},
+	}
+}
+
+// CreateCertificateSecret is a convenience method for creating a secret that contains only a ca or cert to trust.
+func CreateCertificateSecret(caPem []byte, secretName string, namespace string) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			corev1.TLSCertKey: caPem,
 		},
 	}
 }

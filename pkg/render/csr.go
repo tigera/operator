@@ -39,7 +39,7 @@ const (
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
-	installation *operator.InstallationSpec,
+	certificateManagement *operator.CertificateManagement,
 	image string,
 	mountName string,
 	commonName string,
@@ -55,14 +55,14 @@ func CreateCSRInitContainer(
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
-			{Name: "SIGNER", Value: installation.CertificateManagement.SignerName},
+			{Name: "SIGNER", Value: certificateManagement.SignerName},
 			{Name: "COMMON_NAME", Value: commonName},
-			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.KeyAlgorithm)},
-			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},
+			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", certificateManagement.KeyAlgorithm)},
+			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", certificateManagement.SignatureAlgorithm)},
 			{Name: "KEY_NAME", Value: keyName},
 			{Name: "CERT_NAME", Value: certName},
 			{Name: "CA_CERT_NAME", Value: "ca.crt"},
-			{Name: "CA_CERT", Value: base64.URLEncoding.EncodeToString(installation.CertificateManagement.CACert)},
+			{Name: "CA_CERT", Value: base64.URLEncoding.EncodeToString(certificateManagement.CACert)},
 			{Name: "APP_NAME", Value: appNameLabel},
 			{Name: "DNS_NAMES", Value: strings.Join(dnsNames, ",")},
 			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
@@ -154,19 +154,5 @@ func certificateVolumeSource(certificateManagement *operator.CertificateManageme
 				DefaultMode: &defaultMode,
 			},
 		}
-	}
-}
-
-// CreateCertificateSecret is a convenience method for creating a secret that contains only a ca or cert to trust.
-func CreateCertificateSecret(caPem []byte, secretName string, namespace string) *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
-		Data: map[string][]byte{
-			corev1.TLSCertKey: caPem,
-		},
 	}
 }

@@ -696,7 +696,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if c.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation,
+			c.installation.CertificateManagement,
 			c.csrInitImage,
 			complianceServerTLSVolumeName,
 			ComplianceServiceName,

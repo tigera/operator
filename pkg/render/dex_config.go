@@ -134,13 +134,13 @@ func NewDexKeyValidatorConfig(
 
 // Create a new DexConfig.
 func NewDexConfig(
-	installation *oprv1.InstallationSpec,
+	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
 	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(installation, authentication, tlsSecret, dexSecret, idpSecret, nil, clusterDomain)}
+	return &dexConfig{baseCfg(certificateManagement, authentication, tlsSecret, dexSecret, idpSecret, nil, clusterDomain)}
 }
 
 type dexKeyValidatorConfig struct {
@@ -157,7 +157,7 @@ type dexRelyingPartyConfig struct {
 
 // Create a struct to hold the base configuration of dex.
 func baseCfg(
-	installation *oprv1.InstallationSpec,
+	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
@@ -185,28 +185,28 @@ func baseCfg(
 	}
 
 	return &dexBaseCfg{
-		installation:   installation,
-		authentication: authentication,
-		tlsSecret:      tlsSecret,
-		idpSecret:      idpSecret,
-		dexSecret:      dexSecret,
-		certSecret:     certSecret,
-		connectorType:  connType,
-		managerURI:     baseUrl,
-		clusterDomain:  clusterDomain,
+		certificateManagement: certificateManagement,
+		authentication:        authentication,
+		tlsSecret:             tlsSecret,
+		idpSecret:             idpSecret,
+		dexSecret:             dexSecret,
+		certSecret:            certSecret,
+		connectorType:         connType,
+		managerURI:            baseUrl,
+		clusterDomain:         clusterDomain,
 	}
 }
 
 type dexBaseCfg struct {
-	installation   *oprv1.InstallationSpec
-	authentication *oprv1.Authentication
-	tlsSecret      *corev1.Secret
-	idpSecret      *corev1.Secret
-	dexSecret      *corev1.Secret
-	certSecret     *corev1.Secret
-	managerURI     string
-	connectorType  string
-	clusterDomain  string
+	certificateManagement *oprv1.CertificateManagement
+	authentication        *oprv1.Authentication
+	tlsSecret             *corev1.Secret
+	idpSecret             *corev1.Secret
+	dexSecret             *corev1.Secret
+	certSecret            *corev1.Secret
+	managerURI            string
+	connectorType         string
+	clusterDomain         string
 }
 
 func (d *dexBaseCfg) ManagerURI() string {
@@ -341,7 +341,7 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 
 func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 
-	tlsVolumeSource := certificateVolumeSource(d.installation.CertificateManagement, DexTLSSecretName)
+	tlsVolumeSource := certificateVolumeSource(d.certificateManagement, DexTLSSecretName)
 	defaultMode := int32(420)
 	volumes := []corev1.Volume{
 		{
@@ -384,7 +384,7 @@ func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: DexCertSecretName,
 					Items: []corev1.KeyToPath{
-						{Key: "tls.crt", Path: "tls-dex.crt"},
+						{Key: corev1.TLSCertKey, Path: "tls-dex.crt"},
 					},
 				},
 			},
@@ -401,7 +401,7 @@ func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: DexCertSecretName,
 					Items: []corev1.KeyToPath{
-						{Key: "tls.crt", Path: "tls-dex.crt"},
+						{Key: corev1.TLSCertKey, Path: "tls-dex.crt"},
 					},
 				},
 			},
@@ -474,8 +474,8 @@ func (d *dexRelyingPartyConfig) UserInfoURI() string {
 func (d *dexConfig) CreateCertSecret() *corev1.Secret {
 	var certBytes []byte
 
-	if d.installation.CertificateManagement != nil {
-		certBytes = d.installation.CertificateManagement.CACert
+	if d.certificateManagement != nil {
+		certBytes = d.certificateManagement.CACert
 	} else {
 		certBytes = d.tlsSecret.Data[corev1.TLSCertKey]
 	}

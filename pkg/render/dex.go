@@ -36,11 +36,13 @@ import (
 
 const (
 	// Manifest object variables
-	DexNamespace      = "tigera-dex"
-	DexObjectName     = "tigera-dex"
-	DexPort           = 5556
+	DexNamespace  = "tigera-dex"
+	DexObjectName = "tigera-dex"
+	DexPort       = 5556
+	// This is the secret containing just a cert that a client should mount in order to trust Dex.
 	DexCertSecretName = "tigera-dex-tls-crt"
-	DexTLSSecretName  = "tigera-dex-tls"
+	// This is the secret that Dex mounts, containing a key and a cert.
+	DexTLSSecretName = "tigera-dex-tls"
 
 	// Constants related to Dex configurations
 	DexClientId = "tigera-manager"
@@ -185,7 +187,7 @@ func (c *dexComponent) deployment() client.Object {
 	var initContainers []corev1.Container
 	if c.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation,
+			c.installation.CertificateManagement,
 			c.csrInitImage,
 			"tls",
 			DexObjectName,

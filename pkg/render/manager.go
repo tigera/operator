@@ -283,7 +283,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if c.useCertificateManagement {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation,
+			c.installation.CertificateManagement,
 			c.csrInitImage,
 			ManagerTLSSecretName,
 			ManagerServiceName,

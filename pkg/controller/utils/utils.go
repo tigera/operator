@@ -249,10 +249,13 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 }
 
 // ValidateCertPair checks if the given secret exists in the given
-// namespace and if so that it contains key and cert fields. If a secret exists then it is returned.
-// If there is an error accessing the secret (except NotFound) or the cert
-// does not have both a key and cert field then an appropriate error is returned.
-// If no secret exists then nil, nil is returned to represent that no cert is valid.
+// namespace and if so that it contains key and cert fields. If an
+// empty string is passed for the keyName argument, If a secret
+// exists then it is returned. If there is an error accessing the
+// secret (except NotFound) or the cert does not have both a key
+// and cert field then an appropriate error is returned. If no
+// secret exists then nil, nil is returned to represent that no
+// cert is valid.
 func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{

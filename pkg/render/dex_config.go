@@ -271,7 +271,7 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{, d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
 		dexCertSecretAnnotation:  rmeta.AnnotationHash(d.certSecret.Data),
 	}
 	if d.dexSecret != nil {
@@ -284,7 +284,7 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
 		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI()}),
-		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.certSecret.Data),
+		dexCertSecretAnnotation:  rmeta.AnnotationHash(d.certSecret.Data),
 	}
 	return annotations
 }

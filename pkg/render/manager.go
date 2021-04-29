@@ -500,7 +500,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           "gcr.io/tigera-dev/cnx/tigera/voltron:rene-master", //todo: revert
+		Image:           "quay.io/tigera/voltron:oidc-workaround", //todo: revert
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),

@@ -15,15 +15,22 @@
 package render
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"mime"
+	"net/http"
 	"strconv"
 	"strings"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"golang.org/x/oauth2"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -89,6 +96,7 @@ type DexKeyValidatorConfig interface {
 	// The issuer of the OIDC bearer tokens used during a UI session.
 	Issuer() string
 	ClientId() string
+	RequiredConfigMaps(namespace string) []*corev1.ConfigMap
 	// RequiredEnv returns env that is used to configure pods with dex options.
 	RequiredEnv(prefix string) []corev1.EnvVar
 	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
@@ -214,6 +222,32 @@ func (d *dexBaseCfg) Issuer() string {
 	}
 	return fmt.Sprintf("%s/dex", d.managerURI)
 }
+
+func (d *dexBaseCfg) RequiredConfigMaps(namespace string) []*corev1.ConfigMap {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
+		p, wellknown, keys := d.getStuff()
+
+		wellknown = strings.ReplaceAll(wellknown, p.JWKSURL, "/discovery/keys")
+		return []*corev1.ConfigMap{
+			{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ManagerOIDCConfig,
+					Namespace: namespace,
+					Labels:    map[string]string{
+						//"unsupported.operator.tigera.io/ignore": "true", // nice hack for now :-). todo: use http get and replace stuff etc.
+					},
+				},
+				Data: map[string]string{
+					"openid-configuration": wellknown,
+					"keys":                 keys,
+				},
+			},
+		}
+	}
+	return nil
+}
+
 func (d *dexBaseCfg) ClientId() string {
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
 		return string(d.idpSecret.Data[ClientIDSecretField])
@@ -283,22 +317,100 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI(), d.RequiredConfigMaps("")}),
 		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations
+}
+
+type providerJSON struct {
+	Issuer      string   `json:"issuer"`
+	AuthURL     string   `json:"authorization_endpoint"`
+	TokenURL    string   `json:"token_endpoint"`
+	JWKSURL     string   `json:"jwks_uri"`
+	UserInfoURL string   `json:"userinfo_endpoint"`
+	Algorithms  []string `json:"id_token_signing_alg_values_supported"`
+}
+
+func doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	client := http.DefaultClient
+	if c, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok {
+		client = c
+	}
+	return client.Do(req.WithContext(ctx))
+}
+
+func unmarshalResp(r *http.Response, body []byte, v interface{}) error {
+	err := json.Unmarshal(body, &v)
+	if err == nil {
+		return nil
+	}
+	ct := r.Header.Get("Content-Type")
+	mediaType, _, parseErr := mime.ParseMediaType(ct)
+	if parseErr == nil && mediaType == "application/json" {
+		return fmt.Errorf("got Content-Type = application/json, but could not unmarshal as JSON: %v", err)
+	}
+	return fmt.Errorf("expected Content-Type = application/json, got %q: %v", ct, err)
+}
+
+func (d *dexBaseCfg) getStuff() (providerJSON, string, string) {
+	ctx := context.TODO()
+	wellKnown := strings.TrimSuffix(d.Issuer(), "/") + "/.well-known/openid-configuration"
+	req, err := http.NewRequest("GET", wellKnown, nil)
+	if err != nil {
+		panic(err)
+	}
+	resp, err := doRequest(ctx, req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(fmt.Sprintf("unable to read response body: %v", err))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		panic(fmt.Sprintf("%s: %s", resp.Status, body))
+	}
+
+	var p providerJSON
+	err = unmarshalResp(resp, body, &p)
+	if err != nil {
+		panic(fmt.Sprintf("oidc: failed to decode provider discovery object: %v", err))
+	}
+	wellKnownJson := string(body)
+	// fetch the keys
+	req, err = http.NewRequest("GET", p.JWKSURL, nil)
+	if err != nil {
+		panic(fmt.Errorf("oidc: can't create request: %v", err))
+	}
+
+	resp, err = doRequest(ctx, req)
+	if err != nil {
+		panic(fmt.Errorf("oidc: get keys failed %v", err))
+	}
+	defer resp.Body.Close()
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(fmt.Sprintf("unable to read response body: %v", err))
+	}
+	return p, wellKnownJson, string(body)
+
 }
 
 // Append variables that are necessary for using the dex authenticator.
 func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 	oidc := d.authentication.Spec.OIDC
 	if d.connectorType == connectorTypeOIDC && oidc.OIDCType == oprv1.OIDCTypeTigera {
-
+		p, _, _ := d.getStuff()
 		return []corev1.EnvVar{
 			{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
 			{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: d.Issuer()},
 			{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: d.Issuer()},
-			{Name: fmt.Sprintf("%sDEX_JWKSURL", prefix), Value: "https://tigera-cc-dev.us.auth0.com/.well-known/jwks.json"}, //todo: get from well-known
+			{Name: fmt.Sprintf("%sDEX_JWKSURL", prefix), Value: p.JWKSURL}, //todo: get from well-known
 			{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: d.ClientId()},
 			{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: oidc.UsernameClaim},
 			{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: oidc.GroupsClaim},
@@ -391,7 +503,7 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 
 // Add volume for Dex TLS secret.
 func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: DexTLSSecretName,
 			VolumeSource: corev1.VolumeSource{
@@ -404,6 +516,24 @@ func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 			},
 		},
 	}
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
+		defaultMode := int32(420)
+		return append(volumes, []corev1.Volume{
+			{
+				Name: ManagerOIDCConfig,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ManagerOIDCConfig,
+						},
+						DefaultMode: &defaultMode,
+					},
+				},
+			},
+		}...)
+	}
+
+	return volumes
 }
 
 // Add volume for Dex TLS secret.
@@ -425,7 +555,17 @@ func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
 func (d *dexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"}}
+	mounts := []corev1.VolumeMount{{Name: DexTLSSecretName, MountPath: "/etc/ssl/certs"}} //todo dont use this secret anywhere for OIDCTypeTigera
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
+		ManagerOIDCWellknownURI := "/usr/share/nginx/html/.well-known" //todo move
+		ManagerOIDCJwksURI := "/usr/share/nginx/html/discovery"        //todo move
+		return append(mounts, []corev1.VolumeMount{
+			{Name: ManagerOIDCConfig, MountPath: ManagerOIDCWellknownURI},
+			{Name: ManagerOIDCConfig, MountPath: ManagerOIDCJwksURI},
+		}...)
+	}
+
+	return mounts
 }
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location

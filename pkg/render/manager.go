@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -216,6 +217,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	}
 	objs = append(objs, c.managerDeployment())
+	if c.dexCfg != nil {
+		objs = append(objs, configmap.ToRuntimeObjects(c.dexCfg.RequiredConfigMaps(ManagerNamespace)...)...)
+	}
 
 	return objs, nil
 }
@@ -290,6 +294,14 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		},
 	}
 	return d
+}
+
+// managerVolumes returns the volumes for the Tigera Secure manager component.
+func (c *managerComponent) managerVolumeMounts() []v1.VolumeMount {
+	if c.dexCfg != nil {
+		return c.dexCfg.RequiredVolumeMounts()
+	}
+	return []v1.VolumeMount{}
 }
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
@@ -444,6 +456,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
+		VolumeMounts:    c.managerVolumeMounts(),
 	}
 
 	return tm

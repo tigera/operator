@@ -151,6 +151,12 @@ spec:
                   issuerURL:
                     description: IssuerURL is the URL to the OIDC provider.
                     type: string
+                  oidcType:
+                    description: 'Default: "Dex"'
+                    enum:
+                    - Dex
+                    - Tigera
+                    type: string
                   promptTypes:
                     description: 'PromptTypes is an optional list of string values
                       that specifies whether the identity provider prompts the end

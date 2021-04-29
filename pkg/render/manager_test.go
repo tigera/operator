@@ -387,7 +387,7 @@ func renderObjects(oidc bool, managementCluster *operator.ManagementCluster, tls
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, render.CreateDexTLSSecret("cn"), nil, dns.DefaultClusterDomain)
 	}
 
 	var tunnelSecret *corev1.Secret

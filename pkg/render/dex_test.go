@@ -115,7 +115,7 @@ var _ = Describe("dex rendering tests", func() {
 		})
 
 		DescribeTable("should render the cluster name properly in the validator and rp configs", func(clusterDomain string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret, clusterDomain)
+			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret, idpSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
 			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)

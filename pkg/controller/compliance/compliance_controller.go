@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/authentication"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -332,14 +333,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authenticationCR proxy.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error querying Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
-	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
 		return reconcile.Result{}, nil
 	}
 
@@ -347,13 +348,22 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	var dexCfg render.DexKeyValidatorConfig
-	if authentication != nil {
+	if authenticationCR != nil {
 		dexTLSSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+
+		// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
+		idpSecret, err := authentication.GetIdpSecret(ctx, r.client, authenticationCR)
+		if err != nil {
+			log.Error(err, "Invalid or missing identity provider secret")
+			r.status.SetDegraded("Invalid or missing identity provider secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		dexCfg = render.NewDexKeyValidatorConfig(authenticationCR, dexTLSSecret, idpSecret, r.clusterDomain)
 	}
 
 	reqLogger.V(3).Info("rendering components")

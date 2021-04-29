@@ -458,8 +458,8 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.dexCfg.ManagerURI())},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: DexClientId}}
+			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.dexCfg.Issuer()},
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.dexCfg.ClientId()}}
 	}
 	return envs
 }
@@ -487,7 +487,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           c.proxyImage,
+		Image:           "gcr.io/tigera-dev/cnx/tigera/voltron:rene-master", //todo: revert
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),

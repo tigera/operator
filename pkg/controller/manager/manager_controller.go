@@ -21,6 +21,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -439,25 +440,32 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	// Fetch the Authentication spec. If present, we use it to configure dex as an authenticationCR proxy.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
-	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
 		return reconcile.Result{}, nil
 	}
 
 	var dexCfg render.DexKeyValidatorConfig
-	if authentication != nil {
+	if authenticationCR != nil {
 		dexTLSSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+		// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
+		idpSecret, err := authentication.GetIdpSecret(ctx, r.client, authenticationCR)
+		if err != nil {
+			log.Error(err, "Invalid or missing identity provider secret")
+			r.status.SetDegraded("Invalid or missing identity provider secret", err.Error())
+			return reconcile.Result{}, err
+		}
+		dexCfg = render.NewDexKeyValidatorConfig(authenticationCR, dexTLSSecret, idpSecret, r.clusterDomain)
 	}
 
 	var elasticLicenseType render.ElasticsearchLicenseType

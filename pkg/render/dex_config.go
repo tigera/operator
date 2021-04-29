@@ -86,6 +86,9 @@ type DexConfig interface {
 type DexKeyValidatorConfig interface {
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
 	ManagerURI() string
+	// The issuer of the OIDC bearer tokens used during a UI session.
+	Issuer() string
+	ClientId() string
 	// RequiredEnv returns env that is used to configure pods with dex options.
 	RequiredEnv(prefix string) []corev1.EnvVar
 	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
@@ -126,8 +129,9 @@ func NewDexRelyingPartyConfig(
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	tlsSecret *corev1.Secret,
+	idpSecret *corev1.Secret,
 	clusterDomain string) DexKeyValidatorConfig {
-	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, nil, clusterDomain)}
+	return &dexKeyValidatorConfig{baseCfg(authentication, tlsSecret, nil, idpSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.
@@ -204,6 +208,19 @@ func (d *dexBaseCfg) ManagerURI() string {
 	return d.managerURI
 }
 
+func (d *dexBaseCfg) Issuer() string {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
+		return d.authentication.Spec.OIDC.IssuerURL
+	}
+	return fmt.Sprintf("%s/dex", d.managerURI)
+}
+func (d *dexBaseCfg) ClientId() string {
+	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
+		return string(d.idpSecret.Data[ClientIDSecretField])
+	}
+	return fmt.Sprintf("%s/dex", d.managerURI)
+}
+
 func (d *dexBaseCfg) UsernameClaim() string {
 	claim := defaultUsernameClaim
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
@@ -274,11 +291,27 @@ func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 
 // Append variables that are necessary for using the dex authenticator.
 func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
+	oidc := d.authentication.Spec.OIDC
+	if d.connectorType == connectorTypeOIDC && oidc.OIDCType == oprv1.OIDCTypeTigera {
+
+		return []corev1.EnvVar{
+			{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
+			{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: d.Issuer()},
+			{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: d.Issuer()},
+			{Name: fmt.Sprintf("%sDEX_JWKSURL", prefix), Value: "https://tigera-cc-dev.us.auth0.com/.well-known/jwks.json"}, //todo: get from well-known
+			{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: d.ClientId()},
+			{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: oidc.UsernameClaim},
+			{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: oidc.GroupsClaim},
+			{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
+			{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
+		}
+	}
+
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
 		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
 		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556/", d.clusterDomain)},
-		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
+		{Name: fmt.Sprintf("%sDEX_JWKSURL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: DefaultGroupsClaim},

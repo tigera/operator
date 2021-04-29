@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -198,6 +199,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.dexCfg != nil {
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.dexCfg.RequiredSecrets(ComplianceNamespace)...)...)
+		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.dexCfg.RequiredConfigMaps(ComplianceNamespace)...)...)
 	}
 
 	var objsToDelete []client.Object

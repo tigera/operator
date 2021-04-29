@@ -105,9 +105,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for verifiers", func() {
-			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(2))
 			Expect(hashes2).To(HaveLen(2))
 			Expect(hashes3).To(HaveLen(2))
@@ -304,7 +304,7 @@ var _ = Describe("dex config tests", func() {
 	)
 
 	DescribeTable("Test DexKVConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
-		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, idpSecret, dns.DefaultClusterDomain)
 
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())

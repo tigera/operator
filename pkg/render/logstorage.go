@@ -656,7 +656,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptyDir.
 		csrInitContainerHTTP := CreateCSRInitContainer(
-			es.installation,
+			es.installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameHTTP,
 			ElasticsearchServiceName,
@@ -668,7 +668,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 		// Add the init container that will issue a CSR for transport and mount it in an emptyDir.
 		csrInitContainerTransport := CreateCSRInitContainer(
-			es.installation,
+			es.installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameTransport,
 			ElasticsearchServiceName,
@@ -1297,7 +1297,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
 		automountToken = true
 		csrInitContainer := CreateCSRInitContainer(
-			es.installation,
+			es.installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameHTTP,
 			ElasticsearchServiceName,

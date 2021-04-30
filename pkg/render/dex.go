@@ -188,6 +188,7 @@ func (c *dexComponent) deployment() client.Object {
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,
+							ImagePullPolicy: "Always", //todo: revert.
 							Image:           c.image,
 							Env:             c.dexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),

@@ -99,9 +99,7 @@ func Manager(
 		KibanaTLSHashAnnotation: rmeta.SecretsAnnotationHash(kibanaSecrets...),
 	}
 	var tlsAnnotation string
-	if installation.CertificateManagement != nil {
-		tlsAnnotation = rmeta.AnnotationHash(installation.CertificateManagement.CACert)
-	} else {
+	if installation.CertificateManagement == nil {
 		tlsSecrets = append(tlsSecrets, tlsKeyPair)
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
 		tlsAnnotation = rmeta.AnnotationHash(tlsKeyPair.Data)

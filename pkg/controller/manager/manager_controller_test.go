@@ -83,7 +83,6 @@ var _ = Describe("Manager controller tests", func() {
 		var r ReconcileManager
 		var cr *operatorv1.Manager
 		var mockStatus *status.MockStatus
-		var installation *operatorv1.Installation
 
 		clusterDomain := "some.domain"
 		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
@@ -119,24 +118,23 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			})).NotTo(HaveOccurred())
-			installation = &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{
-						Registry: "some.registry.org/",
-						// The test is provider agnostic.
-						KubernetesProvider: operatorv1.ProviderNone,
-					},
-				},
-			}
 			Expect(c.Create(
 				ctx,
-				installation,
+				&operatorv1.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec: operatorv1.InstallationSpec{
+						Variant:  operatorv1.TigeraSecureEnterprise,
+						Registry: "some.registry.org/",
+					},
+					Status: operatorv1.InstallationStatus{
+						Variant: operatorv1.TigeraSecureEnterprise,
+						Computed: &operatorv1.InstallationSpec{
+							Registry: "some.registry.org/",
+							// The test is provider agnostic.
+							KubernetesProvider: operatorv1.ProviderNone,
+						},
+					},
+				},
 			)).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &operatorv1.Compliance{
@@ -289,11 +287,13 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 			}
 			if certificateManagementEnabled {
+				installation := &operatorv1.Installation{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, installation))
 				installation.Spec.CertificateManagement = &operatorv1.CertificateManagement{}
 				Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
 			}
 			if expectDegraded {
-				mockStatus.On("SetDegraded", mock.Anything, "").Return().Once()
+				mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return().Once()
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
 			} else {

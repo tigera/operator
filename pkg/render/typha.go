@@ -356,7 +356,6 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 	if c.installation.CertificateManagement == nil {
 		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
 	} else {
-		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.installation.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation.CertificateManagement,
 			c.certSignReqImage,

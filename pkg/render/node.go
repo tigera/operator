@@ -567,7 +567,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	if c.cr.CertificateManagement == nil {
 		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 	} else {
-		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cr.CertificateManagement,
 			c.certSignReqImage,

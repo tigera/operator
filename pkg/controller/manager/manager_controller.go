@@ -306,8 +306,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			}
 		}
 	} else if !certOperatorManaged {
-		r.status.SetDegraded(fmt.Sprintf("self provided secret %s/%s is not supported when certificate management is not supported", render.ManagerNamespace, render.ManagerTLSSecretName), "")
-		return reconcile.Result{}, fmt.Errorf("self provided secret %s/%s is not supported when certificate management is not supported", render.ManagerNamespace, render.ManagerTLSSecretName)
+		err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
+		r.status.SetDegraded("Invalid certificate configuration", err.Error())
+		return reconcile.Result{}, err
 	} else {
 		tlsSecret = nil
 	}

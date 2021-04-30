@@ -275,7 +275,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// If the manager TLS secret exists, check whether it is managed by the
 	// operator.
-	var certOperatorManaged bool
+	certOperatorManaged := true
 	if tlsSecret != nil {
 		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
@@ -305,7 +305,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				return reconcile.Result{}, err
 			}
 		}
-	} else if certOperatorManaged {
+	} else if !certOperatorManaged {
+		r.status.SetDegraded(fmt.Sprintf("self provided secret %s/%s is not supported when certificate management is not supported", render.ManagerNamespace, render.ManagerTLSSecretName), "")
+		return reconcile.Result{}, fmt.Errorf("self provided secret %s/%s is not supported when certificate management is not supported", render.ManagerNamespace, render.ManagerTLSSecretName)
+	} else {
 		tlsSecret = nil
 	}
 

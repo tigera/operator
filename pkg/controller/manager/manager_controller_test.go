@@ -18,7 +18,14 @@ import (
 	"context"
 	"fmt"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+
 	"github.com/stretchr/testify/mock"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -31,22 +38,17 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
-
 	"github.com/tigera/operator/test"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("Manager controller tests", func() {
@@ -81,6 +83,7 @@ var _ = Describe("Manager controller tests", func() {
 		var r ReconcileManager
 		var cr *operatorv1.Manager
 		var mockStatus *status.MockStatus
+		var installation *operatorv1.Installation
 
 		clusterDomain := "some.domain"
 		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
@@ -116,23 +119,24 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			})).NotTo(HaveOccurred())
-			Expect(c.Create(
-				ctx,
-				&operatorv1.Installation{
-					ObjectMeta: metav1.ObjectMeta{Name: "default"},
-					Spec: operatorv1.InstallationSpec{
-						Variant:  operatorv1.TigeraSecureEnterprise,
+			installation = &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{
 						Registry: "some.registry.org/",
-					},
-					Status: operatorv1.InstallationStatus{
-						Variant: operatorv1.TigeraSecureEnterprise,
-						Computed: &operatorv1.InstallationSpec{
-							Registry: "some.registry.org/",
-							// The test is provider agnostic.
-							KubernetesProvider: operatorv1.ProviderNone,
-						},
+						// The test is provider agnostic.
+						KubernetesProvider: operatorv1.ProviderNone,
 					},
 				},
+			}
+			Expect(c.Create(
+				ctx,
+				installation,
 			)).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &operatorv1.Compliance{
@@ -273,6 +277,42 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
 		})
+
+		DescribeTable("test combinations with certificate management and BYO tls", func(certificateManagementEnabled, byoTLS, expectDegraded bool) {
+			if byoTLS {
+				dnsNames := []string{"manager.example.com", "192.168.10.22"}
+				testCA := test.MakeTestCA("manager-test")
+				userSecret, err := secret.CreateTLSSecret(
+					testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
+					render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
+			}
+			if certificateManagementEnabled {
+				installation.Spec.CertificateManagement = &operatorv1.CertificateManagement{}
+				Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
+			}
+			if expectDegraded {
+				mockStatus.On("SetDegraded", mock.Anything, "").Return().Once()
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).Should(HaveOccurred())
+			} else {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				deploy := &appsv1.Deployment{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-manager", Namespace: render.ManagerNamespace}, deploy)).ShouldNot(HaveOccurred())
+
+				if certificateManagementEnabled {
+					Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+				} else {
+					Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(0))
+				}
+			}
+		},
+			Entry("Regular flow", false, false, false),
+			Entry("Certificate management flow", true, false, false),
+			Entry("Self provided TLS", false, true, false),
+			Entry("Self provided TLS & certificate management", true, true, true))
 	})
 
 	Context("image reconciliation", func() {

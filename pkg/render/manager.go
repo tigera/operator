@@ -46,7 +46,6 @@ const (
 	managerTargetPort                = 9443
 	ManagerServiceName               = "tigera-manager"
 	ManagerNamespace                 = "tigera-manager"
-	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc.%s"
 	ManagerServiceIP                 = "localhost"
 	ManagerServiceAccount            = "tigera-manager"
 	ManagerClusterRole               = "tigera-manager-role"
@@ -99,10 +98,8 @@ func Manager(
 	tlsAnnotations := map[string]string{
 		KibanaTLSHashAnnotation: rmeta.SecretsAnnotationHash(kibanaSecrets...),
 	}
-	// If the TLS Secret was passed it means we want to use it, regardless of the certificate management feature.
-	useCertificateManagement := tlsKeyPair == nil && installation.CertificateManagement != nil
 	var tlsAnnotation string
-	if useCertificateManagement {
+	if installation.CertificateManagement != nil {
 		tlsAnnotation = rmeta.AnnotationHash(installation.CertificateManagement.CACert)
 	} else {
 		tlsSecrets = append(tlsSecrets, tlsKeyPair)
@@ -139,7 +136,6 @@ func Manager(
 		installation:               installation,
 		managementCluster:          managementCluster,
 		esLicenseType:              esLicenseType,
-		useCertificateManagement:   useCertificateManagement,
 	}, nil
 }
 
@@ -161,7 +157,6 @@ type managerComponent struct {
 	proxyImage                 string
 	esProxyImage               string
 	csrInitImage               string
-	useCertificateManagement   bool
 }
 
 func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -184,7 +179,7 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.useCertificateManagement {
+	if c.installation.CertificateManagement != nil {
 		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -239,7 +234,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.managerDeployment())
 
 	var toDelete []client.Object
-	if c.useCertificateManagement {
+	if c.installation.CertificateManagement != nil {
 		objs = append(objs, csrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
 		// If we want to use certificate management, we should clean up any existing secrets that have been created by the operator.
 		secretToDelete := &corev1.Secret{
@@ -263,12 +258,10 @@ func (c *managerComponent) Ready() bool {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-	var annotations = make(map[string]string)
+	annotations := make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
-		annotations = map[string]string{
-			complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecret.Data),
-		}
+		annotations[complianceServerTLSHashAnnotation] = rmeta.AnnotationHash(c.complianceServerCertSecret.Data)
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -281,7 +274,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	var initContainers []corev1.Container
-	if c.useCertificateManagement {
+	if c.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.installation.CertificateManagement,
 			c.csrInitImage,
@@ -345,7 +338,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
 	var certificateManagement *operator.CertificateManagement
-	if c.useCertificateManagement {
+	if c.installation.CertificateManagement != nil {
 		certificateManagement = c.installation.CertificateManagement
 	}
 	tlsVolumeSource := certificateVolumeSource(certificateManagement, ManagerTLSSecretName)

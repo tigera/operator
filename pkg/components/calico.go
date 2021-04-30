@@ -17,30 +17,30 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "release-v3.19"
+	CalicoRelease string = "v3.19.0"
 
 	ComponentCalicoCNI = component{
-		Version: "release-v3.19",
+		Version: "v3.19.0",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version: "release-v3.19",
+		Version: "v3.19.0",
 		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoNode = component{
-		Version: "release-v3.19",
+		Version: "v3.19.0",
 		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
-		Version: "release-v3.19",
+		Version: "v3.19.0",
 		Image:   "calico/typha",
 	}
 
 	ComponentFlexVolume = component{
-		Version: "release-v3.19",
+		Version: "v3.19.0",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 	ComponentOperatorInit = component{

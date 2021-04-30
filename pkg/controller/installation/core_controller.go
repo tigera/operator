@@ -868,8 +868,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		common.CalicoNamespace,
 		render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretCertName,
 		render.ManagerInternalSecretKeyName,
+		render.ManagerInternalSecretCertName,
 	)
 
 	// Ensure that CA and TLS certificate for tigera-manager for internal

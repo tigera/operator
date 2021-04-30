@@ -39,7 +39,7 @@ const (
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
-	installation *operator.InstallationSpec,
+	certificateManagement *operator.CertificateManagement,
 	image string,
 	mountName string,
 	commonName string,
@@ -55,14 +55,14 @@ func CreateCSRInitContainer(
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
-			{Name: "SIGNER", Value: installation.CertificateManagement.SignerName},
+			{Name: "SIGNER", Value: certificateManagement.SignerName},
 			{Name: "COMMON_NAME", Value: commonName},
-			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.KeyAlgorithm)},
-			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", installation.CertificateManagement.SignatureAlgorithm)},
+			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", certificateManagement.KeyAlgorithm)},
+			{Name: "SIGNATURE_ALGORITHM", Value: fmt.Sprintf("%v", certificateManagement.SignatureAlgorithm)},
 			{Name: "KEY_NAME", Value: keyName},
 			{Name: "CERT_NAME", Value: certName},
 			{Name: "CA_CERT_NAME", Value: "ca.crt"},
-			{Name: "CA_CERT", Value: base64.URLEncoding.EncodeToString(installation.CertificateManagement.CACert)},
+			{Name: "CA_CERT", Value: base64.URLEncoding.EncodeToString(certificateManagement.CACert)},
 			{Name: "APP_NAME", Value: appNameLabel},
 			{Name: "DNS_NAMES", Value: strings.Join(dnsNames, ",")},
 			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
@@ -142,6 +142,7 @@ func csrClusterRoleBinding(name, namespace string) *rbacv1.ClusterRoleBinding {
 }
 
 func certificateVolumeSource(certificateManagement *operator.CertificateManagement, secretName string) corev1.VolumeSource {
+	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -149,7 +150,8 @@ func certificateVolumeSource(certificateManagement *operator.CertificateManageme
 	} else {
 		return corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: secretName,
+				SecretName:  secretName,
+				DefaultMode: &defaultMode,
 			},
 		}
 	}

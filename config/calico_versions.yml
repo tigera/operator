@@ -1,12 +1,12 @@
-title: release-v3.19
+title: v3.19.0
 components:
   typha:
-    version: release-v3.19
+    version: v3.19.0
   calico/node:
-    version: release-v3.19
+    version: v3.19.0
   calico/cni:
-    version: release-v3.19
+    version: v3.19.0
   calico/kube-controllers:
-    version: release-v3.19
+    version: v3.19.0
   flexvol:
-    version: release-v3.19
+    version: v3.19.0

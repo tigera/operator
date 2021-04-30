@@ -75,7 +75,7 @@ var _ = Describe("dex config tests", func() {
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {
-			connector := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
+			connector := render.NewDexConfig(nil, authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
 		})
@@ -83,9 +83,9 @@ var _ = Describe("dex config tests", func() {
 
 	Context("Hashes should be consistent and not be affected by fields with pointers", func() {
 		It("should produce consistent hashes for dex config", func() {
-			hashes1 := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexConfig(authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexConfig(authenticationDiff, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := render.NewDexConfig(nil, authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := render.NewDexConfig(nil, authentication.DeepCopy(), tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := render.NewDexConfig(nil, authenticationDiff, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(4))
 			Expect(hashes2).To(HaveLen(4))
 			Expect(hashes3).To(HaveLen(4))
@@ -134,7 +134,7 @@ var _ = Describe("dex config tests", func() {
 	)
 
 	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
-		dexConfig := render.NewDexConfig(auth, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, auth, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
 		Expect(dexConfig.Connector()).To(BeEquivalentTo(expectedConnector))
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-config"]).NotTo(BeEmpty())
@@ -283,14 +283,14 @@ var _ = Describe("dex config tests", func() {
 
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
-		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-cert-secret"]).NotTo(BeEmpty())
 		Expect(dexConfig.ManagerURI()).To(Equal(domain))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
-			Name: render.DexTLSSecretName,
+			Name: render.DexCertSecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: render.DexTLSSecretName,
+					SecretName: render.DexCertSecretName,
 					Items: []corev1.KeyToPath{
 						{Key: "tls.crt", Path: "tls-dex.crt"},
 					},
@@ -307,14 +307,14 @@ var _ = Describe("dex config tests", func() {
 		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, dns.DefaultClusterDomain)
 
 		annotations := dexConfig.RequiredAnnotations()
-		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
+		Expect(annotations["hash.operator.tigera.io/tigera-dex-cert-secret"]).NotTo(BeEmpty())
 		Expect(dexConfig.ManagerURI()).To(Equal(domain))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
-			Name: render.DexTLSSecretName,
+			Name: render.DexCertSecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: render.DexTLSSecretName,
+					SecretName: render.DexCertSecretName,
 					Items: []corev1.KeyToPath{
 						{Key: "tls.crt", Path: "tls-dex.crt"},
 					},
@@ -336,7 +336,7 @@ var _ = Describe("dex config tests", func() {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data:     secretData,
 		}
-		dexConfig := render.NewDexConfig(google, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, google, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
 		connector := dexConfig.Connector()["config"].(map[string]interface{})
 
 		email, emailFound := connector["adminEmail"]
@@ -375,7 +375,7 @@ var _ = Describe("dex config tests", func() {
 	DescribeTable("Test values for promptTypes ", func(in []operatorv1.PromptType, result string) {
 		auth := oidc.DeepCopy()
 		auth.Spec.OIDC.PromptTypes = in
-		dexConfig := render.NewDexConfig(auth, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, auth, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain)
 		config, ok := dexConfig.Connector()["config"].(map[string]interface{})
 		Expect(ok).To(BeTrue())
 		if result == "" {

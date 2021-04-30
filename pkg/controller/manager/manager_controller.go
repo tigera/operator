@@ -119,7 +119,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -275,7 +275,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// If the manager TLS secret exists, check whether it is managed by the
 	// operator.
-	var certOperatorManaged bool
+	certOperatorManaged := true
 	if tlsSecret != nil {
 		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
@@ -285,24 +285,31 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		certOperatorManaged = utils.IsOperatorIssued(issuer)
 	}
 
-	// If the secret does not exist, then create one.
-	// If the secret exists but is operator managed, then check that it has the
-	// right DNS names and update it if necessary.
-	if tlsSecret == nil || certOperatorManaged {
-		// Create the cert if doesn't exist. If the cert exists, check that the cert
-		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
-		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, "localhost")
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-		tlsSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
-		)
+	if installation.CertificateManagement == nil {
+		// If the secret does not exist, then create one.
+		// If the secret exists but is operator managed, then check that it has the
+		// right DNS names and update it if necessary.
+		if tlsSecret == nil || certOperatorManaged {
+			// Create the cert if doesn't exist. If the cert exists, check that the cert
+			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
+			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
+			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, "localhost")
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			tlsSecret, err = utils.EnsureCertificateSecret(
+				render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
+			)
 
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
-			return reconcile.Result{}, err
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			}
 		}
+	} else if !certOperatorManaged {
+		r.status.SetDegraded(fmt.Sprintf("self provided secret %s/%s is not supported when certificate management is not supported", render.ManagerNamespace, render.ManagerTLSSecretName), "")
+		return reconcile.Result{}, fmt.Errorf("self provided secret %s/%s is not supported when certificate management is not supported", render.ManagerNamespace, render.ManagerTLSSecretName)
+	} else {
+		tlsSecret = nil
 	}
 
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
@@ -327,8 +334,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
-			render.ComplianceServerCertName,
-			render.ComplianceServerKeyName,
+			"", // We don't need the key.
+			corev1.TLSCertKey,
 		)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
@@ -453,7 +460,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}

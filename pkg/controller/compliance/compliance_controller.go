@@ -118,7 +118,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexTLSSecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -296,8 +296,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
+			render.ManagerInternalSecretCertName,
 		)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
@@ -306,32 +306,35 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
-		rmeta.OperatorNamespace(),
-		render.ComplianceServerCertSecret,
-		render.ComplianceServerCertName,
-		render.ComplianceServerKeyName,
-	)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
-		return reconcile.Result{}, err
+	var complianceServerCertSecret *corev1.Secret
+	if network.CertificateManagement == nil {
+		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
+			render.ComplianceServerCertSecret,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+		)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		}
+
+		// Create the cert if doesn't exist. If the cert exists, check that the cert
+		// has the expected DNS names. If the cert doesn't and the cert is managed by the
+		// operator, the cert is recreated and returned. If the invalid cert is supplied by
+		// the user, set the component degraded.
+
+		complianceServerCertSecret, err = utils.EnsureCertificateSecret(
+			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
+		)
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, rmeta.OperatorNamespace())
 	}
-
-	// Create the cert if doesn't exist. If the cert exists, check that the cert
-	// has the expected DNS names. If the cert doesn't and the cert is managed by the
-	// operator, the cert is recreated and returned. If the invalid cert is supplied by
-	// the user, set the component degraded.
-	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
-	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
-		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, svcDNSNames...,
-	)
-
-	if err != nil {
-		r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
-		return reconcile.Result{}, err
-	}
-
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -349,7 +352,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var dexCfg render.DexKeyValidatorConfig
 	if authentication != nil {
 		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}

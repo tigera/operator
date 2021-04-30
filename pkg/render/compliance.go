@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/dns"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -52,9 +53,8 @@ const (
 	ElasticsearchComplianceServerUserSecret      = "tigera-ee-compliance-server-elasticsearch-access"
 	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
 
-	ComplianceServerCertSecret = "tigera-compliance-server-tls"
-	ComplianceServerCertName   = "tls.crt"
-	ComplianceServerKeyName    = "tls.key"
+	ComplianceServerCertSecret    = "tigera-compliance-server-tls"
+	complianceServerTLSVolumeName = "tls"
 
 	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
 )
@@ -109,6 +109,7 @@ type complianceComponent struct {
 	serverImage                 string
 	controllerImage             string
 	reporterImage               string
+	csrInitImage                string
 	hasNoLicense                bool
 }
 
@@ -141,6 +142,13 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -209,11 +217,19 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
 		)
+
+		if c.installation.CertificateManagement != nil {
+			complianceObjs = append(complianceObjs, csrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+		}
+
 	} else {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerManagedClusterRole(),
 		)
 		objsToDelete = []client.Object{c.complianceServerDeployment()}
+		if c.installation.CertificateManagement != nil {
+			objsToDelete = append(objsToDelete, csrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+		}
 	}
 
 	if c.openshift {
@@ -677,6 +693,19 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	if c.dexCfg != nil {
 		envVars = append(envVars, c.dexCfg.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
+	var initContainers []corev1.Container
+	if c.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation.CertificateManagement,
+			c.csrInitImage,
+			complianceServerTLSVolumeName,
+			ComplianceServiceName,
+			APIServerSecretKeyName,
+			APIServerSecretCertName,
+			dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, c.clusterDomain),
+			ComplianceNamespace))
+	}
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
@@ -691,6 +720,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
@@ -720,10 +750,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					VolumeMounts: c.complianceVolumeMounts(),
+					VolumeMounts: c.complianceServerVolumeMounts(),
 				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.clusterDomain, c.SupportedOSType()),
 			},
-			Volumes: c.complianceVolumes(),
+			Volumes: c.complianceServerVolumes(),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -753,9 +783,9 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 	return psp
 }
 
-func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
+func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{{
-		Name:      "cert",
+		Name:      complianceServerTLSVolumeName,
 		MountPath: "/code/apiserver.local.config/certificates",
 		ReadOnly:  true,
 	}}
@@ -775,26 +805,26 @@ func (c *complianceComponent) complianceVolumeMounts() []corev1.VolumeMount {
 	return mounts
 }
 
-func (c *complianceComponent) complianceVolumes() []corev1.Volume {
+func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 	defaultMode := int32(420)
-	var volumes = []corev1.Volume{{
-		Name: "cert",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				DefaultMode: &defaultMode,
-				SecretName:  ComplianceServerCertSecret,
-				Items: []corev1.KeyToPath{
-					{
-						Key:  "tls.crt",
-						Path: "apiserver.crt",
-					},
-					{
-						Key:  "tls.key",
-						Path: "apiserver.key",
-					},
-				},
+
+	serverVolumeSource := certificateVolumeSource(c.installation.CertificateManagement, ComplianceServerCertSecret)
+	if c.installation.CertificateManagement == nil {
+		serverVolumeSource.Secret.Items = []corev1.KeyToPath{
+			{
+				Key:  corev1.TLSCertKey,
+				Path: APIServerSecretCertName,
 			},
-		}}}
+			{
+				Key:  corev1.TLSPrivateKeyKey,
+				Path: APIServerSecretKeyName,
+			},
+		}
+	}
+	var volumes = []corev1.Volume{{
+		Name:         complianceServerTLSVolumeName,
+		VolumeSource: serverVolumeSource,
+	}}
 
 	if c.managerInternalTLSSecret != nil {
 		volumes = append(volumes,

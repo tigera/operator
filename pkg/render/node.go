@@ -569,7 +569,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	} else {
 		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cr,
+			c.cr.CertificateManagement,
 			c.certSignReqImage,
 			"felix-certs",
 			FelixCommonName,

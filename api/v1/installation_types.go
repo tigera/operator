@@ -129,17 +129,8 @@ type InstallationSpec struct {
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional
-	NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
-}
-
-// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option,
-// which ensures a pod will still be scheduled even when all the nodes it matches are unschedulable.
-type PreferredNodeAffinity struct {
-	// The scheduler will prefer to schedule pods to nodes that satisfy
-	// the affinity expressions specified by this field, but it may choose
-	// a node that violates one or more of the expressions.
-	// +optional
-	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
+	//NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
+	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty"`
 }
 
 // ComponentName represents a single component.

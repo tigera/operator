@@ -978,7 +978,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -1034,8 +1034,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
 
-		apiService, ok := rtest.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1beta1", "APIService").(*v1beta1.APIService)
-		Expect(ok).To(BeTrue(), "Expected v1beta1.APIService")
+		apiService, ok := rtest.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1", "APIService").(*apiregv1.APIService)
+		Expect(ok).To(BeTrue(), "Expected v1.APIService")
 		verifyAPIService(apiService, clusterDomain)
 
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "", "v1", "Deployment").(*v1.Deployment)
@@ -1158,7 +1158,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1beta1", kind: "APIService"},
+			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},

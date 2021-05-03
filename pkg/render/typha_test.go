@@ -224,7 +224,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}}
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.PreferredNodeAffinity{
+			NodeAffinity: &v1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}
@@ -273,7 +273,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}}
 		installation.KubernetesProvider = operator.ProviderAKS
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.PreferredNodeAffinity{
+			NodeAffinity: &v1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}

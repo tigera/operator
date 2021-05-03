@@ -647,16 +647,16 @@ func (c *typhaComponent) affinity() (aff *v1.Affinity) {
 			},
 		}
 	}
-
 	// add the user-specified typha preferred affinity if specified.
 	if c.installation.TyphaAffinity != nil && c.installation.TyphaAffinity.NodeAffinity != nil {
 		// check if above code initialized affintiy or not.
 		// this ensures we still return nil if neither condition is hit.
 		if aff == nil {
 			aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{}}
+			aff.NodeAffinity = c.installation.TyphaAffinity.NodeAffinity
+		} else {
+			aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
 		}
-		aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
 	}
-
 	return aff
 }

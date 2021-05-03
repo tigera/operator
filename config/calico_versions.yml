@@ -1,12 +1,12 @@
-title: master
+title: v3.19.0
 components:
   typha:
-    version: master
+    version: v3.19.0
   calico/node:
-    version: master
+    version: v3.19.0
   calico/cni:
-    version: master
+    version: v3.19.0
   calico/kube-controllers:
-    version: master
+    version: v3.19.0
   flexvol:
-    version: master
+    version: v3.19.0

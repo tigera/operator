@@ -129,7 +129,6 @@ type InstallationSpec struct {
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional
-	//NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
 	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty"`
 }
 

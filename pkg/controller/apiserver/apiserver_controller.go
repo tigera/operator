@@ -19,10 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -31,15 +30,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var log = logf.Log.WithName("controller_apiserver")
@@ -47,22 +47,19 @@ var log = logf.Log.WithName("controller_apiserver")
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller.
-		return nil
-	}
 	return add(mgr, newReconciler(mgr, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		amazonCRDExists: opts.AmazonCRDExists,
-		status:          status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		provider:            opts.DetectedProvider,
+		amazonCRDExists:     opts.AmazonCRDExists,
+		enterpriseCRDsExist: opts.EnterpriseCRDExists,
+		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		clusterDomain:       opts.ClusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -96,12 +93,6 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
-	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
-		if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-		}
-	}
-
 	if r.amazonCRDExists {
 		err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -110,16 +101,24 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		}
 	}
 
-	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
-	}
+	if r.enterpriseCRDsExist {
+		// Watch for changes to primary resource ManagementCluster
+		err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+		}
 
-	// Watch for changes to primary resource ManagementClusterConnection
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+		// Watch for changes to primary resource ManagementClusterConnection
+		err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+		}
+
+		for _, namespace := range []string{rmeta.OperatorNamespace(), rmeta.APIServerNamespace()} {
+			if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
+				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+			}
+		}
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -137,12 +136,13 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	amazonCRDExists bool
-	status          status.StatusManager
-	clusterDomain   string
+	client              client.Client
+	scheme              *runtime.Scheme
+	provider            operatorv1.Provider
+	amazonCRDExists     bool
+	enterpriseCRDsExist bool
+	status              status.StatusManager
+	clusterDomain       string
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -154,24 +154,22 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIServer")
 
-	// Fetch the APIServer instance
-	instance := &operatorv1.APIServer{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("APIServer CR not found", "err", err)
+			reqLogger.Info("APIServer config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
-		r.status.SetDegraded("Error querying APIServer", err.Error())
+		r.status.SetDegraded(msg, err.Error())
+		reqLogger.Error(err, fmt.Sprintf("An error occurred when querying the APIServer resource: %s", msg))
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.
-	variant, network, err := installation.GetInstallation(context.Background(), r.client)
+	statusVariant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -180,10 +178,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
-		return reconcile.Result{}, nil
-	}
+	variant := network.Variant
+	freshInstall := statusVariant == ""
+	ns := rmeta.APIServerNamespace()
 
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
@@ -200,48 +197,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded("Error validating TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
-		r.status.RemoveCertificateSigningRequests(render.APIServerNamespace)
+		r.status.RemoveCertificateSigningRequests(ns)
 	} else {
 		// Monitor pending CSRs for the TigeraStatus
-		r.status.AddCertificateSigningRequests(render.APIServerNamespace, map[string]string{
-			"k8s-app": render.APIServerNamespace,
-		})
-	}
-
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading ManagementCluster")
-		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading ManagementClusterConnection")
-		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	if managementClusterConnection != nil && managementCluster != nil {
-		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-		log.Error(err, "")
-		r.status.SetDegraded(err.Error(), "")
-		return reconcile.Result{}, err
-	}
-
-	var tunnelCASecret *v1.Secret
-	if managementCluster != nil {
-		tunnelCASecret, err = utils.ValidateCertPair(r.client,
-			rmeta.OperatorNamespace(),
-			render.VoltronTunnelSecretName,
-			render.VoltronTunnelSecretKeyName,
-			render.VoltronTunnelSecretCertName,
-		)
-		if err != nil {
-			log.Error(err, "Invalid TLS Cert")
-			r.status.SetDegraded("Error validating TLS certificate", err.Error())
-			return reconcile.Result{}, err
-		}
+		r.status.AddCertificateSigningRequests(ns, map[string]string{"k8s-app": ns})
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
@@ -251,15 +210,56 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// Query enterprise-only data.
+	var tunnelCASecret *v1.Secret
 	var amazon *operatorv1.AmazonCloudIntegration
-	if r.amazonCRDExists {
-		amazon, err = utils.GetAmazonCloudIntegration(ctx, r.client)
-		if errors.IsNotFound(err) {
-			amazon = nil
-		} else if err != nil {
-			log.Error(err, "Error reading AmazonCloudIntegration")
-			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+	var managementCluster *operatorv1.ManagementCluster
+	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	if variant == operatorv1.TigeraSecureEnterprise {
+		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
+		if err != nil {
+			log.Error(err, "Error reading ManagementCluster")
+			r.status.SetDegraded("Error reading ManagementCluster", err.Error())
 			return reconcile.Result{}, err
+		}
+
+		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
+		if err != nil {
+			log.Error(err, "Error reading ManagementClusterConnection")
+			r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if managementClusterConnection != nil && managementCluster != nil {
+			err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+			log.Error(err, "")
+			r.status.SetDegraded(err.Error(), "")
+			return reconcile.Result{}, err
+		}
+
+		if managementCluster != nil {
+			tunnelCASecret, err = utils.ValidateCertPair(r.client,
+				rmeta.OperatorNamespace(),
+				render.VoltronTunnelSecretName,
+				render.VoltronTunnelSecretKeyName,
+				render.VoltronTunnelSecretCertName,
+			)
+			if err != nil {
+				log.Error(err, "Invalid TLS Cert")
+				r.status.SetDegraded("Error validating TLS certificate", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
+		if r.amazonCRDExists {
+			amazon, err = utils.GetAmazonCloudIntegration(ctx, r.client)
+			if errors.IsNotFound(err) {
+				amazon = nil
+			} else if err != nil {
+				log.Error(err, "Error reading AmazonCloudIntegration")
+				r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
@@ -275,7 +275,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component, err := render.APIServer(k8sapi.Endpoint, network, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+	component, err := render.APIServer(k8sapi.Endpoint, network, freshInstall, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
@@ -301,6 +301,34 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Check to see if we need to apply any resources before launching the rest of the
+	// components.
+	if freshInstall {
+		// Provision any config resources.
+		var config v1.ConfigMap
+		err := r.client.Get(ctx, client.ObjectKey{Namespace: "tigera-operator", Name: "config"}, &config)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// Config exists. Send it to the API server.
+		for _, v := range config.Data {
+			u := unstructured.Unstructured{}
+			err = yaml.Unmarshal([]byte(v), &u.Object)
+			if err != nil {
+				r.status.SetDegraded("Error unmarshalling configmap", err.Error())
+				return reconcile.Result{}, err
+			}
+			err = r.client.Create(ctx, &u)
+			if err != nil {
+				if !errors.IsAlreadyExists(err) {
+					r.status.SetDegraded("Error creating / updating resource", err.Error())
+					return reconcile.Result{}, err
+				}
+			}
+		}
 	}
 
 	// Everything is available - update the CRD status.

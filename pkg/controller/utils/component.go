@@ -170,7 +170,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		err := c.client.Delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)
-			logCtx.Error(err, "Error deleting object %v", obj)
+			logCtx.Error(err, fmt.Sprintf("Error deleting object %v", obj))
 			return err
 		}
 

@@ -864,6 +864,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	enableESOIDCWorkaround := false
+	if (authentication.Spec.OIDC != nil && authentication.Spec.OIDC.OIDCType == operator.OIDCTypeTigera) ||
+		esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		enableESOIDCWorkaround = true
+	}
+
 	var managerInternalTLSSecret *corev1.Secret
 	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		common.CalicoNamespace,
@@ -1040,7 +1046,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		needNsMigration,
 		nodeAppArmorProfile,
 		r.clusterDomain,
-		esLicenseType,
+		enableESOIDCWorkaround,
 		esAdminSecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,

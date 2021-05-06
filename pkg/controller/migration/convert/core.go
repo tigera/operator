@@ -8,7 +8,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 )
 
 func handleCore(c *components, install *operatorv1.Installation) error {
@@ -336,7 +335,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 					}
 				}
 				install.Spec.TyphaAffinity = &operatorv1.TyphaAffinity{
-					NodeAffinity: &v1.NodeAffinity{
+					NodeAffinity: &operatorv1.TigeraNodeAffinty{
 						PreferredDuringSchedulingIgnoredDuringExecution: aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 					},
 				}

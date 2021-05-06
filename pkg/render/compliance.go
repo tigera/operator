@@ -20,6 +20,7 @@ import (
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -31,6 +32,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -69,7 +71,7 @@ func Compliance(
 	openshift bool,
 	managementCluster *operatorv1.ManagementCluster,
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
-	dexCfg DexKeyValidatorConfig,
+	authKeyValidatorConfig authentication.KeyValidatorConfig,
 	clusterDomain string,
 	hasNoLicense bool,
 ) (Component, error) {
@@ -87,7 +89,7 @@ func Compliance(
 		clusterDomain:               clusterDomain,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
-		dexCfg:                      dexCfg,
+		authKeyValidatorConfig:      authKeyValidatorConfig,
 		hasNoLicense:                hasNoLicense,
 	}, nil
 }
@@ -103,7 +105,7 @@ type complianceComponent struct {
 	clusterDomain               string
 	managementCluster           *operatorv1.ManagementCluster
 	managementClusterConnection *operatorv1.ManagementClusterConnection
-	dexCfg                      DexKeyValidatorConfig
+	authKeyValidatorConfig      authentication.KeyValidatorConfig
 	benchmarkerImage            string
 	snapshotterImage            string
 	serverImage                 string
@@ -204,8 +206,9 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
-	if c.dexCfg != nil {
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.dexCfg.RequiredSecrets(ComplianceNamespace)...)...)
+	if c.authKeyValidatorConfig != nil {
+		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.authKeyValidatorConfig.RequiredSecrets(ComplianceNamespace)...)...)
+		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.authKeyValidatorConfig.RequiredConfigMaps(ComplianceNamespace)...)...)
 	}
 
 	var objsToDelete []client.Object
@@ -690,8 +693,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
-	if c.dexCfg != nil {
-		envVars = append(envVars, c.dexCfg.RequiredEnv("TIGERA_COMPLIANCE_")...)
+	if c.authKeyValidatorConfig != nil {
+		envVars = append(envVars, c.authKeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
 	var initContainers []corev1.Container
 	if c.installation.CertificateManagement != nil {
@@ -723,9 +726,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
-					Name:  ComplianceServerName,
-					Image: c.serverImage,
-					Env:   envVars,
+					Name:            ComplianceServerName,
+					Image:           "gcr.io/tigera-dev/experimental/brianmcmahon/tigera/compliance-server:latest",
+					ImagePullPolicy: "Always",
+					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -798,8 +802,8 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 		})
 	}
 
-	if c.dexCfg != nil {
-		mounts = append(mounts, c.dexCfg.RequiredVolumeMounts()...)
+	if c.authKeyValidatorConfig != nil {
+		mounts = append(mounts, c.authKeyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return mounts
@@ -845,8 +849,8 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 			})
 	}
 
-	if c.dexCfg != nil {
-		volumes = append(volumes, c.dexCfg.RequiredVolumes()...)
+	if c.authKeyValidatorConfig != nil {
+		volumes = append(volumes, c.authKeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return volumes

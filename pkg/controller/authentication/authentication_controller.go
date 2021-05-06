@@ -135,6 +135,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			log.Info("BRIANMARK not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
@@ -144,7 +145,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	reqLogger.V(2).Info("Loaded config", "config", authentication)
 	preDefaultPatchFrom := client.MergeFrom(authentication.DeepCopy())
 
-	// Set defaults for backwards compatibility.
 	updateAuthenticationWithDefaults(authentication)
 
 	// Validate the configuration
@@ -219,7 +219,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := getIdpSecret(ctx, r.client, authentication)
+	idpSecret, err := utils.GetIdpSecret(ctx, r.client, authentication)
 	if err != nil {
 		log.Error(err, "Invalid or missing identity provider secret")
 		r.status.SetDegraded("Invalid or missing identity provider secret", err.Error())
@@ -245,8 +245,14 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	var dexCfg render.DexConfig
+	deleteDex := false
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.OIDCType == oprv1.OIDCTypeTigera {
+		deleteDex = true
+	}
+
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg = render.NewDexConfig(install.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
@@ -259,6 +265,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		install,
 		dexCfg,
 		r.clusterDomain,
+		deleteDex,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -274,12 +281,12 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Clear the degraded bit if we've reached this far.
-	r.status.ClearDegraded()
-
-	if !r.status.IsAvailable() {
-		// Schedule a kick to check again in the near future.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
+	//r.status.ClearDegraded()
+	//
+	//if !r.status.IsAvailable() {
+	//	// Schedule a kick to check again in the near future.
+	//	return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	//}
 
 	// Everything is available - update the CRD status.
 	authentication.Status.State = oprv1.TigeraStatusReady
@@ -287,40 +294,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func getIdpSecret(ctx context.Context, client client.Client, authentication *oprv1.Authentication) (*corev1.Secret, error) {
-	var secretName string
-	var requiredFields []string
-	if authentication.Spec.OIDC != nil {
-		secretName = render.OIDCSecretName
-		requiredFields = append(requiredFields, render.ClientIDSecretField, render.ClientSecretSecretField)
-	} else if authentication.Spec.Openshift != nil {
-		secretName = render.OpenshiftSecretName
-		requiredFields = append(requiredFields, render.ClientIDSecretField, render.ClientSecretSecretField, render.RootCASecretField)
-	} else if authentication.Spec.LDAP != nil {
-		secretName = render.LDAPSecretName
-		requiredFields = append(requiredFields, render.BindDNSecretField, render.BindPWSecretField, render.RootCASecretField)
-	}
-
-	secret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rmeta.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("missing secret %s/%s: %w", rmeta.OperatorNamespace(), secretName, err)
-	}
-
-	for _, field := range requiredFields {
-		data := secret.Data[field]
-		if len(data) == 0 {
-			return nil, fmt.Errorf("%s is a required field for secret %s/%s", field, secret.Namespace, secret.Name)
-		}
-
-		if field == render.BindDNSecretField {
-			if _, err := ldap.ParseDN(string(data)); err != nil {
-				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", rmeta.OperatorNamespace(), secretName, field)
-			}
-		}
-	}
-	return secret, nil
 }
 
 // updateAuthenticationWithDefaults sets values for backwards compatibility.

@@ -261,6 +261,44 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(na).To(Equal(rst))
 	})
 
+	It("should ignore Required set by user if provider AKS", func() {
+		rst := &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{{
+				MatchExpressions: []v1.NodeSelectorRequirement{{
+					Key:      "test",
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"myTestNode"},
+				}},
+			}},
+		}
+		installation.KubernetesProvider = operator.ProviderAKS
+		installation.TyphaAffinity = &operator.TyphaAffinity{
+			NodeAffinity: &operator.TigeraNodeAffinty{
+				RequiredDuringSchedulingIgnoredDuringExecution: rst,
+			},
+		}
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		resources, _ := component.Objects()
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		Expect(na).To(Equal(&v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{{
+			MatchExpressions: []v1.NodeSelectorRequirement{
+				{
+					Key:      "type",
+					Operator: corev1.NodeSelectorOpNotIn,
+					Values:   []string{"virtual-node"},
+				},
+				{
+					Key:      "kubernetes.azure.com/cluster",
+					Operator: "Exists",
+				},
+			},
+		}}}))
+		Expect(na).ToNot(Equal(rst))
+	})
+
 	It("should include virtual kubelet affinity for aks", func() {
 		installation.KubernetesProvider = operator.ProviderAKS
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)

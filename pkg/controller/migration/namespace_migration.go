@@ -90,7 +90,7 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context
 	}
 
 	nds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
-	if err == nil && nds.DeletionTimestamp != nil {
+	if err == nil && nds != nil && nds.DeletionTimestamp == nil {
 		return true, nil
 	}
 	if !apierrs.IsNotFound(err) {
@@ -98,7 +98,7 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context
 	}
 
 	kcdeploy, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, kubeControllerDeploymentName, metav1.GetOptions{})
-	if err == nil && kcdeploy.DeletionTimestamp != nil {
+	if err == nil && kcdeploy != nil && kcdeploy.DeletionTimestamp == nil {
 		return true, nil
 	}
 	if !apierrs.IsNotFound(err) {
@@ -106,7 +106,7 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context
 	}
 
 	tdeploy, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
-	if err == nil && tdeploy.DeletionTimestamp != nil {
+	if err == nil && tdeploy != nil && tdeploy.DeletionTimestamp == nil {
 		return true, nil
 	}
 	if !apierrs.IsNotFound(err) {

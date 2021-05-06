@@ -129,17 +129,30 @@ type InstallationSpec struct {
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional
-	NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
+	NodeAffinity *TigeraNodeAffinty `json:"nodeAffinity,omitempty"`
 }
 
-// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option,
-// which ensures a pod will still be scheduled even when all the nodes it matches are unschedulable.
-type PreferredNodeAffinity struct {
+// TigeraNodeAffinty is similar to *v1.NodeAffinity, but allows us to limit available shcedulers.
+type TigeraNodeAffinty struct {
 	// The scheduler will prefer to schedule pods to nodes that satisfy
 	// the affinity expressions specified by this field, but it may choose
 	// a node that violates one or more of the expressions.
 	// +optional
 	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
+
+	// WARNING: Please note that If the affinity requirements specified by this field are not met at
+	// scheduling time, the pod will NOT be scheduled onto the node.
+	// There is no fallback to another affinity rules with this setting.
+	// This may cause networking disruption or even catastrophic failure!
+	// PreferredDuringSchedulingIgnoredDuringExecution should be a default choice if
+	// there are no well understood specific conditions exist in your environment.
+	// NOTE: RequiredDuringSchedulingIgnoredDuringExecution is also a default for AKS nodes,
+	// this way they are not scheduled on virtual nodes.
+	// If the affinity requirements specified by this field cease to be met
+	// at some point during pod execution (e.g. due to an update), the system
+	// may or may not try to eventually evict the pod from its node.
+	// +optional
+	RequiredDuringSchedulingIgnoredDuringExecution *v1.NodeSelector `json:"requiredDuringSchedulingIgnoredDuringExecution,omitempty" protobuf:"bytes,1,opt,name=requiredDuringSchedulingIgnoredDuringExecution"`
 }
 
 // ComponentName represents a single component.

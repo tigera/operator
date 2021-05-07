@@ -19,10 +19,11 @@ import (
 	"strconv"
 	"strings"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 
 	oprv1 "github.com/tigera/operator/api/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -81,23 +82,8 @@ const (
 type DexConfig interface {
 	Connector() map[string]interface{}
 	CreateCertSecret() *corev1.Secret
-	DexKeyValidatorConfig
-}
-
-// DexKeyValidatorConfig is a config for (backend) servers that validate JWTs issued by Dex.
-type DexKeyValidatorConfig interface {
-	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
-	ManagerURI() string
-	// RequiredEnv returns env that is used to configure pods with dex options.
-	RequiredEnv(prefix string) []corev1.EnvVar
-	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
-	RequiredAnnotations() map[string]string
-	// RequiredSecrets returns secrets that you need to render for dex.
-	RequiredSecrets(namespace string) []*corev1.Secret
-	// RequiredVolumeMounts returns volume mounts that are related to dex.
-	RequiredVolumeMounts() []corev1.VolumeMount
-	// RequiredVolumes returns volumes that are related to dex.
-	RequiredVolumes() []corev1.Volume
+	RedirectURIs() []string
+	authentication.KeyValidatorConfig
 }
 
 // DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
@@ -110,11 +96,12 @@ type DexRelyingPartyConfig interface {
 	UserInfoURI() string
 	// ClientSecret returns the secret for Dex' auth endpoint
 	ClientSecret() []byte
-	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
+	// BaseURL returns the address where the Manager UI can be found. Ex: https://example.org
 	RequestedScopes() []string
 	// UsernameClaim returns the part of the JWT that represents a unique username.
 	UsernameClaim() string
-	DexKeyValidatorConfig
+	BaseURL() string
+	authentication.KeyValidatorConfig
 }
 
 func NewDexRelyingPartyConfig(
@@ -127,9 +114,10 @@ func NewDexRelyingPartyConfig(
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
+	idpSecret *corev1.Secret,
 	certSecret *corev1.Secret,
-	clusterDomain string) DexKeyValidatorConfig {
-	return &dexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, nil, certSecret, clusterDomain)}
+	clusterDomain string) authentication.KeyValidatorConfig {
+	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, idpSecret, certSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.
@@ -143,7 +131,7 @@ func NewDexConfig(
 	return &dexConfig{baseCfg(certificateManagement, authentication, tlsSecret, dexSecret, idpSecret, nil, clusterDomain)}
 }
 
-type dexKeyValidatorConfig struct {
+type DexKeyValidatorConfig struct {
 	*dexBaseCfg
 }
 
@@ -192,7 +180,7 @@ func baseCfg(
 		dexSecret:             dexSecret,
 		certSecret:            certSecret,
 		connectorType:         connType,
-		managerURI:            baseUrl,
+		baseURL:               baseUrl,
 		clusterDomain:         clusterDomain,
 	}
 }
@@ -204,13 +192,41 @@ type dexBaseCfg struct {
 	idpSecret             *corev1.Secret
 	dexSecret             *corev1.Secret
 	certSecret            *corev1.Secret
-	managerURI            string
+	baseURL               string
 	connectorType         string
 	clusterDomain         string
 }
 
-func (d *dexBaseCfg) ManagerURI() string {
-	return d.managerURI
+func (d *dexBaseCfg) BaseURL() string {
+	return d.baseURL
+}
+
+func (d *dexBaseCfg) Issuer() string {
+	return fmt.Sprintf("%s/dex", d.baseURL)
+}
+
+func (d *dexBaseCfg) RedirectURIs() []string {
+	redirectURIs := []string{
+		"https://localhost:9443/login/oidc/callback",
+		"https://127.0.0.1:9443/login/oidc/callback",
+		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
+		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
+	}
+
+	if d.baseURL != "" && !strings.Contains(d.baseURL, "localhost") && !strings.Contains(d.baseURL, "127.0.0.1") {
+		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", d.baseURL))
+		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", d.baseURL))
+	}
+
+	return redirectURIs
+}
+
+func (d *dexBaseCfg) RequiredConfigMaps(namespace string) []*corev1.ConfigMap {
+	return nil
+}
+
+func (d *dexBaseCfg) ClientID() string {
+	return DexClientId
 }
 
 func (d *dexBaseCfg) UsernameClaim() string {
@@ -271,7 +287,7 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.BaseURL(), d.RequestedScopes()}),
 		dexCertSecretAnnotation:  rmeta.AnnotationHash(d.certSecret.Data),
 	}
 	if d.dexSecret != nil {
@@ -281,26 +297,27 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 }
 
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
-func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
+func (d *DexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.BaseURL()}),
 		dexCertSecretAnnotation:  rmeta.AnnotationHash(d.certSecret.Data),
 	}
 	return annotations
 }
 
 // Append variables that are necessary for using the dex authenticator.
-func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
+func (d *DexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
 		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556/", d.clusterDomain)},
-		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
-		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
-		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: DefaultGroupsClaim},
-		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_ENABLED", prefix), Value: strconv.FormatBool(true)},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.BaseURL())},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_JWKSURL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_CLIENT_ID", prefix), Value: DexClientId},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_GROUPS_CLAIM", prefix), Value: DefaultGroupsClaim},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
 }
 
@@ -376,7 +393,7 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 }
 
 // Add volume for Dex TLS secret.
-func (d *dexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
+func (d *DexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
 			Name: DexCertSecretName,
@@ -410,7 +427,7 @@ func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
 }
 
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
-func (d *dexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
+func (d *DexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{{Name: DexCertSecretName, MountPath: "/etc/ssl/certs"}}
 }
 
@@ -451,11 +468,11 @@ func (d *dexRelyingPartyConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 }
 
 func (d *dexRelyingPartyConfig) DexIssuer() string {
-	return fmt.Sprintf("%s/dex", d.ManagerURI())
+	return fmt.Sprintf("%s/dex", d.BaseURL())
 }
 
 func (d *dexRelyingPartyConfig) AuthURI() string {
-	return fmt.Sprintf("%s/dex/auth", d.ManagerURI())
+	return fmt.Sprintf("%s/dex/auth", d.BaseURL())
 }
 
 func (d *dexRelyingPartyConfig) JWKSURI() string {
@@ -494,7 +511,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"issuer":       d.authentication.Spec.OIDC.IssuerURL,
 			"clientID":     fmt.Sprintf("$%s", clientIDEnv),
 			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
-			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
 			"userNameKey":  d.UsernameClaim(),
 			"userIDKey":    d.UsernameClaim(),
@@ -536,7 +553,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"issuer":       googleIssuer,
 			"clientID":     fmt.Sprintf("$%s", clientIDEnv),
 			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
-			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
 		}
 		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
@@ -549,7 +566,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"issuer":          d.authentication.Spec.Openshift.IssuerURL,
 			"clientID":        fmt.Sprintf("$%s", clientIDEnv),
 			"clientSecret":    fmt.Sprintf("$%s", clientSecretEnv),
-			"redirectURI":     fmt.Sprintf("%s/dex/callback", d.ManagerURI()),
+			"redirectURI":     fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			RootCASecretField: rootCASecretLocation,
 		}
 	case connectorTypeLDAP:

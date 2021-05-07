@@ -30,6 +30,7 @@ require (
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/r3labs/diff/v2 v2.8.0
 	go.uber.org/zap v1.15.0
+	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/klog/v2 v2.3.0 // indirect

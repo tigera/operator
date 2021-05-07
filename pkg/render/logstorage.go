@@ -984,10 +984,10 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 			"claims.groups":               DefaultGroupsClaim,
 			"rp.response_type":            "code",
 			"rp.requested_scopes":         []string{"openid", "email", "profile", "groups", "offline_access"},
-			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.ManagerURI()),
-			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.ManagerURI()),
-			"op.issuer":                   fmt.Sprintf("%s/dex", es.dexCfg.ManagerURI()),
-			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.ManagerURI()),
+			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.dexCfg.BaseURL()),
+			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.dexCfg.BaseURL()),
+			"op.issuer":                   es.dexCfg.Issuer(),
+			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.dexCfg.BaseURL()),
 			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
 		}
 	}

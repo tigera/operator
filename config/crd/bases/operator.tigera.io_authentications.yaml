@@ -175,6 +175,12 @@ spec:
                     items:
                       type: string
                     type: array
+                  type:
+                    description: 'Default: "Dex"'
+                    enum:
+                    - Dex
+                    - Tigera
+                    type: string
                   usernameClaim:
                     description: UsernameClaim specifies which claim to use from the
                       OIDC provider as the username.

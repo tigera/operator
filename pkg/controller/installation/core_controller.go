@@ -864,6 +864,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// If the license Elasticsearch license type is basic OR the OIDC type is Tigera then enable the Elasticsearch OIDC
+	// workaround in kube controllers.
+	enableESOIDCWorkaround := false
+	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operator.OIDCTypeTigera) ||
+		esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		enableESOIDCWorkaround = true
+	}
+
 	var managerInternalTLSSecret *corev1.Secret
 	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		common.CalicoNamespace,
@@ -1040,7 +1048,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		needNsMigration,
 		nodeAppArmorProfile,
 		r.clusterDomain,
-		esLicenseType,
+		enableESOIDCWorkaround,
 		esAdminSecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,

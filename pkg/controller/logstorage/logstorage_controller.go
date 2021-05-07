@@ -502,20 +502,18 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var dexCfg render.DexRelyingPartyConfig
-	if authentication != nil {
+	if authentication != nil && (authentication.Spec.OIDC == nil || authentication.Spec.OIDC.Type != operatorv1.OIDCTypeTigera) {
 		var dexCertSecret *corev1.Secret
 		dexCertSecret = &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexCertSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
 			return reconcile.Result{}, err
 		}
-		var dexSecret *corev1.Secret
-		if authentication != nil {
-			dexSecret = &corev1.Secret{}
-			if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
-				r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-				return reconcile.Result{}, err
-			}
+
+		dexSecret := &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
+			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
+			return reconcile.Result{}, err
 		}
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}

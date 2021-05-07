@@ -57,6 +57,7 @@ func Dex(
 	installation *oprv1.InstallationSpec,
 	dexConfig DexConfig,
 	clusterDomain string,
+	deleteDex bool,
 ) Component {
 
 	return &dexComponent{
@@ -66,6 +67,7 @@ func Dex(
 		installation:  installation,
 		connector:     dexConfig.Connector(),
 		clusterDomain: clusterDomain,
+		deleteDex:     deleteDex,
 	}
 }
 
@@ -78,6 +80,7 @@ type dexComponent struct {
 	image         string
 	csrInitImage  string
 	clusterDomain string
+	deleteDex     bool
 }
 
 func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
@@ -117,13 +120,24 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 	}
-	objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(rmeta.OperatorNamespace())...)...)
+
+	// TODO Some of the secrets created in the operator namespace are created by the customer (i.e. oidc credentials)
+	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
+	// TODO the RequiredSecrets in the dex condig to not pass back secrets of this type.
+	if !c.deleteDex {
+		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(rmeta.OperatorNamespace())...)...)
+	}
+
 	objs = append(objs, c.dexConfig.CreateCertSecret())
 	objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.pullSecrets...)...)...)
 
 	if c.installation.CertificateManagement != nil {
 		objs = append(objs, csrClusterRoleBinding(DexObjectName, DexNamespace))
+	}
+
+	if c.deleteDex {
+		return nil, objs
 	}
 
 	return objs, nil
@@ -196,6 +210,7 @@ func (c *dexComponent) deployment() client.Object {
 			dns.GetServiceDNSNames(DexObjectName, DexNamespace, c.clusterDomain),
 			DexNamespace))
 	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{

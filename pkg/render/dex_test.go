@@ -86,7 +86,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName)
+			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -119,7 +119,7 @@ var _ = Describe("dex rendering tests", func() {
 		})
 
 		DescribeTable("should render the cluster name properly in the validator and rp configs", func(clusterDomain string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, certSecret, clusterDomain)
+			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, certSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
 			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)
@@ -145,7 +145,7 @@ var _ = Describe("dex rendering tests", func() {
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
-			}, dexCfg, clusterName)
+			}, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
@@ -155,7 +155,7 @@ var _ = Describe("dex rendering tests", func() {
 			installation.CertificateManagement = &operatorv1.CertificateManagement{}
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName)
+			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {

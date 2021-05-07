@@ -299,31 +299,6 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 }
 
-// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
-// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
-// launch enterprise-dependent components.
-func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *operator.InstallationSpec, error) {
-	// Fetch the Installation instance. We only support a single instance named "default".
-	instance := &operator.Installation{}
-	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
-		return instance.Status.Variant, nil, err
-	}
-
-	spec := instance.Spec
-
-	// update Installation with 'overlay'
-	overlay := operator.Installation{}
-	if err := client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return instance.Status.Variant, nil, err
-		}
-	} else {
-		spec = overrideInstallationSpec(spec, overlay.Spec)
-	}
-
-	return instance.Status.Variant, &spec, nil
-}
-
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
 func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
@@ -684,7 +659,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				r.SetDegraded("Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			instance.Spec = overrideInstallationSpec(install.Spec, instance.Spec)
+			instance.Spec = utils.OverrideInstallationSpec(install.Spec, instance.Spec)
 		}
 	}
 
@@ -720,7 +695,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		reqLogger.V(5).Info("no 'overlay' installation found")
 	} else {
-		instance.Spec = overrideInstallationSpec(instance.Spec, overlay.Spec)
+		instance.Spec = utils.OverrideInstallationSpec(instance.Spec, overlay.Spec)
 		reqLogger.V(2).Info("loaded final computed config", "config", instance)
 
 		// Validate the configuration.
@@ -788,6 +763,29 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			log.Info("Rebooting to enable AWS controllers")
 			os.Exit(0)
 		}
+	}
+
+	freshInstall := reflect.DeepEqual(status, operator.InstallationStatus{})
+	if freshInstall {
+		// This is a fresh deployment. Check if an API server has been requested. If it has, we should
+		// wait for it to roll out successfully before proceeding, allowing for configuration to be
+		// specified prior to calico/node launching.
+		apiserver, msg, err := utils.GetAPIServer(ctx, r.client)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
+				r.status.SetDegraded(msg, err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+		if apiserver.Status.State != operator.TigeraStatusReady {
+			// API server is not yet ready. Wait for it.
+			r.status.SetDegraded("Waiting for API server to be ready", "")
+			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		// API server is ready. Artificially wait, giving time for API resources to be created.
+		log.Info("Fresh install - API server ready, proceeding")
 	}
 
 	// Query for pull secrets in operator namespace
@@ -891,11 +889,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-	// Elasticsearch.
-	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
-	if err != nil {
-		return reconcile.Result{}, err
+	var esAdminSecret *v1.Secret
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
+		// Elasticsearch.
+		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS

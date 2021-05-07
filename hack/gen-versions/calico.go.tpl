@@ -48,6 +48,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with .Components.apiserver}}
+	ComponentCalicoAPIServer = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

@@ -107,7 +107,24 @@ type AuthenticationOIDC struct {
 	// Default: "Consent"
 	// +optional
 	PromptTypes []PromptType `json:"promptTypes,omitempty"`
+
+	// Default: "Dex"
+	// +optional
+	Type OIDCType `json:"type,omitempty"`
 }
+
+// OIDCType defines how OIDC is configured for Tigera Enterprise. Dex should be the best option for most use-cases.
+// The Tigera option can help in specific use-cases, for instance, when you are unable to configure a client secret.
+// One of: Dex, Tigera
+// +kubebuilder:validation:Enum=Dex;Tigera
+type OIDCType string
+
+const (
+	// OIDCTypeDex uses Dex IdP, a popular open-source tool for connecting OIDC.
+	OIDCTypeDex OIDCType = "Dex"
+	// OIDCTypeTigera uses customer code to pass OIDC configuration directly into our server applications.
+	OIDCTypeTigera OIDCType = "Tigera"
+)
 
 // PromptType is a value that specifies whether the identity provider prompts the end user for re-authentication and
 // consent.

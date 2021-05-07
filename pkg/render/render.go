@@ -79,7 +79,7 @@ func Calico(
 	up bool,
 	nodeAppArmorProfile string,
 	clusterDomain string,
-	esLicenseType ElasticsearchLicenseType,
+	enableESOIDCWorkaround bool,
 	esAdminSecret *corev1.Secret,
 	kubeControllersMetricsPort int,
 	nodeReporterMetricsPort int,
@@ -159,7 +159,7 @@ func Calico(
 		upgrade:                     up,
 		authentication:              authentication,
 		nodeAppArmorProfile:         nodeAppArmorProfile,
-		esLicenseType:               esLicenseType,
+		enableESOIDCWorkaround:      enableESOIDCWorkaround,
 		clusterDomain:               clusterDomain,
 		esAdminSecret:               esAdminSecret,
 		kubeControllersMetricsPort:  kubeControllersMetricsPort,
@@ -246,7 +246,7 @@ type calicoRenderer struct {
 	authentication              *operator.Authentication
 	nodeAppArmorProfile         string
 	clusterDomain               string
-	esLicenseType               ElasticsearchLicenseType
+	enableESOIDCWorkaround      bool
 	esAdminSecret               *corev1.Secret
 	kubeControllersMetricsPort  int
 	nodeReporterMetricsPort     int
@@ -263,7 +263,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort, r.bgpLayoutHash))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
 		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
-		r.esLicenseType, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))
+		r.enableESOIDCWorkaround, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))
 	return components
 }
 

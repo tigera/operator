@@ -19,10 +19,9 @@ import (
 	"strconv"
 	"strings"
 
+	oprv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-
-	oprv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -88,6 +87,10 @@ type DexConfig interface {
 type DexKeyValidatorConfig interface {
 	// ManagerURI returns the address where the Manager UI can be found. Ex: https://example.org
 	ManagerURI() string
+	// The issuer of the OIDC bearer tokens used during a UI session.
+	Issuer() string
+	ClientID() string
+	RequiredConfigMaps(namespace string) []*corev1.ConfigMap
 	// RequiredEnv returns env that is used to configure pods with dex options.
 	RequiredEnv(prefix string) []corev1.EnvVar
 	// RequiredAnnotations returns annotations that make your the pods get refreshed if any of the config/secrets change.
@@ -127,9 +130,10 @@ func NewDexRelyingPartyConfig(
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
+	idpSecret *corev1.Secret,
 	certSecret *corev1.Secret,
 	clusterDomain string) DexKeyValidatorConfig {
-	return &dexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, nil, certSecret, clusterDomain)}
+	return &dexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, idpSecret, certSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.
@@ -213,6 +217,18 @@ func (d *dexBaseCfg) ManagerURI() string {
 	return d.managerURI
 }
 
+func (d *dexBaseCfg) Issuer() string {
+	return fmt.Sprintf("%s/dex", d.managerURI)
+}
+
+func (d *dexBaseCfg) RequiredConfigMaps(namespace string) []*corev1.ConfigMap {
+	return nil
+}
+
+func (d *dexBaseCfg) ClientID() string {
+	return DexClientId
+}
+
 func (d *dexBaseCfg) UsernameClaim() string {
 	claim := defaultUsernameClaim
 	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.UsernameClaim != "" {
@@ -293,14 +309,15 @@ func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: fmt.Sprintf("%sDEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
-		{Name: fmt.Sprintf("%sDEX_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
 		{Name: fmt.Sprintf("%sDEX_URL", prefix), Value: fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556/", d.clusterDomain)},
-		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
-		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
-		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: DefaultGroupsClaim},
-		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_DEX_ENABLED", prefix), Value: strconv.FormatBool(true)},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_ISSUER", prefix), Value: fmt.Sprintf("%s/dex", d.ManagerURI())},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_JWKSURL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_CLIENT_ID", prefix), Value: DexClientId},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_GROUPS_CLAIM", prefix), Value: DefaultGroupsClaim},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
+		{Name: fmt.Sprintf("%sOIDC_AUTH_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
 }
 

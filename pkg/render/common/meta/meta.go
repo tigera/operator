@@ -94,8 +94,11 @@ func OperatorNamespace() string {
 }
 
 // APIServerNamespace returns the namespace to use for the API server component.
-func APIServerNamespace() string {
-	return "calico-apiserver"
+func APIServerNamespace(v operatorv1.ProductVariant) string {
+	if v == operatorv1.Calico {
+		return "calico-apiserver"
+	}
+	return "tigera-system"
 }
 
 // GetResourceRequirements retrieves the component ResourcesRequirements from the installation. If it doesn't exist, it

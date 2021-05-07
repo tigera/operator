@@ -85,10 +85,6 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-	}
-
 	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
@@ -114,10 +110,21 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
-		for _, namespace := range []string{rmeta.OperatorNamespace(), rmeta.APIServerNamespace()} {
+		for _, namespace := range []string{rmeta.OperatorNamespace(), rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)} {
 			if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
 				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 			}
+		}
+
+		// TODO: Replace hardcoded name with variable / function value
+		if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+		}
+	} else {
+		// Watch OSS versions of any resources.
+		// TODO: Replace hardcoded name with variable / function value
+		if err = utils.AddSecretsWatch(c, "calico-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}
 	}
 
@@ -180,7 +187,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	variant := network.Variant
 	freshInstall := statusVariant == ""
-	ns := rmeta.APIServerNamespace()
+	ns := rmeta.APIServerNamespace(variant)
 
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
@@ -188,7 +195,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
-			render.APIServerTLSSecretName,
+
+			// TODO: Pick correct name based on product variant.
+			"calico-apiserver-certs",
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
 		)

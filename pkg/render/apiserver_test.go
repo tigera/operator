@@ -126,7 +126,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, "tigera-system", clusterDomain)
+		expectedDNSNames := dns.GetServiceDNSNames("tigera-api", "tigera-system", clusterDomain)
 		operatorCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
@@ -1025,7 +1025,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
-		expectedDNSNames := dns.GetServiceDNSNames(render.APIServiceName, "tigera-system", clusterDomain)
+		expectedDNSNames := dns.GetServiceDNSNames("tigera-api", "tigera-system", clusterDomain)
 		operatorCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)

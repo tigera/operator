@@ -90,6 +90,8 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
+	log.Info("Rendering APIServer", "variant", installation.Variant)
+
 	if installation.CertificateManagement == nil {
 		svcDNSNames := dns.GetServiceDNSNames(apiserverServiceName(installation.Variant), rmeta.APIServerNamespace(installation.Variant), clusterDomain)
 		if tlsKeyPair == nil {
@@ -255,7 +257,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced enterprise objects.
 	namespacedEnterpriseObjects := []client.Object{
 		c.auditPolicyConfigMap(),
-		c.networkPolicies(),
+		//TODO: c.networkPolicies(),
 	}
 
 	// Global OSS objects.
@@ -753,7 +755,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					DNSPolicy:          dnsPolicy,
 					NodeSelector:       c.installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
-					ServiceAccountName: "calico-apiserver",
+					ServiceAccountName: serviceAccountName(c.installation.Variant),
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
 					InitContainers:     initContainers,

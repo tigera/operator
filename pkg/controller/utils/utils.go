@@ -141,7 +141,7 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernete
 				duration = maxDuration
 			}
 			ticker.Reset(duration)
-			if areCalicoAPIsReady(client) {
+			if isLicenseKeyReady(client) {
 				err := addLicenseWatch(controller)
 				if err != nil {
 					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
@@ -204,14 +204,18 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	return true
 }
 
-func areCalicoAPIsReady(client kubernetes.Interface) bool {
-	groups, err := client.Discovery().ServerGroups()
+func isLicenseKeyReady(client kubernetes.Interface) bool {
+	_, res, err := client.Discovery().ServerGroupsAndResources()
 	if err != nil {
 		return false
 	}
-	for _, g := range groups.Groups {
-		if g.Name == "projectcalico.org" {
-			return true
+	for _, group := range res {
+		if group.GroupVersion == "projectcalico.org" {
+			for _, r := range group.APIResources {
+				if r.Kind == "LicenseKey" {
+					return true
+				}
+			}
 		}
 	}
 	return false

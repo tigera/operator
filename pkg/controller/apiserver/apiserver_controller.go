@@ -21,7 +21,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -30,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -189,15 +187,18 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	freshInstall := statusVariant == ""
 	ns := rmeta.APIServerNamespace(variant)
 
+	// We need separate certificates for OSS vs Enterprise.
+	secretName := "calico-apiserver-certs"
+	if network.Variant == operatorv1.TigeraSecureEnterprise {
+		secretName = "tigera-apiserver-certs"
+	}
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
-
-			// TODO: Pick correct name based on product variant.
-			"calico-apiserver-certs",
+			secretName,
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
 		)
@@ -316,28 +317,30 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// components.
 	if freshInstall {
 		// Provision any config resources.
-		var config v1.ConfigMap
-		err := r.client.Get(ctx, client.ObjectKey{Namespace: "tigera-operator", Name: "config"}, &config)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+		// var config v1.ConfigMap
+		// err := r.client.Get(ctx, client.ObjectKey{Namespace: "tigera-operator", Name: "config"}, &config)
+		// if err != nil {
+		// 	return reconcile.Result{}, err
+		// }
 
-		// Config exists. Send it to the API server.
-		for _, v := range config.Data {
-			u := unstructured.Unstructured{}
-			err = yaml.Unmarshal([]byte(v), &u.Object)
-			if err != nil {
-				r.status.SetDegraded("Error unmarshalling configmap", err.Error())
-				return reconcile.Result{}, err
-			}
-			err = r.client.Create(ctx, &u)
-			if err != nil {
-				if !errors.IsAlreadyExists(err) {
-					r.status.SetDegraded("Error creating / updating resource", err.Error())
-					return reconcile.Result{}, err
-				}
-			}
-		}
+		// // Config exists. Send it to the API server.
+		// for _, v := range config.Data {
+		// 	u := unstructured.Unstructured{}
+		// 	err = yaml.Unmarshal([]byte(v), &u.Object)
+		// 	if err != nil {
+		// 		r.status.SetDegraded("Error unmarshalling configmap", err.Error())
+		// 		return reconcile.Result{}, err
+		// 	}
+		// 	err = r.client.Create(ctx, &u)
+		// 	if err != nil {
+		// 		if !errors.IsAlreadyExists(err) {
+		// 			r.status.SetDegraded("Error creating / updating resource", err.Error())
+		// 			return reconcile.Result{}, err
+		// 		}
+		// 	}
+		// }
+
+		// TODO: Do we need to implement this or should we just continue to use the calicoctl init containter?
 	}
 
 	// Everything is available - update the CRD status.

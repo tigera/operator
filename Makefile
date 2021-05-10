@@ -125,6 +125,7 @@ BUILD_INIT_IMAGE?=tigera/operator-init
 
 BINDIR?=build/_output/bin
 
+IMAGE_REGISTRY?=quay.io
 PUSH_IMAGE_PREFIXES?=quay.io/
 RELEASE_PREFIXES?=
 # If this is a release, also tag and push additional images.
@@ -204,7 +205,7 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X github.com/tigera/operator/version.VERSION=$(GIT_VERSION) -s -w" ./main.go'
+	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./main.go'
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
@@ -388,7 +389,7 @@ endif
 ## Verifies the release artifacts produces by `make release-build` are correct.
 release-verify: release-prereqs
 	# Check the reported version is correct for each release artifact.
-	if ! docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run quay.io/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
+	if ! docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
 
 release-publish-images: release-prereqs
 	# Push images.
@@ -466,7 +467,7 @@ gen-csv: $(OPERATOR_SDK_BARE) get-digest
 .PHONY: prepull-image
 prepull-image:
 	@echo Pulling operator image...
-	docker pull quay.io/tigera/operator:v$(VERSION)
+	docker pull $(IMAGE_REGISTRY)/$(BUILD_IMAGE):v$(VERSION)
 
 # Get the digest for the image. This target runs docker commands on the host since the
 # build container doesn't have docker-in-docker. 'docker inspect' returns output like the example
@@ -488,7 +489,7 @@ prepull-image:
 .PHONY: get-digest
 get-digest: prepull-image
 	@echo Getting operator image digest...
-	$(eval OPERATOR_IMAGE_INSPECT=$(shell sh -c "docker image inspect quay.io/tigera/operator:v$(VERSION) | base64 -w 0"))
+	$(eval OPERATOR_IMAGE_INSPECT=$(shell sh -c "docker image inspect $(IMAGE_REGISTRY)/$(BUILD_IMAGE):v$(VERSION) | base64 -w 0"))
 
 ## Generate a CSV bundle zip file containing all CSVs and a package manifest.
 # E.g. make gen-bundle

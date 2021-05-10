@@ -15,6 +15,7 @@
 package render_test
 
 import (
+	"fmt"
 	"reflect"
 
 	. "github.com/onsi/ginkgo"
@@ -105,9 +106,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for verifiers", func() {
-			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := render.NewDexKeyValidatorConfig(authentication, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, tlsSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(2))
 			Expect(hashes2).To(HaveLen(2))
 			Expect(hashes3).To(HaveLen(2))
@@ -141,7 +142,7 @@ var _ = Describe("dex config tests", func() {
 		Expect(annotations["hash.operator.tigera.io/tigera-idp-secret"]).NotTo(BeEmpty())
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-tls-secret"]).NotTo(BeEmpty())
-		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+		Expect(dexConfig.Issuer()).To(Equal(fmt.Sprintf("%s/dex", domain)))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(expectedVolumes))
 		Expect(dexConfig.RequiredEnv("")).To(ConsistOf(expectedEnv))
@@ -284,7 +285,7 @@ var _ = Describe("dex config tests", func() {
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-cert-secret"]).NotTo(BeEmpty())
-		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+		Expect(dexConfig.BaseURL()).To(Equal(domain))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
 			Name: render.DexCertSecretName,
@@ -304,11 +305,11 @@ var _ = Describe("dex config tests", func() {
 	)
 
 	DescribeTable("Test DexKVConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
-		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexKeyValidatorConfig(auth, tlsSecret, idpSecret, dns.DefaultClusterDomain)
 
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-cert-secret"]).NotTo(BeEmpty())
-		Expect(dexConfig.ManagerURI()).To(Equal(domain))
+		Expect(dexConfig.Issuer()).To(Equal(fmt.Sprintf("%s/dex", domain)))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(corev1.Volume{
 			Name: render.DexCertSecretName,
@@ -320,7 +321,7 @@ var _ = Describe("dex config tests", func() {
 					},
 				},
 			}}))
-		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret, idpSecret))
 	},
 		Entry("Compare actual and expected OIDC config", oidc),
 		Entry("Compare actual and expected LDAP config", ldap),

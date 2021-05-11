@@ -68,7 +68,7 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
 
-	Describe("without CR found", func() {
+	Context("without CR found", func() {
 		It("status is not created", func() {
 			sm.updateStatus()
 			stat := &operator.TigeraStatus{}
@@ -100,10 +100,82 @@ var _ = Describe("Status reporting tests", func() {
 		})
 	})
 
-	Describe("with CR found", func() {
+	Context("with CR found", func() {
 		BeforeEach(func() {
 			sm.OnCRFound()
+			// sync doesn't actually run so it needs to be set explicitly here.
+			sm.hasSynced = true
 		})
+
+		Context("ReadyToMonitor not called", func() {
+			When("it is not progressing or failing", func() {
+				It("should not be available, progressing, or degraded", func() {
+					Expect(sm.IsAvailable()).To(BeFalse())
+					Expect(sm.IsProgressing()).To(BeFalse())
+					Expect(sm.IsDegraded()).To(BeFalse())
+				})
+			})
+			When("it is not progressing or failing but there is an explicit degraded reasons", func() {
+				It("should not be available or progressing but should be degraded", func() {
+					sm.SetDegraded("some message", "some message")
+
+					Expect(sm.IsAvailable()).To(BeFalse())
+					Expect(sm.IsProgressing()).To(BeFalse())
+					Expect(sm.IsDegraded()).To(BeTrue())
+				})
+			})
+			When("it is progressing", func() {
+				It("should not be available, progressing or degraded", func() {
+					sm.progressing = []string{"progressing message"}
+
+					Expect(sm.IsAvailable()).To(BeFalse())
+					Expect(sm.IsProgressing()).To(BeFalse())
+					Expect(sm.IsDegraded()).To(BeFalse())
+				})
+			})
+			When("it is failing", func() {
+				It("should not be available, progressing or degraded", func() {
+					sm.failing = []string{"failing message"}
+
+					Expect(sm.IsAvailable()).To(BeFalse())
+					Expect(sm.IsProgressing()).To(BeFalse())
+					Expect(sm.IsDegraded()).To(BeFalse())
+				})
+			})
+		})
+
+		Context("ReadyToMonitor called", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+			When("it is not progressing or failing", func() {
+				It("should be available, but not progressing or degraded", func() {
+					Expect(sm.IsAvailable()).To(BeTrue())
+					Expect(sm.IsProgressing()).To(BeFalse())
+					Expect(sm.IsDegraded()).To(BeFalse())
+				})
+			})
+			When("it is progressing and not failing", func() {
+				It("should not be available or degraded but should be progressing", func() {
+					sm.progressing = []string{"progressing message"}
+
+					Expect(sm.IsAvailable()).To(BeFalse())
+					Expect(sm.IsProgressing()).To(BeTrue())
+					Expect(sm.IsDegraded()).To(BeFalse())
+				})
+			})
+
+			When("it is not progressing and is failing", func() {
+				It("should not be available or degraded but should be progressing", func() {
+					sm.failing = []string{"failing message"}
+
+					Expect(sm.IsAvailable()).To(BeFalse())
+					Expect(sm.IsProgressing()).To(BeFalse())
+					Expect(sm.IsDegraded()).To(BeTrue())
+				})
+			})
+		})
+
 		It("Should handle basic state changes", func() {
 			// We expect no state to be "True" at boot.
 			Expect(sm.IsAvailable()).To(BeFalse())
@@ -117,6 +189,9 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.IsAvailable()).To(BeFalse())
 			Expect(sm.IsDegraded()).To(BeTrue())
 			Expect(sm.IsProgressing()).To(BeFalse())
+
+			By("Telling the Status Manager we're ready to start monitoring")
+			sm.ReadyToMonitor()
 
 			By("Setting a degraded state via pod status")
 			sm.explicitDegradedMsg = ""

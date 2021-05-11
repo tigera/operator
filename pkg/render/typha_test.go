@@ -212,7 +212,7 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
-	It("should render typha affinity", func() {
+	It("should render Preferred typha affinity when set by user", func() {
 		pfts := []v1.PreferredSchedulingTerm{{
 			Weight: 100,
 			Preference: v1.NodeSelectorTerm{
@@ -224,7 +224,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}}
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.PreferredNodeAffinity{
+			NodeAffinity: &operator.TigeraNodeAffinty{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}
@@ -235,6 +235,68 @@ var _ = Describe("Typha rendering tests", func() {
 		d := dResource.(*apps.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
 		Expect(na).To(Equal(pfts))
+	})
+
+	It("should render Required typha affinity when set by user", func() {
+		rst := &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{{
+				MatchExpressions: []v1.NodeSelectorRequirement{{
+					Key:      "test",
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"myTestNode"},
+				}},
+			}},
+		}
+		installation.TyphaAffinity = &operator.TyphaAffinity{
+			NodeAffinity: &operator.TigeraNodeAffinty{
+				RequiredDuringSchedulingIgnoredDuringExecution: rst,
+			},
+		}
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		resources, _ := component.Objects()
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		Expect(na).To(Equal(rst))
+	})
+
+	It("should ignore Required set by user if provider AKS", func() {
+		rst := &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{{
+				MatchExpressions: []v1.NodeSelectorRequirement{{
+					Key:      "test",
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"myTestNode"},
+				}},
+			}},
+		}
+		installation.KubernetesProvider = operator.ProviderAKS
+		installation.TyphaAffinity = &operator.TyphaAffinity{
+			NodeAffinity: &operator.TigeraNodeAffinty{
+				RequiredDuringSchedulingIgnoredDuringExecution: rst,
+			},
+		}
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		resources, _ := component.Objects()
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*apps.Deployment)
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		Expect(na).To(Equal(&v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{{
+			MatchExpressions: []v1.NodeSelectorRequirement{
+				{
+					Key:      "type",
+					Operator: corev1.NodeSelectorOpNotIn,
+					Values:   []string{"virtual-node"},
+				},
+				{
+					Key:      "kubernetes.azure.com/cluster",
+					Operator: "Exists",
+				},
+			},
+		}}}))
+		Expect(na).ToNot(Equal(rst))
 	})
 
 	It("should include virtual kubelet affinity for aks", func() {
@@ -273,7 +335,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}}
 		installation.KubernetesProvider = operator.ProviderAKS
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.PreferredNodeAffinity{
+			NodeAffinity: &operator.TigeraNodeAffinty{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}

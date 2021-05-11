@@ -70,6 +70,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("ClearDegraded", mock.Anything)
 		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ReadyToMonitor")
 
 		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
 		dpl = &appsv1.Deployment{

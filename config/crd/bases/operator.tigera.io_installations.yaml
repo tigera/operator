@@ -591,7 +591,7 @@ spec:
                           type: object
                         type: array
                       requiredDuringSchedulingIgnoredDuringExecution:
-                        description: 'WARNING: Please note that If the affinity requirements
+                        description: 'WARNING: Please note that if the affinity requirements
                           specified by this field are not met at scheduling time,
                           the pod will NOT be scheduled onto the node. There is no
                           fallback to another affinity rules with this setting. This
@@ -1280,7 +1280,7 @@ spec:
                               type: object
                             type: array
                           requiredDuringSchedulingIgnoredDuringExecution:
-                            description: 'WARNING: Please note that If the affinity
+                            description: 'WARNING: Please note that if the affinity
                               requirements specified by this field are not met at
                               scheduling time, the pod will NOT be scheduled onto
                               the node. There is no fallback to another affinity rules

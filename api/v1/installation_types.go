@@ -152,7 +152,7 @@ type TigeraNodeAffinty struct {
 	// at some point during pod execution (e.g. due to an update), the system
 	// may or may not try to eventually evict the pod from its node.
 	// +optional
-	RequiredDuringSchedulingIgnoredDuringExecution *v1.NodeSelector `json:"requiredDuringSchedulingIgnoredDuringExecution,omitempty" protobuf:"bytes,1,opt,name=requiredDuringSchedulingIgnoredDuringExecution"`
+	RequiredDuringSchedulingIgnoredDuringExecution *v1.NodeSelector `json:"requiredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
 // ComponentName represents a single component.

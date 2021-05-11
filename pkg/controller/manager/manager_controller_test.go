@@ -99,6 +99,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
 				client:          c,
@@ -329,6 +330,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
 				client:          c,

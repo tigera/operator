@@ -190,6 +190,10 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	}
 
 	cmpLog.V(1).Info("Done reconciling component")
+	// TODO Get each controller to explicitly call ReadyToMonitor on the status manager instead of doing it here.
+	if status != nil {
+		status.ReadyToMonitor()
+	}
 	return nil
 }
 

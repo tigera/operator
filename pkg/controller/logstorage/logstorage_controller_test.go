@@ -223,6 +223,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("OnCRNotFound").Return()
 						mockStatus.On("ClearDegraded")
+						mockStatus.On("ReadyToMonitor")
 					})
 					DescribeTable("tests that the ExternalService is setup with the default service name", func(clusterDomain, expectedSvcName string) {
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, clusterDomain)
@@ -265,6 +266,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddStatefulSets", mock.Anything).Return()
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
+						mockStatus.On("ReadyToMonitor")
 
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
@@ -340,6 +342,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("AddStatefulSets", mock.Anything)
 					mockStatus.On("AddCronJobs", mock.Anything)
 					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("ReadyToMonitor")
 				})
 				It("test LogStorage reconciles successfully", func() {
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
@@ -1029,6 +1032,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("AddCronJobs", mock.Anything)
 					mockStatus.On("ClearDegraded", mock.Anything)
 					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("ReadyToMonitor")
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {

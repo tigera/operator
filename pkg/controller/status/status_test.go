@@ -68,7 +68,7 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
 
-	Describe("without CR found", func() {
+	Context("without CR found", func() {
 		It("status is not created", func() {
 			sm.updateStatus()
 			stat := &operator.TigeraStatus{}
@@ -135,6 +135,9 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.IsAvailable()).To(BeFalse())
 			Expect(sm.IsDegraded()).To(BeFalse())
 			Expect(sm.IsProgressing()).To(BeTrue())
+
+			By("Telling the Status Monitor we're ready to start monitoring")
+			sm.ReadyToMonitor()
 
 			By("Setting an available state")
 			sm.progressing = []string{}

@@ -74,6 +74,7 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
+		mockStatus.On("ReadyToMonitor")
 
 		idpSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

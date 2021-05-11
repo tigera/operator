@@ -70,6 +70,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("ReadyToMonitor")
 
 		Expect(cli.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

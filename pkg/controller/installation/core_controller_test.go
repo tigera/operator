@@ -348,6 +348,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			mockStatus.On("ReadyToMonitor")
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -635,6 +636,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			mockStatus.On("ReadyToMonitor")
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{

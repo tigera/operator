@@ -5,11 +5,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TODO use mockery to generate mock
 type MockStatus struct {
 	mock.Mock
 }
 
 func (m *MockStatus) Run() {
+	m.Called()
+}
+
+func (m *MockStatus) ReadyToMonitor() {
 	m.Called()
 }
 

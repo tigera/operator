@@ -69,6 +69,7 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+		mockStatus.On("ReadyToMonitor")
 
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{

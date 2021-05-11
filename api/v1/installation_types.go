@@ -140,7 +140,7 @@ type TigeraNodeAffinty struct {
 	// +optional
 	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
 
-	// WARNING: Please note that If the affinity requirements specified by this field are not met at
+	// WARNING: Please note that if the affinity requirements specified by this field are not met at
 	// scheduling time, the pod will NOT be scheduled onto the node.
 	// There is no fallback to another affinity rules with this setting.
 	// This may cause networking disruption or even catastrophic failure!

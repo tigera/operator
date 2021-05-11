@@ -74,6 +74,7 @@ type StatusManager interface {
 	IsAvailable() bool
 	IsProgressing() bool
 	IsDegraded() bool
+	ReadyToMonitor()
 }
 
 type statusManager struct {
@@ -96,6 +97,10 @@ type statusManager struct {
 	// Keep track of currently calculated status.
 	progressing []string
 	failing     []string
+
+	// readyToMonitor tells the status manager that it's ready to monitor the resources that it's been told to monitor,
+	// if there are any, and report statuses based on the state of those resources.
+	readyToMonitor bool
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
@@ -161,6 +166,18 @@ func (m *statusManager) Run() {
 			}
 		}
 	}()
+}
+
+// ReadyToMonitor signals that this Status Manager should start evaluating the resources it knows about and report
+// if the availability of the component based on the statuses of those monitored resources.
+//
+// If there are no resources to monitor, then by default this component is available (all 0 resources for this component
+// are healthy). One caveat to the default when there are no resources to monitor is if the component has a degraded
+// status explicitely set.
+func (m *statusManager) ReadyToMonitor() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.readyToMonitor = true
 }
 
 // OnCRFound indicates to the status manager that it should start reporting status. Until called,
@@ -300,10 +317,18 @@ func (m *statusManager) IsAvailable() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// Don't allow an available state until the status manager has been explicitly told it's ready to start monitoring
+	// the restources it's been told to monitor
+	if !m.readyToMonitor {
+		log.V(2).WithName(m.component).Info("Refusing to evaluate component availability, Status Manager not ready to start monitoring.")
 		return false
 	}
+
+	if m.degraded {
+		return false
+	}
+
+	// If there are no resources to monitor then this is always true, which is by design.
 	return len(m.failing) == 0 && len(m.progressing) == 0
 }
 
@@ -312,8 +337,7 @@ func (m *statusManager) IsProgressing() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	if !m.readyToMonitor {
 		return false
 	}
 	return len(m.progressing) != 0 && len(m.failing) == 0
@@ -324,14 +348,14 @@ func (m *statusManager) IsDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	// Controllers can explicitly set us degraded.
+	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
+	// should start monitoring resources.
 	if m.degraded {
 		return true
 	}
 
 	// Otherwise, we might be degraded due to failing pods.
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	if !m.readyToMonitor {
 		return false
 	}
 	return len(m.failing) != 0
@@ -443,21 +467,9 @@ func (m *statusManager) syncState() bool {
 		}
 	}
 
-	if len(m.deployments)+len(m.daemonsets)+len(m.statefulsets)+len(m.cronjobs) > 0 {
-		// We have been told about the resources we need to watch - set state before unlocking.
-		m.progressing = progressing
-		m.failing = failing
-		return true
-	} else {
-		// We don't know about any resources. Clear internal state to indicate this.
-		m.progressing = nil
-		m.failing = nil
-	}
-
-	// If we don't know about any resources, and we don't have any explicit degraded state set, then
-	// we're not yet ready to report status. However, if we've been given an explicit degraded state, then
-	// we should report it.
-	return m.explicitDegradedReason != ""
+	m.progressing = progressing
+	m.failing = failing
+	return true
 }
 
 // isInitialized returns true if corresponding CR has been queried

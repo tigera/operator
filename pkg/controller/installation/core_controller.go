@@ -1165,6 +1165,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
+	r.status.ReadyToMonitor()
+
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
 

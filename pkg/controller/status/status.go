@@ -74,6 +74,7 @@ type StatusManager interface {
 	IsAvailable() bool
 	IsProgressing() bool
 	IsDegraded() bool
+	ReadyToMonitor()
 }
 
 type statusManager struct {
@@ -96,6 +97,11 @@ type statusManager struct {
 	// Keep track of currently calculated status.
 	progressing []string
 	failing     []string
+
+	// readyToMonitor tells the status manager that it's ready to monitor the resources that it's been told to monitor,
+	// if there are any, and report statuses based on the state of those resources.
+	readyToMonitor bool
+	hasSynced      bool
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
@@ -121,29 +127,49 @@ func (m *statusManager) updateStatus() {
 		return
 	}
 
-	if !m.syncState() {
-		return
+	// Unless we've been given an explicit degraded reason we are not ready to start reporting statuses until
+	// ReadyToMonitor has been called by the owner of the status manager. This means there's no point in syncing
+	// the state.
+	if m.readyToMonitor {
+		m.syncState()
+
+		// We've collected knowledge about the current state of the objects we're monitoring.
+		// Now, use that to update the TigeraStatus object for this manager.
+		if m.IsAvailable() {
+			m.setAvailable("All objects available", "")
+		} else {
+			m.clearAvailable()
+		}
+
+		if m.IsProgressing() {
+			m.setProgressing("Not all pods are ready", m.progressingMessage())
+		} else {
+			m.clearProgressing()
+		}
+
+		if m.IsDegraded() {
+			m.setDegraded(m.degradedReason(), m.degradedMessage())
+		} else {
+			m.clearDegraded()
+		}
+	} else {
+		log.V(2).WithName(m.component).Info("Status manager is not ready to report component statuses.")
+
+		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
+		// as this degraded reason may be the reason why we're not ready to monitor.
+		if m.isExplicitlyDegraded() {
+			m.setDegraded(m.degradedReason(), m.degradedMessage())
+		} else {
+			m.clearDegraded()
+		}
 	}
 
-	// We've collected knowledge about the current state of the objects we're monitoring.
-	// Now, use that to update the TigeraStatus object for this manager.
-	if m.IsAvailable() {
-		m.setAvailable("All objects available", "")
-	} else {
-		m.clearAvailable()
-	}
+}
 
-	if m.IsProgressing() {
-		m.setProgressing("Not all pods are ready", m.progressingMessage())
-	} else {
-		m.clearProgressing()
-	}
-
-	if m.IsDegraded() {
-		m.setDegraded(m.degradedReason(), m.degradedMessage())
-	} else {
-		m.clearDegraded()
-	}
+func (m *statusManager) isExplicitlyDegraded() bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	return m.explicitDegradedReason != ""
 }
 
 // Run starts the status manager state monitoring routine.
@@ -161,6 +187,18 @@ func (m *statusManager) Run() {
 			}
 		}
 	}()
+}
+
+// ReadyToMonitor signals that this Status Manager should start evaluating the resources it knows about and report
+// if the availability of the component based on the statuses of those monitored resources.
+//
+// If there are no resources to monitor, then by default this component is available (all 0 resources for this component
+// are healthy). One caveat to the default when there are no resources to monitor is if the component has a degraded
+// status explicitely set.
+func (m *statusManager) ReadyToMonitor() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.readyToMonitor = true
 }
 
 // OnCRFound indicates to the status manager that it should start reporting status. Until called,
@@ -300,10 +338,17 @@ func (m *statusManager) IsAvailable() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// If we're not ready to monitor or haven't synced then we're not ready to report a status base on the status of the
+	// known resources.
+	if !m.readyToMonitor || !m.hasSynced {
 		return false
 	}
+
+	if m.degraded {
+		return false
+	}
+
+	// If there are no resources to monitor then this is always true, which is by design.
 	return len(m.failing) == 0 && len(m.progressing) == 0
 }
 
@@ -312,10 +357,12 @@ func (m *statusManager) IsProgressing() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// If we're not ready to monitor or haven't synced then we're not ready to report a status base on the status of the
+	// known resources.
+	if !m.readyToMonitor || !m.hasSynced {
 		return false
 	}
+
 	return len(m.progressing) != 0 && len(m.failing) == 0
 }
 
@@ -324,22 +371,25 @@ func (m *statusManager) IsDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	// Controllers can explicitly set us degraded.
+	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
+	// should start monitoring resources.
 	if m.degraded {
 		return true
 	}
 
-	// Otherwise, we might be degraded due to failing pods.
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// If we're not ready to monitor or haven't synced then we're not ready to report a status base on the status of the
+	// known resources.
+	if !m.readyToMonitor || !m.hasSynced {
 		return false
 	}
+
+	// We may be degraded due to failing pods.
 	return len(m.failing) != 0
 }
 
-// syncState syncs our internal state with that of the cluster. It returns true if we've synced
-// and returns false if we are still waiting for information.
-func (m *statusManager) syncState() bool {
+// syncState syncs the internal state of the k8s resources that the status manager has been told to monitor with that of
+// the cluster.
+func (m *statusManager) syncState() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	progressing := []string{}
@@ -443,21 +493,9 @@ func (m *statusManager) syncState() bool {
 		}
 	}
 
-	if len(m.deployments)+len(m.daemonsets)+len(m.statefulsets)+len(m.cronjobs) > 0 {
-		// We have been told about the resources we need to watch - set state before unlocking.
-		m.progressing = progressing
-		m.failing = failing
-		return true
-	} else {
-		// We don't know about any resources. Clear internal state to indicate this.
-		m.progressing = nil
-		m.failing = nil
-	}
-
-	// If we don't know about any resources, and we don't have any explicit degraded state set, then
-	// we're not yet ready to report status. However, if we've been given an explicit degraded state, then
-	// we should report it.
-	return m.explicitDegradedReason != ""
+	m.progressing = progressing
+	m.failing = failing
+	m.hasSynced = true
 }
 
 // isInitialized returns true if corresponding CR has been queried

@@ -864,6 +864,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// If the Elasticsearch license type is basic OR there is an Authentication CR with OIDC type Tigera, then
+	// enable the Elasticsearch OIDC workaround in kube controllers.
+	enableESOIDCWorkaround := false
+	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operator.OIDCTypeTigera) ||
+		esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		enableESOIDCWorkaround = true
+	}
+
 	var managerInternalTLSSecret *corev1.Secret
 	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		common.CalicoNamespace,
@@ -1040,7 +1048,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		needNsMigration,
 		nodeAppArmorProfile,
 		r.clusterDomain,
-		esLicenseType,
+		enableESOIDCWorkaround,
 		esAdminSecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
@@ -1164,6 +1172,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
+
+	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
+	r.status.ReadyToMonitor()
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

@@ -62,8 +62,17 @@ const (
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 
-	ProbeTimeoutSeconds = 5
-	ProbePeriodSeconds  = 10
+	probeTimeoutSeconds = 20
+	probePeriodSeconds  = 20
+	// Default initial delay for Linux fluentd pods.
+	initialDelaySeconds = 0
+	// Use a much longer initial delay for Windows to account for slow container
+	// startup.
+	windowsInitialDelaySeconds = 120
+	// Default failure threshold for probes is 3. For the startup we should tolerate more failures.
+	startupProbeFailureThreshold = 10
+	// Make allowances for the current readiness probe.
+	readinessProbeFailureThreshold = 5
 
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
@@ -609,9 +618,11 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 // The startup probe uses the same action as the liveness probe, but with
 // a higher failure threshold and a larger timeout to account for slow networks.
 func (c *fluentdComponent) startup() *corev1.Probe {
-	// Default failure threshold for probes is 3. For the startup we should
-	// tolerate more failures.
-	var startupProbeFailureThreshold int32 = 10
+	var initialDelay int32
+	initialDelay = initialDelaySeconds
+	if c.osType == rmeta.OSTypeWindows {
+		initialDelay = windowsInitialDelaySeconds
+	}
 
 	return &corev1.Probe{
 		Handler: corev1.Handler{
@@ -619,9 +630,10 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   ProbeTimeoutSeconds * 2,
-		PeriodSeconds:    ProbePeriodSeconds,
-		FailureThreshold: startupProbeFailureThreshold,
+		InitialDelaySeconds: initialDelay,
+		TimeoutSeconds:      probeTimeoutSeconds,
+		PeriodSeconds:       probePeriodSeconds,
+		FailureThreshold:    startupProbeFailureThreshold,
 	}
 }
 
@@ -632,8 +644,8 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds: ProbeTimeoutSeconds,
-		PeriodSeconds:  ProbePeriodSeconds,
+		TimeoutSeconds: probeTimeoutSeconds,
+		PeriodSeconds:  probePeriodSeconds,
 	}
 }
 
@@ -644,7 +656,9 @@ func (c *fluentdComponent) readiness() *corev1.Probe {
 				Command: c.readinessCmd(),
 			},
 		},
-		TimeoutSeconds: ProbeTimeoutSeconds,
+		TimeoutSeconds:   probeTimeoutSeconds,
+		PeriodSeconds:    probePeriodSeconds,
+		FailureThreshold: readinessProbeFailureThreshold,
 	}
 }
 

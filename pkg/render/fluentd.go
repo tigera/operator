@@ -243,10 +243,8 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
-	if c.eksConfig != nil {
-		// Windows PSP does not support allowedHostPaths yet.
-		// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == rmeta.OSTypeLinux {
+	if c.eksConfig != nil && c.osType == rmeta.OSTypeLinux {
+		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
 				c.eksLogForwarderClusterRoleBinding(),

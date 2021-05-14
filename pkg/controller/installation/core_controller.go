@@ -796,29 +796,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	freshInstall := reflect.DeepEqual(status, operator.InstallationStatus{})
-	if freshInstall {
-		// This is a fresh deployment. Check if an API server has been requested. If it has, we should
-		// wait for it to roll out successfully before proceeding, allowing for configuration to be
-		// specified prior to calico/node launching.
-		apiserver, msg, err := utils.GetAPIServer(ctx, r.client)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				reqLogger.V(5).Info("failed to get APIServer CR", "err", err)
-				r.status.SetDegraded(msg, err.Error())
-				return reconcile.Result{}, err
-			}
-		}
-		if apiserver.Status.State != operator.TigeraStatusReady {
-			// API server is not yet ready. Wait for it.
-			r.status.SetDegraded("Waiting for API server to be ready", "")
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-		}
-
-		// API server is ready. Artificially wait, giving time for API resources to be created.
-		log.Info("Fresh install - API server ready, proceeding")
-	}
-
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {

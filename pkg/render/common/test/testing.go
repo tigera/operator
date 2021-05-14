@@ -46,6 +46,30 @@ func ExpectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
 	}
 }
 
+func ExpectResourceInList(objs []client.Object, name, ns, group, version, kind string) {
+	type expectedResource struct {
+		Name      string
+		Namespace string
+		GVK       schema.GroupVersionKind
+	}
+
+	o := expectedResource{
+		Name:      name,
+		Namespace: ns,
+		GVK:       schema.GroupVersionKind{Group: group, Version: version, Kind: kind},
+	}
+
+	elems := []expectedResource{}
+	for _, obj := range objs {
+		elems = append(elems, expectedResource{
+			Name:      obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName(),
+			Namespace: obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace(),
+			GVK:       obj.GetObjectKind().GroupVersionKind(),
+		})
+	}
+	Expect(elems).To(ContainElement(o))
+}
+
 func ExpectResource(resource runtime.Object, name, ns, group, version, kind string) {
 	gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()

@@ -356,7 +356,7 @@ func (c *apiServerComponent) authReaderRoleBinding() *rbacv1.RoleBinding {
 	var name string
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-apiserver-auth-reader"
+		name = "tigera-auth-reader"
 	case operatorv1.Calico:
 		name = "calico-apiserver-auth-reader"
 	}
@@ -814,8 +814,16 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
+	var name string
+	switch c.installation.Variant {
+	case operatorv1.TigeraSecureEnterprise:
+		name = "tigera-apiserver"
+	case operatorv1.Calico:
+		name = "calico-apiserver"
+	}
+
 	apiServer := corev1.Container{
-		Name:  "calico-apiserver",
+		Name:  name,
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
@@ -856,7 +864,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
 		fmt.Sprintf("--secure-port=%d", apiServerPort),
-		"-v=5",
 	}
 
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {

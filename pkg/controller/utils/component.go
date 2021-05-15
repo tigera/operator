@@ -36,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -328,6 +330,14 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		for i := range nodeSets {
 			podSpecs = append(podSpecs, &nodeSets[i].PodTemplate.Spec)
 		}
+	case *monitoringv1.Alertmanager:
+		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
+		podSpec := &obj.(*monitoringv1.Alertmanager).Spec
+		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+	case *monitoringv1.Prometheus:
+		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
+		podSpec := &obj.(*monitoringv1.Prometheus).Spec
+		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
 	default:
 		return
 	}

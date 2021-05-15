@@ -685,13 +685,30 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Verbs: []string{"get", "list"},
 			},
 			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"hostendpoints",
+				},
+				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"felixconfigurations",
+				},
+				ResourceNames: []string{
+					"default",
+				},
+				Verbs: []string{"get"},
+			},
+			{
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
 				Verbs:     []string{"list"},
 			},
 			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the

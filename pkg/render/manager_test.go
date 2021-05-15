@@ -155,13 +155,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs: []string{"get", "list"},
 			},
 			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"hostendpoints",
+				},
+				Verbs: []string{"list"},
+			},
+			{
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
 				Verbs:     []string{"list"},
 			},
 			{
@@ -310,13 +317,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs: []string{"get", "list"},
 			},
 			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"hostendpoints",
+				},
+				Verbs: []string{"list"},
+			},
+			{
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
 				Verbs:     []string{"list"},
 			},
 			{

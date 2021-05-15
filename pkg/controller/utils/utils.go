@@ -101,7 +101,7 @@ func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatche
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return addNamespacedWatch(c, s, metaMatches...)
+	return AddNamespacedWatch(c, s, metaMatches...)
 }
 
 func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
@@ -109,11 +109,11 @@ func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return addNamespacedWatch(c, cm)
+	return AddNamespacedWatch(c, cm)
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
-	return addNamespacedWatch(c, &v1.Service{
+	return AddNamespacedWatch(c, &v1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
@@ -154,10 +154,10 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernete
 	}
 }
 
-// addWatch creates a watch on the given object. If a name and namespace are provided, then it will
+// AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.
-func addNamespacedWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
+func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	if objMeta.GetNamespace() == "" {
 		return fmt.Errorf("No namespace provided for namespaced watch")

@@ -205,14 +205,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		createNamespace(ManagerNamespace, c.installation.KubernetesProvider),
 	}
-	pullSecrets := secret.CopyToNamespace(ManagerNamespace, c.pullSecrets...)
-	pullSecrets = append(pullSecrets, secret.CopyToNamespace(common.TigeraPrometheusNamespace, c.pullSecrets...)...)
-
-	// TODO: move copying of imagePullSecrets for prometheus into a dedicated prometheus controller
-	// once one is introduced.
-	// note that the TigeraPrometheusNamespace is not created by the operator but rather a dependency
-	// (as is all prometheus resources).
-	objs = append(objs, secret.ToRuntimeObjects(pullSecrets...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.pullSecrets...)...)...)
 
 	objs = append(objs,
 		managerServiceAccount(),

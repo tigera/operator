@@ -85,3 +85,9 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
+  prometheus:
+    image: prometheus/prometheus
+    version: v2.17.2
+  prometheus-alertmanager:
+    image: prometheus/alertmanager
+    version: v0.20.0

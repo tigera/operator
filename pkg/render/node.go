@@ -917,7 +917,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
-		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{

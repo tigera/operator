@@ -10,3 +10,6 @@ components:
     version: master
   flexvol:
     version: master
+  apiserver:
+    version: latest
+    image: caseydavenport/apiserver

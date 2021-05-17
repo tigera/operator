@@ -144,8 +144,9 @@ type TigeraNodeAffinty struct {
 	// scheduling time, the pod will NOT be scheduled onto the node.
 	// There is no fallback to another affinity rules with this setting.
 	// This may cause networking disruption or even catastrophic failure!
-	// PreferredDuringSchedulingIgnoredDuringExecution should be a default choice if
-	// there are no well understood specific conditions exist in your environment.
+	// PreferredDuringSchedulingIgnoredDuringExecution should be used for affinity
+	// unless there is a specific well understood reason to use RequiredDuringSchedulingIgnoredDuringExecution and
+	// you can guarantee that the RequiredDuringSchedulingIgnoredDuringExecution will always have sufficient nodes to satisfy the requirement.
 	// NOTE: RequiredDuringSchedulingIgnoredDuringExecution is set by default for AKS nodes,
 	// to avoid scheduling Typhas on virtual-nodes.
 	// If the affinity requirements specified by this field cease to be met

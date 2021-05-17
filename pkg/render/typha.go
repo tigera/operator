@@ -623,15 +623,16 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 // affinity sets the user-specified typha affinity if specified.
 func (c *typhaComponent) affinity() (aff *v1.Affinity) {
 	if c.installation.TyphaAffinity != nil && c.installation.TyphaAffinity.NodeAffinity != nil {
-		aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{}}
-		// only set if specified to not override the defaults.
-		if c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-			aff.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		// this ensures we return nil if no affinity is specified.
+		if c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
+			return nil
 		}
-		// this ensures we still return nil if neither condition is hit.
-		if len(c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) > 0 {
-			aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+		aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution:  c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+			PreferredDuringSchedulingIgnoredDuringExecution: c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+		},
 		}
+
 	}
 	return aff
 }

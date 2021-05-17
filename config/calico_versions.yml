@@ -12,4 +12,3 @@ components:
     version: master
   apiserver:
     version: latest
-    image: caseydavenport/apiserver

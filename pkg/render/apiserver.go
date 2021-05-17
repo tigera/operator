@@ -623,12 +623,14 @@ func (c *apiServerComponent) webhookReaderClusterRole() *rbacv1.ClusterRole {
 
 // webhookReaderClusterRoleBinding binds the calico-apiserver ServiceAccount to the webhook-reader
 func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	var name string
+	var name, refName string
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = "tigera-apiserver-webhook-reader"
+		refName = "tigera-webhook-reader"
 	case operatorv1.Calico:
 		name = "calico-apiserver-webhook-reader"
+		refName = "calico-webhook-reader"
 	}
 
 	return &rbacv1.ClusterRoleBinding{
@@ -643,7 +645,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRo
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "calico-webhook-reader",
+			Name:     refName,
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -726,7 +728,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	d := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: rmeta.APIServerNamespace(c.installation.Variant),
@@ -777,16 +779,17 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
-	volumeMounts := []corev1.VolumeMount{
-		{Name: apiServerTLSSecretName(c.installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
-	}
-
+	volumeMounts := []corev1.VolumeMount{}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
 		)
 	}
+
+	volumeMounts = append(volumeMounts,
+		corev1.VolumeMount{Name: apiServerTLSSecretName(c.installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
+	)
 
 	if c.managementCluster != nil {
 		volumeMounts = append(volumeMounts,
@@ -919,12 +922,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 // apiServerVolumes creates the volumes used by the API server deployment.
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
-	volumes := []corev1.Volume{
-		{
-			Name:         apiServerTLSSecretName(c.installation.Variant),
-			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, apiServerTLSSecretName(c.installation.Variant)),
-		},
-	}
+	volumes := []corev1.Volume{}
 	hostPathType := corev1.HostPathDirectoryOrCreate
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
@@ -965,6 +963,14 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 			})
 		}
 	}
+
+	volumes = append(volumes,
+		corev1.Volume{
+			Name:         apiServerTLSSecretName(c.installation.Variant),
+			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, apiServerTLSSecretName(c.installation.Variant)),
+		},
+	)
+
 	return volumes
 }
 

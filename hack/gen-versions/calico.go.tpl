@@ -66,5 +66,6 @@ var (
 		ComponentCalicoTypha,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
+		ComponentCalicoAPIServer,
 	}
 )

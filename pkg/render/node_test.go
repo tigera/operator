@@ -1865,6 +1865,26 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(expected))
 	})
 
+	It("should set CALICO_DISABLE_FILE_LOGGING to false for Calient node ENV", func() {
+		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+
+		// Assert on expected env vars.
+		expectedEnvVars := []v1.EnvVar{
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+		}
+		ds := dsResource.(*apps.DaemonSet)
+		for _, v := range expectedEnvVars {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
+		}
+	})
+
 	It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Variant = operator.TigeraSecureEnterprise

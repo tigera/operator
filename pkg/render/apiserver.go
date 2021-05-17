@@ -24,6 +24,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -257,7 +259,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced enterprise objects.
 	namespacedEnterpriseObjects := []client.Object{
 		c.auditPolicyConfigMap(),
-		//TODO: c.networkPolicies(),
 	}
 
 	// Global OSS objects.
@@ -273,12 +274,20 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
+		// Add network policy last. It needs to be added after the resources required to run the API server,
+		// because it is backed by the API server itself.
+		// TODO: Do we want to do this now?
+		// namespacedObjects = append(namespacedObjects, c.enterpriseNetworkPolicy())
+
 		// Explicitly delete any global OSS objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalCalicoObjects...)
 	} else {
 		// Create any Calico-only objects
 		globalObjects = append(globalObjects, globalCalicoObjects...)
+
+		// Add in a NetworkPolicy.
+		namespacedObjects = append(namespacedObjects, c.networkPolicy())
 
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
@@ -1009,6 +1018,37 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecu
 	return psp
 }
 
+// networkPolicy returns a NP to allow traffic to the API server. This prevents it from
+// being cut off from the main API server. For the enterprise equivalent, see enterpriseNetworkPolicy().
+//
+// Calico only
+func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
+	tcp := v1.ProtocolTCP
+	p := intstr.FromInt(5443)
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.installation.Variant)},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"apiserver": "true",
+				},
+			},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					Ports: []netv1.NetworkPolicyPort{
+						{
+							Protocol: &tcp,
+							Port:     &p,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // tigeraCustomResourcesClusterRole creates a clusterrole that gives permissions to access backing CRDs
 //
 // Calico Enterprise only
@@ -1463,10 +1503,10 @@ rules:
 	}
 }
 
-// networkPolicies returns the network policies to deploy for the API server.
+// enterpriseNetworkPolicy returns the network policies to deploy for the API server.
 //
 // Calico Enterprise only
-func (c *apiServerComponent) networkPolicies() *v3.NetworkPolicy {
+func (c *apiServerComponent) enterpriseNetworkPolicy() *v3.NetworkPolicy {
 	var order float64 = 1
 	p := v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

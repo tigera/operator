@@ -29,6 +29,7 @@ import (
 	"github.com/onsi/gomega/gstruct"
 	"github.com/openshift/library-go/pkg/crypto"
 	v1 "k8s.io/api/apps/v1"
+	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -1009,6 +1010,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			{name: "calico-api", ns: "calico-apiserver", group: "", version: "v1", kind: "Service"},
 			{name: "calico-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "allow-apiserver", ns: "calico-apiserver", group: "networking.k8s.io", version: "v1", kind: "NetworkPolicy"},
 		}
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
@@ -1122,6 +1124,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-api", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Service"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhook-reader"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRoleBinding"}},
+			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "networking.k8s.io/v1", Kind: "NetworkPolicy"}},
 		}
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
@@ -1130,11 +1133,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
+		By("Checking each expected resource is actually rendered")
 		for _, e := range expectedResources {
 			gvk := e.GetObjectKind().GroupVersionKind()
 			rtest.ExpectResourceInList(resources, e.GetName(), e.GetNamespace(), gvk.Group, gvk.Version, gvk.Kind)
 		}
 
+		By("Checking each rendered resource is actually expected")
 		for _, r := range resources {
 			gvk := r.GetObjectKind().GroupVersionKind()
 			rtest.ExpectResourceInList(expectedResources, r.GetName(), r.GetNamespace(), gvk.Group, gvk.Version, gvk.Kind)

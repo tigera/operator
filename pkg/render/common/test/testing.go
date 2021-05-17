@@ -83,7 +83,6 @@ func GetResource(resources []client.Object, name, ns, group, version, kind strin
 	for _, resource := range resources {
 		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 		om := resource.(metav1.ObjectMetaAccessor).GetObjectMeta()
-		fmt.Printf("Checking: %s, %s, %s\n", om.GetName(), om.GetNamespace(), resource.GetObjectKind().GroupVersionKind())
 		if name == om.GetName() &&
 			ns == om.GetNamespace() &&
 			gvk == resource.GetObjectKind().GroupVersionKind() {

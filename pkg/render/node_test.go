@@ -175,7 +175,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
@@ -412,7 +412,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -567,7 +567,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
@@ -741,7 +741,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
@@ -1001,7 +1001,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
@@ -1174,7 +1174,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
@@ -1359,7 +1359,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1455,7 +1455,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1863,6 +1863,26 @@ var _ = Describe("Node rendering tests", func() {
 		// It should have the reporter port, though.
 		expected := v1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT"}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(expected))
+	})
+
+	It("should set CALICO_DISABLE_FILE_LOGGING to false for Calient node ENV", func() {
+		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
+
+		dsResource := GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+
+		// Assert on expected env vars.
+		expectedEnvVars := []v1.EnvVar{
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+		}
+		ds := dsResource.(*apps.DaemonSet)
+		for _, v := range expectedEnvVars {
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
+		}
 	})
 
 	It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
@@ -2342,7 +2362,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},

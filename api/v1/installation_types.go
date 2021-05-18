@@ -132,7 +132,7 @@ type TyphaAffinity struct {
 	NodeAffinity *TigeraNodeAffinty `json:"nodeAffinity,omitempty"`
 }
 
-// TigeraNodeAffinty is similar to *v1.NodeAffinity, but allows us to limit available shcedulers.
+// TigeraNodeAffinty is similar to *v1.NodeAffinity, but allows us to limit available schedulers.
 type TigeraNodeAffinty struct {
 	// The scheduler will prefer to schedule pods to nodes that satisfy
 	// the affinity expressions specified by this field, but it may choose

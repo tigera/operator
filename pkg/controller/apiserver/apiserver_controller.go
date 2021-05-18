@@ -63,7 +63,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		amazonCRDExists: opts.AmazonCRDExists,
 		status:          status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
+		requestChan:     make(chan utils.ReconcileRequest),
 	}
+	go r.processRequests()
 	r.status.Run()
 	return r
 }
@@ -143,14 +145,43 @@ type ReconcileAPIServer struct {
 	amazonCRDExists bool
 	status          status.StatusManager
 	clusterDomain   string
+	requestChan     chan utils.ReconcileRequest
 }
 
-// Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
+// Reconcile is called by the main controller manager when controlled resources are updated. It dedupes
+// requests to limit the amount of unnecessary work performed.
+func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	resultChan := make(chan utils.ReconcileResult)
+	defer close(resultChan)
+	select {
+	case r.requestChan <- utils.ReconcileRequest{Context: ctx, Request: request, ResultChan: resultChan}:
+		// Wait for a response.
+		res := <-resultChan
+		return res.Result, res.Error
+	default:
+		// There is already a reconcile request queued. We reconcile everything on every
+		// request, so we don't need to queue another.
+		return reconcile.Result{}, nil
+	}
+}
+
+func (r *ReconcileAPIServer) processRequests() {
+	for {
+		req := <-r.requestChan
+		result, err := r.reconcile(req.Context, req.Request)
+		req.ResultChan <- utils.ReconcileResult{Error: err, Result: result}
+
+		// Rate-limit to prevent tight looping.
+		time.Sleep(1 * time.Second)
+	}
+}
+
+// reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
 // and what is in the APIServer.Spec
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileAPIServer) reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIServer")
 

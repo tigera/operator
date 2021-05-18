@@ -33,6 +33,14 @@ require (
 	sigs.k8s.io/controller-runtime v0.7.0
 )
 
+require (
+	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5 // indirect
+	github.com/operator-framework/operator-sdk v1.0.1 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
+	sigs.k8s.io/controller-tools v0.3.0 // indirect
+	sigs.k8s.io/kube-storage-version-migrator v0.0.3 // indirect
+)
+
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	github.com/go-logr/logr => github.com/go-logr/logr v0.3.0

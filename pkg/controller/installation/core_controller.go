@@ -432,7 +432,7 @@ func fillDefaults(instance *operator.Installation) error {
 		// as such, we add a required anti-affinity for virtual-nodes if running on azure
 		case operator.ProviderAKS:
 			instance.Spec.TyphaAffinity = &operator.TyphaAffinity{
-				NodeAffinity: &operator.NodeAffinty{
+				NodeAffinity: &operator.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{{
 							MatchExpressions: []v1.NodeSelectorRequirement{
@@ -452,14 +452,6 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		default:
 			instance.Spec.TyphaAffinity = nil
-		}
-	}
-
-	// Default the CalicoNetworkSpec based on the CNI plugin.
-	if instance.Spec.CalicoNetwork == nil {
-		switch instance.Spec.CNI.Type {
-		case operator.PluginCalico:
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 		}
 	}
 

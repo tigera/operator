@@ -432,7 +432,7 @@ func fillDefaults(instance *operator.Installation) error {
 		// as such, we add a required anti-affinity for virtual-nodes if running on azure
 		case operator.ProviderAKS:
 			instance.Spec.TyphaAffinity = &operator.TyphaAffinity{
-				NodeAffinity: &operator.TigeraNodeAffinty{
+				NodeAffinity: &operator.NodeAffinty{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{{
 							MatchExpressions: []v1.NodeSelectorRequirement{

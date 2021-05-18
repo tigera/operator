@@ -223,7 +223,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}}
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.TigeraNodeAffinty{
+			NodeAffinity: &operator.NodeAffinty{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}
@@ -247,7 +247,7 @@ var _ = Describe("Typha rendering tests", func() {
 			}},
 		}
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.TigeraNodeAffinty{
+			NodeAffinity: &operator.NodeAffinty{
 				RequiredDuringSchedulingIgnoredDuringExecution: rst,
 			},
 		}

@@ -142,11 +142,11 @@ type InstallationSpec struct {
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional
-	NodeAffinity *TigeraNodeAffinty `json:"nodeAffinity,omitempty"`
+	NodeAffinity *NodeAffinty `json:"nodeAffinity,omitempty"`
 }
 
-// TigeraNodeAffinty is similar to *v1.NodeAffinity, but allows us to limit available schedulers.
-type TigeraNodeAffinty struct {
+// NodeAffinty is similar to *v1.NodeAffinity, but allows us to limit available schedulers.
+type NodeAffinty struct {
 	// The scheduler will prefer to schedule pods to nodes that satisfy
 	// the affinity expressions specified by this field, but it may choose
 	// a node that violates one or more of the expressions.

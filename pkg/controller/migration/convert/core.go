@@ -335,7 +335,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 					}
 				}
 				install.Spec.TyphaAffinity = &operatorv1.TyphaAffinity{
-					NodeAffinity: &operatorv1.NodeAffinty{
+					NodeAffinity: &operatorv1.NodeAffinity{
 						PreferredDuringSchedulingIgnoredDuringExecution: aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 					},
 				}

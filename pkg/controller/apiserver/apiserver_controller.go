@@ -63,6 +63,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		amazonCRDExists: opts.AmazonCRDExists,
 		status:          status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
+		requestChan:     make(chan utils.ReconcileRequest),
 	}
 	go r.processRequests()
 	r.status.Run()
@@ -144,27 +145,16 @@ type ReconcileAPIServer struct {
 	amazonCRDExists bool
 	status          status.StatusManager
 	clusterDomain   string
-	requestChan     chan reconcileRequest
-}
-
-type reconcileRequest struct {
-	Context    context.Context
-	Request    reconcile.Request
-	ResultChan chan reconcileResult
-}
-
-type reconcileResult struct {
-	Error  error
-	Result reconcile.Result
+	requestChan     chan utils.ReconcileRequest
 }
 
 // Reconcile is called by the main controller manager when controlled resources are updated. It dedupes
 // requests to limit the amount of unnecessary work performed.
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	resultChan := make(chan reconcileResult)
+	resultChan := make(chan utils.ReconcileResult)
 	defer close(resultChan)
 	select {
-	case r.requestChan <- reconcileRequest{ctx, request, resultChan}:
+	case r.requestChan <- utils.ReconcileRequest{Context: ctx, Request: request, ResultChan: resultChan}:
 		// Wait for a response.
 		res := <-resultChan
 		return res.Result, res.Error
@@ -179,7 +169,7 @@ func (r *ReconcileAPIServer) processRequests() {
 	for {
 		req := <-r.requestChan
 		result, err := r.reconcile(req.Context, req.Request)
-		req.ResultChan <- reconcileResult{err, result}
+		req.ResultChan <- utils.ReconcileResult{Error: err, Result: result}
 
 		// Rate-limit to prevent tight looping.
 		time.Sleep(1 * time.Second)

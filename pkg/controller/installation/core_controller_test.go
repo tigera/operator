@@ -20,6 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -576,6 +577,45 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
 		})
 	})
+
+	table.DescribeTable("test Node Affinity defaults",
+		func(expected bool, provider operator.Provider, result []v1.NodeSelectorTerm) {
+			installation := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: provider,
+				},
+			}
+			Expect(mergeAndFillDefaults(installation, nil, nil, nil)).To(BeNil())
+			if expected {
+				Expect(installation.Spec.TyphaAffinity).ToNot(BeNil())
+				Expect(installation.Spec.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).Should(Equal(result))
+			} else {
+				Expect(installation.Spec.TyphaAffinity).To(BeNil())
+			}
+		},
+		table.Entry("AKS provider sets default",
+			true,
+			operator.ProviderAKS,
+			[]v1.NodeSelectorTerm{{
+				MatchExpressions: []v1.NodeSelectorRequirement{
+					{
+						Key:      "type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"virtual-node"},
+					},
+					{
+						Key:      "kubernetes.azure.com/cluster",
+						Operator: v1.NodeSelectorOpExists,
+					},
+				},
+			}},
+		),
+		table.Entry("Expect no default value for DockerEE provider",
+			false,
+			operator.ProviderDockerEE,
+			[]v1.NodeSelectorTerm{},
+		),
+	)
 
 	Context("management cluster exists", func() {
 		var c client.Client

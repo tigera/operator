@@ -20,7 +20,6 @@ import (
 	"github.com/onsi/gomega/gstruct"
 
 	apps "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -212,7 +211,7 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
-	It("should render typha affinity", func() {
+	It("should render Preferred typha affinity when set by user", func() {
 		pfts := []v1.PreferredSchedulingTerm{{
 			Weight: 100,
 			Preference: v1.NodeSelectorTerm{
@@ -224,7 +223,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}}
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.PreferredNodeAffinity{
+			NodeAffinity: &operator.TigeraNodeAffinty{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}
@@ -237,44 +236,19 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(na).To(Equal(pfts))
 	})
 
-	It("should include virtual kubelet affinity for aks", func() {
-		installation.KubernetesProvider = operator.ProviderAKS
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
-		resources, _ := component.Objects()
-		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
-		Expect(dResource).ToNot(BeNil())
-		d := dResource.(*apps.Deployment)
-		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-		Expect(na).To(Equal(&v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{{
-			MatchExpressions: []v1.NodeSelectorRequirement{
-				{
-					Key:      "type",
-					Operator: corev1.NodeSelectorOpNotIn,
-					Values:   []string{"virtual-node"},
-				},
-				{
-					Key:      "kubernetes.azure.com/cluster",
-					Operator: "Exists",
-				},
-			},
-		}}}))
-	})
-
-	It("should combine virtual kubelet with user-specified affinity for aks", func() {
-		pfts := []v1.PreferredSchedulingTerm{{
-			Weight: 100,
-			Preference: v1.NodeSelectorTerm{
-				MatchFields: []v1.NodeSelectorRequirement{{
-					Key:      "foo",
-					Operator: "in",
-					Values:   []string{"foo", "bar"},
+	It("should render Required typha affinity when set by user", func() {
+		rst := &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{{
+				MatchExpressions: []v1.NodeSelectorRequirement{{
+					Key:      "test",
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"myTestNode"},
 				}},
-			},
-		}}
-		installation.KubernetesProvider = operator.ProviderAKS
+			}},
+		}
 		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.PreferredNodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
+			NodeAffinity: &operator.TigeraNodeAffinty{
+				RequiredDuringSchedulingIgnoredDuringExecution: rst,
 			},
 		}
 		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
@@ -282,21 +256,8 @@ var _ = Describe("Typha rendering tests", func() {
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 		d := dResource.(*apps.Deployment)
-		na := d.Spec.Template.Spec.Affinity.NodeAffinity
-		Expect(na.PreferredDuringSchedulingIgnoredDuringExecution).To(Equal(pfts))
-		Expect(na.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(Equal([]v1.NodeSelectorTerm{{
-			MatchExpressions: []v1.NodeSelectorRequirement{
-				{
-					Key:      "type",
-					Operator: corev1.NodeSelectorOpNotIn,
-					Values:   []string{"virtual-node"},
-				},
-				{
-					Key:      "kubernetes.azure.com/cluster",
-					Operator: "Exists",
-				},
-			},
-		}}))
+		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		Expect(na).To(Equal(rst))
 	})
 
 	It("should render all resources when certificate management is enabled", func() {

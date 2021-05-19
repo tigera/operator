@@ -11,4 +11,4 @@ components:
   flexvol:
     version: master
   apiserver:
-    version: latest
+    version: master

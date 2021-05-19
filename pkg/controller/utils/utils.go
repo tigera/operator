@@ -407,7 +407,7 @@ func GetInstallation(ctx context.Context, client client.Client) (operatorv1.Prod
 	return instance.Status.Variant, &spec, nil
 }
 
-// GetAPIServer finds the correct API server instance and returns a mesasge and error in the case of an error.
+// GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.
 func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APIServer, string, error) {
 	// Fetch the APIServer instance. Look for the "default" instance first.
 	instance := &operatorv1.APIServer{}

@@ -92,8 +92,6 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
-	log.Info("Rendering APIServer", "variant", installation.Variant)
-
 	if installation.CertificateManagement == nil {
 		svcDNSNames := dns.GetServiceDNSNames(apiserverServiceName(installation.Variant), rmeta.APIServerNamespace(installation.Variant), clusterDomain)
 		if tlsKeyPair == nil {
@@ -206,8 +204,8 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Start with all of the cluster-scoped resources that are used for both Calico and Calico Enterprise.
-	// When switching between Calico / Enterprise, these objects are simply updated in-place (with the excpetion
-	// of the Namespace itself).
+	// When switching between Calico / Enterprise, most of these objects are simply updated in-place (with some exceptions
+	// that have different names depending on the variant).
 	globalObjects := []client.Object{
 		c.calicoCustomResourcesClusterRole(),
 		c.calicoCustomResourcesClusterRoleBinding(),
@@ -453,27 +451,15 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"ipamblocks",
 				"blockaffinities",
 			},
-			Verbs: []string{"*"},
-		},
-		{
-			// Calico Enterprise backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{
-				"stagedkubernetesnetworkpolicies",
-				"stagednetworkpolicies",
-				"stagedglobalnetworkpolicies",
-				"tiers",
-				"licensekeys",
-				"globalalerts",
-				"globalalerttemplates",
-				"globalthreatfeeds",
-				"globalreporttypes",
-				"globalreports",
-				"remoteclusterconfigurations",
-				"managedclusters",
-				"packetcaptures",
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+				"create",
+				"update",
+				"delete",
+				"patch",
 			},
-			Verbs: []string{"*"},
 		},
 	}
 	if !c.openshift {
@@ -1072,7 +1058,15 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"managedclusters",
 				"packetcaptures",
 			},
-			Verbs: []string{"*"},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+				"create",
+				"update",
+				"delete",
+				"patch",
+			},
 		},
 	}
 	if !c.openshift {
@@ -1081,7 +1075,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{"calico-apiserver"},
+			ResourceNames: []string{"tigera-apiserver"},
 		})
 	}
 

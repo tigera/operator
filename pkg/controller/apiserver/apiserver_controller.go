@@ -174,7 +174,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
 	// Query for the installation object.
-	_, network, err := utils.GetInstallation(context.Background(), r.client)
+	variant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
@@ -183,7 +183,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	variant := network.Variant
+	if variant == "" {
+		r.status.SetDegraded(fmt.Sprintf("Waiting for Installation to be ready"), "")
+		return reconcile.Result{}, nil
+	}
 	ns := rmeta.APIServerNamespace(variant)
 
 	// We need separate certificates for OSS vs Enterprise.

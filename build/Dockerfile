@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+ARG ARCH=amd64
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.2-301.1592810506 AS ubi
 
 # Update base packages to get security updates.
@@ -27,6 +27,7 @@ COPY --from=ubi /etc/pki /etc/pki
 COPY --from=ubi /usr/share/pki /usr/share/pki
 
 ARG GIT_VERSION=unknown
+ARG ARCH
 LABEL name="Calico Operator" \
       vendor="Project Calico" \
       version=$GIT_VERSION \
@@ -39,7 +40,7 @@ ENV OPERATOR=/usr/local/bin/operator \
     USER_UID=1001
 
 # install operator binary
-COPY build/_output/bin/operator-amd64 ${OPERATOR}
+COPY build/_output/bin/operator-${ARCH} ${OPERATOR}
 
 # The exec form of ENTRYPOINT does not invoke a command shell.
 # This means that normal shell processing does not happen, so will not

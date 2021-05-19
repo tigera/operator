@@ -16,12 +16,10 @@ require (
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
-	github.com/projectcalico/go-yaml v0.0.0-20161201183616-955bc3e451ef
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.6.1
 	github.com/tigera/api v0.0.0-20210210003744-476f909e3f8f
 	go.uber.org/zap v1.15.0
-	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.3.0
@@ -32,8 +30,6 @@ require (
 	k8s.io/klog/v2 v2.3.0 // indirect
 	k8s.io/kube-aggregator v0.19.2
 	sigs.k8s.io/controller-runtime v0.7.0
-	sigs.k8s.io/controller-tools v0.3.0 // indirect
-	sigs.k8s.io/yaml v1.2.0
 )
 
 replace (

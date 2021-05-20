@@ -113,17 +113,14 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 			}
 		}
+	}
 
-		// TODO: Replace hardcoded name with variable / function value
-		if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-		}
-	} else {
-		// Watch OSS versions of any resources.
-		// TODO: Replace hardcoded name with variable / function value
-		if err = utils.AddSecretsWatch(c, "calico-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-		}
+	// Watch for certificate changes. We watch both secrets in case the user is switching between variants.
+	if err = utils.AddSecretsWatch(c, "calico-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+	if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {

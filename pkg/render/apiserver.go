@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	v3 "github.com/tigera/operator/pkg/apis/projectcalico.org/v3"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 
@@ -202,25 +201,36 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
+func populateLists(create []client.Object, dels []client.Object, f func() (client.Object, client.Object)) ([]client.Object, []client.Object) {
+	c, d := f()
+	create = append(create, c)
+	dels = append(dels, d)
+	return create, dels
+}
+
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Start with all of the cluster-scoped resources that are used for both Calico and Calico Enterprise.
-	// When switching between Calico / Enterprise, most of these objects are simply updated in-place (with some exceptions
-	// that have different names depending on the variant).
+	// When switching between Calico / Enterprise, these objects are simply updated in-place.
 	globalObjects := []client.Object{
 		c.calicoCustomResourcesClusterRole(),
 		c.calicoCustomResourcesClusterRoleBinding(),
-		c.delegateAuthClusterRoleBinding(),
-		c.authClusterRole(),
-		c.authClusterRoleBinding(),
-		c.authReaderRoleBinding(),
-		c.webhookReaderClusterRole(),
-		c.webhookReaderClusterRoleBinding(),
-	}
-	if !c.openshift {
-		globalObjects = append(globalObjects, c.apiServerPodSecurityPolicy())
 	}
 
-	// Namespaced objects that are common between Calico and Calico Enterprise.
+	// These objects are global, and have different names based on Calico or Calico Enterprise.
+	// We need to delete the object for the variant that we're not currently installilng.
+	objsToDelete := []client.Object{}
+	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.delegateAuthClusterRoleBinding)
+	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authClusterRole)
+	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authClusterRoleBinding)
+	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
+	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
+	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
+	if !c.openshift {
+		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
+	}
+
+	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
+	// deleted, since they will be garbage collected on namespace deletion.
 	namespacedObjects := []client.Object{}
 	namespacedObjects = append(namespacedObjects,
 		c.apiServerServiceAccount(),
@@ -241,7 +251,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, csrClusterRoleBinding(csrRolebindingName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant)))
 	}
 
-	// Global enterprise objects.
+	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
 		createNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.installation.KubernetesProvider),
 		c.tigeraCustomResourcesClusterRole(),
@@ -254,28 +264,22 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tieredPolicyPassthruClusterRolebinding(),
 	}
 
-	// Namespaced enterprise objects.
+	// Namespaced enterprise-only objects.
 	namespacedEnterpriseObjects := []client.Object{
 		c.auditPolicyConfigMap(),
 	}
 
-	// Global OSS objects.
+	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
 		createNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.installation.KubernetesProvider),
 	}
 
 	// Compile the final arrays based on the variant.
 	objsToCreate := []client.Object{}
-	objsToDelete := []client.Object{}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
-
-		// Add network policy last. It needs to be added after the resources required to run the API server,
-		// because it is backed by the API server itself.
-		// TODO: Do we want to do this now?
-		// namespacedObjects = append(namespacedObjects, c.enterpriseNetworkPolicy())
 
 		// Explicitly delete any global OSS objects.
 		// Namespaced objects will be handled by namespace deletion.
@@ -301,6 +305,8 @@ func (c *apiServerComponent) Ready() bool {
 }
 
 // apiServiceRegistration creates an API service that registers Tigera Secure APIs (and API server).
+//
+// Both Calico and Calico Enterprise, with the same name.
 func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APIService {
 	// The APIService is the same for OSS and Enterprise, with the exception that
 	// it points to a different Service and Namespace for each.
@@ -326,70 +332,97 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 
 // delegateAuthClusterRoleBinding creates a clusterrolebinding that allows the API server to delegate
 // authn/authz requests to main API server.
-func (c *apiServerComponent) delegateAuthClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+//
+// Both Calico and Calico Enterprise, but different names.
+func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, client.Object) {
 	// Determine names based on the configured variant.
-	var name string
+	var name, nameToDelete string
+	enterpriseName := "tigera-apiserver-delegate-auth"
+	ossName := "calico-apiserver-delegate-auth"
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-apiserver-delegate-auth"
+		name = enterpriseName
+		nameToDelete = ossName
 	case operatorv1.Calico:
-		name = "calico-apiserver-delegate-auth"
+		name = ossName
+		nameToDelete = enterpriseName
 	}
 
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      serviceAccountName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
 			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     "system:auth-delegator",
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-	}
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      serviceAccountName(c.installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     "system:auth-delegator",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		}, &rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nameToDelete,
+			},
+		}
+
 }
 
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
 // extension-apiserver-authentication configmap. That configmap contains the client CA file that
 // the main API server was configured with.
-func (c *apiServerComponent) authReaderRoleBinding() *rbacv1.RoleBinding {
-	var name string
+//
+// Both Calico and Calico Enterprise, but different names.
+func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Object) {
+	var name, nameToDelete string
+	enterpriseName := "tigera-auth-reader"
+	ossName := "calico-apiserver-auth-reader"
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-auth-reader"
+		name = enterpriseName
+		nameToDelete = ossName
 	case operatorv1.Calico:
-		name = "calico-apiserver-auth-reader"
+		name = ossName
+		nameToDelete = enterpriseName
 	}
 
 	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "kube-system",
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "Role",
-			Name:     "extension-apiserver-authentication-reader",
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      serviceAccountName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "kube-system",
 			},
-		},
-	}
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "Role",
+				Name:     "extension-apiserver-authentication-reader",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      serviceAccountName(c.installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				},
+			},
+		}, &rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nameToDelete,
+				Namespace: "kube-system",
+			},
+		}
+
 }
 
 // apiServerServiceAccount creates the service account used by the API server.
+//
+// Both Calico and Calico Enterprise, but in different namespaces.
 func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -401,6 +434,8 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 }
 
 // calicoCustomResourcesClusterRole creates a clusterrole that gives permissions to access backing CRDs and k8s networkpolicies.
+//
+// Both Calico and Calico Enterprise, with the same name.
 func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
@@ -483,6 +518,8 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 
 // calicoCustomResourcesClusterRoleBinding creates a clusterrolebinding that applies calicoCustomResourcesClusterRole to
 // the calico-apiserver service account.
+//
+// Both Calico and Calico Enterprise, with the same name.
 func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -504,149 +541,199 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 	}
 }
 
-func (c *apiServerComponent) authClusterRole() *rbacv1.ClusterRole {
-	var name string
+// authClusterRole returns the cluster role to create, and one to delete, based on the variant.
+//
+// Both Calico and Calico Enterprise, with different names.
+func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
+	var name, nameToDelete string
+	enterpriseName := "tigera-extension-apiserver-auth-access"
+	ossName := "calico-extension-apiserver-auth-access"
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-extension-apiserver-auth-access"
+		name = enterpriseName
+		nameToDelete = ossName
 	case operatorv1.Calico:
-		name = "calico-extension-apiserver-auth-access"
+		name = ossName
+		nameToDelete = enterpriseName
 	}
 
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{
-					"",
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{
+						"",
+					},
+					Resources: []string{
+						"configmaps",
+					},
+					Verbs: []string{
+						"list",
+						"watch",
+					},
+					ResourceNames: []string{
+						"extension-apiserver-authentication",
+					},
 				},
-				Resources: []string{
-					"configmaps",
-				},
-				Verbs: []string{
-					"list",
-					"watch",
-				},
-				ResourceNames: []string{
-					"extension-apiserver-authentication",
+				{
+					APIGroups: []string{
+						"rbac.authorization.k8s.io",
+					},
+					Resources: []string{
+						"clusterroles",
+						"clusterrolebindings",
+						"roles",
+						"rolebindings",
+					},
+					Verbs: []string{
+						"get",
+						"list",
+						"watch",
+					},
 				},
 			},
-			{
-				APIGroups: []string{
-					"rbac.authorization.k8s.io",
-				},
-				Resources: []string{
-					"clusterroles",
-					"clusterrolebindings",
-					"roles",
-					"rolebindings",
-				},
-				Verbs: []string{
-					"get",
-					"list",
-					"watch",
-				},
+		}, &rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nameToDelete,
 			},
-		},
-	}
+		}
 }
 
-func (c *apiServerComponent) authClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	var name string
+// authClusterRoleBinding returns a clusterrolebinding to create, and a clusterrolebinding to delete.
+//
+// Both Calico and Calico Enterprise, with different names.
+func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Object) {
+	var name, nameToDelete string
+	enterpriseName := "tigera-extension-apiserver-auth-access"
+	ossName := "calico-extension-apiserver-auth-access"
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-extension-apiserver-auth-access"
+		name = enterpriseName
+		nameToDelete = ossName
 	case operatorv1.Calico:
-		name = "calico-extension-apiserver-auth-access"
+		name = ossName
+		nameToDelete = enterpriseName
 	}
 
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      serviceAccountName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
 			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     "calico-extension-apiserver-auth-access",
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-	}
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      serviceAccountName(c.installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     "calico-extension-apiserver-auth-access",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		}, &rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nameToDelete,
+			},
+		}
+
 }
 
-// webhookReaderClusterRole returns a ClusterRole to read MutatingWebhookConfigurations and ValidatingWebhookConfigurations
-func (c *apiServerComponent) webhookReaderClusterRole() *rbacv1.ClusterRole {
-	var name string
+// webhookReaderClusterRole returns a ClusterRole to read MutatingWebhookConfigurations and ValidatingWebhookConfigurations and an
+// equivalent one to delete based on variant.
+//
+// Both Calico and Calico Enterprise, with different names.
+func (c *apiServerComponent) webhookReaderClusterRole() (client.Object, client.Object) {
+	var name, nameToDelete string
+	enterpriseName := "tigera-webhook-reader"
+	ossName := "calico-webhook-reader"
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-webhook-reader"
+		name = enterpriseName
+		nameToDelete = ossName
 	case operatorv1.Calico:
-		name = "calico-webhook-reader"
+		name = ossName
+		nameToDelete = enterpriseName
 	}
 
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{
-					"admissionregistration.k8s.io",
-				},
-				Resources: []string{
-					"mutatingwebhookconfigurations", "validatingwebhookconfigurations",
-				},
-				Verbs: []string{
-					"get",
-					"list",
-					"watch",
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{
+						"admissionregistration.k8s.io",
+					},
+					Resources: []string{
+						"mutatingwebhookconfigurations", "validatingwebhookconfigurations",
+					},
+					Verbs: []string{
+						"get",
+						"list",
+						"watch",
+					},
 				},
 			},
-		},
-	}
+		}, &rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nameToDelete,
+			},
+		}
 }
 
-// webhookReaderClusterRoleBinding binds the calico-apiserver ServiceAccount to the webhook-reader
-func (c *apiServerComponent) webhookReaderClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	var name, refName string
+// webhookReaderClusterRoleBinding binds the apiserver ServiceAccount to the webhook-reader. It also returns a version to
+// delete, based on variant.
+//
+// Both Calico and Calico Enterprise, with different names.
+func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, client.Object) {
+	var name, nameToDelete, refName string
+	enterpriseName := "tigera-apiserver-webhook-reader"
+	ossName := "calico-apiserver-webhook-reader"
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-apiserver-webhook-reader"
+		name = enterpriseName
+		nameToDelete = ossName
 		refName = "tigera-webhook-reader"
 	case operatorv1.Calico:
-		name = "calico-apiserver-webhook-reader"
+		name = ossName
+		nameToDelete = enterpriseName
 		refName = "calico-webhook-reader"
 	}
 
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      serviceAccountName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      serviceAccountName(c.installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				},
 			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     refName,
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-	}
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     refName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		}, &rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: nameToDelete},
+		}
+
 }
 
-// apiServerService creates a service backed by the API server and query server.
+// apiServerService creates a service backed by the API server and - for enterprise - query server.
+//
+// Both Calico and Calico Enterprise, different namespaces.
 func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -986,13 +1073,21 @@ func (c *apiServerComponent) getTLSObjects() []client.Object {
 	return objs
 }
 
-func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	var name string
+// apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.
+//
+// Both Calico and Calico Enterprise, with different names.
+func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client.Object) {
+	var name, nameToDelete string
+	enterpriseName := "tigera-apiserver"
+	ossName := "calico-apiserver"
+
 	switch c.installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-apiserver"
+		name = enterpriseName
+		nameToDelete = ossName
 	case operatorv1.Calico:
-		name = "calico-apiserver"
+		name = ossName
+		nameToDelete = enterpriseName
 	}
 
 	psp := podsecuritypolicy.NewBasePolicy()
@@ -1001,13 +1096,17 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() *policyv1beta1.PodSecu
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
+
+	pspToDelete := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName(nameToDelete)
+
+	return psp, pspToDelete
 }
 
 // networkPolicy returns a NP to allow traffic to the API server. This prevents it from
-// being cut off from the main API server. For the enterprise equivalent, see enterpriseNetworkPolicy().
+// being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
 //
-// Calico only
+// Calico only.
 func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	tcp := v1.ProtocolTCP
 	p := intstr.FromInt(5443)
@@ -1495,82 +1594,4 @@ rules:
 			"config": defaultAuditPolicy,
 		},
 	}
-}
-
-// enterpriseNetworkPolicy returns the network policies to deploy for the API server.
-//
-// Calico Enterprise only
-func (c *apiServerComponent) enterpriseNetworkPolicy() *v3.NetworkPolicy {
-	var order float64 = 1
-	p := v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			// This object is for Enterprise only, so pass it explicitly.
-			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
-			Name:      "allow-tigera.apiserver-access",
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &order,
-			Tier:     "allow-tigera",
-			Selector: "k8s-app == 'calico-apiserver'",
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: "TCP",
-					Source: v3.EntityRule{
-						Nets: []string{"0.0.0.0/0"},
-					},
-					Destination: v3.EntityRule{
-						Ports: []int32{443, 5443, 9090, 10443},
-					},
-				},
-			},
-		},
-	}
-
-	// Egress rules depend on platform in order to access DNS.
-	egress := []v3.Rule{}
-	if c.openshift {
-		egress = append(egress, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: "UDP",
-			Destination: v3.EntityRule{
-				Ports:    []int32{5353},
-				Selector: "dns.operator.openshift.io/daemonset-dns == \"default\"",
-			},
-		})
-	} else {
-		egress = append(egress, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: "UDP",
-			Destination: v3.EntityRule{
-				Ports:    []int32{53},
-				Selector: "k8s-app == \"kube-dns\"",
-			},
-		})
-	}
-
-	// This egress rule in this policy allows tigera api-server to communicate with kubernetes api server.
-	// By default, kubernetes api server listens on [12388, 6443, 443].
-	ports := []int32{6443, 443}
-	if c.installation.KubernetesProvider == operatorv1.ProviderDockerEE {
-		// DockerEE uses port 12388 for kubernetes apiserver service.
-		ports = []int32{12388}
-	}
-	egress = append(egress, v3.Rule{
-		Action:   v3.Allow,
-		Protocol: "TCP",
-		Destination: v3.EntityRule{
-			NamespaceSelector: "projectcalico.org/name == \"deafult\"",
-			Selector:          "provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes'",
-			Ports:             ports,
-		},
-	})
-
-	// Pass to subsequent tiers for further enforcement
-	egress = append(egress, v3.Rule{
-		Action: v3.Pass,
-	})
-	return &p
 }

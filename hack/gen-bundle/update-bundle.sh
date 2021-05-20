@@ -54,6 +54,10 @@ if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
     yq write -i ${CSV} spec.replaces tigera-operator.v${PREV_VERSION}
 fi
 
+# Set the CSV to ignore previous versions when updating. Use brackets to preserve the
+# dot in the key "olm.skipRange".
+yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERSION}
+
 #
 # Now start updates to the bundle dockerfile. First update the package name.
 #

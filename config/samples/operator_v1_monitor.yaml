@@ -1,0 +1,4 @@
+apiVersion: operator.tigera.io/v1
+kind: Monitor
+metadata:
+  name: tigera-secure

@@ -24,6 +24,12 @@ Tests:
 - Tests for file `X.go` can be found in `X_test.go`.
 - FV tests which run against a local cluster can be found in `test/*.go`.
 
+### Controller Dependency Graph
+
+This graph shows the dependencies between controllers. Optional dependencies are in dashed lines.
+
+![Controller Dependency Graph](controller-dependency-graph.svg)
+
 ### Design principles
 
 When developing in the operator, there are a few design principles to be aware of.

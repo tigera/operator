@@ -45,7 +45,7 @@ var (
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version: "latest",
+		Version: "master",
 		Image:   "calico/apiserver",
 	}
 	ComponentOperatorInit = component{
@@ -60,5 +60,6 @@ var (
 		ComponentCalicoTypha,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
+		ComponentCalicoAPIServer,
 	}
 )

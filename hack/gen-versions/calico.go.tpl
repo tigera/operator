@@ -48,7 +48,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .Components.apiserver}}
+{{ with index .Components "calico/apiserver"}}
 	ComponentCalicoAPIServer = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

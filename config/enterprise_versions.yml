@@ -1,43 +1,43 @@
-title: v3.5.2
+title: v3.5.3
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.5.2
+    version: v3.5.3
   voltron:
     image: tigera/voltron
-    version: v3.5.2
+    version: v3.5.3
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v3.5.2
+    version: v3.5.3
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: v3.5.2
+    version: v3.5.3
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.5.2
+    version: v3.5.3
   typha:
     image: tigera/typha
-    version: v3.5.2
+    version: v3.5.3
   cnx-node:
     image: tigera/cnx-node
-    version: v3.5.2
+    version: v3.5.3
   fluentd:
     image: tigera/fluentd
-    version: v3.5.2
+    version: v3.5.3
   fluentd-windows:
     image: tigera/fluentd-windows
-    version: v3.5.2
+    version: v3.5.3
   es-proxy:
     image: tigera/es-proxy
-    version: v3.5.2
+    version: v3.5.3
   eck-kibana:
     version: 7.10.1
   dex:
     image: tigera/dex
-    version: v3.5.2
+    version: v3.5.3
   kibana:
     image: tigera/kibana
-    version: v3.5.2
+    version: v3.5.3
   elasticsearch-operator:
     registry: docker.elastic.co
     image: eck/eck-operator
@@ -46,40 +46,40 @@ components:
     version: 7.10.1
   elasticsearch:
     image: tigera/elasticsearch
-    version: v3.5.2
+    version: v3.5.3
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v3.5.2
+    version: v3.5.3
   es-curator:
     image: tigera/es-curator
-    version: v3.5.2
+    version: v3.5.3
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.5.2
+    version: v3.5.3
   compliance-controller:
     image: tigera/compliance-controller
-    version: v3.5.2
+    version: v3.5.3
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v3.5.2
+    version: v3.5.3
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v3.5.2
+    version: v3.5.3
   compliance-server:
     image: tigera/compliance-server
-    version: v3.5.2
+    version: v3.5.3
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v3.5.2
+    version: v3.5.3
   guardian:
     image: tigera/guardian
-    version: v3.5.2
+    version: v3.5.3
   tigera-cni:
     image: tigera/cni
-    version: v3.5.2
+    version: v3.5.3
   cloud-controllers:
     image: tigera/cloud-controllers
-    version: v3.5.2
+    version: v3.5.3
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
-    version: v3.5.2
+    version: v3.5.3

@@ -1098,7 +1098,7 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 
 	pspToDelete := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(nameToDelete)
+	pspToDelete.GetObjectMeta().SetName(nameToDelete)
 
 	return psp, pspToDelete
 }

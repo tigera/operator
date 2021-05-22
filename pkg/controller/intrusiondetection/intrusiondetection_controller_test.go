@@ -227,5 +227,46 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					components.ComponentElasticTseeInstaller.Image,
 					"sha256:intrusiondetectionjobinstallerhash")))
 		})
+		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			j := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.IntrusionDetectionInstallerJobName,
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}
+			// Shouldn't be able to find the job in a managed cluster.
+			Expect(test.GetResource(c, &j)).NotTo(BeNil())
+		})
+		It("should register intrusion-detection-job-installer image when in a management cluster", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterSpec{
+					Address: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			j := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.IntrusionDetectionInstallerJobName,
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &j)).To(BeNil())
+		})
 	})
 })

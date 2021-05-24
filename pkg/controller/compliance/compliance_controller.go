@@ -20,7 +20,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -57,7 +56,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	var licenseAPIReady = &utils.ReadyFlag{}
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -77,13 +76,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new *reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileCompliance{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        provider,
-		status:          status.New(mgr.GetClient(), "compliance"),
-		clusterDomain:   clusterDomain,
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "compliance", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
 	r.status.Run()
@@ -118,7 +117,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexTLSSecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -296,8 +295,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
+			render.ManagerInternalSecretCertName,
 		)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
@@ -306,61 +305,74 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	complianceServerCertSecret, err := utils.ValidateCertPair(r.client,
-		rmeta.OperatorNamespace(),
-		render.ComplianceServerCertSecret,
-		render.ComplianceServerCertName,
-		render.ComplianceServerKeyName,
-	)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
-		return reconcile.Result{}, err
+	var complianceServerCertSecret *corev1.Secret
+	if network.CertificateManagement == nil {
+		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
+			render.ComplianceServerCertSecret,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+		)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		}
+
+		// Create the cert if doesn't exist. If the cert exists, check that the cert
+		// has the expected DNS names. If the cert doesn't and the cert is managed by the
+		// operator, the cert is recreated and returned. If the invalid cert is supplied by
+		// the user, set the component degraded.
+
+		complianceServerCertSecret, err = utils.EnsureCertificateSecret(
+			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
+		)
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, rmeta.OperatorNamespace())
 	}
 
-	// Create the cert if doesn't exist. If the cert exists, check that the cert
-	// has the expected DNS names. If the cert doesn't and the cert is managed by the
-	// operator, the cert is recreated and returned. If the invalid cert is supplied by
-	// the user, set the component degraded.
-	svcDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)
-	complianceServerCertSecret, err = utils.EnsureCertificateSecret(
-		render.ComplianceServerCertSecret, complianceServerCertSecret, render.ComplianceServerKeyName, render.ComplianceServerCertName, rmeta.DefaultCertificateDuration, svcDNSNames...,
-	)
-
-	if err != nil {
-		r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
-		return reconcile.Result{}, err
-	}
-
-	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error querying Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
-	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
 		return reconcile.Result{}, nil
 	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	var dexCfg render.DexKeyValidatorConfig
-	if authentication != nil {
-		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, err
-		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "Failed to process the authentication CR.")
+		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	reqLogger.V(3).Info("rendering components")
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(esSecrets, managerInternalTLSSecret, network, complianceServerCertSecret, esClusterConfig, pullSecrets, openshift, managementCluster, managementClusterConnection, dexCfg, r.clusterDomain, hasNoLicense)
+	component, err := render.Compliance(
+		esSecrets,
+		managerInternalTLSSecret,
+		network,
+		complianceServerCertSecret,
+		esClusterConfig,
+		pullSecrets,
+		openshift,
+		managementCluster,
+		managementClusterConnection,
+		keyValidatorConfig,
+		r.clusterDomain,
+		hasNoLicense)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

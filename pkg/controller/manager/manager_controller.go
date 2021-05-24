@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/compliance"
@@ -59,7 +61,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	var licenseAPIReady = &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -79,13 +81,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, clusterDomain string, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        provider,
-		status:          status.New(mgr.GetClient(), "manager"),
-		clusterDomain:   clusterDomain,
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
 	c.status.Run()
@@ -119,7 +121,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexTLSSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -127,8 +129,9 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ManagerOIDCConfig, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", render.ManagerOIDCConfig, err)
+	// This may or may not exist, it depends on what the OIDC type is in the Authentication CR.
+	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
@@ -275,33 +278,42 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// If the manager TLS secret exists, check whether it is managed by the
 	// operator.
-	var certOperatorManaged bool
+	certOperatorManaged := true
 	if tlsSecret != nil {
-		certOperatorManaged, err = utils.IsOperatorManaged(tlsSecret, render.ManagerInternalSecretCertName)
+		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
 			return reconcile.Result{}, err
 		}
+		certOperatorManaged = utils.IsOperatorIssued(issuer)
 	}
 
-	// If the secret does not exist, then create one.
-	// If the secret exists but is operator managed, then check that it has the
-	// right DNS names and update it if necessary.
-	if tlsSecret == nil || certOperatorManaged {
-		// Create the cert if doesn't exist. If the cert exists, check that the cert
-		// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
-		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, "localhost")
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-		tlsSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
-		)
+	if installation.CertificateManagement == nil {
+		// If the secret does not exist, then create one.
+		// If the secret exists but is operator managed, then check that it has the
+		// right DNS names and update it if necessary.
+		if tlsSecret == nil || certOperatorManaged {
+			// Create the cert if doesn't exist. If the cert exists, check that the cert
+			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
+			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
+			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, "localhost")
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			tlsSecret, err = utils.EnsureCertificateSecret(
+				render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
+			)
 
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
-			return reconcile.Result{}, err
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			}
 		}
+	} else if !certOperatorManaged {
+		err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
+		r.status.SetDegraded("Invalid certificate configuration", err.Error())
+		return reconcile.Result{}, err
+	} else {
+		tlsSecret = nil
 	}
 
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
@@ -326,8 +338,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
 			rmeta.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
-			render.ComplianceServerCertName,
-			render.ComplianceServerKeyName,
+			"", // We don't need the key.
+			corev1.TLSCertKey,
 		)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
@@ -438,25 +450,22 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
-	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
 		return reconcile.Result{}, nil
 	}
 
-	var dexCfg render.DexKeyValidatorConfig
-	if authentication != nil {
-		dexTLSSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, err
-		}
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, dexTLSSecret, r.clusterDomain)
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "Failed to process the authentication CR.")
+		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	var elasticLicenseType render.ElasticsearchLicenseType
@@ -472,7 +481,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
-		dexCfg,
+		keyValidatorConfig,
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
 		complianceServerCertSecret,

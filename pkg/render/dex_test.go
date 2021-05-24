@@ -20,6 +20,7 @@ import (
 )
 
 var _ = Describe("dex rendering tests", func() {
+	const clusterName = "svc.cluster.local"
 	Context("dex is configured for oidc", func() {
 
 		const (
@@ -31,6 +32,7 @@ var _ = Describe("dex rendering tests", func() {
 			installation   *operatorv1.InstallationSpec
 			authentication *operatorv1.Authentication
 			tlsSecret      *corev1.Secret
+			certSecret     *corev1.Secret
 			dexSecret      *corev1.Secret
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
@@ -56,6 +58,7 @@ var _ = Describe("dex rendering tests", func() {
 			}
 
 			tlsSecret = render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
+			certSecret = render.CreateCertificateSecret(tlsSecret.Data[corev1.TLSCertKey], render.DexCertSecretName, rmeta.OperatorNamespace())
 			dexSecret = render.CreateDexClientSecret()
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -81,9 +84,9 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a OIDC setup", func() {
 
-			dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg)
+			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -102,27 +105,28 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexObjectName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 				{render.OIDCSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexCertSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
 			}
-			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
 				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
+			Expect(len(resources)).To(Equal(len(expectedResources)))
 		})
 
 		DescribeTable("should render the cluster name properly in the validator and rp configs", func(clusterDomain string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, tlsSecret, clusterDomain)
+			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, certSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
 			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)
-			Expect(validatorEnv[2].Value).To(Equal(expectedUrl + "/"))
-			Expect(validatorEnv[3].Value).To(Equal(expectedUrl + "/dex/keys"))
+			Expect(validatorEnv[1].Value).To(Equal(expectedUrl + "/"))
+			Expect(validatorEnv[4].Value).To(Equal(expectedUrl + "/dex/keys"))
 
-			rpConfig := render.NewDexRelyingPartyConfig(authentication, tlsSecret, dexSecret, clusterDomain)
+			rpConfig := render.NewDexRelyingPartyConfig(authentication, certSecret, dexSecret, clusterDomain)
 			Expect(rpConfig.UserInfoURI()).To(Equal(expectedUrl + "/dex/userinfo"))
 			Expect(rpConfig.TokenURI()).To(Equal(expectedUrl + "/dex/token"))
 		},
@@ -138,13 +142,50 @@ var _ = Describe("dex rendering tests", func() {
 				Effect:   corev1.TaintEffectNoExecute,
 			}
 
-			dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, "svc.cluster.local")
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
-			}, dexCfg)
+			}, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
+		})
+
+		It("should render all resources for a certificate management", func() {
+			installation.CertificateManagement = &operatorv1.CertificateManagement{}
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+
+			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			resources, _ := component.Objects()
+
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
+				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
+				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},
+				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
+				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
+				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
+				{render.DexTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexObjectName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.OIDCSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexCertSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
+				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{"tigera-dex:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			}
+
+			for i, expectedRes := range expectedResources {
+				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+			Expect(len(resources)).To(Equal(len(expectedResources)))
 		})
 	})
 })

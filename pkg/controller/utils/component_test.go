@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
+
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -74,7 +76,7 @@ var _ = Describe("Component handler tests", func() {
 
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
-		sm = status.New(c, "fake-component")
+		sm = status.New(c, "fake-component", &common.VersionInfo{Major: 1, Minor: 19})
 
 		// We need to provide something to handler even though it seems to be unused..
 		instance = &operatorv1.Manager{

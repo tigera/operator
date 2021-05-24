@@ -51,7 +51,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	statusManager := status.New(mgr.GetClient(), "management-cluster-connection")
+	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider))
 }
 

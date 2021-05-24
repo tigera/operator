@@ -52,7 +52,7 @@ func KubeControllers(
 	elasticsearchSecret *v1.Secret,
 	kibanaSecret *v1.Secret,
 	authentication *operator.Authentication,
-	esLicenseType ElasticsearchLicenseType,
+	enabledESOIDCWorkaround bool,
 	clusterDomain string,
 	esAdminSecret *v1.Secret,
 	metricsPort int,
@@ -81,7 +81,7 @@ func KubeControllers(
 		logStorageExists:            logStorageExists,
 		authentication:              authentication,
 		k8sServiceEp:                k8sServiceEp,
-		esLicenseType:               esLicenseType,
+		enabledESOIDCWorkaround:     enabledESOIDCWorkaround,
 		clusterDomain:               clusterDomain,
 		elasticsearchUserSecret:     elasticsearchUserSecret,
 		metricsPort:                 metricsPort,
@@ -98,7 +98,7 @@ type kubeControllersComponent struct {
 	logStorageExists            bool
 	authentication              *operator.Authentication
 	k8sServiceEp                k8sapi.ServiceEndpoint
-	esLicenseType               ElasticsearchLicenseType
+	enabledESOIDCWorkaround     bool
 	image                       string
 	clusterDomain               string
 	elasticsearchUserSecret     *v1.Secret
@@ -350,7 +350,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 
-			env = append(env, v1.EnvVar{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)})
+			if c.enabledESOIDCWorkaround {
+				env = append(env, v1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
+			}
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.
@@ -381,11 +383,25 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Env:       env,
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &v1.Probe{
+			PeriodSeconds: int32(10),
 			Handler: v1.Handler{
 				Exec: &v1.ExecAction{
 					Command: []string{
 						"/usr/bin/check-status",
 						"-r",
+					},
+				},
+			},
+		},
+		LivenessProbe: &v1.Probe{
+			PeriodSeconds:       int32(10),
+			InitialDelaySeconds: int32(10),
+			FailureThreshold:    int32(6),
+			Handler: v1.Handler{
+				Exec: &v1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-l",
 					},
 				},
 			},

@@ -19,7 +19,12 @@ import (
 	"strconv"
 	"strings"
 
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+
+	"github.com/tigera/operator/pkg/render/common/authentication"
+
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -32,6 +37,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -45,7 +51,6 @@ const (
 	managerTargetPort                = 9443
 	ManagerServiceName               = "tigera-manager"
 	ManagerNamespace                 = "tigera-manager"
-	ManagerServiceDNS                = "tigera-manager.tigera-manager.svc.%s"
 	ManagerServiceIP                 = "localhost"
 	ManagerServiceAccount            = "tigera-manager"
 	ManagerClusterRole               = "tigera-manager-role"
@@ -57,7 +62,6 @@ const (
 	ManagerInternalTLSSecretCertName = "internal-manager-tls-cert"
 	ManagerInternalSecretKeyName     = "key"
 	ManagerInternalSecretCertName    = "cert"
-	ManagerOIDCConfig                = "tigera-manager-oidc-config"
 
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
 	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
@@ -79,7 +83,7 @@ const (
 )
 
 func Manager(
-	dexCfg DexKeyValidatorConfig,
+	keyValidatorConfig authentication.KeyValidatorConfig,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
@@ -94,16 +98,24 @@ func Manager(
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 ) (Component, error) {
-	tlsSecrets := []*corev1.Secret{tlsKeyPair}
-	tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
-	tlsAnnotations := make(map[string]string)
-
-	if dexCfg != nil {
-		tlsSecrets = append(tlsSecrets, dexCfg.RequiredSecrets(ManagerNamespace)...)
-		tlsAnnotations = dexCfg.RequiredAnnotations()
+	var tlsSecrets []*corev1.Secret
+	tlsAnnotations := map[string]string{
+		KibanaTLSHashAnnotation: rmeta.SecretsAnnotationHash(kibanaSecrets...),
 	}
-	tlsAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
-	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(kibanaSecrets...)
+	var tlsAnnotation string
+	if installation.CertificateManagement == nil {
+		tlsSecrets = append(tlsSecrets, tlsKeyPair)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
+		tlsAnnotation = rmeta.AnnotationHash(tlsKeyPair.Data)
+	}
+	tlsAnnotations[tlsSecretHashAnnotation] = tlsAnnotation
+
+	if keyValidatorConfig != nil {
+		tlsSecrets = append(tlsSecrets, keyValidatorConfig.RequiredSecrets(ManagerNamespace)...)
+		for key, value := range keyValidatorConfig.RequiredAnnotations() {
+			tlsAnnotations[key] = value
+		}
+	}
 
 	if managementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
@@ -115,7 +127,7 @@ func Manager(
 		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
-		dexCfg:                     dexCfg,
+		keyValidatorConfig:         keyValidatorConfig,
 		esSecrets:                  esSecrets,
 		kibanaSecrets:              kibanaSecrets,
 		complianceServerCertSecret: complianceServerCertSecret,
@@ -132,7 +144,7 @@ func Manager(
 }
 
 type managerComponent struct {
-	dexCfg                     DexKeyValidatorConfig
+	keyValidatorConfig         authentication.KeyValidatorConfig
 	esSecrets                  []*corev1.Secret
 	kibanaSecrets              []*corev1.Secret
 	complianceServerCertSecret *corev1.Secret
@@ -148,6 +160,7 @@ type managerComponent struct {
 	managerImage               string
 	proxyImage                 string
 	esProxyImage               string
+	csrInitImage               string
 }
 
 func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -168,6 +181,13 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -216,8 +236,26 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	}
 	objs = append(objs, c.managerDeployment())
+	if c.keyValidatorConfig != nil {
+		objs = append(objs, configmap.ToRuntimeObjects(c.keyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
+	}
 
-	return objs, nil
+	var toDelete []client.Object
+	if c.installation.CertificateManagement != nil {
+		objs = append(objs, csrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
+		// If we want to use certificate management, we should clean up any existing secrets that have been created by the operator.
+		secretToDelete := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ManagerTLSSecretName,
+				Namespace: rmeta.OperatorNamespace(),
+			},
+		}
+		toDelete = append(toDelete, secretToDelete)
+		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, secretToDelete)...)...)
+	}
+
+	return objs, toDelete
 }
 
 func (c *managerComponent) Ready() bool {
@@ -227,12 +265,10 @@ func (c *managerComponent) Ready() bool {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-	var annotations map[string]string = make(map[string]string)
+	annotations := make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
-		annotations = map[string]string{
-			complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecret.Data),
-		}
+		annotations[complianceServerTLSHashAnnotation] = rmeta.AnnotationHash(c.complianceServerCertSecret.Data)
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -242,6 +278,19 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	// tigera-management-cluster-connection : cert used to generate guardian certificates
 	for k, v := range c.tlsAnnotations {
 		annotations[k] = v
+	}
+
+	var initContainers []corev1.Container
+	if c.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation.CertificateManagement,
+			c.csrInitImage,
+			ManagerTLSSecretName,
+			ManagerServiceName,
+			ManagerSecretKeyName,
+			ManagerSecretCertName,
+			dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, c.clusterDomain),
+			ManagerNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -258,6 +307,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
@@ -293,15 +343,24 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 }
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
+func (c *managerComponent) managerVolumeMounts() []v1.VolumeMount {
+	if c.keyValidatorConfig != nil {
+		return c.keyValidatorConfig.RequiredVolumeMounts()
+	}
+	return []v1.VolumeMount{}
+}
+
+// managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []v1.Volume {
+	var certificateManagement *operator.CertificateManagement
+	if c.installation.CertificateManagement != nil {
+		certificateManagement = c.installation.CertificateManagement
+	}
+	tlsVolumeSource := certificateVolumeSource(certificateManagement, ManagerTLSSecretName)
 	v := []v1.Volume{
 		{
-			Name: ManagerTLSSecretName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: ManagerTLSSecretName,
-				},
-			},
+			Name:         ManagerTLSSecretName,
+			VolumeSource: tlsVolumeSource,
 		},
 		{
 			Name: KibanaPublicCertSecret,
@@ -365,8 +424,8 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			},
 		)
 	}
-	if c.dexCfg != nil {
-		v = append(v, c.dexCfg.RequiredVolumes()...)
+	if c.keyValidatorConfig != nil {
+		v = append(v, c.keyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return v
@@ -433,16 +492,6 @@ func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
-	envs = setManagerCloudEnvs(envs)
-	return envs
-}
-
-// Do this as a separate function to try to make updates in the future easier.
-func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
-	envs = append(envs,
-		v1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
-		v1.EnvVar{Name: "LICENSE_EDITION", Value: "cloudEdition"},
-	)
 	return envs
 }
 
@@ -454,6 +503,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
+		VolumeMounts:    c.managerVolumeMounts(),
 	}
 
 	return tm
@@ -463,13 +513,19 @@ func (c *managerComponent) managerContainer() corev1.Container {
 func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	var envs []corev1.EnvVar
 
-	if c.dexCfg == nil {
+	if c.keyValidatorConfig == nil {
 		envs = []corev1.EnvVar{{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "Token"}}
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_AUTHORITY", Value: fmt.Sprintf("%s/dex", c.dexCfg.ManagerURI())},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: DexClientId}}
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.keyValidatorConfig.ClientID()}}
+
+		switch c.keyValidatorConfig.(type) {
+		case *DexKeyValidatorConfig:
+			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.keyValidatorConfig.Issuer()})
+		case *tigerakvc.KeyValidatorConfig:
+			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: ""})
+		}
 	}
 	return envs
 }
@@ -487,8 +543,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 	}
 
-	if c.dexCfg != nil {
-		env = append(env, c.dexCfg.RequiredEnv("VOLTRON_")...)
+	if c.keyValidatorConfig != nil {
+		env = append(env, c.keyValidatorConfig.RequiredEnv("VOLTRON_")...)
 	}
 
 	if c.complianceServerCertSecret == nil {
@@ -520,8 +576,8 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 
-	if c.dexCfg != nil {
-		mounts = append(mounts, c.dexCfg.RequiredVolumeMounts()...)
+	if c.keyValidatorConfig != nil {
+		mounts = append(mounts, c.keyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return mounts
@@ -540,9 +596,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
 	}
 
-	if c.dexCfg != nil {
-		env = append(env, c.dexCfg.RequiredEnv("")...)
-		volumeMounts = append(volumeMounts, c.dexCfg.RequiredVolumeMounts()...)
+	if c.keyValidatorConfig != nil {
+		env = append(env, c.keyValidatorConfig.RequiredEnv("")...)
+		volumeMounts = append(volumeMounts, c.keyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return corev1.Container{

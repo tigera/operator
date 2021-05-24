@@ -73,10 +73,12 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		)
 	}
 
-	operatorManaged, err := IsOperatorManaged(secret, certName)
+	issuer, err := GetCertificateIssuer(secret.Data[certName])
 	if err != nil {
 		return nil, err
 	}
+
+	operatorManaged := IsOperatorIssued(issuer)
 
 	// For user provided certs, skip checking whether they have the right DNS
 	// names.
@@ -99,19 +101,24 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 	return secret, err
 }
 
-// Check if the cert secret is created and managed by the operator.
-func IsOperatorManaged(certSecret *corev1.Secret, certKeyName string) (bool, error) {
-	cert, err := parseCertificate(certSecret, certKeyName)
-	if err != nil {
-		certsLogger.Info(fmt.Sprintf("Parsing certificate error: %v", err))
-		return false, err
-	}
-
-	return operatorIssuedCertRegexp.MatchString(cert.Issuer.CommonName), nil
+// IsOperatorIssued checks if the cert secret is issued operator.
+func IsOperatorIssued(issuer string) bool {
+	return operatorIssuedCertRegexp.MatchString(issuer)
 }
 
-func parseCertificate(secret *corev1.Secret, certKeyName string) (*x509.Certificate, error) {
-	certBytes := secret.Data[certKeyName]
+// GetCertificateIssuer returns the issuer of a PEM block.
+func GetCertificateIssuer(certPem []byte) (string, error) {
+	cert, err := parseCertificate(certPem)
+	if err != nil {
+		certsLogger.Info(fmt.Sprintf("Parsing certificate error: %v", err))
+		return "", err
+	}
+
+	return cert.Issuer.CommonName, nil
+
+}
+
+func parseCertificate(certBytes []byte) (*x509.Certificate, error) {
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {
 		return nil, ErrInvalidCertNoPEMData
@@ -125,7 +132,7 @@ func parseCertificate(secret *corev1.Secret, certKeyName string) (*x509.Certific
 
 // Check that the cert in the secret has the expected DNS names.
 func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expectedDNSNames []string) error {
-	cert, err := parseCertificate(secret, certKeyName)
+	cert, err := parseCertificate(secret.Data[certKeyName])
 	if err != nil {
 		return err
 	}

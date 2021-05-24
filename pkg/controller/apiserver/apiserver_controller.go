@@ -51,18 +51,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.AmazonCRDExists, opts.ClusterDomain))
+	return add(mgr, newReconciler(mgr, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider, amazonCRDExists bool, clusterDomain string) *ReconcileAPIServer {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPIServer {
 	r := &ReconcileAPIServer{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        provider,
-		amazonCRDExists: amazonCRDExists,
-		status:          status.New(mgr.GetClient(), "apiserver"),
-		clusterDomain:   clusterDomain,
+		provider:        opts.DetectedProvider,
+		amazonCRDExists: opts.AmazonCRDExists,
+		status:          status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -90,6 +90,10 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 
 	if err = utils.AddSecretsWatch(c, render.APIServerTLSSecretName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.APIServerNamespace} {
@@ -257,6 +261,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded("Error reading AmazonCloudIntegration", err.Error())
 			return reconcile.Result{}, err
 		}
+	}
+
+	err = utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to manage the rendered component.

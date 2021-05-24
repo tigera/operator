@@ -29,7 +29,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -49,9 +48,6 @@ var log = logf.Log.WithName("controller_authentication")
 const (
 	controllerName = "authentication-controller"
 
-	// Common name to add to the Dex TLS secret.
-	dexCN = "tigera-dex.tigera-dex.svc.%s"
-
 	defaultNameAttribute string = "uid"
 )
 
@@ -62,17 +58,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider, opts.ClusterDomain))
+	return add(mgr, newReconciler(mgr, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider oprv1.Provider, clusterDomain string) *ReconcileAuthentication {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
-		provider:      provider,
-		status:        status.New(mgr.GetClient(), "authentication"),
-		clusterDomain: clusterDomain,
+		provider:      opts.DetectedProvider,
+		status:        status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
+		clusterDomain: opts.ClusterDomain,
 	}
 	r.status.Run()
 	return r
@@ -101,7 +97,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.DexNamespace} {
 		for _, secretName := range []string{
-			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
+			render.DexTLSSecretName, render.DexCertSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", controllerName, secretName, namespace, err)
@@ -208,29 +204,28 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	// Cert used for TLS between voltron and dex when voltron is proxying dex from https://<manager-url>/dex
-	tlsSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
-		if errors.IsNotFound(err) {
-			// We need to render a new one.
-			tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(dexCN, r.clusterDomain))
-		} else {
-			log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
-			r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
-			return reconcile.Result{}, err
+	// Secret used for TLS between dex and other components.
+	var tlsSecret *corev1.Secret
+	if install.CertificateManagement == nil {
+		tlsSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
+			if errors.IsNotFound(err) {
+				tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCNPattern, r.clusterDomain))
+			} else {
+				log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
+				r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := getIdpSecret(ctx, r.client, authentication)
+	idpSecret, err := utils.GetIdpSecret(ctx, r.client, authentication)
 	if err != nil {
 		log.Error(err, "Invalid or missing identity provider secret")
 		r.status.SetDegraded("Invalid or missing identity provider secret", err.Error())
 		return reconcile.Result{}, err
 	}
-
-	// Set namespace for secrets so they can be used in the namespace of dex.
-	idpSecret = secret.CopyToNamespace(render.DexNamespace, idpSecret)[0]
 
 	dexSecret := &corev1.Secret{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
@@ -251,8 +246,13 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	disableDex := false
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == oprv1.OIDCTypeTigera {
+		disableDex = true
+	}
+
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
@@ -264,6 +264,8 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		r.provider == oprv1.ProviderOpenShift,
 		install,
 		dexCfg,
+		r.clusterDomain,
+		disableDex,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -292,40 +294,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func getIdpSecret(ctx context.Context, client client.Client, authentication *oprv1.Authentication) (*corev1.Secret, error) {
-	var secretName string
-	var requiredFields []string
-	if authentication.Spec.OIDC != nil {
-		secretName = render.OIDCSecretName
-		requiredFields = append(requiredFields, render.ClientIDSecretField, render.ClientSecretSecretField)
-	} else if authentication.Spec.Openshift != nil {
-		secretName = render.OpenshiftSecretName
-		requiredFields = append(requiredFields, render.ClientIDSecretField, render.ClientSecretSecretField, render.RootCASecretField)
-	} else if authentication.Spec.LDAP != nil {
-		secretName = render.LDAPSecretName
-		requiredFields = append(requiredFields, render.BindDNSecretField, render.BindPWSecretField, render.RootCASecretField)
-	}
-
-	secret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rmeta.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("missing secret %s/%s: %w", rmeta.OperatorNamespace(), secretName, err)
-	}
-
-	for _, field := range requiredFields {
-		data := secret.Data[field]
-		if len(data) == 0 {
-			return nil, fmt.Errorf("%s is a required field for secret %s/%s", field, secret.Namespace, secret.Name)
-		}
-
-		if field == render.BindDNSecretField {
-			if _, err := ldap.ParseDN(string(data)); err != nil {
-				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", rmeta.OperatorNamespace(), secretName, field)
-			}
-		}
-	}
-	return secret, nil
 }
 
 // updateAuthenticationWithDefaults sets values for backwards compatibility.

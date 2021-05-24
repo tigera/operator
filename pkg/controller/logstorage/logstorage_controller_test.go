@@ -223,6 +223,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("OnCRNotFound").Return()
 						mockStatus.On("ClearDegraded")
+						mockStatus.On("ReadyToMonitor")
 					})
 					DescribeTable("tests that the ExternalService is setup with the default service name", func(clusterDomain, expectedSvcName string) {
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, clusterDomain)
@@ -265,6 +266,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddStatefulSets", mock.Anything).Return()
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
+						mockStatus.On("ReadyToMonitor")
 
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
@@ -340,6 +342,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("AddStatefulSets", mock.Anything)
 					mockStatus.On("AddCronJobs", mock.Anything)
 					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("ReadyToMonitor")
 				})
 				It("test LogStorage reconciles successfully", func() {
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
@@ -473,7 +476,7 @@ var _ = Describe("LogStorage controller", func() {
 					})).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, render.CreateDexClientSecret())).ToNot(HaveOccurred())
-					Expect(cli.Create(ctx, render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local"))).ToNot(HaveOccurred())
+					Expect(cli.Create(ctx, render.CreateCertificateSecret([]byte(""), render.DexCertSecretName, rmeta.OperatorNamespace()))).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
@@ -1029,6 +1032,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("AddCronJobs", mock.Anything)
 					mockStatus.On("ClearDegraded", mock.Anything)
 					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("ReadyToMonitor")
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
@@ -1209,7 +1213,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", false, nil, render.ElasticsearchLicenseTypeBasic)
+		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {
@@ -1296,54 +1300,6 @@ func createKibanaSecrets() []client.Object {
 		kbPublicSecret,
 	}
 }
-
-var _ = Describe("LogStorage w/ Certificate management", func() {
-	Context("Reconcile", func() {
-		var (
-			cli          client.Client
-			mockStatus   *status.MockStatus
-			scheme       *runtime.Scheme
-			ctx          = context.Background()
-			install      *operatorv1.Installation
-			logstorageCR *operatorv1.LogStorage
-		)
-		BeforeEach(func() {
-			install = &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-			}
-			logstorageCR = &operatorv1.LogStorage{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-secure",
-				},
-				Spec: operatorv1.LogStorageSpec{},
-			}
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("Run").Return()
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("SetDegraded", "Certificate Management is not yet supported for clusters with LogStorage, please remove the setting from your Installation resource.", "").Return()
-			scheme = runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			cli = fake.NewFakeClientWithScheme(scheme)
-			Expect(cli.Create(ctx, &storagev1.StorageClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: DefaultElasticsearchStorageClass,
-				},
-			}))
-		})
-		It("should return an error when certification management is enabled while logstorage is present", func() {
-			install.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("ca"), SignerName: "a.b/c"}
-			Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
-			Expect(cli.Create(ctx, logstorageCR)).To(BeNil())
-			r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
-			Expect(err).ShouldNot(HaveOccurred())
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-		})
-	})
-})
 
 func (*mockESClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
 	return nil

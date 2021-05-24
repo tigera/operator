@@ -2858,5 +2858,6 @@ func verifyProbesAndLifecycle(ds *apps.DaemonSet, isOpenshift, isEnterprise bool
 		PreStop: &v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
 	}
 	Expect(ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
-	Expect(ds.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(5))
+
+	Expect(*ds.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(5))
 }

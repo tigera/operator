@@ -43,11 +43,17 @@ import (
 )
 
 const (
-	BirdTemplatesConfigMapName = "bird-templates"
-	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
-	nodeCertHashAnnotation     = "hash.operator.tigera.io/node-cert"
-	nodeCniConfigAnnotation    = "hash.operator.tigera.io/cni-config"
-	CSRLabelCalicoSystem       = "calico-system"
+	BirdTemplatesConfigMapName  = "bird-templates"
+	birdTemplateHashAnnotation  = "hash.operator.tigera.io/bird-templates"
+	nodeCertHashAnnotation      = "hash.operator.tigera.io/node-cert"
+	nodeCniConfigAnnotation     = "hash.operator.tigera.io/cni-config"
+	bgpLayoutHashAnnotation     = "hash.operator.tigera.io/bgp-layout"
+	CSRLabelCalicoSystem        = "calico-system"
+	BGPLayoutConfigMapName      = "bgp-layout"
+	BGPLayoutConfigMapKey       = "earlyNetworkConfiguration"
+	BGPLayoutVolumeName         = "bgp-layout"
+	BGPLayoutPath               = "/etc/calico/early-networking.yaml"
+	K8sSvcEndpointConfigMapName = "kubernetes-services-endpoint"
 )
 
 var (
@@ -67,6 +73,7 @@ func Node(
 	nodeAppArmorProfile string,
 	clusterDomain string,
 	nodeReporterMetricsPort int,
+	bgpLayoutHash string,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:            k8sServiceEp,
@@ -78,6 +85,7 @@ func Node(
 		nodeAppArmorProfile:     nodeAppArmorProfile,
 		clusterDomain:           clusterDomain,
 		nodeReporterMetricsPort: nodeReporterMetricsPort,
+		bgpLayoutHash:           bgpLayoutHash,
 	}
 }
 
@@ -95,6 +103,7 @@ type nodeComponent struct {
 	flexvolImage            string
 	certSignReqImage        string
 	nodeReporterMetricsPort int
+	bgpLayoutHash           string
 }
 
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
@@ -558,9 +567,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	if c.cr.CertificateManagement == nil {
 		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.NodeSecret.Data)
 	} else {
-		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cr.CertificateManagement.CACert)
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cr,
+			c.cr.CertificateManagement,
 			c.certSignReqImage,
 			"felix-certs",
 			FelixCommonName,
@@ -585,8 +593,16 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		annotations["container.apparmor.security.beta.kubernetes.io/calico-node"] = c.nodeAppArmorProfile
 	}
 
+	if c.bgpLayoutHash != "" {
+		annotations[bgpLayoutHashAnnotation] = c.bgpLayoutHash
+	}
+
 	if c.cr.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
+	}
+
+	if c.bpfDataplaneEnabled() {
+		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
 	var affinity *v1.Affinity
@@ -696,10 +712,13 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 		},
 	}
 
-	if c.cr.CalicoNetwork != nil &&
-		c.cr.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
-		volumes = append(volumes, v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}})
+	if c.bpfDataplaneEnabled() {
+		volumes = append(volumes,
+			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
+			v1.Volume{Name: "sys-fs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+			// Volume for the bpffs itself, used by the main node container.
+			v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+		)
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
@@ -743,7 +762,28 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 				},
 			})
 	}
+
+	if c.bgpLayoutHash != "" {
+		volumes = append(volumes,
+			v1.Volume{
+				Name: BGPLayoutVolumeName,
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: BGPLayoutConfigMapName,
+						},
+					},
+				},
+			})
+	}
+
 	return volumes
+}
+
+func (c *nodeComponent) bpfDataplaneEnabled() bool {
+	return c.cr.CalicoNetwork != nil &&
+		c.cr.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 }
 
 // cniContainer creates the node's init container that installs CNI.
@@ -781,6 +821,33 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		SecurityContext: &v1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
+	}
+}
+
+// bpffsInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
+// init container reduces the privileges needed by the main container.  It's important that the BPF filesystem is
+// mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
+// the BPF dataplane's BPF maps.
+func (c *nodeComponent) bpffsInitContainer() v1.Container {
+	bidirectional := v1.MountPropagationBidirectional
+	mounts := []v1.VolumeMount{
+		{
+			MountPath: "/sys/fs",
+			Name:      "sys-fs",
+			// Bidirectional is required to ensure that the new mount we make at /sys/fs/bpf propagates to the host
+			// so that it outlives the init container.
+			MountPropagation: &bidirectional,
+		},
+	}
+
+	return v1.Container{
+		Name:         "mount-bpffs",
+		Image:        c.nodeImage,
+		VolumeMounts: mounts,
+		SecurityContext: &v1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
+		},
+		Command: []string{"calico-node", "-init"},
 	}
 }
 
@@ -852,9 +919,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}
-	if c.cr.CalicoNetwork != nil &&
-		c.cr.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+	if c.bpfDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
@@ -887,6 +952,17 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 				})
 		}
 	}
+
+	if c.bgpLayoutHash != "" {
+		nodeVolumeMounts = append(nodeVolumeMounts,
+			v1.VolumeMount{
+				Name:      BGPLayoutVolumeName,
+				ReadOnly:  true,
+				MountPath: BGPLayoutPath,
+				SubPath:   BGPLayoutConfigMapKey,
+			})
+	}
+
 	return nodeVolumeMounts
 }
 
@@ -968,6 +1044,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}},
 	}
 
+	if c.cr.CNI != nil && c.cr.CNI.Type == operator.PluginAmazonVPC {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
+	}
+
 	// If there are no IP pools specified, then configure no default IP pools.
 	if c.cr.CalicoNetwork == nil || len(c.cr.CalicoNetwork.IPPools) == 0 {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
@@ -1022,9 +1102,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 	}
 
-	if c.cr.CalicoNetwork != nil &&
-		c.cr.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+	if c.bpfDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
 
@@ -1109,6 +1187,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
@@ -1174,6 +1253,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 
 	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars()...)
+
+	if c.bgpLayoutHash != "" {
+		nodeEnv = append(nodeEnv, v1.EnvVar{
+			Name:  "CALICO_EARLY_NETWORKING",
+			Value: BGPLayoutPath,
+		})
+	}
 
 	return nodeEnv
 }

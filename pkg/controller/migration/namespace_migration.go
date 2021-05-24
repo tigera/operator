@@ -89,24 +89,24 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context
 		return false, nil
 	}
 
-	_, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
-	if err == nil {
+	nds, err := m.client.AppsV1().DaemonSets(kubeSystem).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
+	if err == nil && nds != nil && nds.DeletionTimestamp == nil {
 		return true, nil
 	}
 	if !apierrs.IsNotFound(err) {
 		return false, fmt.Errorf("failed to get daemonset %s in kube-system: %s", nodeDaemonSetName, err)
 	}
 
-	_, err = m.client.AppsV1().Deployments(kubeSystem).Get(ctx, kubeControllerDeploymentName, metav1.GetOptions{})
-	if err == nil {
+	kcdeploy, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, kubeControllerDeploymentName, metav1.GetOptions{})
+	if err == nil && kcdeploy != nil && kcdeploy.DeletionTimestamp == nil {
 		return true, nil
 	}
 	if !apierrs.IsNotFound(err) {
 		return false, fmt.Errorf("failed to get deployment %s in kube-system: %s", kubeControllerDeploymentName, err)
 	}
 
-	_, err = m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
-	if err == nil {
+	tdeploy, err := m.client.AppsV1().Deployments(kubeSystem).Get(ctx, typhaDeploymentName, metav1.GetOptions{})
+	if err == nil && tdeploy != nil && tdeploy.DeletionTimestamp == nil {
 		return true, nil
 	}
 	if !apierrs.IsNotFound(err) {

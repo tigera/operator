@@ -23,10 +23,12 @@ import (
 	"time"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batch "k8s.io/api/batch/v1beta1"
-	"k8s.io/api/certificates/v1beta1"
+	certV1 "k8s.io/api/certificates/v1"
+	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -72,6 +74,7 @@ type StatusManager interface {
 	IsAvailable() bool
 	IsProgressing() bool
 	IsDegraded() bool
+	ReadyToMonitor()
 }
 
 type statusManager struct {
@@ -84,6 +87,7 @@ type statusManager struct {
 	certificatestatusrequests map[string]map[string]string
 	lock                      sync.Mutex
 	enabled                   *bool
+	kubernetesVersion         *common.VersionInfo
 
 	// Track degraded state as set by external controllers.
 	degraded               bool
@@ -93,9 +97,14 @@ type statusManager struct {
 	// Keep track of currently calculated status.
 	progressing []string
 	failing     []string
+
+	// readyToMonitor tells the status manager that it's ready to monitor the resources that it's been told to monitor,
+	// if there are any, and report statuses based on the state of those resources.
+	readyToMonitor bool
+	hasSynced      bool
 }
 
-func New(client client.Client, component string) StatusManager {
+func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
 	return &statusManager{
 		client:                    client,
 		component:                 component,
@@ -104,6 +113,7 @@ func New(client client.Client, component string) StatusManager {
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		kubernetesVersion:         kubernetesVersion,
 	}
 }
 
@@ -117,29 +127,49 @@ func (m *statusManager) updateStatus() {
 		return
 	}
 
-	if !m.syncState() {
-		return
+	// Unless we've been given an explicit degraded reason we are not ready to start reporting statuses until
+	// ReadyToMonitor has been called by the owner of the status manager. This means there's no point in syncing
+	// the state.
+	if m.readyToMonitor {
+		m.syncState()
+
+		// We've collected knowledge about the current state of the objects we're monitoring.
+		// Now, use that to update the TigeraStatus object for this manager.
+		if m.IsAvailable() {
+			m.setAvailable("All objects available", "")
+		} else {
+			m.clearAvailable()
+		}
+
+		if m.IsProgressing() {
+			m.setProgressing("Not all pods are ready", m.progressingMessage())
+		} else {
+			m.clearProgressing()
+		}
+
+		if m.IsDegraded() {
+			m.setDegraded(m.degradedReason(), m.degradedMessage())
+		} else {
+			m.clearDegraded()
+		}
+	} else {
+		log.V(2).WithName(m.component).Info("Status manager is not ready to report component statuses.")
+
+		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
+		// as this degraded reason may be the reason why we're not ready to monitor.
+		if m.isExplicitlyDegraded() {
+			m.setDegraded(m.degradedReason(), m.degradedMessage())
+		} else {
+			m.clearDegraded()
+		}
 	}
 
-	// We've collected knowledge about the current state of the objects we're monitoring.
-	// Now, use that to update the TigeraStatus object for this manager.
-	if m.IsAvailable() {
-		m.setAvailable("All objects available", "")
-	} else {
-		m.clearAvailable()
-	}
+}
 
-	if m.IsProgressing() {
-		m.setProgressing("Not all pods are ready", m.progressingMessage())
-	} else {
-		m.clearProgressing()
-	}
-
-	if m.IsDegraded() {
-		m.setDegraded(m.degradedReason(), m.degradedMessage())
-	} else {
-		m.clearDegraded()
-	}
+func (m *statusManager) isExplicitlyDegraded() bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	return m.explicitDegradedReason != ""
 }
 
 // Run starts the status manager state monitoring routine.
@@ -157,6 +187,18 @@ func (m *statusManager) Run() {
 			}
 		}
 	}()
+}
+
+// ReadyToMonitor signals that this Status Manager should start evaluating the resources it knows about and report
+// if the availability of the component based on the statuses of those monitored resources.
+//
+// If there are no resources to monitor, then by default this component is available (all 0 resources for this component
+// are healthy). One caveat to the default when there are no resources to monitor is if the component has a degraded
+// status explicitely set.
+func (m *statusManager) ReadyToMonitor() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.readyToMonitor = true
 }
 
 // OnCRFound indicates to the status manager that it should start reporting status. Until called,
@@ -296,10 +338,17 @@ func (m *statusManager) IsAvailable() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// If we're not ready to monitor or haven't synced then we're not ready to report a status base on the status of the
+	// known resources.
+	if !m.readyToMonitor || !m.hasSynced {
 		return false
 	}
+
+	if m.degraded {
+		return false
+	}
+
+	// If there are no resources to monitor then this is always true, which is by design.
 	return len(m.failing) == 0 && len(m.progressing) == 0
 }
 
@@ -308,10 +357,12 @@ func (m *statusManager) IsProgressing() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// If we're not ready to monitor or haven't synced then we're not ready to report a status base on the status of the
+	// known resources.
+	if !m.readyToMonitor || !m.hasSynced {
 		return false
 	}
+
 	return len(m.progressing) != 0 && len(m.failing) == 0
 }
 
@@ -320,22 +371,25 @@ func (m *statusManager) IsDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	// Controllers can explicitly set us degraded.
+	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
+	// should start monitoring resources.
 	if m.degraded {
 		return true
 	}
 
-	// Otherwise, we might be degraded due to failing pods.
-	if m.progressing == nil || m.failing == nil {
-		// We haven't learned our state yet. Return false.
+	// If we're not ready to monitor or haven't synced then we're not ready to report a status base on the status of the
+	// known resources.
+	if !m.readyToMonitor || !m.hasSynced {
 		return false
 	}
+
+	// We may be degraded due to failing pods.
 	return len(m.failing) != 0
 }
 
-// syncState syncs our internal state with that of the cluster. It returns true if we've synced
-// and returns false if we are still waiting for information.
-func (m *statusManager) syncState() bool {
+// syncState syncs the internal state of the k8s resources that the status manager has been told to monitor with that of
+// the cluster.
+func (m *statusManager) syncState() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	progressing := []string{}
@@ -431,7 +485,7 @@ func (m *statusManager) syncState() bool {
 	}
 
 	for _, labels := range m.certificatestatusrequests {
-		pending, err := hasPendingCSR(context.TODO(), m.client, labels)
+		pending, err := hasPendingCSR(context.TODO(), m, labels)
 		if err != nil {
 			log.WithValues("error", err).Error(err, fmt.Sprintf("Unable to poll for CertificateSigningRequest(s) with labels value %v", labels))
 		} else if pending {
@@ -439,21 +493,9 @@ func (m *statusManager) syncState() bool {
 		}
 	}
 
-	if len(m.deployments)+len(m.daemonsets)+len(m.statefulsets)+len(m.cronjobs) > 0 {
-		// We have been told about the resources we need to watch - set state before unlocking.
-		m.progressing = progressing
-		m.failing = failing
-		return true
-	} else {
-		// We don't know about any resources. Clear internal state to indicate this.
-		m.progressing = nil
-		m.failing = nil
-	}
-
-	// If we don't know about any resources, and we don't have any explicit degraded state set, then
-	// we're not yet ready to report status. However, if we've been given an explicit degraded state, then
-	// we should report it.
-	return m.explicitDegradedReason != ""
+	m.progressing = progressing
+	m.failing = failing
+	m.hasSynced = true
 }
 
 // isInitialized returns true if corresponding CR has been queried
@@ -670,8 +712,17 @@ func (m *statusManager) degradedReason() string {
 	return strings.Join(reasons, "; ")
 }
 
-func hasPendingCSR(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
-	csrs := &v1beta1.CertificateSigningRequestList{}
+func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {
+	if m.kubernetesVersion.ProvidesCertV1API() {
+		return hasPendingCSRUsingCertV1(ctx, m.client, labelMap)
+	}
+	// For k8s v1.19 onwards, certificate/v1beta1 will be deprecated and is planning to be removed on 1.22
+	// Once in the future we stop support v1.18, we need to change the code to only use certificate/v1
+	return hasPendingCSRUsingCertV1beta1(ctx, m.client, labelMap)
+}
+
+func hasPendingCSRUsingCertV1(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
+	csrs := &certV1.CertificateSigningRequestList{}
 	selector := labels.SelectorFromSet(labelMap)
 	err := cli.List(ctx, csrs, &client.ListOptions{LabelSelector: selector})
 	if err != nil {
@@ -691,7 +742,36 @@ func hasPendingCSR(ctx context.Context, cli client.Client, labelMap map[string]s
 		for _, condition := range csr.Status.Conditions {
 			if condition.Status == v1.ConditionUnknown {
 				return true, nil
-			} else if condition.Type == v1beta1.CertificateApproved && csr.Status.Certificate == nil {
+			} else if condition.Type == certV1.CertificateApproved && csr.Status.Certificate == nil {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, labelMap map[string]string) (bool, error) {
+	csrs := &certV1beta1.CertificateSigningRequestList{}
+	selector := labels.SelectorFromSet(labelMap)
+	err := cli.List(ctx, csrs, &client.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return false, err
+	}
+
+	if len(csrs.Items) == 0 {
+		return false, nil
+	}
+
+	for _, csr := range csrs.Items {
+		if len(csr.Status.Conditions) == 0 {
+			// No conditions means status is pending
+			return true, nil
+		}
+		// no condition approved, means it is pending.
+		for _, condition := range csr.Status.Conditions {
+			if condition.Status == v1.ConditionUnknown {
+				return true, nil
+			} else if condition.Type == certV1beta1.CertificateApproved && csr.Status.Certificate == nil {
 				return true, nil
 			}
 		}

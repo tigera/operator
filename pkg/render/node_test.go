@@ -2859,5 +2859,5 @@ func verifyProbesAndLifecycle(ds *apps.DaemonSet, isOpenshift, isEnterprise bool
 	}
 	Expect(ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
 
-	Expect(*ds.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(5))
+	Expect(int(*ds.Spec.Template.Spec.TerminationGracePeriodSeconds)).To(Equal(5))
 }

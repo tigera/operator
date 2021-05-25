@@ -45,7 +45,9 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 		case ComponentElasticsearchOperator:
 			registry = ECKRegistry
 		case ComponentOperatorInit,
-			ComponentCSRInitContainer:
+			ComponentCSRInitContainer,
+			ComponentPrometheus,
+			ComponentPrometheusAlertmanager:
 			registry = InitRegistry
 		default:
 			registry = TigeraRegistry

@@ -82,6 +82,11 @@ const (
 	defaultTunnelVoltronPort    = "9449"
 )
 
+var (
+	CloudManagerConfigOverrideName = "cloud-manager-config"
+	CloudPortalAPIURL              = "https://www.dev.calicocloud.io"
+)
+
 func Manager(
 	keyValidatorConfig authentication.KeyValidatorConfig,
 	esSecrets []*corev1.Secret,
@@ -502,6 +507,15 @@ func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
 		v1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
 		v1.EnvVar{Name: "LICENSE_EDITION", Value: "cloudEdition"},
 	)
+
+	// enable cloud portal api if configmap is setting value.
+	// this allows us to run v3.7 without portal integration for external idp customers.
+	if CloudPortalAPIURL != "" {
+		envs = append(envs,
+			v1.EnvVar{Name: "CNX_PORTAL_API_URL", Value: CloudPortalAPIURL},
+			v1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"},
+		)
+	}
 	return envs
 }
 

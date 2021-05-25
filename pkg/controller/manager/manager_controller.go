@@ -16,6 +16,7 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -136,6 +137,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.CloudManagerConfigOverrideName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -472,6 +477,20 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Cloud modifications
+	mgrCfg := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: "cloud-manager-config", Namespace: rmeta.OperatorNamespace()}
+	if err = r.client.Get(ctx, key, mgrCfg); err != nil {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-manager-config ConfigMap: %s", err.Error())
+		}
+	} else {
+		if err = json.Unmarshal([]byte(mgrCfg.Data["config"]), &render.CloudManagerConfigOverrides); err != nil {
+			r.status.SetDegraded("Failed to unmarshall config in cloud-manager-config ConfigMap", err.Error())
 			return reconcile.Result{}, err
 		}
 	}

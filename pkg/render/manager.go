@@ -82,6 +82,13 @@ const (
 	defaultTunnelVoltronPort    = "9449"
 )
 
+var (
+	CloudManagerConfigOverrideName = "cloud-manager-config"
+	CloudManagerConfigOverrides    = struct {
+		PortalAPIURL string `json:"portalAPIURL"`
+	}{}
+)
+
 func Manager(
 	keyValidatorConfig authentication.KeyValidatorConfig,
 	esSecrets []*corev1.Secret,
@@ -167,7 +174,7 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, is)
+	c.managerImage = "gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:tesla-dev"
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -501,6 +508,8 @@ func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
 	envs = append(envs,
 		v1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
 		v1.EnvVar{Name: "LICENSE_EDITION", Value: "cloudEdition"},
+		v1.EnvVar{Name: "CNX_PORTAL_API_URL", Value: CloudManagerConfigOverrides.PortalAPIURL},
+		v1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"},
 	)
 	return envs
 }
@@ -528,13 +537,20 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.keyValidatorConfig.ClientID()}}
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.keyValidatorConfig.ClientID()},
+
+			// todo: remove this once manager correctly reads well-known-config from root of local domain
+			// instead of from root of auth0.
+			{Name: "CNX_WEB_OIDC_AUDIENCE", Value: c.keyValidatorConfig.ClientID()},
+		}
 
 		switch c.keyValidatorConfig.(type) {
 		case *DexKeyValidatorConfig:
 			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.keyValidatorConfig.Issuer()})
 		case *tigerakvc.KeyValidatorConfig:
-			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: ""})
+			// todo: revert this to an empty string once manager correctly reads well-known-config from root of local domain
+			// instead of from root of auth0.
+			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.keyValidatorConfig.Issuer()})
 		}
 	}
 	return envs

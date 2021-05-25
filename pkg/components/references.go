@@ -46,6 +46,8 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 		case ComponentOperatorInit,
 			ComponentCSRInitContainer:
 			registry = InitRegistry
+		case ComponentManager:
+			registry = "gcr.io/unique-caldron-775/cnx/"
 		default:
 			registry = TigeraRegistry
 		}

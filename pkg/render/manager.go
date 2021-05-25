@@ -174,7 +174,7 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, is)
+	c.managerImage = "gcr.io/unique-caldron-775/cnx/tigera/cnx-manager:tesla-dev"
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())

@@ -528,13 +528,20 @@ func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.keyValidatorConfig.ClientID()}}
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.keyValidatorConfig.ClientID()},
+
+			// todo: remove this once manager correctly reads well-known-config from root of local domain
+			// instead of from root of auth0.
+			{Name: "CNX_WEB_OIDC_AUDIENCE", Value: c.keyValidatorConfig.ClientID()},
+		}
 
 		switch c.keyValidatorConfig.(type) {
 		case *DexKeyValidatorConfig:
 			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.keyValidatorConfig.Issuer()})
 		case *tigerakvc.KeyValidatorConfig:
-			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: ""})
+			// todo: revert this to an empty string once manager correctly reads well-known-config from root of local domain
+			// instead of from root of auth0.
+			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: c.keyValidatorConfig.Issuer()})
 		}
 	}
 	return envs

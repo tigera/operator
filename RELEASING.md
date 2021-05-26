@@ -56,7 +56,7 @@ If the release includes new Calico CRDs, add the new CRDs to `hack/gen-bundle/ge
 We currently only publish operator releases targeting Calico. If the release targets Calico, continue onto the following steps to generate the
 operator bundle for it, and publish the release on the RH Catalog.
 
-1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the release branch containing the released tag.
+1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the tag you released and create a new branch.
 
 1. Login to our operator project on connect.redhat.com and publish the operator image on the RH Catalog. This step needs to happen before we generate and submit the operator metadata bundle.
 
@@ -73,9 +73,14 @@ operator bundle for it, and publish the release on the RH Catalog.
 1. Login to our operator bundle project on connect.redhat.com
 
 1. Tag and push the operator bundle image to connect.redhat.com
+   ```
+   docker login -u unused scan.connect.redhat.com # Use the registry key found on our operator bundle project page at connect.redhat.com
+   docker tag tigera-operator-bundle:1.13.1 scan.connect.redhat.com/<project_id>/operator:1.13.1 # Replace the <project_id> with the PID found on our operator bundle project page at connect.redhat.com
+   docker push !$
+   ```
 
-1. Create a PR, adding the new bundle and get it reviewed.
+3. Add the new bundle in `bundle/`, push the branch, submit a PR, and get it reviewed.
 
-1. Wait until the operator bundle has passed validation tests. Once that has
+4. Wait until the operator bundle has passed validation tests on our operator bundle project page at connect.redhat.com. Once that has
    happened, publish the new bundle in the UI, and merge the operator PR.
 

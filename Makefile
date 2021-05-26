@@ -594,7 +594,7 @@ bundle: bundle-generate update-bundle bundle-validate bundle-image
 
 .PHONY: bundle-validate
 bundle-validate:
-	#$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
+	$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
 
 .PHONY: bundle-manifests
 bundle-manifests:

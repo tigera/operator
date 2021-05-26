@@ -101,26 +101,27 @@ type nodeComponent struct {
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
+	prefix := c.cr.ImagePrefix
 	var err error
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, is)
+		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is)
 	} else {
-		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, is)
+		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is)
 	}
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, is)
+	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, is)
+		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is)
 	} else {
-		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, is)
+		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is)
 	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())

@@ -1353,9 +1353,14 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-	psp.Spec.AllowedCapabilities = []v1.Capability{
-		v1.Capability("NET_ADMIN"),
-		v1.Capability("NET_RAW"),
+	if !c.bpfDataplaneEnabled() {
+		// Do not need privileged permissions when running in iptables mode.
+		psp.Spec.Privileged = false
+		psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
+		psp.Spec.AllowedCapabilities = []v1.Capability{
+			v1.Capability("NET_ADMIN"),
+			v1.Capability("NET_RAW"),
+		}
 	}
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
